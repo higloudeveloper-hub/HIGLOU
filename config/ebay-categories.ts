@@ -394,7 +394,24 @@ export const EBAY_CATEGORY_OPTIONS: EbayCategoryOption[] = [
   {
     id: "3197",
     name: "Furniture",
-    keywords: ["sofa", "chair", "table", "desk", "dresser", "furniture"],
+    keywords: ["sofa", "desk", "dresser", "indoor furniture", "mueble de sala"],
+  },
+  {
+    id: "20524",
+    name: "Patio Furniture Sets",
+    keywords: [
+      "patio furniture set",
+      "patio dining set",
+      "patio set",
+      "outdoor patio",
+      "outdoor furniture set",
+      "juego de patio",
+      "muebles de patio",
+      "muebles de exterior",
+      "muebles de jardín",
+      "garden furniture",
+      "wicker patio",
+    ],
   },
 
   // Beauty
@@ -601,6 +618,19 @@ const APPAREL_CATEGORY_IDS = new Set([
 const NON_APPAREL_HINT =
   /\b(atv|utv|quad|4[\s-]?wheeler|motorcycle|scooter|dirt\s*bike|go[\s-]?kart|lawn\s*mower|generator|refrigerator|washer|dryer|vehicle|engine|cc\s*\d{2,4}|\d{2,4}\s*cc)\b/i;
 
+const PATIO_OUTDOOR_HINT =
+  /\b(patio|outdoor\s+furniture|outdoor\s+patio|juego\s+de\s+patio|muebles?\s+de\s+(patio|exterior|jard[ií]n)|patio\s+(set|dining|furniture|table|chair)|garden\s+furniture|wicker\s+patio)\b/i;
+
+const INDOOR_FURNITURE_SCORE_IDS = new Set([
+  "3197",
+  "107578",
+  "38204",
+  "38208",
+  "20480",
+  "175758",
+  "103431",
+]);
+
 export function findEbayCategoryById(categoryId: string) {
   return EBAY_CATEGORY_OPTIONS.find((c) => c.id === categoryId.trim()) ?? null;
 }
@@ -628,6 +658,7 @@ export function scoreEbayCategories(input: {
   if (!haystack) return [];
 
   const blocksApparel = NON_APPAREL_HINT.test(haystack);
+  const isPatioOutdoor = PATIO_OUTDOOR_HINT.test(haystack);
 
   return EBAY_CATEGORY_OPTIONS.map((option) => {
     if (blocksApparel && APPAREL_CATEGORY_IDS.has(option.id)) {
@@ -666,6 +697,16 @@ export function scoreEbayCategories(input: {
     ) {
       score += 12;
     }
+
+    if (isPatioOutdoor) {
+      if (option.id === "20524") score += 48;
+      else if (option.id === "79684" && /\b(camastro|lounger|chaise)\b/i.test(haystack)) {
+        score += 24;
+      } else if (INDOOR_FURNITURE_SCORE_IDS.has(option.id)) {
+        score = Math.max(0, score - 50);
+      }
+    }
+
     return { option, score };
   })
     .filter((row) => row.score > 0)

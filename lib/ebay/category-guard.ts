@@ -25,6 +25,26 @@ const SHOE_PRODUCT =
 const BEDDING_PRODUCT =
   /\b(comforter|duvet|bedding|sheet\s*set|pillowcase|quilt)\b/i;
 
+/** Outdoor patio furniture — must not land in indoor Furniture / Dining Sets. */
+export const PATIO_OUTDOOR_PRODUCT =
+  /\b(patio|outdoor\s+furniture|outdoor\s+patio|juego\s+de\s+patio|muebles?\s+de\s+(patio|exterior|jard[ií]n)|patio\s+(set|dining|furniture|table|chair)|jard[ií]n\s+(set|muebles)|garden\s+furniture|wicker\s+patio)\b/i;
+
+const INDOOR_FURNITURE_CATEGORY_IDS = new Set([
+  "3197", // Furniture (catch-all → "Muebles")
+  "107578", // Dining Sets (indoor)
+  "38204", // Tables
+  "38208", // Sofas
+  "20480", // Bedroom Sets
+  "175758", // Beds
+  "103431", // Bar stools
+  "20488", // Furniture accessories
+  "183320", // Bar carts
+  "125085", // Vanities
+]);
+
+const INDOOR_FURNITURE_NAME =
+  /\b(furniture|dining\s+sets?|bedroom\s+sets?|sofas?|muebles?)\b/i;
+
 export function productCategoryHaystack(input: {
   categoryName?: string | null;
   productType?: string | null;
@@ -96,6 +116,17 @@ export function isCategoryProductMismatch(input: {
 
   // Name says something totally unrelated while product is clearly a beverage.
   if (beverage && name && FISHING_NAME.test(name)) return true;
+
+  // Patio / outdoor sets must not stay under indoor furniture leaves.
+  const patio = PATIO_OUTDOOR_PRODUCT.test(product);
+  if (
+    patio &&
+    (INDOOR_FURNITURE_CATEGORY_IDS.has(id) ||
+      (INDOOR_FURNITURE_NAME.test(name) &&
+        !/\b(patio|outdoor|exterior|jard[ií]n)\b/i.test(name)))
+  ) {
+    return true;
+  }
 
   return false;
 }

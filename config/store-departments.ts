@@ -161,8 +161,8 @@ export const STORE_DEPARTMENTS: StoreDepartment[] = [
   {
     slug: "sports-outdoors",
     name: "Sports & Outdoors",
-    leafIds: ["15273", "16034", "7294", "888", "43962"],
-    keywords: ["fitness", "camp", "bike", "sport", "atv"],
+    leafIds: ["15273", "16034", "7294", "888", "43962", "20524", "79684", "151621"],
+    keywords: ["fitness", "camp", "bike", "sport", "atv", "patio", "outdoor", "jardín"],
   },
   {
     slug: "tools-auto",
@@ -187,6 +187,7 @@ export const EXTRA_LEAF_NAMES: Record<string, string> = {
   "20612": "Air Cannon Fan",
   "20620": "Lighting Fans",
   "117503": "Chandeliers & Ceiling Fixtures",
+  "20524": "Patio Furniture Sets",
 };
 
 export const FALLBACK_DEPARTMENT: StoreDepartment = {

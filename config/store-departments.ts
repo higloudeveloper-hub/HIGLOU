@@ -160,9 +160,15 @@ export const STORE_DEPARTMENTS: StoreDepartment[] = [
   },
   {
     slug: "sports-outdoors",
-    name: "Sports & Outdoors",
-    leafIds: ["15273", "16034", "7294", "888", "43962", "20524", "79684", "151621"],
-    keywords: ["fitness", "camp", "bike", "sport", "atv", "patio", "outdoor", "jardín"],
+    name: "Sports",
+    leafIds: ["15273", "16034", "7294", "888", "43962", "177831", "100470", "6720", "6723"],
+    keywords: ["fitness", "camp", "bike", "sport", "atv", "deporte"],
+  },
+  {
+    slug: "outdoor-garden",
+    name: "Patio & Garden",
+    leafIds: ["20524", "79684", "151604", "151621"],
+    keywords: ["patio", "outdoor", "jardín", "jardin", "garden", "grill", "parrilla"],
   },
   {
     slug: "tools-auto",

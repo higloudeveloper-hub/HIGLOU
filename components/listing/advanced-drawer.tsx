@@ -8,6 +8,8 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { ConfidenceBadge } from "@/components/listing/confidence-badge";
 import { DescriptionEditor } from "@/components/description/description-editor";
+import { StoreTemplatePicker } from "@/components/listing/store-template-picker";
+import type { StoreBranding } from "@/config/store-branding";
 import type { ConfidenceStatus } from "@/lib/ai/confidence-engine";
 import type { ProductListing } from "@/types/product";
 import { cn } from "@/lib/utils";
@@ -26,6 +28,8 @@ export function AdvancedDrawer({
   onRegenerateDescription,
   setFieldConfidence,
   forceOpen = false,
+  storeBranding,
+  onStoreBrandingChange,
 }: {
   listing: ProductListing;
   fieldConfidence: FieldConfidence;
@@ -41,6 +45,8 @@ export function AdvancedDrawer({
   setFieldConfidence: React.Dispatch<React.SetStateAction<FieldConfidence>>;
   /** Render body open without accordion chrome (dialog / sheet) */
   forceOpen?: boolean;
+  storeBranding?: StoreBranding;
+  onStoreBrandingChange?: (next: StoreBranding) => void;
 }) {
   const body = (
       <div
@@ -50,6 +56,16 @@ export function AdvancedDrawer({
           forceOpen && "px-0 pb-2 pt-1",
         )}
       >
+        {storeBranding && onStoreBrandingChange ? (
+          <div className="rounded-2xl border-2 border-amber-400 bg-amber-50 p-1 shadow-sm">
+            <StoreTemplatePicker
+              branding={storeBranding}
+              onChange={onStoreBrandingChange}
+              compact
+            />
+          </div>
+        ) : null}
+
         <section className="space-y-4">
           <h4 className="text-xs font-semibold tracking-wide text-zinc-500">
             IDENTITY

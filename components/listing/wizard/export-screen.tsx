@@ -436,6 +436,23 @@ export function ExportScreen({
               imports into Don Baraton Admin (Category ID places each item in
               Bedding, Lighting, Kitchen &amp; Appliances…).
             </p>
+            {storeBranding && onStoreBrandingChange ? (
+              <div className="mt-3 rounded-2xl border-2 border-amber-400 bg-amber-50 p-1">
+                <StoreTemplatePicker
+                  branding={storeBranding}
+                  onChange={onStoreBrandingChange}
+                  compact
+                />
+              </div>
+            ) : (
+              <div className="mt-3 rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-[12px] text-amber-950">
+                Abre{" "}
+                <a className="font-semibold underline" href="/settings#branding">
+                  Settings → Store branding
+                </a>{" "}
+                para elegir tienda y plantilla HTML.
+              </div>
+            )}
             <div className="mt-3 rounded-xl border border-amber-300/70 bg-amber-50/80 px-3 py-2.5 text-[12px] text-amber-950">
               <div className="flex items-start gap-2">
                 <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />

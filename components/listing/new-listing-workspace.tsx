@@ -1401,6 +1401,8 @@ export function NewListingWorkspace({
           void regenerateFieldWithAi("description")
         }
         setFieldConfidence={setFieldConfidence}
+        storeBranding={storeBranding}
+        onStoreBrandingChange={handleStoreBrandingChange}
       />
     </WizardShell>
   );

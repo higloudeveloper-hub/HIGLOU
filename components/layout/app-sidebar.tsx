@@ -35,8 +35,8 @@ const NAV = [
     match: (path: string) => path === "/exports" || path.startsWith("/exports/"),
   },
   {
-    href: "/settings",
-    label: "Settings",
+    href: "/settings#branding",
+    label: "Store & templates",
     icon: Settings,
     match: (path: string) =>
       path === "/settings" ||
@@ -55,10 +55,10 @@ export function AppSidebar() {
       <div className="px-5 pb-4 pt-7">
         <Link href="/home" className="group block">
           <div className="text-[11px] font-semibold tracking-[0.2em] text-zinc-400 transition group-hover:text-zinc-500">
-            HIGLOU STORE
+            STORE STUDIO
           </div>
           <div className="mt-1.5 text-[15px] font-semibold leading-snug tracking-tight text-zinc-950">
-            Studio
+            Multi-store listings
           </div>
         </Link>
       </div>

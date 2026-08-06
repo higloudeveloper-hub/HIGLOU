@@ -26,12 +26,14 @@ import {
   X,
 } from "lucide-react";
 import { StickyActionBar } from "@/components/listing/wizard/sticky-action-bar";
+import { StoreTemplatePicker } from "@/components/listing/store-template-picker";
 import {
   EBAY_CREATE_DRAFTS_INCLUDES,
   buildEbayDraftManualSteps,
 } from "@/lib/ebay/draft-completion-checklist";
 import { estimatePackageAndShipping } from "@/lib/ebay/package-shipping";
 import type { ProductListing } from "@/types/product";
+import type { StoreBranding } from "@/config/store-branding";
 import { cn } from "@/lib/utils";
 
 export function ExportScreen({
@@ -49,6 +51,8 @@ export function ExportScreen({
   onOpenMore,
   onStartNew,
   onSaveDraft,
+  storeBranding,
+  onStoreBrandingChange,
 }: {
   listing: ProductListing;
   productName?: string;
@@ -64,6 +68,8 @@ export function ExportScreen({
   onOpenMore: () => void;
   onStartNew: () => void;
   onSaveDraft?: () => void;
+  storeBranding?: StoreBranding;
+  onStoreBrandingChange?: (next: StoreBranding) => void;
 }) {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [exporting, setExporting] = useState(false);
@@ -190,7 +196,17 @@ export function ExportScreen({
 
   return (
     <div className="pb-28">
-      <div className="mx-auto grid max-w-[1600px] gap-6 px-6 py-10 lg:grid-cols-[300px_1fr_400px]">
+      <div className="mx-auto max-w-[1600px] px-6 pt-8">
+        {storeBranding && onStoreBrandingChange ? (
+          <div className="mb-6">
+            <StoreTemplatePicker
+              branding={storeBranding}
+              onChange={onStoreBrandingChange}
+            />
+          </div>
+        ) : null}
+      </div>
+      <div className="mx-auto grid max-w-[1600px] gap-6 px-6 pb-10 lg:grid-cols-[300px_1fr_400px]">
         <aside className="space-y-4">
           <div className="rounded-2xl border border-success/30 bg-success-soft/70 p-4">
             <div className="flex items-center gap-2">
@@ -203,6 +219,9 @@ export function ExportScreen({
                 </div>
                 <p className="text-[12px] text-muted-foreground">
                   Your listing is ready for eBay CSV and your marketplace.
+                  {storeBranding?.storeName
+                    ? ` Store: ${storeBranding.storeName}`
+                    : ""}
                 </p>
               </div>
             </div>

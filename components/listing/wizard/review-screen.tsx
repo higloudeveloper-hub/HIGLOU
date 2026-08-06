@@ -14,6 +14,7 @@ import {
   Truck,
 } from "lucide-react";
 import { DescriptionEditor } from "@/components/description/description-editor";
+import { StoreTemplatePicker } from "@/components/listing/store-template-picker";
 import { StickyActionBar } from "@/components/listing/wizard/sticky-action-bar";
 import { usePrefersReducedMotion } from "@/components/listing/wizard/use-prefers-reduced-motion";
 import { Input } from "@/components/ui/input";
@@ -46,6 +47,7 @@ import {
   type ReviewFieldId,
 } from "@/components/listing/review-helpers";
 import type { ProductListing } from "@/types/product";
+import type { StoreBranding } from "@/config/store-branding";
 import { cn } from "@/lib/utils";
 
 function FieldNote({
@@ -92,6 +94,8 @@ export function ReviewScreen({
   onContinue,
   onBack,
   onOpenMore,
+  storeBranding,
+  onStoreBrandingChange,
 }: {
   listing: ProductListing;
   attentionFields: AttentionField[];
@@ -108,6 +112,8 @@ export function ReviewScreen({
   onContinue: () => void;
   onBack?: () => void;
   onOpenMore: () => void;
+  storeBranding?: StoreBranding;
+  onStoreBrandingChange?: (next: StoreBranding) => void;
 }) {
   const reduceMotion = usePrefersReducedMotion();
   const [activePhoto, setActivePhoto] = useState(0);
@@ -189,6 +195,16 @@ export function ReviewScreen({
         transition={fade}
         className="mx-auto max-w-[1120px] px-4 pt-5 sm:px-6"
       >
+        {storeBranding && onStoreBrandingChange ? (
+          <div className="mb-4">
+            <StoreTemplatePicker
+              branding={storeBranding}
+              onChange={onStoreBrandingChange}
+              compact
+            />
+          </div>
+        ) : null}
+
         {/* Compact workspace header */}
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <div className="min-w-0">

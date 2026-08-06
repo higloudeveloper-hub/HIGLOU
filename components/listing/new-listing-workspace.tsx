@@ -249,6 +249,24 @@ export function NewListingWorkspace({
     };
   }, []);
 
+  const handleStoreBrandingChange = (next: StoreBranding) => {
+    const cloned = cloneStoreBranding(next);
+    setStoreBranding(cloned);
+    try {
+      localStorage.setItem("higlou-active-branding", JSON.stringify(cloned));
+    } catch {
+      /* ignore */
+    }
+    // Persist in background so drafts keep the chosen store.
+    void fetch("/api/settings/branding", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(cloned),
+    }).catch(() => {
+      /* offline / auth — local cache still applies for this session */
+    });
+  };
+
   useEffect(() => {
     if (!productId) return;
     let cancelled = false;
@@ -1336,6 +1354,8 @@ export function NewListingWorkspace({
           onContinue={() => setStep("export")}
           onBack={productId ? undefined : () => setStep("reveal")}
           onOpenMore={() => setMoreOpen(true)}
+          storeBranding={storeBranding}
+          onStoreBrandingChange={handleStoreBrandingChange}
         />
       ) : null}
 
@@ -1355,6 +1375,8 @@ export function NewListingWorkspace({
           onOpenMore={() => setMoreOpen(true)}
           onStartNew={startNewProduct}
           onSaveDraft={() => void saveDraft()}
+          storeBranding={storeBranding}
+          onStoreBrandingChange={handleStoreBrandingChange}
         />
       ) : null}
 

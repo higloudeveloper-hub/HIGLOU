@@ -68,6 +68,9 @@ const bodySchema = z.object({
   size: z.string().optional(),
   productType: z.string().optional(),
   categoryName: z.string().optional(),
+  colors: z.array(z.string()).optional().default([]),
+  materials: z.array(z.string()).optional().default([]),
+  features: z.array(z.string()).optional().default([]),
   itemSpecifics: z
     .array(
       z.object({
@@ -431,18 +434,25 @@ export async function POST(request: Request) {
       }
     }
 
-    const dynamicCColumns = enrichItemSpecificsForExport({
+    const enriched = enrichItemSpecificsForExport({
       categoryId,
+      categoryName,
       itemSpecifics: data.itemSpecifics,
       brand: data.brand,
       size: data.size,
       model: data.model,
+      productType: data.productType,
+      title: data.title,
+      colors: data.colors,
+      materials: data.materials,
+      features: data.features,
     });
 
     const csv = generateEbayCsvFromTemplate({
       templateRaw,
       valuesByHeader,
-      dynamicCColumns,
+      dynamicCColumns: enriched.columns,
+      attributePairs: enriched.attributePairs,
       appendPublishReadyColumns: useAddAction,
     });
 

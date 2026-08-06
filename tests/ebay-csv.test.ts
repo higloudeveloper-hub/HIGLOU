@@ -115,6 +115,45 @@ describe("official eBay draft template", () => {
     expect(written[2]).toBe(0xbf);
   });
 
+  it("appends Attribute Name/Value pairs for Create Drafts", () => {
+    const csv = generateEbayCsvFromTemplate({
+      templateRaw: raw,
+      valuesByHeader: {
+        "Action(SiteID=US|Country=US|Currency=USD|Version=1193|CC=UTF-8)":
+          "Draft",
+        "Category ID": "63897",
+        Title: "Glacier Bay Dorind Collection Bathroom Faucet",
+        Price: "89.00",
+        Quantity: "1",
+        Format: "FixedPrice",
+      },
+      dynamicCColumns: {
+        "C:Brand": "Glacier Bay",
+        "C:Type": "Bathroom Faucet",
+        "C:Finish": "Brushed Nickel",
+      },
+      attributePairs: [
+        { name: "Brand", value: "Glacier Bay" },
+        { name: "Type", value: "Bathroom Faucet" },
+        { name: "Finish", value: "Brushed Nickel" },
+      ],
+    });
+
+    const withoutBom = csv.slice(1);
+    const lines = withoutBom.trimEnd().split(/\r?\n/);
+    const headerCells = splitCsvLine(lines[4]);
+    const rowCells = splitCsvLine(lines[5]);
+    expect(headerCells).toContain("Attribute1Name");
+    expect(headerCells).toContain("Attribute1Value");
+    expect(headerCells).toContain("C:Brand");
+    expect(rowCells[headerCells.indexOf("Attribute1Name")]).toBe("Brand");
+    expect(rowCells[headerCells.indexOf("Attribute1Value")]).toBe(
+      "Glacier Bay",
+    );
+    expect(rowCells[headerCells.indexOf("Attribute2Name")]).toBe("Type");
+    expect(rowCells[headerCells.indexOf("C:Finish")]).toBe("Brushed Nickel");
+  });
+
   it("refuses inventing non-C policy columns via dynamic append", () => {
     expect(() =>
       generateEbayCsvFromTemplate({

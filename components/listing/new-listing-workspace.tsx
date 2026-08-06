@@ -961,6 +961,9 @@ export function NewListingWorkspace({
           size: exportListing.size,
           productType: exportListing.productType || exportListing.type,
           categoryName: exportListing.categoryName,
+          colors: (exportListing.colors || []).map(String).filter(Boolean),
+          materials: (exportListing.materials || []).map(String).filter(Boolean),
+          features: (exportListing.features || []).map(String).filter(Boolean),
           itemSpecifics: exportListing.itemSpecifics.map((field) => ({
             key: field.key,
             value: field.value,
@@ -1133,6 +1136,11 @@ export function NewListingWorkspace({
           productType: publishListing.productType || publishListing.type,
           categoryName:
             publishListing.categoryName || "Lamps, Lighting & Ceiling Fans",
+          colors: (publishListing.colors || []).map(String).filter(Boolean),
+          materials: (publishListing.materials || [])
+            .map(String)
+            .filter(Boolean),
+          features: (publishListing.features || []).map(String).filter(Boolean),
           itemSpecifics: publishListing.itemSpecifics.map((field) => ({
             key: field.key,
             value: field.value,

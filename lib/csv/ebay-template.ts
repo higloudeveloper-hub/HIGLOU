@@ -241,6 +241,11 @@ export interface GenerateCsvOptions {
   /** Only Item Specifics C:* columns that should be appended if missing. */
   dynamicCColumns?: Record<string, string>;
   /**
+   * Attribute1Name / Attribute1Value pairs — Create Drafts often maps these
+   * even when bare C:* columns are ignored.
+   */
+  attributePairs?: Array<{ name: string; value: string }>;
+  /**
    * When true, also append missing publish-ready location/weight/shipping
    * headers that have values (minimal draft templates lack them).
    */
@@ -250,7 +255,8 @@ export interface GenerateCsvOptions {
 /**
  * Generate CSV from the official template.
  * Preserves #INFO / metadata / original headers exactly.
- * Appends C:* Item Specifics, and optionally publish-ready shipping columns.
+ * Appends C:* Item Specifics, Attribute Name/Value pairs, and optionally
+ * publish-ready shipping columns.
  */
 export function generateEbayCsvFromTemplate(options: GenerateCsvOptions): string {
   const parsed = parseEbayTemplate(options.templateRaw);
@@ -262,6 +268,7 @@ export function generateEbayCsvFromTemplate(options: GenerateCsvOptions): string
 
   const headers = [...parsed.meta.headers];
   const dynamic = options.dynamicCColumns ?? {};
+  const valuesByHeader = { ...options.valuesByHeader };
 
   for (const column of Object.keys(dynamic)) {
     if (!column.startsWith("C:")) {
@@ -270,7 +277,24 @@ export function generateEbayCsvFromTemplate(options: GenerateCsvOptions): string
     if (!headers.includes(column)) {
       headers.push(column);
     }
+    if (!valuesByHeader[column]?.trim() && dynamic[column]?.trim()) {
+      valuesByHeader[column] = dynamic[column];
+    }
   }
+
+  // Dual format for Seller Hub Create Drafts: Attribute{#}Name / Attribute{#}Value
+  const pairs = (options.attributePairs || []).filter(
+    (p) => p.name.trim() && p.value.trim(),
+  );
+  pairs.forEach((pair, index) => {
+    const n = index + 1;
+    const nameHeader = `Attribute${n}Name`;
+    const valueHeader = `Attribute${n}Value`;
+    if (!headers.includes(nameHeader)) headers.push(nameHeader);
+    if (!headers.includes(valueHeader)) headers.push(valueHeader);
+    valuesByHeader[nameHeader] = pair.name.trim();
+    valuesByHeader[valueHeader] = pair.value.trim();
+  });
 
   // Always emit Category ID / Name when provided — Don Baratón import depends on them.
   // Custom seller templates sometimes omit these columns.
@@ -281,13 +305,11 @@ export function generateEbayCsvFromTemplate(options: GenerateCsvOptions): string
     const existing = findHeader(headers, [canonical, ...aliases]);
     if (existing) return existing;
     const value =
-      options.valuesByHeader[canonical] ||
-      aliases
-        .map((alias) => options.valuesByHeader[alias])
-        .find((v) => v?.trim());
+      valuesByHeader[canonical] ||
+      aliases.map((alias) => valuesByHeader[alias]).find((v) => v?.trim());
     if (!value?.trim()) return null;
     headers.push(canonical);
-    options.valuesByHeader[canonical] = value;
+    valuesByHeader[canonical] = value;
     return canonical;
   };
   ensureCoreHeader("Category ID", [
@@ -301,23 +323,17 @@ export function generateEbayCsvFromTemplate(options: GenerateCsvOptions): string
 
   if (options.appendPublishReadyColumns) {
     for (const column of PUBLISH_READY_APPEND_HEADERS) {
-      const value = options.valuesByHeader[column];
+      const value = valuesByHeader[column];
       if (!value?.trim()) continue;
       if (!headers.includes(column)) {
         headers.push(column);
       }
     }
-    // Refuse inventing arbitrary non-allowlisted policy columns.
-    for (const column of Object.keys(options.valuesByHeader)) {
-      if (headers.includes(column)) continue;
-      if (column.startsWith("C:")) continue;
-      if (!PUBLISH_READY_APPEND_SET.has(column)) continue;
-    }
   }
 
   const row = headers.map((header) => {
-    if (Object.prototype.hasOwnProperty.call(options.valuesByHeader, header)) {
-      return escapeCsvCell(options.valuesByHeader[header] ?? "");
+    if (Object.prototype.hasOwnProperty.call(valuesByHeader, header)) {
+      return escapeCsvCell(valuesByHeader[header] ?? "");
     }
     if (Object.prototype.hasOwnProperty.call(dynamic, header)) {
       return escapeCsvCell(dynamic[header] ?? "");

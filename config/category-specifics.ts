@@ -114,6 +114,22 @@ export const CATEGORY_SPECIFICS: CategorySpecificConfig[] = [
     ],
   },
   {
+    id: "faucets",
+    name: "Faucets & Plumbing",
+    // 63897 = Faucets (US). Older kitchen/bath leaf IDs kept for legacy drafts.
+    categoryIds: ["63897", "20589", "20595", "177033", "260882"],
+    fields: [
+      { key: "brand", label: "Brand", csvColumn: "C:Brand", required: true },
+      { key: "type", label: "Type", csvColumn: "C:Type", required: true },
+      { key: "material", label: "Material", csvColumn: "C:Material" },
+      { key: "finish", label: "Finish", csvColumn: "C:Finish" },
+      { key: "color", label: "Color", csvColumn: "C:Color" },
+      { key: "model", label: "Model", csvColumn: "C:Model" },
+      { key: "mpn", label: "MPN", csvColumn: "C:MPN" },
+      { key: "features", label: "Features", csvColumn: "C:Features" },
+    ],
+  },
+  {
     id: "generic",
     name: "Generic Product",
     categoryIds: [],
@@ -125,13 +141,31 @@ export const CATEGORY_SPECIFICS: CategorySpecificConfig[] = [
       { key: "color", label: "Color", csvColumn: "C:Color" },
       { key: "material", label: "Material", csvColumn: "C:Material" },
       { key: "features", label: "Features", csvColumn: "C:Features" },
+      { key: "finish", label: "Finish", csvColumn: "C:Finish" },
     ],
   },
 ];
 
-export function resolveCategorySpecifics(categoryId: string) {
+export function resolveCategorySpecifics(
+  categoryId: string,
+  hints?: { categoryName?: string; productType?: string; title?: string },
+) {
+  const byId = CATEGORY_SPECIFICS.find((cfg) =>
+    cfg.categoryIds.includes(categoryId),
+  );
+  if (byId) return byId;
+
+  const hay = [hints?.categoryName, hints?.productType, hints?.title]
+    .join(" ")
+    .toLowerCase();
+  if (/faucet|grifo|plumbing|tap\b/.test(hay)) {
+    return (
+      CATEGORY_SPECIFICS.find((cfg) => cfg.id === "faucets") ??
+      CATEGORY_SPECIFICS.find((cfg) => cfg.id === "generic")!
+    );
+  }
+
   return (
-    CATEGORY_SPECIFICS.find((cfg) => cfg.categoryIds.includes(categoryId)) ??
     CATEGORY_SPECIFICS.find((cfg) => cfg.id === "generic") ??
     CATEGORY_SPECIFICS[CATEGORY_SPECIFICS.length - 1]
   );

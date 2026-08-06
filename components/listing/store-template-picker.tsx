@@ -12,6 +12,17 @@ import {
 import type { StoreBranding } from "@/config/store-branding";
 import { cn } from "@/lib/utils";
 
+function withSafeColors(branding: StoreBranding): StoreBranding["colors"] {
+  return {
+    headerBackground: branding.colors?.headerBackground || "#111111",
+    headerText: branding.colors?.headerText || "#ffffff",
+    bodyText: branding.colors?.bodyText || "#1d1d1f",
+    accent: branding.colors?.accent || "#f4c928",
+    panelBackground: branding.colors?.panelBackground || "#f7f7f7",
+    border: branding.colors?.border || "#e5e5e5",
+  };
+}
+
 export function StoreTemplatePicker({
   branding,
   onChange,
@@ -21,26 +32,27 @@ export function StoreTemplatePicker({
   onChange: (next: StoreBranding) => void;
   compact?: boolean;
 }) {
-  const safeBranding: StoreBranding = {
+  // Keep empty strings editable — never coerce to "My Store" in the input value
+  // (that made typed text collide with the fallback, e.g. "HMy Store").
+  const storeName = branding.storeName ?? "";
+  const storeNameDisplay = branding.storeNameDisplay ?? "";
+  const templateId = branding.templateId || "classic";
+  const colors = withSafeColors(branding);
+
+  const baseForUpdate = (): StoreBranding => ({
     ...branding,
-    storeName: branding.storeName || "My Store",
-    storeNameDisplay: branding.storeNameDisplay || (branding.storeName || "MY STORE").toUpperCase(),
-    templateId: branding.templateId || "classic",
-    colors: {
-      headerBackground: branding.colors?.headerBackground || "#111111",
-      headerText: branding.colors?.headerText || "#ffffff",
-      bodyText: branding.colors?.bodyText || "#1d1d1f",
-      accent: branding.colors?.accent || "#f4c928",
-      panelBackground: branding.colors?.panelBackground || "#f7f7f7",
-      border: branding.colors?.border || "#e5e5e5",
-    },
-  };
-  const selectTemplate = (templateId: DescriptionTemplateId) => {
-    const meta = DESCRIPTION_TEMPLATES.find((t) => t.id === templateId);
+    storeName,
+    storeNameDisplay,
+    templateId,
+    colors,
+  });
+
+  const selectTemplate = (nextTemplateId: DescriptionTemplateId) => {
+    const meta = DESCRIPTION_TEMPLATES.find((t) => t.id === nextTemplateId);
     onChange({
-      ...safeBranding,
-      templateId,
-      colors: meta ? { ...meta.suggestedColors } : { ...safeBranding.colors },
+      ...baseForUpdate(),
+      templateId: nextTemplateId,
+      colors: meta ? { ...meta.suggestedColors } : { ...colors },
     });
   };
 
@@ -48,12 +60,12 @@ export function StoreTemplatePicker({
     const preset = STORE_PRESETS.find((p) => p.id === presetId);
     if (!preset) return;
     onChange({
-      ...safeBranding,
+      ...baseForUpdate(),
       ...preset.branding,
       colors: { ...preset.branding.colors },
-      returnPolicyText: safeBranding.returnPolicyText,
-      warrantyInformation: safeBranding.warrantyInformation,
-      logoUrl: safeBranding.logoUrl,
+      returnPolicyText: branding.returnPolicyText,
+      warrantyInformation: branding.warrantyInformation,
+      logoUrl: branding.logoUrl,
       includeReturnsSection: false,
     });
   };
@@ -85,7 +97,7 @@ export function StoreTemplatePicker({
 
       <div className="mb-3 flex flex-wrap gap-1.5">
         {STORE_PRESETS.map((preset) => {
-          const active = safeBranding.storeName === preset.branding.storeName;
+          const active = storeName === preset.branding.storeName;
           return (
             <button
               key={preset.id}
@@ -108,36 +120,38 @@ export function StoreTemplatePicker({
         <div className="space-y-1.5">
           <Label className="text-xs">Nombre de la tienda</Label>
           <Input
-            value={safeBranding.storeName}
+            value={storeName}
             onChange={(e) => {
-              const storeName = e.target.value;
+              const nextName = e.target.value;
+              const displaySynced =
+                !storeNameDisplay.trim() ||
+                storeNameDisplay === storeName.toUpperCase();
               onChange({
-                ...safeBranding,
-                storeName,
-                storeNameDisplay:
-                  safeBranding.storeNameDisplay ===
-                    safeBranding.storeName.toUpperCase() ||
-                  !safeBranding.storeNameDisplay.trim()
-                    ? storeName.toUpperCase()
-                    : safeBranding.storeNameDisplay,
-                thankYouMessage: `Thank You for Shopping With ${storeName || "Our Store"}`,
-                footerText: `Shop with confidence at ${storeName || "Our Store"}.`,
+                ...baseForUpdate(),
+                storeName: nextName,
+                storeNameDisplay: displaySynced
+                  ? nextName.toUpperCase()
+                  : storeNameDisplay,
+                thankYouMessage: `Thank You for Shopping With ${nextName.trim() || "Our Store"}`,
+                footerText: `Shop with confidence at ${nextName.trim() || "Our Store"}.`,
               });
             }}
             placeholder="Ej. Higlou Store"
+            autoComplete="organization"
           />
         </div>
         <div className="space-y-1.5">
           <Label className="text-xs">Nombre en el header</Label>
           <Input
-            value={safeBranding.storeNameDisplay}
+            value={storeNameDisplay}
             onChange={(e) =>
               onChange({
-                ...safeBranding,
+                ...baseForUpdate(),
                 storeNameDisplay: e.target.value,
               })
             }
             placeholder="HIGLOU STORE"
+            autoComplete="off"
           />
         </div>
       </div>
@@ -146,7 +160,7 @@ export function StoreTemplatePicker({
         <Label className="text-xs">Plantilla HTML</Label>
         <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
           {DESCRIPTION_TEMPLATES.map((template) => {
-            const active = safeBranding.templateId === template.id;
+            const active = templateId === template.id;
             return (
               <button
                 key={template.id}

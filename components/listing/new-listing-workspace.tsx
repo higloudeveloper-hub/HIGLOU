@@ -208,6 +208,10 @@ export function NewListingWorkspace({
   >({});
   const [moreOpen, setMoreOpen] = useState(false);
   const [publishingDonBaraton, setPublishingDonBaraton] = useState(false);
+  const brandingDirtyRef = useRef(false);
+  const brandingSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
   const analyzeAbortRef = useRef(false);
   const firstAttentionRef = useRef<HTMLDivElement | null>(null);
 
@@ -218,7 +222,7 @@ export function NewListingWorkspace({
         const cached = localStorage.getItem("higlou-active-branding");
         if (cached) {
           const parsed = JSON.parse(cached) as StoreBranding;
-          if (!cancelled && parsed?.storeName) {
+          if (!cancelled && parsed?.storeName && !brandingDirtyRef.current) {
             setStoreBranding(cloneStoreBranding(parsed));
           }
         }
@@ -229,7 +233,8 @@ export function NewListingWorkspace({
         const res = await fetch("/api/settings/branding");
         if (!res.ok) return;
         const body = (await res.json()) as { branding: StoreBranding };
-        if (!cancelled && body.branding) {
+        // Don't clobber in-progress typing if the user already edited.
+        if (!cancelled && body.branding && !brandingDirtyRef.current) {
           setStoreBranding(cloneStoreBranding(body.branding));
           try {
             localStorage.setItem(
@@ -250,6 +255,7 @@ export function NewListingWorkspace({
   }, []);
 
   const handleStoreBrandingChange = (next: StoreBranding) => {
+    brandingDirtyRef.current = true;
     const cloned = cloneStoreBranding(next);
     setStoreBranding(cloned);
     try {
@@ -257,15 +263,31 @@ export function NewListingWorkspace({
     } catch {
       /* ignore */
     }
-    // Persist in background so drafts keep the chosen store.
-    void fetch("/api/settings/branding", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(cloned),
-    }).catch(() => {
-      /* offline / auth — local cache still applies for this session */
-    });
+    // Debounce persist — saving every keystroke raced with empty→default
+    // coercion on the API and made the store name field fight the user.
+    if (brandingSaveTimerRef.current) {
+      clearTimeout(brandingSaveTimerRef.current);
+    }
+    brandingSaveTimerRef.current = setTimeout(() => {
+      const payload = cloneStoreBranding(cloned);
+      if (!payload.storeName.trim()) return;
+      void fetch("/api/settings/branding", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      }).catch(() => {
+        /* offline / auth — local cache still applies for this session */
+      });
+    }, 600);
   };
+
+  useEffect(() => {
+    return () => {
+      if (brandingSaveTimerRef.current) {
+        clearTimeout(brandingSaveTimerRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (!productId) return;

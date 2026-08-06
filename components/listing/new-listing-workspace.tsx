@@ -16,6 +16,11 @@ import {
 } from "@/lib/ebay/description-html";
 import { sanitizeEbayHtml } from "@/lib/ebay/sanitize-html";
 import {
+  STORE_BRANDING_DEFAULTS,
+  cloneStoreBranding,
+  type StoreBranding,
+} from "@/config/store-branding";
+import {
   buildEbayTitle,
   generateSku,
 } from "@/lib/ebay/listing-helpers";
@@ -54,13 +59,19 @@ const PRODUCT_UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 /** Rebuild Description HTML from current fields so drafts never ship stale/empty copy. */
-function withFreshDescription(listing: ProductListing): ProductListing {
+function withFreshDescription(
+  listing: ProductListing,
+  branding: StoreBranding = STORE_BRANDING_DEFAULTS,
+): ProductListing {
   const descriptionSummary = synthesizeDescriptionSummary(listing);
   const descriptionHtml = sanitizeEbayHtml(
-    buildListingDescriptionHtml({
-      ...listing,
-      descriptionSummary,
-    }),
+    buildListingDescriptionHtml(
+      {
+        ...listing,
+        descriptionSummary,
+      },
+      branding,
+    ),
   );
   return {
     ...listing,
@@ -69,7 +80,10 @@ function withFreshDescription(listing: ProductListing): ProductListing {
   };
 }
 
-function mapApiProductToListing(product: Record<string, unknown>): ProductListing {
+function mapApiProductToListing(
+  product: Record<string, unknown>,
+  branding: StoreBranding = STORE_BRANDING_DEFAULTS,
+): ProductListing {
   const base = createEmptyListing();
   const images = Array.isArray(product.images)
     ? (product.images as Array<Record<string, unknown>>).map(
@@ -161,7 +175,7 @@ function mapApiProductToListing(product: Record<string, unknown>): ProductListin
 
   // Heal empty/stale HTML from DB so review + export show real copy.
   if (isWeakDescriptionHtml(mapped.descriptionHtml) && mapped.title.trim()) {
-    return withFreshDescription(mapped);
+    return withFreshDescription(mapped, branding);
   }
   return mapped;
 }
@@ -172,6 +186,9 @@ export function NewListingWorkspace({
   productId?: string;
 } = {}) {
   const [listing, setListing] = useState<ProductListing>(() => createEmptyListing());
+  const [storeBranding, setStoreBranding] = useState<StoreBranding>(() =>
+    cloneStoreBranding(STORE_BRANDING_DEFAULTS),
+  );
   const [step, setStep] = useState<WizardStep>("photos");
   const [analyzing, setAnalyzing] = useState(false);
   const [analysisStep, setAnalysisStep] = useState(0);
@@ -195,6 +212,44 @@ export function NewListingWorkspace({
   const firstAttentionRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const cached = localStorage.getItem("higlou-active-branding");
+        if (cached) {
+          const parsed = JSON.parse(cached) as StoreBranding;
+          if (!cancelled && parsed?.storeName) {
+            setStoreBranding(cloneStoreBranding(parsed));
+          }
+        }
+      } catch {
+        /* ignore */
+      }
+      try {
+        const res = await fetch("/api/settings/branding");
+        if (!res.ok) return;
+        const body = (await res.json()) as { branding: StoreBranding };
+        if (!cancelled && body.branding) {
+          setStoreBranding(cloneStoreBranding(body.branding));
+          try {
+            localStorage.setItem(
+              "higlou-active-branding",
+              JSON.stringify(body.branding),
+            );
+          } catch {
+            /* ignore */
+          }
+        }
+      } catch {
+        /* keep defaults / cache */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
     if (!productId) return;
     let cancelled = false;
     (async () => {
@@ -208,7 +263,7 @@ export function NewListingWorkspace({
           product: Record<string, unknown>;
         };
         if (!cancelled && body.product) {
-          setListing(mapApiProductToListing(body.product));
+          setListing(mapApiProductToListing(body.product, storeBranding));
           setStep("review");
         }
       } catch (error) {
@@ -224,7 +279,17 @@ export function NewListingWorkspace({
     return () => {
       cancelled = true;
     };
-  }, [productId]);
+  }, [productId]); // branding applied via separate effect
+
+  // Keep description HTML aligned with active store name + template.
+  useEffect(() => {
+    setListing((prev) => {
+      if (!prev.title.trim() && !prev.descriptionSummary.trim()) return prev;
+      const next = withFreshDescription(prev, storeBranding);
+      if (next.descriptionHtml === prev.descriptionHtml) return prev;
+      return next;
+    });
+  }, [storeBranding]);
 
   const update = <K extends keyof ProductListing>(
     key: K,
@@ -233,7 +298,10 @@ export function NewListingWorkspace({
     setListing((prev) => ({ ...prev, [key]: value, updatedAt: new Date().toISOString() }));
   };
 
-  const validationItems = useMemo(() => validateListing(listing), [listing]);
+  const validationItems = useMemo(
+    () => validateListing(listing, storeBranding.storeName),
+    [listing, storeBranding.storeName],
+  );
   const blocked = hasCriticalErrors(validationItems);
   const attentionFields = useMemo(() => getAttentionFields(listing), [listing]);
 
@@ -301,10 +369,13 @@ export function NewListingWorkspace({
         toast.success("Title updated");
       }
       if (field === "description" && body.descriptionSummary) {
-        const next = withFreshDescription({
-          ...listing,
-          descriptionSummary: body.descriptionSummary,
-        });
+        const next = withFreshDescription(
+          {
+            ...listing,
+            descriptionSummary: body.descriptionSummary,
+          },
+          storeBranding,
+        );
         setListing((prev) => ({
           ...prev,
           descriptionSummary: next.descriptionSummary,
@@ -431,7 +502,7 @@ export function NewListingWorkspace({
       descriptionHtml: "",
     };
 
-    return withFreshDescription(next);
+    return withFreshDescription(next, storeBranding);
   };
 
   const analyzeProduct = async (options?: {
@@ -794,7 +865,7 @@ export function NewListingWorkspace({
 
   const generateCsv = async (): Promise<boolean> => {
     // Rebuild Description from current fields BEFORE save/export.
-    const fresh = withFreshDescription(listing);
+    const fresh = withFreshDescription(listing, storeBranding);
     if (
       fresh.descriptionHtml !== listing.descriptionHtml ||
       fresh.descriptionSummary !== listing.descriptionSummary
@@ -969,7 +1040,7 @@ export function NewListingWorkspace({
   };
 
   const publishToDonBaraton = async () => {
-    const fresh = withFreshDescription(listing);
+    const fresh = withFreshDescription(listing, storeBranding);
     if (
       fresh.descriptionHtml !== listing.descriptionHtml ||
       fresh.descriptionSummary !== listing.descriptionSummary

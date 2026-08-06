@@ -68,7 +68,8 @@ export default function SettingsPage() {
               Store branding
             </h2>
             <p className="mt-1 text-sm text-zinc-500">
-              Every description I write includes your Higlou Store frame.
+              Pick your store name, colors, and HTML template. Drafts use this
+              branding automatically for every listing.
             </p>
           </div>
           <div className="rounded-2xl bg-white p-5 sm:p-6">

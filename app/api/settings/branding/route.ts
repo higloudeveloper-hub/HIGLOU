@@ -5,6 +5,7 @@ import {
   STORE_BRANDING_DEFAULTS,
   type StoreBranding,
 } from "@/config/store-branding";
+import { resolveTemplateId } from "@/config/description-templates";
 
 const brandingSchema = z.object({
   storeName: z.string().optional(),
@@ -17,6 +18,7 @@ const brandingSchema = z.object({
   warrantyInformation: z.string().optional(),
   footerText: z.string().optional(),
   logoUrl: z.string().optional(),
+  templateId: z.string().optional(),
   colors: z
     .object({
       headerBackground: z.string().optional(),
@@ -32,9 +34,27 @@ const brandingSchema = z.object({
 function mergeBranding(
   row: Record<string, unknown> | null | undefined,
 ): StoreBranding {
-  const colors = {
+  const colorsRaw = {
     ...STORE_BRANDING_DEFAULTS.colors,
     ...((row?.colors as Record<string, string> | undefined) ?? {}),
+  };
+  // Legacy: templateId may live inside colors jsonb before migration.
+  const legacyTemplate =
+    (colorsRaw as Record<string, string>).templateId ||
+    (row?.template_id as string | undefined);
+
+  const colors = {
+    headerBackground:
+      colorsRaw.headerBackground ||
+      STORE_BRANDING_DEFAULTS.colors.headerBackground,
+    headerText:
+      colorsRaw.headerText || STORE_BRANDING_DEFAULTS.colors.headerText,
+    bodyText: colorsRaw.bodyText || STORE_BRANDING_DEFAULTS.colors.bodyText,
+    accent: colorsRaw.accent || STORE_BRANDING_DEFAULTS.colors.accent,
+    panelBackground:
+      colorsRaw.panelBackground ||
+      STORE_BRANDING_DEFAULTS.colors.panelBackground,
+    border: colorsRaw.border || STORE_BRANDING_DEFAULTS.colors.border,
   };
 
   return {
@@ -67,19 +87,10 @@ function mergeBranding(
       row?.footer_text ?? STORE_BRANDING_DEFAULTS.footerText,
     ),
     logoUrl: String(row?.logo_url ?? STORE_BRANDING_DEFAULTS.logoUrl),
-    colors: {
-      headerBackground:
-        colors.headerBackground ||
-        STORE_BRANDING_DEFAULTS.colors.headerBackground,
-      headerText:
-        colors.headerText || STORE_BRANDING_DEFAULTS.colors.headerText,
-      bodyText: colors.bodyText || STORE_BRANDING_DEFAULTS.colors.bodyText,
-      accent: colors.accent || STORE_BRANDING_DEFAULTS.colors.accent,
-      panelBackground:
-        colors.panelBackground ||
-        STORE_BRANDING_DEFAULTS.colors.panelBackground,
-      border: colors.border || STORE_BRANDING_DEFAULTS.colors.border,
-    },
+    templateId: resolveTemplateId(
+      legacyTemplate || STORE_BRANDING_DEFAULTS.templateId,
+    ),
+    colors,
   };
 }
 
@@ -123,19 +134,29 @@ export async function PUT(request: Request) {
         patch.warrantyInformation ?? current.warrantyInformation,
       footerText: patch.footerText ?? current.footerText,
       logoUrl: patch.logoUrl ?? current.logoUrl,
+      templateId: resolveTemplateId(
+        patch.templateId ?? current.templateId,
+      ),
       colors: {
         ...current.colors,
         ...(patch.colors ?? {}),
       },
     };
 
-    // Higlou Store branding must never be empty.
-    if (!next.storeName.trim()) next.storeName = STORE_BRANDING_DEFAULTS.storeName;
+    if (!next.storeName.trim()) {
+      next.storeName = STORE_BRANDING_DEFAULTS.storeName;
+    }
     if (!next.storeNameDisplay.trim()) {
-      next.storeNameDisplay = STORE_BRANDING_DEFAULTS.storeNameDisplay;
+      next.storeNameDisplay = next.storeName.toUpperCase();
+    }
+    if (!next.thankYouMessage.trim()) {
+      next.thankYouMessage = `Thank You for Shopping With ${next.storeName}`;
+    }
+    if (!next.footerText.trim()) {
+      next.footerText = `Shop with confidence at ${next.storeName}.`;
     }
 
-    const payload = {
+    const payload: Record<string, unknown> = {
       user_id: auth.user.id,
       store_name: next.storeName,
       store_name_display: next.storeNameDisplay,
@@ -147,15 +168,32 @@ export async function PUT(request: Request) {
       warranty_information: next.warrantyInformation,
       footer_text: next.footerText,
       logo_url: next.logoUrl,
-      colors: next.colors,
+      colors: {
+        ...next.colors,
+        // Keep templateId in jsonb too so older DBs without the column still work.
+        templateId: next.templateId,
+      },
+      template_id: next.templateId,
       updated_at: new Date().toISOString(),
     };
 
-    const { data, error } = await auth.supabase
+    let { data, error } = await auth.supabase
       .from("store_branding")
       .upsert(payload, { onConflict: "user_id" })
       .select("*")
       .single();
+
+    // Fallback if template_id column is not migrated yet.
+    if (error && /template_id/i.test(error.message)) {
+      delete payload.template_id;
+      const retry = await auth.supabase
+        .from("store_branding")
+        .upsert(payload, { onConflict: "user_id" })
+        .select("*")
+        .single();
+      data = retry.data;
+      error = retry.error;
+    }
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });

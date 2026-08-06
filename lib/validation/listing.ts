@@ -2,7 +2,10 @@ import type { ProductListing } from "@/types/product";
 import type { ValidationItem } from "@/components/validation/validation-checklist";
 import { DEFAULT_VALUES } from "@/config/default-values";
 
-export function validateListing(listing: ProductListing): ValidationItem[] {
+export function validateListing(
+  listing: ProductListing,
+  storeName = "Higlou Store",
+): ValidationItem[] {
   const hasLocalOnly =
     listing.images.length > 0 &&
     listing.images.every((img) => !/^https:\/\//i.test(img.url));
@@ -132,8 +135,11 @@ export function validateListing(listing: ProductListing): ValidationItem[] {
     },
     {
       id: "branding",
-      label: "Description includes Higlou Store branding",
-      ok: /higlou store/i.test(listing.descriptionHtml),
+      label: `Description includes ${storeName} branding`,
+      ok: new RegExp(
+        storeName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"),
+        "i",
+      ).test(listing.descriptionHtml),
       severity: "critical",
     },
   ];

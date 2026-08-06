@@ -1,3 +1,5 @@
+import type { DescriptionTemplateId } from "@/config/description-templates";
+
 export const STORE_BRANDING_DEFAULTS = {
   storeName: "Higlou Store",
   storeNameDisplay: "HIGLOU STORE",
@@ -14,6 +16,8 @@ export const STORE_BRANDING_DEFAULTS = {
   includeReturnsSection: false,
   footerText: "Shop with confidence at Higlou Store.",
   logoUrl: "",
+  /** HTML description layout template */
+  templateId: "classic" as DescriptionTemplateId,
   colors: {
     headerBackground: "#111111",
     headerText: "#ffffff",
@@ -36,6 +40,7 @@ export type StoreBranding = {
   includeReturnsSection?: boolean;
   footerText: string;
   logoUrl: string;
+  templateId: DescriptionTemplateId;
   colors: {
     headerBackground: string;
     headerText: string;
@@ -45,3 +50,12 @@ export type StoreBranding = {
     border: string;
   };
 };
+
+export function cloneStoreBranding(
+  branding: StoreBranding = STORE_BRANDING_DEFAULTS,
+): StoreBranding {
+  return {
+    ...branding,
+    colors: { ...branding.colors },
+  };
+}

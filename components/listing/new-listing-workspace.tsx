@@ -209,6 +209,12 @@ export function NewListingWorkspace({
   >({});
   const [moreOpen, setMoreOpen] = useState(false);
   const [publishingDonBaraton, setPublishingDonBaraton] = useState(false);
+  const [publishingEbay, setPublishingEbay] = useState(false);
+  const [ebayConnection, setEbayConnection] = useState<{
+    connected: boolean;
+    configured: boolean;
+    ebayUsername: string | null;
+  }>({ connected: false, configured: false, ebayUsername: null });
   const brandingDirtyRef = useRef(false);
   const brandingSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
     null,
@@ -287,6 +293,35 @@ export function NewListingWorkspace({
       if (brandingSaveTimerRef.current) {
         clearTimeout(brandingSaveTimerRef.current);
       }
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch("/api/ebay/connection");
+        if (!res.ok) return;
+        const body = (await res.json()) as {
+          connection?: {
+            connected?: boolean;
+            configured?: boolean;
+            ebayUsername?: string | null;
+          };
+        };
+        if (!cancelled && body.connection) {
+          setEbayConnection({
+            connected: Boolean(body.connection.connected),
+            configured: Boolean(body.connection.configured),
+            ebayUsername: body.connection.ebayUsername || null,
+          });
+        }
+      } catch {
+        /* optional */
+      }
+    })();
+    return () => {
+      cancelled = true;
     };
   }, []);
 
@@ -1268,6 +1303,104 @@ export function NewListingWorkspace({
     }
   };
 
+  const publishToEbay = async (mode: "draft" | "live") => {
+    const fresh = withFreshDescription(listing, storeBranding);
+    if (fresh.descriptionHtml !== listing.descriptionHtml) {
+      setListing((prev) => ({
+        ...prev,
+        descriptionSummary: fresh.descriptionSummary,
+        descriptionHtml: fresh.descriptionHtml,
+        updatedAt: new Date().toISOString(),
+      }));
+    }
+    await persistDraft({ quiet: true, draft: fresh });
+
+    setPublishingEbay(true);
+    try {
+      const productId =
+        /^[0-9a-f-]{36}$/i.test(fresh.id) ? fresh.id : undefined;
+      const response = await fetch("/api/ebay/publish", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          productId,
+          mode,
+          listing: {
+            sku: fresh.sku,
+            title: fresh.title,
+            descriptionHtml: fresh.descriptionHtml,
+            descriptionSummary: fresh.descriptionSummary,
+            categoryId: fresh.categoryId,
+            categoryName: fresh.categoryName,
+            brand: fresh.brand,
+            model: fresh.model,
+            mpn: fresh.mpn,
+            upc: fresh.upc,
+            size: fresh.size,
+            productType: fresh.productType || fresh.type,
+            type: fresh.type,
+            condition: fresh.condition,
+            conditionId: fresh.conditionId,
+            price: fresh.price,
+            quantity: fresh.quantity,
+            colors: fresh.colors,
+            materials: fresh.materials,
+            features: fresh.features,
+            itemSpecifics: fresh.itemSpecifics.map((f) => ({
+              key: f.key,
+              value: f.value,
+              label: f.label,
+            })),
+            images: fresh.images
+              .filter((img) => /^https:\/\//i.test(img.url))
+              .map((img) => ({ url: img.url })),
+            shippingPolicyId: fresh.shippingPolicyId,
+            returnPolicyId: fresh.returnPolicyId,
+            paymentPolicyId: fresh.paymentPolicyId,
+          },
+        }),
+      });
+      const body = (await response.json().catch(() => null)) as {
+        error?: string;
+        code?: string;
+        offerId?: string;
+        listingId?: string | null;
+        sellerHubHint?: string;
+      } | null;
+      if (!response.ok) {
+        if (body?.code === "EBAY_NOT_CONNECTED") {
+          toast.error("Connect your eBay store first", {
+            description: "Settings → eBay store connection",
+            action: {
+              label: "Open Settings",
+              onClick: () => {
+                window.location.href = "/settings#ebay-store";
+              },
+            },
+          });
+          return;
+        }
+        throw new Error(body?.error || "eBay publish failed");
+      }
+      toast.success(
+        mode === "live" ? "Published to eBay" : "eBay draft offer created",
+        {
+          description:
+            body?.sellerHubHint ||
+            (body?.listingId
+              ? `Listing ${body.listingId}`
+              : `Offer ${body?.offerId || ""}`),
+        },
+      );
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "eBay publish failed",
+      );
+    } finally {
+      setPublishingEbay(false);
+    }
+  };
+
   const startNewProduct = () => {
     setListing(createEmptyListing());
     setStep("photos");
@@ -1429,6 +1562,11 @@ export function NewListingWorkspace({
           onSaveDraft={() => void saveDraft()}
           storeBranding={storeBranding}
           onStoreBrandingChange={handleStoreBrandingChange}
+          ebayConnected={ebayConnection.connected}
+          ebayUsername={ebayConnection.ebayUsername}
+          ebayConfigured={ebayConnection.configured}
+          onPublishToEbay={(mode) => void publishToEbay(mode)}
+          publishingEbay={publishingEbay}
         />
       ) : null}
 

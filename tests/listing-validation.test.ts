@@ -45,7 +45,6 @@ describe("validateListing branding / export blockers", () => {
         mimeType: "image/jpeg",
         sizeBytes: 1,
         uploadProgress: 100,
-        status: "ready",
       },
     ];
 
@@ -76,7 +75,6 @@ describe("validateListing branding / export blockers", () => {
         mimeType: "image/jpeg",
         sizeBytes: 1,
         uploadProgress: 50,
-        status: "uploading",
       },
       {
         id: "2",
@@ -88,7 +86,6 @@ describe("validateListing branding / export blockers", () => {
         mimeType: "image/jpeg",
         sizeBytes: 1,
         uploadProgress: 100,
-        status: "ready",
       },
     ];
 

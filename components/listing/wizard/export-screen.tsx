@@ -53,6 +53,11 @@ export function ExportScreen({
   onSaveDraft,
   storeBranding,
   onStoreBrandingChange,
+  ebayConnected = false,
+  ebayUsername = null,
+  ebayConfigured = false,
+  onPublishToEbay,
+  publishingEbay = false,
 }: {
   listing: ProductListing;
   productName?: string;
@@ -70,6 +75,11 @@ export function ExportScreen({
   onSaveDraft?: () => void;
   storeBranding?: StoreBranding;
   onStoreBrandingChange?: (next: StoreBranding) => void;
+  ebayConnected?: boolean;
+  ebayUsername?: string | null;
+  ebayConfigured?: boolean;
+  onPublishToEbay?: (mode: "draft" | "live") => void;
+  publishingEbay?: boolean;
 }) {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [exporting, setExporting] = useState(false);
@@ -514,6 +524,56 @@ export function ExportScreen({
                 {exportDisabledReason}
               </p>
             ) : null}
+          </div>
+
+          <div className="rounded-3xl border-2 border-blue-500/30 bg-gradient-to-br from-blue-50 to-white p-5 shadow-sm">
+            <h3 className="text-[15px] font-semibold text-blue-950">
+              Publish to your eBay store
+            </h3>
+            <p className="mt-0.5 text-[12px] text-muted-foreground">
+              {ebayConnected
+                ? `Connected as ${ebayUsername || "seller"} — create an unpublished offer (draft) or publish live when policies are set.`
+                : ebayConfigured
+                  ? "Connect your eBay seller account once, then publish drafts directly from Higlou."
+                  : "Admin: add eBay OAuth env vars, then each client can Connect their store."}
+            </p>
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              {ebayConnected ? (
+                <>
+                  <button
+                    type="button"
+                    disabled={exportDisabled || publishingEbay || !onPublishToEbay}
+                    onClick={() => onPublishToEbay?.("draft")}
+                    className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-[13px] font-semibold text-white disabled:opacity-50"
+                  >
+                    <Store className="h-4 w-4" />
+                    {publishingEbay ? "Sending to eBay…" : "Create eBay draft"}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={exportDisabled || publishingEbay || !onPublishToEbay}
+                    onClick={() => onPublishToEbay?.("live")}
+                    className="inline-flex items-center gap-2 rounded-xl border border-blue-300 bg-white px-4 py-2.5 text-[13px] font-semibold text-blue-900 disabled:opacity-50"
+                  >
+                    Publish live
+                  </button>
+                </>
+              ) : (
+                <a
+                  href={
+                    ebayConfigured
+                      ? "/api/ebay/oauth/start"
+                      : "/settings#ebay-store"
+                  }
+                  className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-[13px] font-semibold text-white"
+                >
+                  <Store className="h-4 w-4" />
+                  {ebayConfigured
+                    ? "Connect eBay store"
+                    : "Open Settings → eBay store"}
+                </a>
+              )}
+            </div>
           </div>
 
           <div className="rounded-3xl border border-[#c8102e]/25 bg-gradient-to-br from-[#fff5f6] to-white p-5 shadow-sm">

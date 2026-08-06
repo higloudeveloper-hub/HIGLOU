@@ -3,11 +3,17 @@ import { AppShell } from "@/components/layout/app-shell";
 import { StoreBrandingForm } from "@/components/settings/store-branding-form";
 import { EbayTemplateForm } from "@/components/settings/ebay-template-form";
 import { EbayPoliciesForm } from "@/components/settings/ebay-policies-form";
+import { EbayConnectForm } from "@/components/settings/ebay-connect-form";
 import { AiSettingsForm } from "@/components/settings/ai-settings-form";
 import { BudgetSettingsForm } from "@/components/settings/budget-settings-form";
 import { EXPECTED_SEED_TEMPLATE_SHA256 } from "@/types/ebay";
 
 const HUB = [
+  {
+    href: "#ebay-store",
+    title: "eBay store",
+    body: "Connect your real eBay seller account via OAuth.",
+  },
   {
     href: "#branding",
     title: "Store branding",
@@ -48,6 +54,21 @@ export default function SettingsPage() {
               <p className="mt-1 text-sm text-zinc-500">{item.body}</p>
             </Link>
           ))}
+        </section>
+
+        <section id="ebay-store" className="scroll-mt-24 space-y-4">
+          <div>
+            <h2 className="text-lg font-semibold tracking-tight text-zinc-950">
+              eBay store connection
+            </h2>
+            <p className="mt-1 text-sm text-zinc-500">
+              Link your seller account so Higlou can create drafts and publish
+              listings through the eBay Sell APIs.
+            </p>
+          </div>
+          <div className="rounded-2xl bg-white p-5 sm:p-6">
+            <EbayConnectForm />
+          </div>
         </section>
 
         <section id="ai" className="scroll-mt-24 space-y-4">

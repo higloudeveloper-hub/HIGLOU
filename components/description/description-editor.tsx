@@ -13,8 +13,11 @@ interface DescriptionEditorProps {
   onChange: (html: string) => void;
   onRegenerate: () => void;
   title?: string;
+  storeName?: string;
   /** Tighter preview for the draft review workspace. */
   compact?: boolean;
+  /** Optional controls rendered above the preview (store / template). */
+  brandingControls?: React.ReactNode;
 }
 
 export function DescriptionEditor({
@@ -22,17 +25,20 @@ export function DescriptionEditor({
   onChange,
   onRegenerate,
   title,
+  storeName,
   compact = false,
+  brandingControls,
 }: DescriptionEditorProps) {
   const sanitized = useMemo(() => sanitizeEbayHtml(html), [html]);
   const previewMin = compact ? "min-h-[360px]" : "min-h-[560px]";
+  const displayStore = storeName || STORE_BRANDING_DEFAULTS.storeName;
 
   return (
     <div className="space-y-4">
+      {brandingControls}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-[13px] text-muted-foreground">
-          Exactly how shoppers will see your {STORE_BRANDING_DEFAULTS.storeName}{" "}
-          description.
+          Exactly how shoppers will see your {displayStore} description.
         </p>
         <Button
           type="button"
@@ -64,7 +70,7 @@ export function DescriptionEditor({
                 </p>
               </div>
               <div className="hidden shrink-0 rounded-full bg-brand px-3 py-1 text-[11px] font-semibold text-brand-foreground sm:block">
-                {STORE_BRANDING_DEFAULTS.storeName}
+                {displayStore}
               </div>
             </div>
             <div className="bg-[oklch(0.97_0.01_90)] p-3 sm:p-4">

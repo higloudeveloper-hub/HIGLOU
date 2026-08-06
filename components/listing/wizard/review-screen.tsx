@@ -196,14 +196,22 @@ export function ReviewScreen({
         className="mx-auto max-w-[1120px] px-4 pt-5 sm:px-6"
       >
         {storeBranding && onStoreBrandingChange ? (
-          <div className="mb-4">
+          <div className="mb-4 rounded-2xl border-2 border-amber-400 bg-amber-50 p-1 shadow-sm">
             <StoreTemplatePicker
               branding={storeBranding}
               onChange={onStoreBrandingChange}
               compact
             />
           </div>
-        ) : null}
+        ) : (
+          <div className="mb-4 rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+            No se cargó el selector de tienda. Abre{" "}
+            <a className="font-semibold underline" href="/settings#branding">
+              Settings → Store branding
+            </a>
+            .
+          </div>
+        )}
 
         {/* Compact workspace header */}
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
@@ -633,7 +641,19 @@ export function ReviewScreen({
                 onChange={(html) => onUpdate("descriptionHtml", html)}
                 onRegenerate={onRegenerateDescription}
                 title={listing.title}
+                storeName={storeBranding?.storeName}
                 compact
+                brandingControls={
+                  storeBranding && onStoreBrandingChange ? (
+                    <div className="rounded-2xl border-2 border-amber-400 bg-amber-50 p-1">
+                      <StoreTemplatePicker
+                        branding={storeBranding}
+                        onChange={onStoreBrandingChange}
+                        compact
+                      />
+                    </div>
+                  ) : null
+                }
               />
             </TabsContent>
 

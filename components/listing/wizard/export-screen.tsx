@@ -196,17 +196,7 @@ export function ExportScreen({
 
   return (
     <div className="pb-28">
-      <div className="mx-auto max-w-[1600px] px-6 pt-8">
-        {storeBranding && onStoreBrandingChange ? (
-          <div className="mb-6">
-            <StoreTemplatePicker
-              branding={storeBranding}
-              onChange={onStoreBrandingChange}
-            />
-          </div>
-        ) : null}
-      </div>
-      <div className="mx-auto grid max-w-[1600px] gap-6 px-6 pb-10 lg:grid-cols-[300px_1fr_400px]">
+      <div className="mx-auto grid max-w-[1600px] gap-6 px-6 py-8 lg:grid-cols-[300px_1fr_400px]">
         <aside className="space-y-4">
           <div className="rounded-2xl border border-success/30 bg-success-soft/70 p-4">
             <div className="flex items-center gap-2">
@@ -220,7 +210,7 @@ export function ExportScreen({
                 <p className="text-[12px] text-muted-foreground">
                   Your listing is ready for eBay CSV and your marketplace.
                   {storeBranding?.storeName
-                    ? ` Store: ${storeBranding.storeName}`
+                    ? ` · ${storeBranding.storeName}`
                     : ""}
                 </p>
               </div>
@@ -323,6 +313,23 @@ export function ExportScreen({
               </button>
             </div>
           </div>
+
+          {storeBranding && onStoreBrandingChange ? (
+            <div className="mb-6 rounded-2xl border-2 border-amber-400 bg-amber-50 p-1 shadow-sm">
+              <StoreTemplatePicker
+                branding={storeBranding}
+                onChange={onStoreBrandingChange}
+              />
+            </div>
+          ) : (
+            <div className="mb-6 rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+              No se cargó el selector de tienda. Abre{" "}
+              <a className="font-semibold underline" href="/settings#branding">
+                Settings → Store branding
+              </a>{" "}
+              o recarga la página (Ctrl+Shift+R).
+            </div>
+          )}
 
           <div className="grid gap-5 md:grid-cols-[1fr_280px]">
             <ul className="divide-y divide-border">

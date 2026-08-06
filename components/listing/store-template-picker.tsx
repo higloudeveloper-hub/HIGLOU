@@ -21,12 +21,26 @@ export function StoreTemplatePicker({
   onChange: (next: StoreBranding) => void;
   compact?: boolean;
 }) {
+  const safeBranding: StoreBranding = {
+    ...branding,
+    storeName: branding.storeName || "My Store",
+    storeNameDisplay: branding.storeNameDisplay || (branding.storeName || "MY STORE").toUpperCase(),
+    templateId: branding.templateId || "classic",
+    colors: {
+      headerBackground: branding.colors?.headerBackground || "#111111",
+      headerText: branding.colors?.headerText || "#ffffff",
+      bodyText: branding.colors?.bodyText || "#1d1d1f",
+      accent: branding.colors?.accent || "#f4c928",
+      panelBackground: branding.colors?.panelBackground || "#f7f7f7",
+      border: branding.colors?.border || "#e5e5e5",
+    },
+  };
   const selectTemplate = (templateId: DescriptionTemplateId) => {
     const meta = DESCRIPTION_TEMPLATES.find((t) => t.id === templateId);
     onChange({
-      ...branding,
+      ...safeBranding,
       templateId,
-      colors: meta ? { ...meta.suggestedColors } : branding.colors,
+      colors: meta ? { ...meta.suggestedColors } : { ...safeBranding.colors },
     });
   };
 
@@ -34,12 +48,12 @@ export function StoreTemplatePicker({
     const preset = STORE_PRESETS.find((p) => p.id === presetId);
     if (!preset) return;
     onChange({
-      ...branding,
+      ...safeBranding,
       ...preset.branding,
       colors: { ...preset.branding.colors },
-      returnPolicyText: branding.returnPolicyText,
-      warrantyInformation: branding.warrantyInformation,
-      logoUrl: branding.logoUrl,
+      returnPolicyText: safeBranding.returnPolicyText,
+      warrantyInformation: safeBranding.warrantyInformation,
+      logoUrl: safeBranding.logoUrl,
       includeReturnsSection: false,
     });
   };
@@ -71,7 +85,7 @@ export function StoreTemplatePicker({
 
       <div className="mb-3 flex flex-wrap gap-1.5">
         {STORE_PRESETS.map((preset) => {
-          const active = branding.storeName === preset.branding.storeName;
+          const active = safeBranding.storeName === preset.branding.storeName;
           return (
             <button
               key={preset.id}
@@ -94,18 +108,18 @@ export function StoreTemplatePicker({
         <div className="space-y-1.5">
           <Label className="text-xs">Nombre de la tienda</Label>
           <Input
-            value={branding.storeName}
+            value={safeBranding.storeName}
             onChange={(e) => {
               const storeName = e.target.value;
               onChange({
-                ...branding,
+                ...safeBranding,
                 storeName,
                 storeNameDisplay:
-                  branding.storeNameDisplay ===
-                    branding.storeName.toUpperCase() ||
-                  !branding.storeNameDisplay.trim()
+                  safeBranding.storeNameDisplay ===
+                    safeBranding.storeName.toUpperCase() ||
+                  !safeBranding.storeNameDisplay.trim()
                     ? storeName.toUpperCase()
-                    : branding.storeNameDisplay,
+                    : safeBranding.storeNameDisplay,
                 thankYouMessage: `Thank You for Shopping With ${storeName || "Our Store"}`,
                 footerText: `Shop with confidence at ${storeName || "Our Store"}.`,
               });
@@ -116,10 +130,10 @@ export function StoreTemplatePicker({
         <div className="space-y-1.5">
           <Label className="text-xs">Nombre en el header</Label>
           <Input
-            value={branding.storeNameDisplay}
+            value={safeBranding.storeNameDisplay}
             onChange={(e) =>
               onChange({
-                ...branding,
+                ...safeBranding,
                 storeNameDisplay: e.target.value,
               })
             }
@@ -132,7 +146,7 @@ export function StoreTemplatePicker({
         <Label className="text-xs">Plantilla HTML</Label>
         <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
           {DESCRIPTION_TEMPLATES.map((template) => {
-            const active = branding.templateId === template.id;
+            const active = safeBranding.templateId === template.id;
             return (
               <button
                 key={template.id}

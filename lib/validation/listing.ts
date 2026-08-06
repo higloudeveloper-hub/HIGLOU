@@ -63,8 +63,25 @@ export function validateListing(listing: ProductListing): ValidationItem[] {
     {
       id: "description",
       label: "Description is present",
-      ok: listing.descriptionHtml.trim().length > 0,
+      ok:
+        listing.descriptionHtml.trim().length > 0 &&
+        !/^<p>\s*<\/p>$/i.test(listing.descriptionHtml.trim()),
       severity: "critical",
+    },
+    {
+      id: "description-body",
+      label: "Description has product copy (not just branding shell)",
+      ok:
+        listing.descriptionSummary.trim().length >= 20 ||
+        listing.features.some((f) => f.trim()) ||
+        listing.setIncludes.some((f) => f.trim()) ||
+        (listing.descriptionHtml.replace(/<[^>]+>/g, " ").trim().length > 180 &&
+          !/see photos and details for key features/i.test(
+            listing.descriptionHtml,
+          )),
+      severity: "warning",
+      detail:
+        "If empty, export will auto-build from title/features before CSV.",
     },
     {
       id: "sku",

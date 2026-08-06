@@ -4,13 +4,16 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { CONDITION_OPTIONS } from "@/config/condition-map";
 import { DEFAULT_VALUES } from "@/config/default-values";
-import { STORE_BRANDING_DEFAULTS } from "@/config/store-branding";
 import { createEmptyListing } from "@/lib/demo/sample-listing";
 import {
   EBAY_CATEGORY_OPTIONS,
   resolveEbayCategory,
 } from "@/config/ebay-categories";
-import { buildHiglouDescriptionHtml } from "@/lib/ebay/description-html";
+import {
+  buildListingDescriptionHtml,
+  isWeakDescriptionHtml,
+  synthesizeDescriptionSummary,
+} from "@/lib/ebay/description-html";
 import { sanitizeEbayHtml } from "@/lib/ebay/sanitize-html";
 import {
   buildEbayTitle,
@@ -50,6 +53,22 @@ const LISTING_SAVE_REQUIRED_MESSAGE =
 const PRODUCT_UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
+/** Rebuild Description HTML from current fields so drafts never ship stale/empty copy. */
+function withFreshDescription(listing: ProductListing): ProductListing {
+  const descriptionSummary = synthesizeDescriptionSummary(listing);
+  const descriptionHtml = sanitizeEbayHtml(
+    buildListingDescriptionHtml({
+      ...listing,
+      descriptionSummary,
+    }),
+  );
+  return {
+    ...listing,
+    descriptionSummary,
+    descriptionHtml,
+  };
+}
+
 function mapApiProductToListing(product: Record<string, unknown>): ProductListing {
   const base = createEmptyListing();
   const images = Array.isArray(product.images)
@@ -82,7 +101,7 @@ function mapApiProductToListing(product: Record<string, unknown>): ProductListin
       }))
     : base.itemSpecifics;
 
-  return {
+  const mapped: ProductListing = {
     ...base,
     id: String(product.id ?? base.id),
     status: (product.status as ProductListing["status"]) || base.status,
@@ -139,6 +158,12 @@ function mapApiProductToListing(product: Record<string, unknown>): ProductListin
     createdAt: String(product.createdAt ?? base.createdAt),
     updatedAt: String(product.updatedAt ?? base.updatedAt),
   };
+
+  // Heal empty/stale HTML from DB so review + export show real copy.
+  if (isWeakDescriptionHtml(mapped.descriptionHtml) && mapped.title.trim()) {
+    return withFreshDescription(mapped);
+  }
+  return mapped;
 }
 
 export function NewListingWorkspace({
@@ -276,32 +301,16 @@ export function NewListingWorkspace({
         toast.success("Title updated");
       }
       if (field === "description" && body.descriptionSummary) {
-        update("descriptionSummary", body.descriptionSummary);
-        const html = sanitizeEbayHtml(
-          buildHiglouDescriptionHtml({
-            productTitle: listing.title,
-            productIntroduction: body.descriptionSummary,
-            features: listing.features,
-            itemCondition: `${listing.condition}${
-              listing.conditionDescription
-                ? ` — ${listing.conditionDescription}`
-                : ""
-            }`,
-            packageContents: listing.setIncludes,
-            shippingInformation: STORE_BRANDING_DEFAULTS.shippingInformation,
-            specs: [
-              { label: "Brand", value: listing.brand },
-              { label: "Model", value: listing.model },
-              { label: "Size", value: listing.size },
-              { label: "Color", value: listing.colors.join(" / ") },
-              { label: "Type", value: listing.productType || listing.type },
-              { label: "Material", value: listing.materials.join(" / ") },
-              { label: "Style", value: listing.style },
-              { label: "Department", value: listing.department },
-            ].filter((row) => row.value.trim()),
-          }),
-        );
-        update("descriptionHtml", html);
+        const next = withFreshDescription({
+          ...listing,
+          descriptionSummary: body.descriptionSummary,
+        });
+        setListing((prev) => ({
+          ...prev,
+          descriptionSummary: next.descriptionSummary,
+          descriptionHtml: next.descriptionHtml,
+          updatedAt: new Date().toISOString(),
+        }));
         toast.success("Description updated");
       }
       if (body.budgetWarning) toast.message(body.budgetWarning);
@@ -422,35 +431,7 @@ export function NewListingWorkspace({
       descriptionHtml: "",
     };
 
-    next.descriptionHtml = sanitizeEbayHtml(
-      buildHiglouDescriptionHtml({
-        productTitle: next.title,
-        productIntroduction: next.descriptionSummary,
-        features: next.features,
-        itemCondition: `${next.condition}${
-          next.conditionDescription ? ` — ${next.conditionDescription}` : ""
-        }`,
-        packageContents: [
-          ...next.setIncludes,
-          ...(next.missingItems?.length
-            ? next.missingItems.map((m) => `Missing: ${m}`)
-            : []),
-        ],
-        shippingInformation: STORE_BRANDING_DEFAULTS.shippingInformation,
-        specs: [
-          { label: "Brand", value: next.brand },
-          { label: "Model", value: next.model },
-          { label: "Size", value: next.size },
-          { label: "Color", value: next.colors.join(" / ") },
-          { label: "Type", value: next.productType || next.type },
-          { label: "Material", value: next.materials.join(" / ") },
-          { label: "Style", value: next.style },
-          { label: "Department", value: next.department },
-        ].filter((row) => row.value.trim()),
-      }),
-    );
-
-    return next;
+    return withFreshDescription(next);
   };
 
   const analyzeProduct = async (options?: {
@@ -812,11 +793,25 @@ export function NewListingWorkspace({
   };
 
   const generateCsv = async (): Promise<boolean> => {
+    // Rebuild Description from current fields BEFORE save/export.
+    const fresh = withFreshDescription(listing);
+    if (
+      fresh.descriptionHtml !== listing.descriptionHtml ||
+      fresh.descriptionSummary !== listing.descriptionSummary
+    ) {
+      setListing((prev) => ({
+        ...prev,
+        descriptionSummary: fresh.descriptionSummary,
+        descriptionHtml: fresh.descriptionHtml,
+        updatedAt: new Date().toISOString(),
+      }));
+    }
+
     // Ensure the listing is in the library before export.
-    await persistDraft({ quiet: true });
+    await persistDraft({ quiet: true, draft: fresh });
 
     // Heal missing/non-numeric category before hitting the API (AI often returns a name only).
-    let exportListing = listing;
+    let exportListing = fresh;
     if (!/^\d{3,8}$/.test(String(listing.categoryId || "").trim())) {
       const resolved = resolveEbayCategory({
         categoryId: listing.categoryId,
@@ -974,20 +969,33 @@ export function NewListingWorkspace({
   };
 
   const publishToDonBaraton = async () => {
-    let publishListing = listing;
-    if (!/^\d{3,8}$/.test(String(listing.categoryId || "").trim())) {
+    const fresh = withFreshDescription(listing);
+    if (
+      fresh.descriptionHtml !== listing.descriptionHtml ||
+      fresh.descriptionSummary !== listing.descriptionSummary
+    ) {
+      setListing((prev) => ({
+        ...prev,
+        descriptionSummary: fresh.descriptionSummary,
+        descriptionHtml: fresh.descriptionHtml,
+        updatedAt: new Date().toISOString(),
+      }));
+    }
+
+    let publishListing = fresh;
+    if (!/^\d{3,8}$/.test(String(fresh.categoryId || "").trim())) {
       const resolved = resolveEbayCategory({
-        categoryId: listing.categoryId,
-        categoryName: listing.categoryName,
-        productType: listing.productType || listing.type,
-        title: listing.title,
-        brand: listing.brand,
+        categoryId: fresh.categoryId,
+        categoryName: fresh.categoryName,
+        productType: fresh.productType || fresh.type,
+        title: fresh.title,
+        brand: fresh.brand,
       });
       if (resolved.categoryId) {
         publishListing = {
-          ...listing,
+          ...fresh,
           categoryId: resolved.categoryId,
-          categoryName: resolved.categoryName || listing.categoryName,
+          categoryName: resolved.categoryName || fresh.categoryName,
         };
         setListing((prev) => ({
           ...prev,

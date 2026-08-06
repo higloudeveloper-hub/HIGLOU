@@ -27,6 +27,7 @@ import {
 import { estimatePackageAndShipping } from "@/lib/ebay/package-shipping";
 import {
   hasCriticalErrors,
+  criticalErrorLabels,
   validateListing,
 } from "@/lib/validation/listing";
 import {
@@ -339,8 +340,13 @@ export function NewListingWorkspace({
   };
 
   const validationItems = useMemo(
-    () => validateListing(listing, storeBranding.storeName),
-    [listing, storeBranding.storeName],
+    () =>
+      validateListing(
+        listing,
+        storeBranding.storeName,
+        storeBranding.storeNameDisplay,
+      ),
+    [listing, storeBranding.storeName, storeBranding.storeNameDisplay],
   );
   const blocked = hasCriticalErrors(validationItems);
   const attentionFields = useMemo(() => getAttentionFields(listing), [listing]);
@@ -946,7 +952,11 @@ export function NewListingWorkspace({
       }
     }
 
-    const items = validateListing(exportListing);
+    const items = validateListing(
+      exportListing,
+      storeBranding.storeName,
+      storeBranding.storeNameDisplay,
+    );
     // Category can be healed server-side — don't block the export UX on it.
     const blocking = items.filter(
       (item) =>
@@ -955,7 +965,9 @@ export function NewListingWorkspace({
         item.id !== "category",
     );
     if (blocking.length > 0) {
-      toast.error("Fix critical validation errors before generating CSV");
+      toast.error("Fix critical validation errors before generating CSV", {
+        description: criticalErrorLabels(blocking).join(" · "),
+      });
       setMoreOpen(true);
       return false;
     }
@@ -974,7 +986,9 @@ export function NewListingWorkspace({
           upc: exportListing.upc,
           price: exportListing.price,
           quantity: exportListing.quantity,
-          itemPhotoUrls: orderedImageUrls,
+          itemPhotoUrls: httpsImageUrls.length
+            ? httpsImageUrls
+            : orderedImageUrls.filter((url) => /^https:\/\//i.test(url)),
           conditionId: exportListing.conditionId,
           descriptionHtml: exportListing.descriptionHtml,
           format: exportListing.listingFormat,
@@ -1120,7 +1134,11 @@ export function NewListingWorkspace({
       }
     }
 
-    const items = validateListing(publishListing);
+    const items = validateListing(
+      publishListing,
+      storeBranding.storeName,
+      storeBranding.storeNameDisplay,
+    );
     const blocking = items.filter(
       (item) =>
         !item.ok &&
@@ -1128,7 +1146,9 @@ export function NewListingWorkspace({
         item.id !== "category",
     );
     if (blocking.length > 0) {
-      toast.error("Fix critical validation errors before publishing");
+      toast.error("Fix critical validation errors before publishing", {
+        description: criticalErrorLabels(blocking).join(" · "),
+      });
       setMoreOpen(true);
       return;
     }
@@ -1148,7 +1168,9 @@ export function NewListingWorkspace({
           upc: publishListing.upc,
           price: publishListing.price,
           quantity: publishListing.quantity,
-          itemPhotoUrls: orderedImageUrls,
+          itemPhotoUrls: httpsImageUrls.length
+            ? httpsImageUrls
+            : orderedImageUrls.filter((url) => /^https:\/\//i.test(url)),
           conditionId: publishListing.conditionId,
           descriptionHtml: publishListing.descriptionHtml,
           format: publishListing.listingFormat,

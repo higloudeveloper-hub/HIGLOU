@@ -2,18 +2,41 @@ import type { ProductListing } from "@/types/product";
 import type { ValidationItem } from "@/components/validation/validation-checklist";
 import { DEFAULT_VALUES } from "@/config/default-values";
 
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/** Description HTML mentions the active store (name or header display). */
+export function descriptionIncludesStoreBranding(
+  html: string,
+  storeName: string,
+  storeNameDisplay?: string,
+): boolean {
+  const candidates = [storeName, storeNameDisplay]
+    .map((v) => String(v || "").trim())
+    .filter((v) => v.length >= 2);
+  if (!candidates.length) return true;
+  return candidates.some((name) =>
+    new RegExp(escapeRegExp(name), "i").test(html),
+  );
+}
+
 export function validateListing(
   listing: ProductListing,
   storeName = "Higlou Store",
+  storeNameDisplay?: string,
 ): ValidationItem[] {
-  const hasLocalOnly =
-    listing.images.length > 0 &&
-    listing.images.every((img) => !/^https:\/\//i.test(img.url));
-  const hasBlob = listing.images.some(
-    (img) =>
-      (img.url || "").startsWith("blob:") ||
-      (img.previewUrl || "").startsWith("blob:"),
-  );
+  const httpsCount = listing.images.filter((img) =>
+    /^https:\/\//i.test(String(img.url || "").trim()),
+  ).length;
+  const nonHttpsCount = listing.images.filter((img) => {
+    const url = String(img.url || "").trim();
+    return url.length > 0 && !/^https:\/\//i.test(url);
+  }).length;
+  const hasBlob = listing.images.some((img) => {
+    const url = String(img.url || img.previewUrl || "");
+    return url.startsWith("blob:") || url.startsWith("file:");
+  });
 
   return [
     {
@@ -102,29 +125,27 @@ export function validateListing(
     },
     {
       id: "image-public",
-      label: "Image URLs are public HTTPS when provided",
-      ok:
-        listing.images.length === 0 ||
-        listing.images.every(
-          (img) => !img.url || /^https:\/\//i.test(img.url),
-        ),
-      severity: "critical",
-      detail: hasLocalOnly
-        ? "Local previews cannot be written to CSV until Supabase HTTPS upload (Phase 2)."
-        : undefined,
+      label: "CSV can use public HTTPS photo URLs",
+      // Allow export when at least one HTTPS URL exists (or no images).
+      // Local/blob previews are skipped at export time — do not block drafts.
+      ok: listing.images.length === 0 || httpsCount > 0 || nonHttpsCount === 0,
+      severity: httpsCount > 0 ? "warning" : "critical",
+      detail:
+        httpsCount > 0 && nonHttpsCount > 0
+          ? `${nonHttpsCount} local preview(s) will be skipped; ${httpsCount} HTTPS photo(s) will export.`
+          : httpsCount === 0 && nonHttpsCount > 0
+            ? "Upload photos to HTTPS (Supabase) before CSV — local previews cannot go to eBay."
+            : undefined,
     },
     {
       id: "no-blob",
-      label: "No unsupported blob/local image paths for CSV",
-      ok: listing.images.every(
-        (image) =>
-          !image.url.startsWith("blob:") &&
-          !image.url.startsWith("file:") &&
-          !image.url.startsWith("/"),
-      ),
-      severity: "critical",
+      label: "Blob previews will not be written to CSV",
+      ok: !hasBlob || httpsCount > 0,
+      severity: httpsCount > 0 ? "warning" : hasBlob ? "critical" : "warning",
       detail: hasBlob
-        ? "Preview blobs are fine locally; CSV requires public HTTPS URLs."
+        ? httpsCount > 0
+          ? "Preview blobs stay local; only HTTPS URLs are written to the CSV."
+          : "Preview blobs are fine locally; CSV requires public HTTPS URLs."
         : undefined,
     },
     {
@@ -135,16 +156,26 @@ export function validateListing(
     },
     {
       id: "branding",
-      label: `Description includes ${storeName} branding`,
-      ok: new RegExp(
-        storeName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"),
-        "i",
-      ).test(listing.descriptionHtml),
-      severity: "critical",
+      label: `Description includes ${storeName.trim() || "store"} branding`,
+      ok: descriptionIncludesStoreBranding(
+        listing.descriptionHtml,
+        storeName,
+        storeNameDisplay,
+      ),
+      // Soft for drafts: export rebuilds HTML from the active store before CSV.
+      severity: "warning",
+      detail:
+        "Export rebuilds the description with your active store name automatically.",
     },
   ];
 }
 
 export function hasCriticalErrors(items: ValidationItem[]) {
   return items.some((item) => !item.ok && item.severity === "critical");
+}
+
+export function criticalErrorLabels(items: ValidationItem[]) {
+  return items
+    .filter((item) => !item.ok && item.severity === "critical")
+    .map((item) => item.label);
 }

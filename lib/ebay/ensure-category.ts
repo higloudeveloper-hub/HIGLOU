@@ -74,26 +74,15 @@ export async function ensureEbayCategory(options: {
   });
 
   // 1) Trust plausible numeric IDs only when they agree with the product.
+  // Keep ANY valid leaf (even outside curated tips) so Don Baratón can create it.
   if (isValidEbayCategoryId(rawId) && !mismatch) {
     const known = findEbayCategoryById(rawId);
-    const ranked = scoreEbayCategories(normalized);
-    const best = ranked[0];
-    // Unknown ID + very strong catalog hit → prefer catalog (e.g. Soft Drinks).
-    if (!known && best && best.score >= 14 && best.option.id !== rawId) {
-      return {
-        categoryId: best.option.id,
-        categoryName: best.option.name,
-        inferred: true,
-        confidence: Math.min(0.92, 0.55 + best.score / 50),
-        source: "catalog",
-      };
-    }
     return {
       categoryId: rawId,
       categoryName:
         options.categoryName?.trim() || known?.name || options.categoryName || "",
       inferred: false,
-      confidence: known ? 0.95 : 0.82,
+      confidence: known ? 0.95 : 0.9,
       source: "model",
     };
   }

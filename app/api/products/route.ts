@@ -84,7 +84,13 @@ export async function POST(request: Request) {
       );
     }
 
-    await syncRelated(auth.supabase, auth.user.id, inserted.id, data);
+    // Product row is the source of truth for /listings. Related rows are best-effort
+    // so a specifics/image glitch cannot hide the listing from the library.
+    try {
+      await syncRelated(auth.supabase, auth.user.id, inserted.id, data);
+    } catch (relatedError) {
+      console.error("product related sync failed", relatedError);
+    }
 
     const [{ data: images }, { data: specifics }] = await Promise.all([
       auth.supabase

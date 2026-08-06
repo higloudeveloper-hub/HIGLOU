@@ -1,72 +1,123 @@
 import { z } from "zod";
 import type { createClient } from "@/lib/supabase/server";
 
+const softString = z.preprocess(
+  (value) => (value == null ? "" : String(value)),
+  z.string(),
+);
+
+const softStringArray = z.preprocess((value) => {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => (item == null ? "" : String(item).trim()))
+    .filter(Boolean);
+}, z.array(z.string()));
+
+const softPrice = z.preprocess((value) => {
+  if (value === null || value === undefined || value === "") return null;
+  const num = Number(value);
+  return Number.isFinite(num) ? num : null;
+}, z.number().nullable().optional());
+
+const softQuantity = z.preprocess((value) => {
+  const num = Math.floor(Number(value));
+  return Number.isFinite(num) && num > 0 ? num : 1;
+}, z.number().int().positive());
+
+const softHandling = z.preprocess((value) => {
+  const num = Math.floor(Number(value));
+  return Number.isFinite(num) && num >= 0 ? num : 1;
+}, z.number().int());
+
+const softConfidence = z.preprocess((value) => {
+  if (value === null || value === undefined || value === "") return null;
+  const num = Number(value);
+  return Number.isFinite(num) ? num : null;
+}, z.number().nullable().optional());
+
+const PRODUCT_STATUSES = [
+  "Uploaded",
+  "Analyzing",
+  "Needs Review",
+  "Ready",
+  "CSV Generated",
+  "Published",
+] as const;
+
+const softStatus = z.preprocess((value) => {
+  const raw = String(value ?? "").trim();
+  if ((PRODUCT_STATUSES as readonly string[]).includes(raw)) return raw;
+  const lower = raw.toLowerCase();
+  if (lower.includes("csv")) return "CSV Generated";
+  if (lower.includes("publish")) return "Published";
+  if (lower.includes("ready")) return "Ready";
+  if (lower.includes("analy")) return "Analyzing";
+  if (lower.includes("review") || lower.includes("draft")) return "Needs Review";
+  return "Uploaded";
+}, z.enum(PRODUCT_STATUSES));
+
 export const productBodySchema = z.object({
-  title: z.string().optional().default(""),
-  subtitle: z.string().optional().default(""),
-  brand: z.string().optional().default(""),
-  collection: z.string().optional().default(""),
-  model: z.string().optional().default(""),
-  sku: z.string().optional().default(""),
-  upc: z.string().optional().default(""),
-  mpn: z.string().optional().default(""),
-  categoryId: z.string().optional().default(""),
-  categoryName: z.string().optional().default(""),
-  condition: z.string().optional().default(""),
-  conditionId: z.string().optional().default(""),
-  conditionDescription: z.string().optional().default(""),
-  price: z.number().nullable().optional(),
-  quantity: z.number().int().positive().optional().default(1),
-  listingFormat: z.string().optional().default("FixedPrice"),
-  descriptionHtml: z.string().optional().default(""),
-  descriptionSummary: z.string().optional().default(""),
+  title: softString.optional().default(""),
+  subtitle: softString.optional().default(""),
+  brand: softString.optional().default(""),
+  collection: softString.optional().default(""),
+  model: softString.optional().default(""),
+  sku: softString.optional().default(""),
+  upc: softString.optional().default(""),
+  mpn: softString.optional().default(""),
+  categoryId: softString.optional().default(""),
+  categoryName: softString.optional().default(""),
+  condition: softString.optional().default(""),
+  conditionId: softString.optional().default(""),
+  conditionDescription: softString.optional().default(""),
+  price: softPrice,
+  quantity: softQuantity.optional().default(1),
+  listingFormat: softString.optional().default("FixedPrice"),
+  descriptionHtml: softString.optional().default(""),
+  descriptionSummary: softString.optional().default(""),
   itemSpecifics: z
     .array(
       z.object({
-        key: z.string(),
-        label: z.string(),
-        value: z.string().optional().default(""),
+        key: softString,
+        label: softString,
+        value: softString.optional().default(""),
         required: z.boolean().optional(),
-        confidence: z.number().nullable().optional(),
+        confidence: softConfidence,
         isCustom: z.boolean().optional(),
       }),
     )
     .optional()
     .default([]),
-  features: z.array(z.string()).optional().default([]),
-  setIncludes: z.array(z.string()).optional().default([]),
-  colors: z.array(z.string()).optional().default([]),
-  materials: z.array(z.string()).optional().default([]),
-  size: z.string().optional().default(""),
-  productType: z.string().optional().default(""),
-  shippingPolicyId: z.string().optional().default(""),
-  returnPolicyId: z.string().optional().default(""),
-  paymentPolicyId: z.string().optional().default(""),
-  handlingTime: z.number().int().optional().default(1),
-  itemLocation: z.string().optional().default(""),
-  postalCode: z.string().optional().default(""),
-  country: z.string().optional().default("US"),
-  status: z
-    .enum([
-      "Uploaded",
-      "Analyzing",
-      "Needs Review",
-      "Ready",
-      "CSV Generated",
-      "Published",
-    ])
-    .optional()
-    .default("Uploaded"),
+  features: softStringArray.optional().default([]),
+  setIncludes: softStringArray.optional().default([]),
+  colors: softStringArray.optional().default([]),
+  materials: softStringArray.optional().default([]),
+  size: softString.optional().default(""),
+  productType: softString.optional().default(""),
+  shippingPolicyId: softString.optional().default(""),
+  returnPolicyId: softString.optional().default(""),
+  paymentPolicyId: softString.optional().default(""),
+  handlingTime: softHandling.optional().default(1),
+  itemLocation: softString.optional().default(""),
+  postalCode: softString.optional().default(""),
+  country: softString.optional().default("US"),
+  status: softStatus.optional().default("Uploaded"),
   images: z
     .array(
       z.object({
         publicUrl: z.string().url(),
-        storagePath: z.string(),
-        fileName: z.string(),
-        sortOrder: z.number().int().optional().default(0),
+        storagePath: softString,
+        fileName: softString,
+        sortOrder: z.preprocess((value) => {
+          const num = Math.floor(Number(value));
+          return Number.isFinite(num) ? num : 0;
+        }, z.number().int()),
         isPrimary: z.boolean().optional().default(false),
-        mimeType: z.string().optional().default("image/jpeg"),
-        sizeBytes: z.number().int().optional().default(0),
+        mimeType: softString.optional().default("image/jpeg"),
+        sizeBytes: z.preprocess((value) => {
+          const num = Math.floor(Number(value));
+          return Number.isFinite(num) && num >= 0 ? num : 0;
+        }, z.number().int()),
       }),
     )
     .optional()
@@ -196,12 +247,12 @@ export async function syncRelated(
         product_id: productId,
         user_id: userId,
         public_url: img.publicUrl,
-        storage_path: img.storagePath,
-        file_name: img.fileName,
+        storage_path: img.storagePath || `products/${productId}/${index}`,
+        file_name: img.fileName || `image-${index}.jpg`,
         sort_order: img.sortOrder ?? index,
         is_primary: img.isPrimary ?? index === 0,
-        mime_type: img.mimeType,
-        size_bytes: img.sizeBytes,
+        mime_type: img.mimeType || "image/jpeg",
+        size_bytes: img.sizeBytes ?? 0,
       })),
     );
     if (imageError) throw new Error(imageError.message);
@@ -215,15 +266,17 @@ export async function syncRelated(
     const { error: specificError } = await supabase
       .from("product_item_specifics")
       .insert(
-        data.itemSpecifics.map((field) => ({
-          product_id: productId,
-          csv_column: field.key,
-          label: field.label,
-          value: field.value ?? "",
-          required: field.required ?? false,
-          confidence: field.confidence ?? null,
-          is_custom: field.isCustom ?? false,
-        })),
+        data.itemSpecifics
+          .filter((field) => field.key.trim() || field.label.trim())
+          .map((field) => ({
+            product_id: productId,
+            csv_column: field.key || `C:${field.label || "Custom"}`,
+            label: field.label || field.key || "Custom",
+            value: field.value ?? "",
+            required: field.required ?? false,
+            confidence: field.confidence ?? null,
+            is_custom: field.isCustom ?? false,
+          })),
       );
     if (specificError) throw new Error(specificError.message);
   }

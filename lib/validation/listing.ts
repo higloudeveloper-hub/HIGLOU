@@ -55,10 +55,10 @@ export function validateListing(listing: ProductListing): ValidationItem[] {
       id: "category",
       label: "Category ID is a numeric eBay leaf ID",
       ok: /^\d{3,8}$/.test(String(listing.categoryId || "").trim()),
-      severity: "critical",
+      severity: "warning",
       detail: /^\d{3,8}$/.test(String(listing.categoryId || "").trim())
         ? undefined
-        : `Got "${listing.categoryId || "(empty)"}" — eBay needs digits like 15709, not product type words.`,
+        : `Got "${listing.categoryId || "(empty)"}" — export will resolve/create a leaf automatically.`,
     },
     {
       id: "description",

@@ -299,7 +299,21 @@ export const EBAY_CATEGORY_OPTIONS: EbayCategoryOption[] = [
   {
     id: "20620",
     name: "Lamps, Lighting & Ceiling Fans",
-    keywords: ["lamp", "light fixture", "ceiling fan", "chandelier"],
+    keywords: [
+      "lamp",
+      "light fixture",
+      "lighting fixture",
+      "wall lighting",
+      "wall light",
+      "wall lighting fixtures",
+      "wall sconce",
+      "outdoor wall light",
+      "sconce",
+      "ceiling fan",
+      "chandelier",
+      "pendant light",
+      "flush mount",
+    ],
   },
   {
     id: "10034",
@@ -411,6 +425,18 @@ export const EBAY_CATEGORY_OPTIONS: EbayCategoryOption[] = [
       "muebles de jardín",
       "garden furniture",
       "wicker patio",
+    ],
+  },
+  {
+    id: "20521",
+    name: "Patio Chairs",
+    keywords: [
+      "patio chair",
+      "outdoor chair",
+      "folding patio chair",
+      "silla de patio",
+      "silla plegable",
+      "folding chair outdoor",
     ],
   },
 
@@ -697,9 +723,26 @@ export function scoreEbayCategories(input: {
     ) {
       score += 12;
     }
+    // Reverse name overlap: e.g. "Wall Lighting Fixtures" ↔ "Lamps, Lighting & Ceiling Fans"
+    if (input.categoryName) {
+      const catName = String(input.categoryName).toLowerCase();
+      const optName = option.name.toLowerCase();
+      const sharedTokens = catName
+        .split(/[^a-z0-9]+/)
+        .filter((t) => t.length > 3 && optName.includes(t));
+      if (sharedTokens.length >= 1 && /light|lamp|fan|fixture/i.test(catName)) {
+        score += 10 + sharedTokens.length * 2;
+      }
+    }
 
     if (isPatioOutdoor) {
-      if (option.id === "20524") score += 48;
+      if (
+        option.id === "20521" &&
+        /\b(chair|silla|folding\s+chair|silla\s+plegable)\b/i.test(haystack) &&
+        !/\b(set|juego|dining\s+set)\b/i.test(haystack)
+      ) {
+        score += 52;
+      } else if (option.id === "20524") score += 48;
       else if (option.id === "79684" && /\b(camastro|lounger|chaise)\b/i.test(haystack)) {
         score += 24;
       } else if (INDOOR_FURNITURE_SCORE_IDS.has(option.id)) {
@@ -747,7 +790,8 @@ export function resolveEbayCategory(input: {
   });
   const best = ranked[0];
 
-  // Keep numeric leaf only when it does not contradict product signals.
+  // Keep ANY valid numeric leaf from AI/eBay — do not remap to curated tips.
+  // Don Baratón will auto-create the leaf if it is not seeded yet.
   if (
     isValidEbayCategoryId(rawId) &&
     !isCategoryProductMismatch({
@@ -757,25 +801,11 @@ export function resolveEbayCategory(input: {
     })
   ) {
     const known = findEbayCategoryById(rawId);
-    // Prefer strong catalog keyword match when model ID is unknown / weak.
-    if (
-      !known &&
-      best &&
-      best.score >= 14 &&
-      best.option.id !== rawId
-    ) {
-      return {
-        categoryId: best.option.id,
-        categoryName: best.option.name,
-        inferred: true,
-        confidence: Math.min(0.9, 0.55 + best.score / 50),
-      };
-    }
     return {
       categoryId: rawId,
       categoryName: existingName || known?.name || "",
       inferred: false,
-      confidence: known ? 0.95 : 0.82,
+      confidence: known ? 0.95 : 0.9,
     };
   }
 

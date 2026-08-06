@@ -116,6 +116,22 @@ describe("resolveEbayCategory", () => {
     });
     expect(result.categoryId).toBe("185035");
   });
+
+  it("maps wall lighting fixtures / outdoor wall lights to lighting leaf", () => {
+    const byName = resolveEbayCategory({
+      categoryName: "Wall Lighting Fixtures",
+      title: "Hampton Bay Modern Matte Black Outdoor Wall Light",
+      brand: "Hampton Bay",
+    });
+    expect(byName.categoryId).toBe("20620");
+    expect(byName.categoryName).toMatch(/Lighting/i);
+
+    const byTitle = resolveEbayCategory({
+      title: "Hampton Bay Modern Matte Black Outdoor Wall Light Sconce",
+      brand: "Hampton Bay",
+    });
+    expect(byTitle.categoryId).toBe("20620");
+  });
 });
 
 describe("draftDefaultsToPolicyValues", () => {

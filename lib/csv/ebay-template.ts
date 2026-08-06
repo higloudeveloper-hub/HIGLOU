@@ -272,6 +272,33 @@ export function generateEbayCsvFromTemplate(options: GenerateCsvOptions): string
     }
   }
 
+  // Always emit Category ID / Name when provided — Don Baratón import depends on them.
+  // Custom seller templates sometimes omit these columns.
+  const ensureCoreHeader = (
+    canonical: string,
+    aliases: string[],
+  ): string | null => {
+    const existing = findHeader(headers, [canonical, ...aliases]);
+    if (existing) return existing;
+    const value =
+      options.valuesByHeader[canonical] ||
+      aliases
+        .map((alias) => options.valuesByHeader[alias])
+        .find((v) => v?.trim());
+    if (!value?.trim()) return null;
+    headers.push(canonical);
+    options.valuesByHeader[canonical] = value;
+    return canonical;
+  };
+  ensureCoreHeader("Category ID", [
+    "eBay category 1 number",
+    "CategoryID",
+  ]);
+  ensureCoreHeader("Category Name", [
+    "eBay category 1 name",
+    "Category",
+  ]);
+
   if (options.appendPublishReadyColumns) {
     for (const column of PUBLISH_READY_APPEND_HEADERS) {
       const value = options.valuesByHeader[column];

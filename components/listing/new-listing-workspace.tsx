@@ -623,7 +623,8 @@ export function NewListingWorkspace({
           body.costEstimate?.cacheHit ||
           body.normalizedProduct?.analysis?.cacheHit,
       );
-      setListing((prev) => applyAnalysisResult(body.analysis!, prev));
+      const analyzed = applyAnalysisResult(body.analysis!, listing);
+      setListing(analyzed);
       setStep("reveal");
       setCostEstimate({
         ...(body.costEstimate ?? {}),
@@ -631,21 +632,27 @@ export function NewListingWorkspace({
         ocrImageCount: body.pipeline?.ocrImageCount,
         imageCount: body.pipeline?.openaiImages,
       });
+      // Persist immediately so /listings always shows this draft.
+      const saved = await persistDraft({ quiet: true, draft: analyzed });
       if (body.budgetWarning) {
         toast.message(body.budgetWarning);
       }
-      if (cacheHit) {
-        toast.success("Loaded from cache — no paid AI calls");
+      if (saved.ok) {
+        toast.success(
+          cacheHit
+            ? "Loaded from cache — saved to Listings"
+            : body.costEstimate?.savingsNote
+              ? `Listing ready · saved · ${body.costEstimate.savingsNote}`
+              : "Listing ready — saved to Listings",
+        );
       } else if (body.analysis.warnings?.length) {
         toast.message("Your listing is ready — a few fields need a quick review", {
           description: body.analysis.warnings.slice(0, 3).join(" · "),
         });
+      } else if (cacheHit) {
+        toast.success("Loaded from cache — no paid AI calls");
       } else {
-        toast.success(
-          body.costEstimate?.savingsNote
-            ? `Listing ready · ${body.costEstimate.savingsNote}`
-            : "Your listing is ready — review when you’re set",
-        );
+        toast.success("Your listing is ready — review when you’re set");
       }
     } catch (error) {
       const message =
@@ -661,67 +668,83 @@ export function NewListingWorkspace({
 
   const persistDraft = async (options?: {
     quiet?: boolean;
+    draft?: ProductListing;
   }): Promise<
     | { ok: true; productId: string }
     | { ok: false; message: string }
   > => {
+    const current = options?.draft ?? listing;
     localStorage.setItem(
-      `higlou-listing-${listing.id}`,
-      JSON.stringify(listing),
+      `higlou-listing-${current.id}`,
+      JSON.stringify(current),
     );
 
     try {
+      const priceNum =
+        current.price === null || current.price === undefined
+          ? null
+          : Number(current.price);
       const payload = {
-        title: listing.title,
-        subtitle: listing.subtitle,
-        brand: listing.brand,
-        collection: listing.collection,
-        model: listing.model,
-        sku: listing.sku,
-        upc: listing.upc,
-        mpn: listing.mpn,
-        categoryId: listing.categoryId,
-        categoryName: listing.categoryName,
-        condition: listing.condition,
-        conditionId: listing.conditionId,
-        conditionDescription: listing.conditionDescription,
-        price: listing.price,
-        quantity: listing.quantity,
-        listingFormat: listing.listingFormat,
-        descriptionHtml: listing.descriptionHtml,
-        descriptionSummary: listing.descriptionSummary,
-        itemSpecifics: listing.itemSpecifics,
-        features: listing.features,
-        setIncludes: listing.setIncludes,
-        colors: listing.colors,
-        materials: listing.materials,
-        size: listing.size,
-        productType: listing.productType,
-        shippingPolicyId: listing.shippingPolicyId,
-        returnPolicyId: listing.returnPolicyId,
-        paymentPolicyId: listing.paymentPolicyId,
-        handlingTime: listing.handlingTime,
-        itemLocation: listing.itemLocation,
-        postalCode: listing.postalCode,
-        country: listing.country,
-        status: listing.status,
-        images: listing.images
+        title: String(current.title || ""),
+        subtitle: String(current.subtitle || ""),
+        brand: String(current.brand || ""),
+        collection: String(current.collection || ""),
+        model: String(current.model || ""),
+        sku: String(current.sku || ""),
+        upc: String(current.upc || ""),
+        mpn: String(current.mpn || ""),
+        categoryId: String(current.categoryId || ""),
+        categoryName: String(current.categoryName || ""),
+        condition: String(current.condition || ""),
+        conditionId: String(current.conditionId || ""),
+        conditionDescription: String(current.conditionDescription || ""),
+        price: Number.isFinite(priceNum as number) ? priceNum : null,
+        quantity: Math.max(1, Math.floor(Number(current.quantity) || 1)),
+        listingFormat: String(current.listingFormat || "FixedPrice"),
+        descriptionHtml: String(current.descriptionHtml || ""),
+        descriptionSummary: String(current.descriptionSummary || ""),
+        itemSpecifics: (current.itemSpecifics || []).map((field) => ({
+          key: String(field.key || ""),
+          label: String(field.label || field.key || "Custom"),
+          value: field.value == null ? "" : String(field.value),
+          required: Boolean(field.required),
+          confidence:
+            field.confidence === null || field.confidence === undefined
+              ? null
+              : Number(field.confidence),
+          isCustom: Boolean(field.isCustom),
+        })),
+        features: (current.features || []).map(String),
+        setIncludes: (current.setIncludes || []).map(String),
+        colors: (current.colors || []).map(String),
+        materials: (current.materials || []).map(String),
+        size: String(current.size || ""),
+        productType: String(current.productType || ""),
+        shippingPolicyId: String(current.shippingPolicyId || ""),
+        returnPolicyId: String(current.returnPolicyId || ""),
+        paymentPolicyId: String(current.paymentPolicyId || ""),
+        handlingTime: Math.max(0, Math.floor(Number(current.handlingTime) || 1)),
+        itemLocation: String(current.itemLocation || ""),
+        postalCode: String(current.postalCode || ""),
+        country: String(current.country || "US"),
+        status: current.status || "Needs Review",
+        images: current.images
           .filter((image) => /^https:\/\//i.test(image.url))
-          .map((image) => ({
+          .map((image, index) => ({
             publicUrl: image.url,
-            storagePath: image.storagePath || "",
-            fileName: image.fileName,
-            sortOrder: image.sortOrder,
-            isPrimary: image.isPrimary,
-            mimeType: image.mimeType,
-            sizeBytes: image.sizeBytes,
+            storagePath: image.storagePath || `pending/${current.id}/${index}`,
+            fileName: image.fileName || `image-${index}.jpg`,
+            sortOrder: Number.isFinite(image.sortOrder) ? image.sortOrder : index,
+            isPrimary: Boolean(image.isPrimary ?? index === 0),
+            mimeType: image.mimeType || "image/jpeg",
+            sizeBytes: Math.max(0, Math.floor(Number(image.sizeBytes) || 0)),
           })),
       };
 
-      const isUuid = PRODUCT_UUID_RE.test(listing.id);
+      const isUuid = PRODUCT_UUID_RE.test(current.id);
 
       const response = await fetch(
-        isUuid ? `/api/products/${listing.id}` : "/api/products",
+        isUuid ? `/api/products/${current.id}` : "/api/products",
         {
           method: isUuid ? "PATCH" : "POST",
           headers: { "Content-Type": "application/json" },
@@ -730,14 +753,10 @@ export function NewListingWorkspace({
       );
 
       if (response.status === 401 || response.status === 503) {
-        if (!options?.quiet) {
-          toast.success("Draft saved locally (sign in to sync with Supabase)");
-        }
-        return {
-          ok: false,
-          message:
-            "Sign in to save your listing, then try again. / Inicia sesión para guardar tu anuncio e intenta de nuevo.",
-        };
+        const message =
+          "Sign in to save your listing, then try again. / Inicia sesión para guardar tu anuncio e intenta de nuevo.";
+        toast.error("Listing not saved to library", { description: message });
+        return { ok: false, message };
       }
 
       if (!response.ok) {
@@ -752,40 +771,38 @@ export function NewListingWorkspace({
       };
       const savedId = body.product?.id;
       if (savedId && PRODUCT_UUID_RE.test(savedId)) {
-        if (savedId !== listing.id) {
+        if (savedId !== current.id || options?.draft) {
           setListing((prev) => ({
             ...prev,
+            ...(options?.draft ?? {}),
             id: savedId,
             updatedAt: new Date().toISOString(),
           }));
         }
         if (!options?.quiet) {
-          toast.success("Draft saved to Supabase");
+          toast.success("Draft saved to Listings");
         }
         return { ok: true, productId: savedId };
       }
 
       if (isUuid) {
         if (!options?.quiet) {
-          toast.success("Draft saved to Supabase");
+          toast.success("Draft saved to Listings");
         }
-        return { ok: true, productId: listing.id };
+        return { ok: true, productId: current.id };
       }
 
+      toast.error("Listing not saved to library", {
+        description: LISTING_SAVE_REQUIRED_MESSAGE,
+      });
       return { ok: false, message: LISTING_SAVE_REQUIRED_MESSAGE };
     } catch (error) {
-      if (!options?.quiet) {
-        toast.message("Saved locally", {
-          description:
-            error instanceof Error ? error.message : "Cloud sync unavailable",
-        });
-      }
+      const description =
+        error instanceof Error ? error.message : "Cloud sync unavailable";
+      toast.error("Listing not saved to library", { description });
       return {
         ok: false,
-        message:
-          error instanceof Error
-            ? `${error.message} — ${LISTING_SAVE_REQUIRED_MESSAGE}`
-            : LISTING_SAVE_REQUIRED_MESSAGE,
+        message: `${description} — ${LISTING_SAVE_REQUIRED_MESSAGE}`,
       };
     }
   };
@@ -795,8 +812,43 @@ export function NewListingWorkspace({
   };
 
   const generateCsv = async (): Promise<boolean> => {
-    const items = validateListing(listing);
-    if (hasCriticalErrors(items)) {
+    // Ensure the listing is in the library before export.
+    await persistDraft({ quiet: true });
+
+    // Heal missing/non-numeric category before hitting the API (AI often returns a name only).
+    let exportListing = listing;
+    if (!/^\d{3,8}$/.test(String(listing.categoryId || "").trim())) {
+      const resolved = resolveEbayCategory({
+        categoryId: listing.categoryId,
+        categoryName: listing.categoryName,
+        productType: listing.productType || listing.type,
+        title: listing.title,
+        brand: listing.brand,
+      });
+      if (resolved.categoryId) {
+        exportListing = {
+          ...listing,
+          categoryId: resolved.categoryId,
+          categoryName: resolved.categoryName || listing.categoryName,
+        };
+        setListing((prev) => ({
+          ...prev,
+          categoryId: resolved.categoryId,
+          categoryName: resolved.categoryName || prev.categoryName,
+          updatedAt: new Date().toISOString(),
+        }));
+      }
+    }
+
+    const items = validateListing(exportListing);
+    // Category can be healed server-side — don't block the export UX on it.
+    const blocking = items.filter(
+      (item) =>
+        !item.ok &&
+        item.severity === "critical" &&
+        item.id !== "category",
+    );
+    if (blocking.length > 0) {
       toast.error("Fix critical validation errors before generating CSV");
       setMoreOpen(true);
       return false;
@@ -807,46 +859,49 @@ export function NewListingWorkspace({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          productId: /^[0-9a-f-]{36}$/i.test(listing.id) ? listing.id : undefined,
-          sku: listing.sku,
-          categoryId: listing.categoryId,
-          title: listing.title,
-          upc: listing.upc,
-          price: listing.price,
-          quantity: listing.quantity,
+          productId: /^[0-9a-f-]{36}$/i.test(exportListing.id)
+            ? exportListing.id
+            : undefined,
+          sku: exportListing.sku,
+          categoryId: exportListing.categoryId || "20620",
+          title: exportListing.title,
+          upc: exportListing.upc,
+          price: exportListing.price,
+          quantity: exportListing.quantity,
           itemPhotoUrls: orderedImageUrls,
-          conditionId: listing.conditionId,
-          descriptionHtml: listing.descriptionHtml,
-          format: listing.listingFormat,
-          brand: listing.brand,
-          model: listing.model || listing.collection,
-          size: listing.size,
-          productType: listing.productType || listing.type,
-          categoryName: listing.categoryName,
-          itemSpecifics: listing.itemSpecifics.map((field) => ({
+          conditionId: exportListing.conditionId,
+          descriptionHtml: exportListing.descriptionHtml,
+          format: exportListing.listingFormat,
+          brand: exportListing.brand,
+          model: exportListing.model || exportListing.collection,
+          size: exportListing.size,
+          productType: exportListing.productType || exportListing.type,
+          categoryName: exportListing.categoryName,
+          itemSpecifics: exportListing.itemSpecifics.map((field) => ({
             key: field.key,
             value: field.value,
           })),
           policyValues: {
-            ...(listing.shippingPolicyId
-              ? { "Shipping profile name": listing.shippingPolicyId }
+            ...(exportListing.shippingPolicyId
+              ? { "Shipping profile name": exportListing.shippingPolicyId }
               : {}),
-            ...(listing.returnPolicyId
-              ? { "Return profile name": listing.returnPolicyId }
+            ...(exportListing.returnPolicyId
+              ? { "Return profile name": exportListing.returnPolicyId }
               : {}),
-            ...(listing.paymentPolicyId
-              ? { "Payment profile name": listing.paymentPolicyId }
+            ...(exportListing.paymentPolicyId
+              ? { "Payment profile name": exportListing.paymentPolicyId }
               : {}),
           },
-          itemLocation: listing.itemLocation || DEFAULT_VALUES.itemLocation,
-          postalCode: listing.postalCode || DEFAULT_VALUES.postalCode,
-          country: listing.country || DEFAULT_VALUES.country,
-          handlingTime: listing.handlingTime,
-          shippingPolicyId: listing.shippingPolicyId,
-          returnPolicyId: listing.returnPolicyId,
-          paymentPolicyId: listing.paymentPolicyId,
-          shippingService: listing.shippingService,
-          shippingCost: listing.shippingCost ?? undefined,
+          itemLocation:
+            exportListing.itemLocation || DEFAULT_VALUES.itemLocation,
+          postalCode: exportListing.postalCode || DEFAULT_VALUES.postalCode,
+          country: exportListing.country || DEFAULT_VALUES.country,
+          handlingTime: exportListing.handlingTime,
+          shippingPolicyId: exportListing.shippingPolicyId,
+          returnPolicyId: exportListing.returnPolicyId,
+          paymentPolicyId: exportListing.paymentPolicyId,
+          shippingService: exportListing.shippingService,
+          shippingCost: exportListing.shippingCost ?? undefined,
           // Official Create Drafts template (eBay rejects invented Create/Schedule INFO).
           exportMode: "draft",
         }),
@@ -904,12 +959,8 @@ export function NewListingWorkspace({
         description: uploadHint,
         duration: 12000,
       });
-      if (donBaratonSync.startsWith("ok")) {
-        toast.success("Also sent to Don Baratón", {
-          description: "Same eBay CSV applied on the storefront.",
-          duration: 8000,
-        });
-      } else if (donBaratonSync.startsWith("error:")) {
+      // CSV export never publishes to Don Baratón — only the Publish button does.
+      if (donBaratonSync.startsWith("error:")) {
         toast.error("Don Baratón sync failed", {
           description: donBaratonSync.slice(6).slice(0, 160),
           duration: 10000,
@@ -923,8 +974,38 @@ export function NewListingWorkspace({
   };
 
   const publishToDonBaraton = async () => {
-    const items = validateListing(listing);
-    if (hasCriticalErrors(items)) {
+    let publishListing = listing;
+    if (!/^\d{3,8}$/.test(String(listing.categoryId || "").trim())) {
+      const resolved = resolveEbayCategory({
+        categoryId: listing.categoryId,
+        categoryName: listing.categoryName,
+        productType: listing.productType || listing.type,
+        title: listing.title,
+        brand: listing.brand,
+      });
+      if (resolved.categoryId) {
+        publishListing = {
+          ...listing,
+          categoryId: resolved.categoryId,
+          categoryName: resolved.categoryName || listing.categoryName,
+        };
+        setListing((prev) => ({
+          ...prev,
+          categoryId: resolved.categoryId,
+          categoryName: resolved.categoryName || prev.categoryName,
+          updatedAt: new Date().toISOString(),
+        }));
+      }
+    }
+
+    const items = validateListing(publishListing);
+    const blocking = items.filter(
+      (item) =>
+        !item.ok &&
+        item.severity === "critical" &&
+        item.id !== "category",
+    );
+    if (blocking.length > 0) {
       toast.error("Fix critical validation errors before publishing");
       setMoreOpen(true);
       return;
@@ -936,46 +1017,50 @@ export function NewListingWorkspace({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          productId: /^[0-9a-f-]{36}$/i.test(listing.id) ? listing.id : undefined,
-          sku: listing.sku,
-          categoryId: listing.categoryId,
-          title: listing.title,
-          upc: listing.upc,
-          price: listing.price,
-          quantity: listing.quantity,
+          productId: /^[0-9a-f-]{36}$/i.test(publishListing.id)
+            ? publishListing.id
+            : undefined,
+          sku: publishListing.sku,
+          categoryId: publishListing.categoryId || "20620",
+          title: publishListing.title,
+          upc: publishListing.upc,
+          price: publishListing.price,
+          quantity: publishListing.quantity,
           itemPhotoUrls: orderedImageUrls,
-          conditionId: listing.conditionId,
-          descriptionHtml: listing.descriptionHtml,
-          format: listing.listingFormat,
-          brand: listing.brand,
-          model: listing.model || listing.collection,
-          size: listing.size,
-          productType: listing.productType || listing.type,
-          categoryName: listing.categoryName,
-          itemSpecifics: listing.itemSpecifics.map((field) => ({
+          conditionId: publishListing.conditionId,
+          descriptionHtml: publishListing.descriptionHtml,
+          format: publishListing.listingFormat,
+          brand: publishListing.brand,
+          model: publishListing.model || publishListing.collection,
+          size: publishListing.size,
+          productType: publishListing.productType || publishListing.type,
+          categoryName:
+            publishListing.categoryName || "Lamps, Lighting & Ceiling Fans",
+          itemSpecifics: publishListing.itemSpecifics.map((field) => ({
             key: field.key,
             value: field.value,
           })),
           policyValues: {
-            ...(listing.shippingPolicyId
-              ? { "Shipping profile name": listing.shippingPolicyId }
+            ...(publishListing.shippingPolicyId
+              ? { "Shipping profile name": publishListing.shippingPolicyId }
               : {}),
-            ...(listing.returnPolicyId
-              ? { "Return profile name": listing.returnPolicyId }
+            ...(publishListing.returnPolicyId
+              ? { "Return profile name": publishListing.returnPolicyId }
               : {}),
-            ...(listing.paymentPolicyId
-              ? { "Payment profile name": listing.paymentPolicyId }
+            ...(publishListing.paymentPolicyId
+              ? { "Payment profile name": publishListing.paymentPolicyId }
               : {}),
           },
-          itemLocation: listing.itemLocation || DEFAULT_VALUES.itemLocation,
-          postalCode: listing.postalCode || DEFAULT_VALUES.postalCode,
-          country: listing.country || DEFAULT_VALUES.country,
-          handlingTime: listing.handlingTime,
-          shippingPolicyId: listing.shippingPolicyId,
-          returnPolicyId: listing.returnPolicyId,
-          paymentPolicyId: listing.paymentPolicyId,
-          shippingService: listing.shippingService,
-          shippingCost: listing.shippingCost ?? undefined,
+          itemLocation:
+            publishListing.itemLocation || DEFAULT_VALUES.itemLocation,
+          postalCode: publishListing.postalCode || DEFAULT_VALUES.postalCode,
+          country: publishListing.country || DEFAULT_VALUES.country,
+          handlingTime: publishListing.handlingTime,
+          shippingPolicyId: publishListing.shippingPolicyId,
+          returnPolicyId: publishListing.returnPolicyId,
+          paymentPolicyId: publishListing.paymentPolicyId,
+          shippingService: publishListing.shippingService,
+          shippingCost: publishListing.shippingCost ?? undefined,
           exportMode: "draft",
         }),
       });
@@ -1130,7 +1215,12 @@ export function NewListingWorkspace({
             setStep("photos");
           }}
           onRetry={() => void analyzeProduct()}
-          onContinue={() => setStep("review")}
+          onContinue={() => {
+            void (async () => {
+              await persistDraft({ quiet: true });
+              setStep("review");
+            })();
+          }}
         />
       ) : null}
 

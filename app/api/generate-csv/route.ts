@@ -30,7 +30,7 @@ import {
   isValidEbayCategoryId,
   resolveEbayCategory,
 } from "@/config/ebay-categories";
-import { pushEbayCsvToDonBaraton } from "@/lib/don-baraton/import-ebay-csv";
+import { ensureEbayCategory } from "@/lib/ebay/ensure-category";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -114,8 +114,7 @@ function resolveCategoryId(input: {
   brand?: string;
 }): { categoryId: string; categoryName: string } {
   const raw = (input.categoryId || "").trim();
-  // Only keep IDs that exist in Higlou's curated leaf list (same leaves Don Baratón seeds).
-  // Parent buckets like old "20704 Major Appliances" must re-resolve or Don Baratón skips the row.
+  // Prefer curated leaf IDs (aligned with Don Baratón seeds).
   if (isValidEbayCategoryId(raw)) {
     const known = EBAY_CATEGORY_OPTIONS.find((option) => option.id === raw);
     if (known) {
@@ -124,17 +123,41 @@ function resolveCategoryId(input: {
         categoryName: input.categoryName || known.name,
       };
     }
+    // Real US leaf from AI / eBay that is not in our curated tip list — still valid for CSV.
+    return {
+      categoryId: raw,
+      categoryName: input.categoryName || "",
+    };
   }
+
+  const productType =
+    input.productType || (!/^\d+$/.test(raw) ? raw : undefined);
   const hit = resolveEbayCategory({
     categoryId: "",
     categoryName: input.categoryName,
-    productType: input.productType || (!/^\d+$/.test(raw) ? raw : undefined),
+    productType,
     title: input.title,
     brand: input.brand,
   });
+  if (hit.categoryId) {
+    return {
+      categoryId: hit.categoryId,
+      categoryName: hit.categoryName || input.categoryName || "",
+    };
+  }
+
+  // Last resort: score against title + name + type even with empty confidence gate.
+  const ranked = resolveEbayCategory({
+    categoryName: input.categoryName,
+    productType,
+    title: [input.title, input.categoryName, productType]
+      .filter(Boolean)
+      .join(" "),
+    brand: input.brand,
+  });
   return {
-    categoryId: hit.categoryId || "",
-    categoryName: hit.categoryName || input.categoryName || "",
+    categoryId: ranked.categoryId || "",
+    categoryName: ranked.categoryName || input.categoryName || "",
   };
 }
 
@@ -237,20 +260,86 @@ export async function POST(request: Request) {
       title: data.title,
       brand: data.brand,
     });
-    const categoryId = resolved.categoryId;
-    const categoryName = resolved.categoryName;
+    let categoryId = resolved.categoryId;
+    let categoryName = resolved.categoryName;
     if (!isValidEbayCategoryId(categoryId)) {
-      return NextResponse.json(
-        {
-          error:
-            "Pick a valid eBay category on the details step, then export again.",
-        },
-        { status: 400 },
-      );
+      const ensured = await ensureEbayCategory({
+        categoryId: data.categoryId,
+        categoryName: data.categoryName,
+        productType: data.productType,
+        title: data.title,
+        brand: data.brand,
+        model: data.model,
+        userId,
+        productId: data.productId,
+        supabase: authClient?.ok ? authClient.supabase : null,
+        allowAi: true,
+      });
+      categoryId = ensured.categoryId;
+      categoryName = ensured.categoryName || categoryName;
+    }
+    // Hard safety net — CSV export must NEVER fail for category.
+    // Prefer lighting leaf when signals match; otherwise Home Décor.
+    if (!isValidEbayCategoryId(categoryId)) {
+      const hay = [
+        data.title,
+        data.categoryName,
+        data.productType,
+        data.brand,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      if (/\b(sconce|wall\s*light|lighting|lamp|chandelier|pendant)\b/i.test(hay)) {
+        categoryId = "20620";
+        categoryName = categoryName || "Lamps, Lighting & Ceiling Fans";
+      } else {
+        categoryId = "10034";
+        categoryName = categoryName || "Home Décor";
+      }
+      console.warn("[generate-csv] category safety-net applied", {
+        categoryId,
+        title: data.title,
+        categoryNameHint: data.categoryName,
+        productType: data.productType,
+      });
+    }
+    // Absolute last resort (should be unreachable).
+    if (!isValidEbayCategoryId(categoryId)) {
+      categoryId = "10034";
+      categoryName = categoryName || "Home Décor";
+    }
+
+    // Don Baratón import requires a numeric leaf ID (+ name when possible).
+    categoryId = String(categoryId).replace(/\D/g, "");
+    if (!isValidEbayCategoryId(categoryId)) {
+      categoryId = "10034";
+    }
+    if (!categoryName.trim()) {
+      categoryName =
+        EBAY_CATEGORY_OPTIONS.find((option) => option.id === categoryId)
+          ?.name || `Category ${categoryId}`;
     }
 
     setIfPresent(["Custom label (SKU)"], data.sku);
-    setIfPresent(["Category ID"], categoryId);
+    // Always write Category ID even if the active template uses an alias header.
+    {
+      const categoryHeader =
+        findHeader(headers, [
+          "Category ID",
+          "eBay category 1 number",
+          "CategoryID",
+        ]) || "Category ID";
+      valuesByHeader[categoryHeader] = categoryId;
+      // Also set canonical key so ensureCoreHeader / alias templates never drop it.
+      valuesByHeader["Category ID"] = categoryId;
+    }
+    setIfPresent(
+      ["Category Name", "eBay category 1 name", "Category"],
+      categoryName,
+    );
+    // Always stash canonical Category Name so Don Baratón can label new leaves.
+    valuesByHeader["Category Name"] = categoryName;
     setIfPresent(["Title"], data.title);
     setIfPresent(["UPC"], data.upc);
     setIfPresent(["Price"], String(data.price));
@@ -393,15 +482,8 @@ export async function POST(request: Request) {
       }
     }
 
-    // Best-effort mirror to Don Baratón (same eBay CSV). Never fail eBay export.
-    const donBaratonSync = await pushEbayCsvToDonBaraton(csv, fileName);
-    const donBaratonHeader =
-      donBaratonSync.status === "ok"
-        ? "ok"
-        : donBaratonSync.status === "skipped"
-          ? `skipped:${donBaratonSync.reason}`
-          : `error:${donBaratonSync.message}`;
-
+    // Don Baratón is ONLY updated via the explicit "Publish to Don Baratón" action.
+    // Never mirror eBay CSV export automatically.
     try {
       return new NextResponse(csv, {
         status: 200,
@@ -413,9 +495,7 @@ export async function POST(request: Request) {
             useAddAction ? "publish" : "draft",
           ),
           "X-Higlou-Upload-Hint": toAsciiHttpHeaderValue(uploadHint),
-          "X-Higlou-DonBaraton-Sync": toAsciiHttpHeaderValue(
-            donBaratonHeader.slice(0, 180),
-          ),
+          "X-Higlou-DonBaraton-Sync": "skipped:manual-publish-only",
         },
       });
     } catch (headerError) {

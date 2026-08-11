@@ -2,6 +2,19 @@ import OpenAI from "openai";
 import { AI_PROVIDER_DEFAULTS } from "@/config/ai-providers";
 import { COST_DEFAULTS, type AnalysisTier } from "@/config/costs";
 
+/** Strip quotes/whitespace from env model ids (common Vercel paste mistake). */
+function cleanModelId(value: string | undefined): string {
+  if (!value) return "";
+  let v = value.trim();
+  if (
+    (v.startsWith('"') && v.endsWith('"')) ||
+    (v.startsWith("'") && v.endsWith("'"))
+  ) {
+    v = v.slice(1, -1).trim();
+  }
+  return v;
+}
+
 export function createOpenAIClient() {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
@@ -13,15 +26,15 @@ export function createOpenAIClient() {
 export function getOpenAIModel(tier: AnalysisTier | "standard" = "economy") {
   if (tier === "advanced") {
     return (
-      process.env.OPENAI_ADVANCED_MODEL ||
-      process.env.OPENAI_MODEL ||
+      cleanModelId(process.env.OPENAI_ADVANCED_MODEL) ||
+      cleanModelId(process.env.OPENAI_MODEL) ||
       COST_DEFAULTS.advancedModel
     );
   }
   // standard shares economy model; cost optimizer varies image count instead
   return (
-    process.env.OPENAI_ECONOMY_MODEL ||
-    process.env.OPENAI_MODEL ||
+    cleanModelId(process.env.OPENAI_ECONOMY_MODEL) ||
+    cleanModelId(process.env.OPENAI_MODEL) ||
     COST_DEFAULTS.economyModel ||
     AI_PROVIDER_DEFAULTS.openaiModel
   );

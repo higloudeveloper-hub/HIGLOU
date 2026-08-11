@@ -129,7 +129,17 @@ export async function createOrReplaceInventoryItem(
 
   product.brand = brand;
 
-  const aspects = { ...(input.aspects || {}) };
+  // Sanitize aspects: eBay wants Record<string, string[]> with non-empty string values.
+  const aspects: EbayAspects = {};
+  for (const [key, values] of Object.entries(input.aspects || {})) {
+    const name = String(key || "").trim();
+    if (!name) continue;
+    const cleaned = (Array.isArray(values) ? values : [values])
+      .map((v) => String(v || "").trim())
+      .filter(Boolean)
+      .slice(0, 10);
+    if (cleaned.length) aspects[name] = cleaned;
+  }
   aspects.Brand = [brand];
   aspects.MPN = [mpnAspect];
   product.aspects = aspects;

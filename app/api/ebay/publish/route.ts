@@ -451,19 +451,50 @@ export async function POST(request: Request) {
     } catch (offerError) {
       const message =
         offerError instanceof Error ? offerError.message : String(offerError);
-      if (!/25713|not available/i.test(message)) {
+
+      // 25005: invalid/non-leaf category — force Taxonomy suggestion and retry once.
+      if (/25005|invalid category/i.test(message)) {
+        const forced = await ensureListableEbayCategory(accessToken, {
+          categoryId: "",
+          categoryName: listing.categoryName,
+          title: listing.title,
+          productType: listing.productType || listing.type,
+          brand: listing.brand,
+        });
+        listing.categoryId = forced.categoryId;
+        if (forced.categoryName) listing.categoryName = forced.categoryName;
+        const retryOffer = {
+          ...offerInput,
+          categoryId: forced.categoryId,
+        };
+        ({ offerId } = await upsertOfferForSku(accessToken, retryOffer));
+        if (productId) {
+          await auth.supabase
+            .from("products")
+            .update({
+              category_id: forced.categoryId,
+              category_name: forced.categoryName || listing.categoryName,
+              updated_at: new Date().toISOString(),
+            })
+            .eq("id", productId)
+            .eq("user_id", auth.user.id);
+        }
+      } else if (/25713|not available/i.test(message)) {
+        // Sandbox/production sometimes sticks a dead offer on the SKU — retry with a fresh SKU.
+        const freshSku = `${inventory.sku}`
+          .replace(/-H[a-z0-9]+$/i, "")
+          .slice(0, 40);
+        const retrySku = `${freshSku}-H${Date.now().toString(36)}`;
+        inventory.sku = retrySku;
+        await createOrReplaceInventoryItem(accessToken, inventory);
+        ({ offerId } = await upsertOfferForSku(accessToken, {
+          ...offerInput,
+          sku: retrySku,
+        }));
+        listing.sku = retrySku;
+      } else {
         throw offerError;
       }
-      // Sandbox sometimes sticks a dead offer on the SKU — retry with a fresh SKU.
-      const freshSku = `${inventory.sku}`.replace(/-H[a-z0-9]+$/i, "").slice(0, 40);
-      const retrySku = `${freshSku}-H${Date.now().toString(36)}`;
-      inventory.sku = retrySku;
-      await createOrReplaceInventoryItem(accessToken, inventory);
-      ({ offerId } = await upsertOfferForSku(accessToken, {
-        ...offerInput,
-        sku: retrySku,
-      }));
-      listing.sku = retrySku;
     }
 
     let listingId = "";

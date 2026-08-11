@@ -204,11 +204,11 @@ export const EXTRA_LEAF_NAMES: Record<string, string> = {
   "185111": "Window & Wall Air Conditioners",
   "29929": "Vacuums",
   "20612": "Air Cannon Fan",
-  "117503": "Lighting Fans",
-  "116880": "Lighting Fans",
-  "176937": "Lighting Fans",
-  "112581": "Lighting Fans",
   "117503": "Chandeliers & Ceiling Fixtures",
+  "116880": "Wall Fixtures",
+  "176937": "Ceiling Fans",
+  "112581": "Lamps",
+  "81256": "Ceiling Lights",
   "20524": "Patio Furniture Sets",
 };
 

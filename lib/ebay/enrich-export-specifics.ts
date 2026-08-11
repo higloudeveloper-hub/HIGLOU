@@ -17,6 +17,27 @@ function firstNonEmpty(...values: Array<string | null | undefined>): string {
   return "";
 }
 
+/** eBay rejects Brand without a paired MPN (error 25002 BrandMPN). */
+export function resolveBrandMpn(input: {
+  brand?: string;
+  mpn?: string;
+  model?: string;
+}): string {
+  const mpn = String(input.mpn || "").trim();
+  if (mpn && !/^(n\/?a|none|null|unknown|-)$/i.test(mpn)) {
+    return mpn.slice(0, 65);
+  }
+  const brand = String(input.brand || "").trim();
+  if (!brand || /^(unbranded|generic|does\s*not\s*apply|n\/?a)$/i.test(brand)) {
+    return "Does Not Apply";
+  }
+  const model = String(input.model || "").trim();
+  if (model && model.length >= 2 && !/^n\/?a$/i.test(model)) {
+    return model.slice(0, 65);
+  }
+  return "Does Not Apply";
+}
+
 function joinAspect(values: string[] | undefined): string {
   return (values || [])
     .map((v) => String(v || "").trim())
@@ -192,6 +213,16 @@ export function enrichItemSpecificsForExport(input: {
     finish,
   };
 
+  // eBay BrandMPN (25002): Brand without a valid MPN is rejected.
+  const brandOrUnbranded = derived.brand || "Unbranded";
+  derived.brand = brandOrUnbranded;
+  derived.mpn = resolveBrandMpn({
+    brand: brandOrUnbranded,
+    mpn: derived.mpn,
+    model: derived.model,
+  });
+
+
   for (const field of family.fields) {
     const column = field.csvColumn.startsWith("C:")
       ? field.csvColumn
@@ -210,8 +241,9 @@ export function enrichItemSpecificsForExport(input: {
   }
 
   // Always push core commerce aspects even if category family omitted them.
+  // Brand + MPN must both be present (eBay error 25002 BrandMPN).
   const coreAlways: Array<[string, string]> = [
-    ["C:Brand", derived.brand || "Unbranded"],
+    ["C:Brand", derived.brand],
     ["C:Type", derived.type],
     ["C:Model", derived.model],
     ["C:MPN", derived.mpn],
@@ -224,6 +256,11 @@ export function enrichItemSpecificsForExport(input: {
     if (!value?.trim()) continue;
     if (!columns[key]?.trim()) columns[key] = value.trim();
   }
+  // Force MPN whenever Brand is present (overwrite empty / whitespace).
+  if (columns["C:Brand"]?.trim() && !columns["C:MPN"]?.trim()) {
+    columns["C:MPN"] = derived.mpn;
+  }
+
 
   if (isFaucetLike(input)) {
     const mount = firstNonEmpty(

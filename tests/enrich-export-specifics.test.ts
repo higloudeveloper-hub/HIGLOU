@@ -25,6 +25,30 @@ describe("enrichItemSpecificsForExport", () => {
     });
 
     expect(columns["C:Brand"]).toBe("Unbranded");
+    expect(columns["C:MPN"]).toBe("Does Not Apply");
+  });
+
+  it("pairs Brand with MPN to avoid eBay 25002 BrandMPN", () => {
+    const { columns } = enrichItemSpecificsForExport({
+      categoryId: "177019",
+      brand: "Higlou",
+      itemSpecifics: [{ key: "C:Type", value: "Comforter Set" }],
+    });
+
+    expect(columns["C:Brand"]).toBe("Higlou");
+    expect(columns["C:MPN"]).toBe("Does Not Apply");
+  });
+
+  it("keeps explicit MPN when provided", () => {
+    const { columns } = enrichItemSpecificsForExport({
+      categoryId: "177019",
+      brand: "Moen",
+      mpn: "12345-BN",
+      itemSpecifics: [],
+    });
+
+    expect(columns["C:Brand"]).toBe("Moen");
+    expect(columns["C:MPN"]).toBe("12345-BN");
   });
 
   it("fills faucet essentials + Attribute pairs from title cues", () => {

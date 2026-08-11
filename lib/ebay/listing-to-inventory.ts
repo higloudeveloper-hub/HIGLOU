@@ -1,5 +1,8 @@
 import type { ProductListing } from "@/types/product";
-import { enrichItemSpecificsForExport } from "@/lib/ebay/enrich-export-specifics";
+import {
+  enrichItemSpecificsForExport,
+  resolveBrandMpn,
+} from "@/lib/ebay/enrich-export-specifics";
 import { estimatePackageAndShipping } from "@/lib/ebay/package-shipping";
 import { synthesizeDescriptionSummary } from "@/lib/ebay/description-html";
 import type {
@@ -87,15 +90,30 @@ export function listingToInventoryItem(
     .map((url) => url.trim())
     .filter(Boolean);
 
+  const aspects = listingToEbayAspects(listing);
+  const brand =
+    aspects.Brand?.[0]?.trim() ||
+    String(listing.brand || "").trim() ||
+    "Unbranded";
+  const mpn =
+    aspects.MPN?.[0]?.trim() ||
+    resolveBrandMpn({
+      brand,
+      mpn: listing.mpn,
+      model: listing.model,
+    });
+  aspects.Brand = [brand];
+  aspects.MPN = [mpn];
+
   return {
     sku: listing.sku,
     title: listing.title,
     description: clampEbayInventoryDescription(listing),
     imageUrls,
-    aspects: listingToEbayAspects(listing),
+    aspects,
     condition: listing.condition || "New",
-    brand: listing.brand || undefined,
-    mpn: listing.mpn || undefined,
+    brand,
+    mpn,
     upc: listing.upc || undefined,
     packageWeightLbs: pkg.weightLbs,
     packageWeightOz: pkg.weightOz,

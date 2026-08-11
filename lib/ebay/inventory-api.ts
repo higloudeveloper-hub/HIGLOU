@@ -112,8 +112,26 @@ export async function createOrReplaceInventoryItem(
     aspects: input.aspects,
     imageUrls: input.imageUrls.slice(0, 24),
   };
-  if (input.brand) product.brand = input.brand;
-  if (input.mpn) product.mpn = [input.mpn];
+  // Brand + MPN must be sent together (eBay 25002 BrandMPN).
+  const brand =
+    String(input.brand || "").trim() ||
+    String(input.aspects?.Brand?.[0] || "").trim() ||
+    "Unbranded";
+  const mpnRaw =
+    String(input.mpn || "").trim() ||
+    String(input.aspects?.MPN?.[0] || "").trim();
+  const mpn =
+    mpnRaw && !/^(n\/?a|none|null|unknown|-)$/i.test(mpnRaw)
+      ? mpnRaw.slice(0, 65)
+      : /^(unbranded|generic|does\s*not\s*apply)$/i.test(brand)
+        ? "Does Not Apply"
+        : mpnRaw || "Does Not Apply";
+  product.brand = brand;
+  product.mpn = [mpn];
+  const aspects = { ...(input.aspects || {}) };
+  aspects.Brand = [brand];
+  aspects.MPN = [mpn];
+  product.aspects = aspects;
   if (input.upc && /^\d{12,14}$/.test(input.upc)) {
     product.upc = [input.upc];
   }

@@ -38,6 +38,7 @@ describe("listingToEbayAspects", () => {
 
     const aspects = listingToEbayAspects(listing);
     expect(aspects.Brand?.[0]).toBe("Leviton");
+    expect(aspects.MPN?.[0]).toBe("Does Not Apply");
     expect(aspects.Type?.[0]).toBe("Dimmer Switch");
     expect(aspects.Color?.[0]).toBe("White");
   });

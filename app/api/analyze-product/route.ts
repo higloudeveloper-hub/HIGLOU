@@ -21,6 +21,7 @@ import {
   httpStatusForAnalysisFailure,
   type AnalysisFailureCode,
 } from "@/types/analysis-failures";
+import { cleanEnvUrl, cleanHttpsUrl } from "@/lib/images/url-sanitize";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -68,13 +69,14 @@ const requestSchema = z.object({
 });
 
 function isOwnedSupabaseImageUrl(url: string, userId?: string): boolean {
-  const base = process.env.NEXT_PUBLIC_SUPABASE_URL?.replace(/\/$/, "");
+  const base = cleanEnvUrl(process.env.NEXT_PUBLIC_SUPABASE_URL);
+  const clean = cleanHttpsUrl(url);
   if (!base || !userId) return true;
   const prefix = `${base}/storage/v1/object/public/`;
-  if (!url.startsWith(prefix)) {
-    return /^https:\/\/(ir\.ebaystatic\.com|i\.ebayimg\.com)/i.test(url);
+  if (!clean.startsWith(prefix)) {
+    return /^https:\/\/(ir\.ebaystatic\.com|i\.ebayimg\.com)/i.test(clean);
   }
-  return url.includes(`/${userId}/`);
+  return clean.includes(`/${userId}/`);
 }
 
 export async function POST(request: Request) {

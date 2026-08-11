@@ -1,5 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { cleanEnvUrl } from "@/lib/images/url-sanitize";
 
 const PUBLIC_PATH_PREFIXES = ["/login", "/forgot-password", "/auth", "/welcome"];
 const PUBLIC_EXACT_PATHS = ["/api/health", "/"];
@@ -21,8 +22,10 @@ function isStaticAsset(pathname: string): boolean {
 
 export async function updateSession(request: NextRequest) {
   const { pathname } = request.nextUrl;
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const supabaseUrl = cleanEnvUrl(process.env.NEXT_PUBLIC_SUPABASE_URL);
+  const supabaseAnonKey = String(
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "",
+  ).trim();
   const isDev = process.env.NODE_ENV === "development";
 
   if (!supabaseUrl || !supabaseAnonKey) {

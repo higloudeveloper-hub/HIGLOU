@@ -12,6 +12,7 @@ import {
   isAcceptedUploadMime,
   resolveImageMime,
 } from "@/config/supported-image-formats";
+import { getPublicSupabaseUrl } from "@/lib/images/url-sanitize";
 
 export { PRODUCT_IMAGES_BUCKET };
 
@@ -26,10 +27,7 @@ function safeFileName(name: string): string {
 }
 
 function publicObjectUrl(path: string): string {
-  const base = process.env.NEXT_PUBLIC_SUPABASE_URL?.replace(/\/$/, "");
-  if (!base) {
-    throw new Error("NEXT_PUBLIC_SUPABASE_URL is required for public image URLs");
-  }
+  const base = getPublicSupabaseUrl();
   const encoded = path
     .split("/")
     .map((seg) => encodeURIComponent(seg))

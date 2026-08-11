@@ -1,12 +1,13 @@
 import { createClient } from "@supabase/supabase-js";
+import { cleanEnvUrl } from "@/lib/images/url-sanitize";
 
 /**
  * Service-role client for server-side uploads and privileged operations.
  * Never expose this client or SUPABASE_SERVICE_ROLE_KEY to the browser.
  */
 export function createAdminClient() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const url = cleanEnvUrl(process.env.NEXT_PUBLIC_SUPABASE_URL);
+  const serviceRoleKey = String(process.env.SUPABASE_SERVICE_ROLE_KEY || "").trim();
 
   if (!url || !serviceRoleKey) {
     throw new Error(

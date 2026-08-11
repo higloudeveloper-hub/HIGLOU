@@ -184,7 +184,7 @@ export function mapProductRow(
     updatedAt: row.updated_at,
     images: images.map((img) => ({
       id: img.id,
-      url: img.public_url,
+      url: String(img.public_url || "").replace(/[\r\n\t]+/g, "").trim(),
       storagePath: img.storage_path,
       fileName: img.file_name,
       sortOrder: img.sort_order,

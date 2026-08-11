@@ -5,13 +5,14 @@ import {
   PRODUCT_IMAGES_BUCKET,
 } from "@/lib/images/storage";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { cleanHttpsUrl, getPublicSupabaseUrl } from "@/lib/images/url-sanitize";
 
 /**
  * eBay Inventory imageUrls must be absolute https URLs.
- * Re-encode path segments and drop invalid entries.
+ * Strips embedded newlines (bad Vercel env paste) and re-encodes path.
  */
 export function normalizeEbayImageUrl(raw: string): string | null {
-  const trimmed = String(raw || "").trim();
+  const trimmed = cleanHttpsUrl(raw);
   if (!trimmed || !/^https:\/\//i.test(trimmed)) return null;
   try {
     const u = new URL(trimmed);
@@ -28,7 +29,6 @@ export function normalizeEbayImageUrl(raw: string): string | null {
         }
       })
       .join("/");
-    // Strip fragments; keep query only if needed for CDN (usually not for Supabase public).
     u.hash = "";
     return u.toString();
   } catch {
@@ -37,10 +37,7 @@ export function normalizeEbayImageUrl(raw: string): string | null {
 }
 
 function publicObjectUrl(path: string): string {
-  const base = process.env.NEXT_PUBLIC_SUPABASE_URL?.replace(/\/$/, "");
-  if (!base) {
-    throw new Error("NEXT_PUBLIC_SUPABASE_URL is required for public image URLs");
-  }
+  const base = getPublicSupabaseUrl();
   const encoded = path
     .split("/")
     .map((seg) => encodeURIComponent(seg))
@@ -75,9 +72,8 @@ async function convertAndReuploadAsJpeg(
 }
 
 /**
- * Produce eBay-safe https image URLs (JPEG/PNG/GIF/BMP/TIFF).
- * Always re-hosts as JPEG so eBay gets a clean public URL with .jpg extension
- * (avoids WebP/HEIC and odd path encoding that Sandbox rejects).
+ * Produce eBay-safe https JPEG image URLs.
+ * Re-hosts as JPEG so Sandbox gets clean public .jpg URLs.
  */
 export async function ensureEbayCompatibleImageUrls(options: {
   urls: string[];

@@ -1,9 +1,10 @@
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
+import { cleanEnvUrl } from "@/lib/images/url-sanitize";
 
 export async function createClient() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const url = cleanEnvUrl(process.env.NEXT_PUBLIC_SUPABASE_URL);
+  const key = String(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "").trim();
   if (!url || !key) {
     throw new Error("Supabase server env vars are not configured");
   }

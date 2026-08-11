@@ -1016,7 +1016,7 @@ export function NewListingWorkspace({
             ? exportListing.id
             : undefined,
           sku: exportListing.sku,
-          categoryId: exportListing.categoryId || "20620",
+          categoryId: exportListing.categoryId || "117503",
           title: exportListing.title,
           upc: exportListing.upc,
           price: exportListing.price,
@@ -1198,7 +1198,7 @@ export function NewListingWorkspace({
             ? publishListing.id
             : undefined,
           sku: publishListing.sku,
-          categoryId: publishListing.categoryId || "20620",
+          categoryId: publishListing.categoryId || "117503",
           title: publishListing.title,
           upc: publishListing.upc,
           price: publishListing.price,

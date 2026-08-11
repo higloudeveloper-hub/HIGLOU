@@ -1,0 +1,170 @@
+import { getEbayConfig } from "@/lib/ebay/config";
+import {
+  isListableEbayCategoryId,
+  resolveEbayCategory,
+} from "@/config/ebay-categories";
+
+const US_CATEGORY_TREE_ID = "0";
+
+type TaxonomySuggestion = {
+  categoryId: string;
+  categoryName: string;
+};
+
+async function taxonomyFetch(
+  accessToken: string,
+  path: string,
+): Promise<unknown> {
+  const cfg = getEbayConfig();
+  const res = await fetch(`${cfg.apiBase}${path}`, {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      Accept: "application/json",
+      "Accept-Language": "en-US",
+    },
+  });
+  const text = await res.text();
+  let json: unknown = null;
+  try {
+    json = text ? JSON.parse(text) : null;
+  } catch {
+    json = { raw: text };
+  }
+  if (!res.ok) {
+    const err = json as {
+      errors?: Array<{ message?: string; longMessage?: string }>;
+      message?: string;
+    } | null;
+    const first = err?.errors?.[0];
+    throw new Error(
+      first?.longMessage ||
+        first?.message ||
+        err?.message ||
+        `Taxonomy API ${res.status}`,
+    );
+  }
+  return json;
+}
+
+/** Ask eBay Taxonomy for leaf category suggestions from a product query. */
+export async function suggestEbayLeafCategories(
+  accessToken: string,
+  query: string,
+): Promise<TaxonomySuggestion[]> {
+  const q = encodeURIComponent(query.trim().slice(0, 200));
+  if (!q) return [];
+  const json = (await taxonomyFetch(
+    accessToken,
+    `/commerce/taxonomy/v1/category_tree/${US_CATEGORY_TREE_ID}/get_category_suggestions?q=${q}`,
+  )) as {
+    categorySuggestions?: Array<{
+      category?: { categoryId?: string; categoryName?: string };
+    }>;
+  };
+
+  return (json.categorySuggestions || [])
+    .map((row) => ({
+      categoryId: String(row.category?.categoryId || "").trim(),
+      categoryName: String(row.category?.categoryName || "").trim(),
+    }))
+    .filter((row) => isListableEbayCategoryId(row.categoryId));
+}
+
+export async function isEbayLeafCategory(
+  accessToken: string,
+  categoryId: string,
+): Promise<boolean> {
+  const id = encodeURIComponent(categoryId.trim());
+  if (!id) return false;
+  try {
+    const json = (await taxonomyFetch(
+      accessToken,
+      `/commerce/taxonomy/v1/category_tree/${US_CATEGORY_TREE_ID}/get_category_subtree?category_id=${id}`,
+    )) as {
+      categorySubtreeNode?: {
+        leafCategoryTreeNode?: boolean;
+        category?: { categoryName?: string };
+      };
+    };
+    return Boolean(json.categorySubtreeNode?.leafCategoryTreeNode);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Ensure a listable US leaf category for Inventory offers (avoids eBay 25005).
+ * Prefers Taxonomy suggestions when the current ID is missing/non-leaf/wrong.
+ */
+export async function ensureListableEbayCategory(
+  accessToken: string,
+  input: {
+    categoryId?: string | null;
+    categoryName?: string | null;
+    title?: string | null;
+    productType?: string | null;
+    brand?: string | null;
+  },
+): Promise<{ categoryId: string; categoryName: string; source: string }> {
+  const currentId = String(input.categoryId || "").trim();
+  const query = [input.title, input.brand, input.productType, input.categoryName]
+    .filter(Boolean)
+    .join(" ")
+    .trim();
+
+  if (isListableEbayCategoryId(currentId)) {
+    const leaf = await isEbayLeafCategory(accessToken, currentId);
+    if (leaf) {
+      return {
+        categoryId: currentId,
+        categoryName: String(input.categoryName || "").trim(),
+        source: "listing",
+      };
+    }
+  }
+
+  if (query) {
+    try {
+      const suggestions = await suggestEbayLeafCategories(accessToken, query);
+      if (suggestions[0]) {
+        return {
+          categoryId: suggestions[0].categoryId,
+          categoryName: suggestions[0].categoryName,
+          source: "taxonomy",
+        };
+      }
+    } catch {
+      // Fall through to curated resolver.
+    }
+  }
+
+  const resolved = resolveEbayCategory({
+    categoryId: isListableEbayCategoryId(currentId) ? currentId : "",
+    categoryName: input.categoryName,
+    productType: input.productType,
+    title: input.title,
+    brand: input.brand,
+  });
+
+  if (isListableEbayCategoryId(resolved.categoryId)) {
+    return {
+      categoryId: resolved.categoryId,
+      categoryName: resolved.categoryName,
+      source: "catalog",
+    };
+  }
+
+  // Last resort for lighting-ish titles — flush/ceiling fixtures leaf.
+  if (/flush|ceiling|chandelier|pendant|light\s*fixture|lamp/i.test(query)) {
+    return {
+      categoryId: "117503",
+      categoryName: "Chandeliers & Ceiling Fixtures",
+      source: "fallback-lighting",
+    };
+  }
+
+  throw new Error(
+    `Invalid eBay category ID "${currentId || "(empty)"}". Pick a leaf category in Review (not a parent like Lighting or Laundry).`,
+  );
+}

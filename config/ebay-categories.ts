@@ -297,23 +297,41 @@ export const EBAY_CATEGORY_OPTIONS: EbayCategoryOption[] = [
     keywords: ["towel", "bath towel", "washcloth"],
   },
   {
-    id: "20620",
-    name: "Lamps, Lighting & Ceiling Fans",
+    id: "117503",
+    name: "Chandeliers & Ceiling Fixtures",
     keywords: [
-      "lamp",
+      "flush mount",
+      "semi flush",
+      "ceiling fixture",
+      "ceiling light",
+      "chandelier",
+      "pendant light",
       "light fixture",
       "lighting fixture",
+    ],
+  },
+  {
+    id: "116880",
+    name: "Wall Fixtures",
+    keywords: [
       "wall lighting",
       "wall light",
       "wall lighting fixtures",
       "wall sconce",
       "outdoor wall light",
       "sconce",
-      "ceiling fan",
-      "chandelier",
-      "pendant light",
-      "flush mount",
+      "wall fixture",
     ],
+  },
+  {
+    id: "176937",
+    name: "Ceiling Fans",
+    keywords: ["ceiling fan", "fan light"],
+  },
+  {
+    id: "112581",
+    name: "Lamps",
+    keywords: ["lamp", "table lamp", "floor lamp", "desk lamp"],
   },
   {
     id: "10034",
@@ -760,6 +778,23 @@ export function isValidEbayCategoryId(value: string | null | undefined): boolean
   return /^\d{3,8}$/.test(String(value ?? "").trim());
 }
 
+/**
+ * Known non-leaf / retired IDs that Inventory offers reject with 25005.
+ * 20620 was historically mislabeled as lighting in Higlou — live US tree uses it for Laundry Supplies (parent).
+ * 20697 is the lighting parent (not a leaf).
+ */
+export const NON_LISTABLE_EBAY_CATEGORY_IDS = new Set([
+  "20620",
+  "20697",
+]);
+
+export function isListableEbayCategoryId(
+  value: string | null | undefined,
+): boolean {
+  const id = String(value ?? "").trim();
+  return isValidEbayCategoryId(id) && !NON_LISTABLE_EBAY_CATEGORY_IDS.has(id);
+}
+
 export function resolveEbayCategory(input: {
   categoryId?: string | null;
   categoryName?: string | null;
@@ -791,9 +826,9 @@ export function resolveEbayCategory(input: {
   const best = ranked[0];
 
   // Keep ANY valid numeric leaf from AI/eBay — do not remap to curated tips.
-  // Don Baratón will auto-create the leaf if it is not seeded yet.
+  // Reject known non-listable parents (Inventory API error 25005).
   if (
-    isValidEbayCategoryId(rawId) &&
+    isListableEbayCategoryId(rawId) &&
     !isCategoryProductMismatch({
       ...input,
       categoryId: rawId,
@@ -810,7 +845,11 @@ export function resolveEbayCategory(input: {
   }
 
   // High bar — weak keyword hits must not invent jeans for arbitrary products.
-  if (!best || best.score < 6) {
+  // Never return known non-listable parents (Inventory 25005).
+  const listableBest = ranked.find(
+    (row) => isListableEbayCategoryId(row.option.id),
+  );
+  if (!listableBest || listableBest.score < 6) {
     return {
       categoryId: "",
       categoryName: existingName,
@@ -820,9 +859,9 @@ export function resolveEbayCategory(input: {
   }
 
   return {
-    categoryId: best.option.id,
-    categoryName: best.option.name,
+    categoryId: listableBest.option.id,
+    categoryName: listableBest.option.name,
     inferred: true,
-    confidence: Math.min(0.88, 0.5 + best.score / 50),
+    confidence: Math.min(0.88, 0.5 + listableBest.score / 50),
   };
 }

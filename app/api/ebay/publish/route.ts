@@ -21,10 +21,12 @@ import {
 import { ensureEbayCompatibleImageUrls } from "@/lib/ebay/ensure-ebay-images";
 import { resolveSellerBusinessPolicyIds } from "@/lib/ebay/account-policies";
 import { loadSellerDraftDefaults } from "@/lib/ebay/draft-defaults";
+import { ensureListableEbayCategory } from "@/lib/ebay/taxonomy-categories";
 import { mapProductRow } from "@/lib/products/persistence";
 import type { ProductListing } from "@/types/product";
 import { createEmptyListing } from "@/lib/demo/sample-listing";
 import { DEFAULT_VALUES } from "@/config/default-values";
+import { isListableEbayCategoryId } from "@/config/ebay-categories";
 
 const bodySchema = z.object({
   productId: z.string().uuid().optional(),
@@ -273,6 +275,57 @@ export async function POST(request: Request) {
       auth.supabase,
       auth.user.id,
     );
+
+    // Inventory offers require a live US leaf category (25005 if parent/retired ID).
+    try {
+      const ensured = await ensureListableEbayCategory(accessToken, {
+        categoryId: listing.categoryId,
+        categoryName: listing.categoryName,
+        title: listing.title,
+        productType: listing.productType || listing.type,
+        brand: listing.brand,
+      });
+      if (
+        ensured.categoryId !== String(listing.categoryId || "").trim() ||
+        (ensured.categoryName &&
+          ensured.categoryName !== String(listing.categoryName || "").trim())
+      ) {
+        listing.categoryId = ensured.categoryId;
+        if (ensured.categoryName) listing.categoryName = ensured.categoryName;
+        if (productId) {
+          await auth.supabase
+            .from("products")
+            .update({
+              category_id: ensured.categoryId,
+              category_name: ensured.categoryName || listing.categoryName,
+              updated_at: new Date().toISOString(),
+            })
+            .eq("id", productId)
+            .eq("user_id", auth.user.id);
+        }
+      }
+    } catch (categoryError) {
+      return NextResponse.json(
+        {
+          error:
+            categoryError instanceof Error
+              ? categoryError.message
+              : "Invalid eBay category ID",
+          code: "EBAY_CATEGORY_INVALID",
+        },
+        { status: 400 },
+      );
+    }
+
+    if (!isListableEbayCategoryId(listing.categoryId)) {
+      return NextResponse.json(
+        {
+          error: `Invalid eBay category ID "${listing.categoryId}". Select a leaf category in Review.`,
+          code: "EBAY_CATEGORY_INVALID",
+        },
+        { status: 400 },
+      );
+    }
 
     // Live publish needs business policy IDs — fill from Settings, then eBay Account API.
     if (data.mode === "live") {

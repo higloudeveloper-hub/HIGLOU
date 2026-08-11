@@ -293,9 +293,9 @@ export async function POST(request: Request) {
         .filter(Boolean)
         .join(" ")
         .toLowerCase();
-      if (/\b(sconce|wall\s*light|lighting|lamp|chandelier|pendant)\b/i.test(hay)) {
-        categoryId = "20620";
-        categoryName = categoryName || "Lamps, Lighting & Ceiling Fans";
+      if (/\b(sconce|wall\s*light|lighting|lamp|chandelier|pendant|flush\s*mount)\b/i.test(hay)) {
+        categoryId = "117503";
+        categoryName = categoryName || "Chandeliers & Ceiling Fixtures";
       } else {
         categoryId = "10034";
         categoryName = categoryName || "Home Décor";

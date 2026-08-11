@@ -30,7 +30,7 @@ export const STORE_DEPARTMENTS: StoreDepartment[] = [
   {
     slug: "lighting",
     name: "Lighting",
-    leafIds: ["20620"],
+    leafIds: ["117503", "116880", "176937", "112581"],
     keywords: ["light", "lamp", "flood", "fixture", "ceiling fan", "bulb"],
   },
   {
@@ -204,7 +204,10 @@ export const EXTRA_LEAF_NAMES: Record<string, string> = {
   "185111": "Window & Wall Air Conditioners",
   "29929": "Vacuums",
   "20612": "Air Cannon Fan",
-  "20620": "Lighting Fans",
+  "117503": "Lighting Fans",
+  "116880": "Lighting Fans",
+  "176937": "Lighting Fans",
+  "112581": "Lighting Fans",
   "117503": "Chandeliers & Ceiling Fixtures",
   "20524": "Patio Furniture Sets",
 };

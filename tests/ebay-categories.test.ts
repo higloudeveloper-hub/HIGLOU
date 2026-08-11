@@ -123,14 +123,26 @@ describe("resolveEbayCategory", () => {
       title: "Hampton Bay Modern Matte Black Outdoor Wall Light",
       brand: "Hampton Bay",
     });
-    expect(byName.categoryId).toBe("20620");
-    expect(byName.categoryName).toMatch(/Lighting/i);
+    expect(byName.categoryId).toBe("116880");
+    expect(byName.categoryName).toMatch(/Wall/i);
 
     const byTitle = resolveEbayCategory({
       title: "Hampton Bay Modern Matte Black Outdoor Wall Light Sconce",
       brand: "Hampton Bay",
     });
-    expect(byTitle.categoryId).toBe("20620");
+    expect(byTitle.categoryId).toBe("116880");
+  });
+
+  it("maps flush mount ceiling lights to Chandeliers & Ceiling Fixtures", () => {
+    const result = resolveEbayCategory({
+      // Legacy non-listable lighting parent / laundry id
+      categoryId: "20620",
+      categoryName: "Lamps, Lighting & Ceiling Fans",
+      title: "Hampton Bay Savannah 13 in 1-Light Flush Mount",
+      brand: "Hampton Bay",
+      productType: "Flush Mount",
+    });
+    expect(result.categoryId).toBe("117503");
   });
 });
 

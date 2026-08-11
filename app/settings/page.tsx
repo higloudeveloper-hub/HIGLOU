@@ -32,7 +32,7 @@ const HUB = [
   {
     href: "#policies",
     title: "eBay policies",
-    body: "Shipping, returns, and payment defaults.",
+    body: "Import shipping, return, and payment policies from your connected account.",
   },
 ] as const;
 
@@ -127,7 +127,8 @@ export default function SettingsPage() {
               eBay policies
             </h2>
             <p className="mt-1 text-sm text-zinc-500">
-              Defaults I apply when building your draft CSV.
+              Import business policies from your connected eBay account, or enter
+              IDs manually. Publish live uses these automatically.
             </p>
           </div>
           <div className="rounded-2xl bg-white p-5 sm:p-6">

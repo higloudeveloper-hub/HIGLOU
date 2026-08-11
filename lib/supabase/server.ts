@@ -4,9 +4,16 @@ import { cleanEnvUrl } from "@/lib/images/url-sanitize";
 
 export async function createClient() {
   const url = cleanEnvUrl(process.env.NEXT_PUBLIC_SUPABASE_URL);
-  const key = String(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "").trim();
+  const key = String(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "")
+    .replace(/[\r\n\t]+/g, "")
+    .trim();
   if (!url || !key) {
     throw new Error("Supabase server env vars are not configured");
+  }
+  if (!/^https?:\/\//i.test(url)) {
+    throw new Error(
+      `Invalid NEXT_PUBLIC_SUPABASE_URL (got ${JSON.stringify(url.slice(0, 48))}). Re-paste https://….supabase.co in Vercel without quotes or Enter.`,
+    );
   }
 
   const cookieStore = await cookies();

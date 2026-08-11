@@ -6,11 +6,18 @@ const PUBLIC_EXACT_PATHS = ["/api/health", "/"];
 
 /** Inline — Edge middleware must not import app lib paths that can break the bundle. */
 function cleanEnvUrl(value: string | undefined | null): string {
-  return String(value || "")
+  let v = String(value || "")
     .replace(/^\uFEFF/, "")
     .replace(/[\r\n\t]+/g, "")
-    .trim()
-    .replace(/\/+$/, "");
+    .trim();
+  if (
+    (v.startsWith('"') && v.endsWith('"')) ||
+    (v.startsWith("'") && v.endsWith("'")) ||
+    (v.startsWith("`") && v.endsWith("`"))
+  ) {
+    v = v.slice(1, -1).trim();
+  }
+  return v.replace(/\/+$/, "");
 }
 
 function isPublicPath(pathname: string): boolean {

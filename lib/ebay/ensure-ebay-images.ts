@@ -1,13 +1,10 @@
-import { randomUUID } from "crypto";
 import sharp from "sharp";
-import {
-  ensureProductImagesBucket,
-  PRODUCT_IMAGES_BUCKET,
-} from "@/lib/images/storage";
+import { PRODUCT_IMAGES_BUCKET } from "@/lib/images/storage";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { cleanHttpsUrl, getPublicSupabaseUrl } from "@/lib/images/url-sanitize";
+import { cleanHttpsUrl } from "@/lib/images/url-sanitize";
 import {
   createEbayEpsFromUrl,
+  isEbayEpsUrl,
   uploadJpegToEbayEps,
 } from "@/lib/ebay/eps-images";
 
@@ -40,16 +37,23 @@ export function normalizeEbayImageUrl(raw: string): string | null {
   }
 }
 
-function publicObjectUrl(path: string): string {
-  const base = getPublicSupabaseUrl();
-  const encoded = path
-    .split("/")
-    .map((seg) => encodeURIComponent(seg))
-    .join("/");
-  return `${base}/storage/v1/object/public/${PRODUCT_IMAGES_BUCKET}/${encoded}`;
-}
-
 async function fetchImageBuffer(sourceUrl: string): Promise<Buffer> {
+  // Prefer service-role download for Supabase public URLs (more reliable on Vercel).
+  const marker = `/object/public/${PRODUCT_IMAGES_BUCKET}/`;
+  const idx = sourceUrl.indexOf(marker);
+  if (idx >= 0) {
+    const path = decodeURIComponent(sourceUrl.slice(idx + marker.length).split("?")[0] || "");
+    if (path) {
+      const admin = createAdminClient();
+      const { data, error } = await admin.storage
+        .from(PRODUCT_IMAGES_BUCKET)
+        .download(path);
+      if (!error && data) {
+        return Buffer.from(await data.arrayBuffer());
+      }
+    }
+  }
+
   const res = await fetch(sourceUrl, { cache: "no-store" });
   if (!res.ok) {
     throw new Error(`Could not fetch image (${res.status})`);
@@ -60,32 +64,19 @@ async function fetchImageBuffer(sourceUrl: string): Promise<Buffer> {
 async function toJpegBuffer(input: Buffer): Promise<Buffer> {
   return sharp(input)
     .rotate()
-    .jpeg({ quality: 90, mozjpeg: true })
+    .resize({
+      width: 1600,
+      height: 1600,
+      fit: "inside",
+      withoutEnlargement: true,
+    })
+    .jpeg({ quality: 88, mozjpeg: true })
     .toBuffer();
 }
 
-async function mirrorJpegToSupabase(
-  jpeg: Buffer,
-  userId: string,
-): Promise<string> {
-  await ensureProductImagesBucket();
-  const admin = createAdminClient();
-  const storagePath = `${userId}/ebay-publish/${randomUUID()}.jpg`;
-  const { error } = await admin.storage
-    .from(PRODUCT_IMAGES_BUCKET)
-    .upload(storagePath, jpeg, {
-      contentType: "image/jpeg",
-      upsert: false,
-    });
-  if (error) {
-    throw new Error(`Failed to store eBay-compatible JPEG: ${error.message}`);
-  }
-  return publicObjectUrl(storagePath);
-}
-
 /**
- * Produce eBay Inventory imageUrls hosted on eBay Picture Services (EPS).
- * Self-hosted Supabase URLs often fail silently on Production drafts — EPS is reliable.
+ * Produce Inventory imageUrls hosted on eBay Picture Services only.
+ * Never returns Supabase/self-hosted URLs — those publish drafts without visible photos.
  */
 export async function ensureEbayCompatibleImageUrls(options: {
   urls: string[];
@@ -99,8 +90,7 @@ export async function ensureEbayCompatibleImageUrls(options: {
     const normalized = normalizeEbayImageUrl(raw);
     if (!normalized) continue;
 
-    // Already on EPS — keep as-is.
-    if (/^https:\/\/i\.ebayimg\.com\//i.test(normalized)) {
+    if (isEbayEpsUrl(normalized)) {
       out.push(normalized);
       continue;
     }
@@ -109,7 +99,6 @@ export async function ensureEbayCompatibleImageUrls(options: {
       const input = await fetchImageBuffer(normalized);
       const jpeg = await toJpegBuffer(input);
 
-      // Prefer binary upload to EPS (eBay never needs to reach Supabase).
       try {
         out.push(
           await uploadJpegToEbayEps(
@@ -127,31 +116,27 @@ export async function ensureEbayCompatibleImageUrls(options: {
         );
       }
 
-      // Fallback: mirror to public Supabase then createImageFromUrl.
-      const publicJpegUrl = await mirrorJpegToSupabase(jpeg, options.userId);
+      // Last Media attempt: ask eBay to pull our public HTTPS URL.
       try {
         out.push(
-          await createEbayEpsFromUrl(options.accessToken, publicJpegUrl),
+          await createEbayEpsFromUrl(options.accessToken, normalized),
         );
-        continue;
       } catch (epsUrlError) {
         errors.push(
           epsUrlError instanceof Error
             ? epsUrlError.message
             : String(epsUrlError),
         );
-        // Last resort: self-hosted HTTPS JPEG (may not render on Production).
-        out.push(publicJpegUrl);
       }
     } catch (error) {
       errors.push(error instanceof Error ? error.message : String(error));
     }
   }
 
-  const unique = [...new Set(out)].slice(0, 24);
+  const unique = [...new Set(out.filter(isEbayEpsUrl))].slice(0, 24);
   if (!unique.length) {
     throw new Error(
-      `No eBay-compatible image URLs. ${errors[0] || "Re-upload photos as JPEG/PNG over HTTPS."}`,
+      `Could not host photos on eBay EPS. ${errors[0] || "Reconnect eBay in Settings and try again."}`,
     );
   }
   return unique;

@@ -534,11 +534,13 @@ export async function POST(request: Request) {
       offerId,
       listingId: listingId || null,
       status,
+      imageCount: inventory.imageUrls.length,
+      imageHost: "ebay-eps",
       ebayUsername: connection.ebayUsername,
       env: connection.env,
       sellerHubHint:
         data.mode === "draft"
-          ? "Offer created unpublished. Finish location/policies in Seller Hub if needed, then publish."
+          ? "Offer created unpublished with eBay-hosted photos. Finish location/policies in Seller Hub if needed, then publish."
           : "Listing published to eBay.",
     });
   } catch (error) {

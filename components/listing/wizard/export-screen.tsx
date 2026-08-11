@@ -534,8 +534,8 @@ export function ExportScreen({
               {ebayConnected
                 ? `Connected as ${ebayUsername || "seller"} — create an unpublished offer (draft) or publish live when policies are set.`
                 : ebayConfigured
-                  ? "Connect your eBay seller account once, then publish drafts directly from Higlou."
-                  : "Admin: add eBay OAuth env vars, then each client can Connect their store."}
+                  ? "Connect your real eBay seller account once, then publish drafts directly from Higlou."
+                  : "Admin: add Production eBay OAuth env vars, then each seller can Connect their store."}
             </p>
             <div className="mt-3 flex flex-wrap items-center gap-2">
               {ebayConnected ? (
@@ -569,7 +569,7 @@ export function ExportScreen({
                 >
                   <Store className="h-4 w-4" />
                   {ebayConfigured
-                    ? "Connect eBay store"
+                    ? "Connect real eBay account"
                     : "Open Settings → eBay store"}
                 </a>
               )}

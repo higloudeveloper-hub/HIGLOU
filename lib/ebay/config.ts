@@ -67,5 +67,5 @@ export function ebayOAuthMissingReason(): string {
     missing.push("EBAY_TOKEN_ENCRYPTION_KEY (min 32 chars)");
   }
   if (!missing.length) return "";
-  return `eBay OAuth is not configured. Set ${missing.join(", ")} in the environment (sandbox first).`;
+  return `eBay OAuth is not configured. Set ${missing.join(", ")} in the environment (use Production keys for live sellers).`;
 }

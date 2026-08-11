@@ -62,8 +62,8 @@ export default function SettingsPage() {
               eBay store connection
             </h2>
             <p className="mt-1 text-sm text-zinc-500">
-              Link your seller account so Higlou can create drafts and publish
-              listings through the eBay Sell APIs.
+              Link your real eBay seller account so Higlou can create drafts and
+              publish listings through the eBay Sell APIs.
             </p>
           </div>
           <div className="rounded-2xl bg-white p-5 sm:p-6">

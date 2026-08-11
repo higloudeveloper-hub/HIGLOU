@@ -81,6 +81,10 @@ export function EbayConnectForm() {
 
   const configured = connection?.configured;
   const connected = connection?.connected;
+  const isProduction = connection?.env === "production";
+  const envLabel = isProduction
+    ? "Production (live seller account)"
+    : "Sandbox (test only)";
 
   return (
     <div className="space-y-4">
@@ -96,7 +100,7 @@ export function EbayConnectForm() {
           </p>
           <p className="mt-1 text-sm text-zinc-500">
             {configured
-              ? `Environment: ${connection?.env}. Connect once — then create drafts or publish live from Export.`
+              ? `${envLabel}. Connect once — then create drafts or publish live from Export.`
               : connection?.missingReason ||
                 "Add eBay Developer credentials to enable Connect."}
           </p>
@@ -130,7 +134,9 @@ export function EbayConnectForm() {
             }}
           >
             <Link2 className="size-4" />
-            Connect eBay store
+            {isProduction
+              ? "Connect real eBay account"
+              : "Connect eBay Sandbox"}
           </Button>
         )}
         <Button type="button" variant="ghost" onClick={() => void load()}>
@@ -138,20 +144,20 @@ export function EbayConnectForm() {
         </Button>
       </div>
 
-      <div className="rounded-xl border border-zinc-100 bg-zinc-50 px-3 py-2.5 text-[12px] text-zinc-600">
-        Setup checklist: create a Sandbox app at developer.ebay.com → RuName
-        pointing to{" "}
-        <code className="text-[11px]">
-          /api/ebay/oauth/callback
-        </code>{" "}
-        → set{" "}
-        <code className="text-[11px]">
-          EBAY_CLIENT_ID / EBAY_CLIENT_SECRET / EBAY_RU_NAME /
-          EBAY_TOKEN_ENCRYPTION_KEY
-        </code>{" "}
-        → run the{" "}
-        <code className="text-[11px]">ebay_connections</code> SQL migration.
-      </div>
+      {isProduction ? (
+        <div className="rounded-xl border border-emerald-100 bg-emerald-50/80 px-3 py-2.5 text-[12px] text-emerald-900">
+          OAuth opens <strong>auth.ebay.com</strong> — sign in with your real
+          seller account (not Sandbox). If you were connected to Sandbox
+          before, disconnect first, then connect again.
+        </div>
+      ) : (
+        <div className="rounded-xl border border-amber-100 bg-amber-50/80 px-3 py-2.5 text-[12px] text-amber-900">
+          Currently on Sandbox. Set{" "}
+          <code className="text-[11px]">EBAY_ENV=production</code> with
+          Production Client ID / Secret / RuName to connect a live seller
+          account.
+        </div>
+      )}
     </div>
   );
 }

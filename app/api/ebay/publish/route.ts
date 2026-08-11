@@ -323,7 +323,26 @@ export async function POST(request: Request) {
       returnPolicyId: listing.returnPolicyId,
     });
 
-    const { offerId } = await upsertOfferForSku(accessToken, offerInput);
+    let offerId = "";
+    try {
+      ({ offerId } = await upsertOfferForSku(accessToken, offerInput));
+    } catch (offerError) {
+      const message =
+        offerError instanceof Error ? offerError.message : String(offerError);
+      if (!/25713|not available/i.test(message)) {
+        throw offerError;
+      }
+      // Sandbox sometimes sticks a dead offer on the SKU — retry with a fresh SKU.
+      const freshSku = `${inventory.sku}`.replace(/-H[a-z0-9]+$/i, "").slice(0, 40);
+      const retrySku = `${freshSku}-H${Date.now().toString(36)}`;
+      inventory.sku = retrySku;
+      await createOrReplaceInventoryItem(accessToken, inventory);
+      ({ offerId } = await upsertOfferForSku(accessToken, {
+        ...offerInput,
+        sku: retrySku,
+      }));
+      listing.sku = retrySku;
+    }
 
     let listingId = "";
     let status = "UNPUBLISHED";

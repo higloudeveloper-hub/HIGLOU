@@ -66,17 +66,23 @@ async function ebayFetch(
         message?: string;
         errorId?: number;
         longMessage?: string;
+        parameters?: Array<{ name?: string; value?: string }>;
       }>;
       message?: string;
     } | null;
     const first = err?.errors?.[0];
+    const extra = (first?.parameters || [])
+      .map((p) => `${p.name || "info"}=${p.value || ""}`)
+      .filter(Boolean)
+      .join(", ");
     const message =
       first?.longMessage ||
       first?.message ||
       err?.message ||
       `eBay API ${res.status} on ${path}`;
     const id = first?.errorId ? ` [eBay ${first.errorId}]` : "";
-    throw new Error(`${message}${id}`);
+    const detail = extra ? ` (${extra})` : "";
+    throw new Error(`${message}${detail}${id}`);
   }
   return json;
 }
@@ -228,6 +234,29 @@ export async function deleteOffer(accessToken: string, offerId: string) {
   }
 }
 
+export async function withdrawOffer(accessToken: string, offerId: string) {
+  try {
+    await ebayFetch(
+      accessToken,
+      `/sell/inventory/v1/offer/${encodeURIComponent(offerId)}/withdraw`,
+      { method: "POST", body: "{}" },
+    );
+  } catch {
+    // Not published / already withdrawn — ignore.
+  }
+}
+
+async function clearOffersForSku(accessToken: string, sku: string) {
+  const existing = await getOffersForSku(accessToken, sku);
+  for (const offer of existing) {
+    if (!offer.offerId) continue;
+    if (String(offer.status || "").toUpperCase() === "PUBLISHED") {
+      await withdrawOffer(accessToken, offer.offerId);
+    }
+    await deleteOffer(accessToken, offer.offerId);
+  }
+}
+
 /**
  * Ensure a default US warehouse location exists for Inventory offers.
  * eBay requires at least one location before offers can be published;
@@ -281,14 +310,35 @@ export async function ensureDefaultInventoryLocation(
   return key;
 }
 
+/** Opt seller into business policies (needed for reliable Sandbox Inventory offers). */
+export async function ensureSellingPolicyOptIn(accessToken: string) {
+  const cfg = getEbayConfig();
+  try {
+    await fetch(`${cfg.apiBase}/sell/account/v1/program/opt_in`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+        Accept: "application/json",
+        "Content-Language": "en-US",
+        "Accept-Language": "en-US",
+      },
+      body: JSON.stringify({ programType: "SELLING_POLICY_MANAGEMENT" }),
+    });
+  } catch {
+    // Non-fatal — seller may already be opted in.
+  }
+}
+
 /**
- * Create or refresh an unpublished offer for a SKU.
- * Always attaches a merchant location. Recovers from stale offer IDs.
+ * Create a fresh unpublished offer for a SKU.
+ * Never updates stale offers (25713). Clears prior offers first.
  */
 export async function upsertOfferForSku(
   accessToken: string,
   input: EbayOfferInput,
 ): Promise<{ offerId: string }> {
+  await ensureSellingPolicyOptIn(accessToken);
   const locationKey =
     input.merchantLocationKey ||
     (await ensureDefaultInventoryLocation(accessToken));
@@ -297,41 +347,35 @@ export async function upsertOfferForSku(
     merchantLocationKey: locationKey,
   };
 
-  const existing = await getOffersForSku(accessToken, offerInput.sku);
-
-  // Prefer a clean create when prior offers are stale/broken.
-  for (const offer of existing) {
-    if (offer.offerId) {
-      try {
-        await updateOffer(accessToken, offer.offerId, offerInput);
-        return { offerId: offer.offerId };
-      } catch {
-        await deleteOffer(accessToken, offer.offerId);
-      }
-    }
-  }
+  await clearOffersForSku(accessToken, offerInput.sku);
 
   try {
     return await createOffer(accessToken, offerInput);
   } catch (error) {
     const message = error instanceof Error ? error.message : "";
     if (
-      /already exists|Offer entity already exists|not available/i.test(message)
+      !/already exists|Offer entity already exists|not available|25713/i.test(
+        message,
+      )
     ) {
-      const again = await getOffersForSku(accessToken, offerInput.sku);
-      for (const offer of again) {
-        if (!offer.offerId) continue;
-        try {
-          await updateOffer(accessToken, offer.offerId, offerInput);
-          return { offerId: offer.offerId };
-        } catch {
-          await deleteOffer(accessToken, offer.offerId);
-        }
-      }
-      // Last resort: create after deletes.
-      return await createOffer(accessToken, offerInput);
+      throw error;
     }
-    throw error;
+
+    await clearOffersForSku(accessToken, offerInput.sku);
+    try {
+      return await createOffer(accessToken, offerInput);
+    } catch (secondError) {
+      // Last resort: new SKU so Sandbox inventory isn't stuck on a dead offer.
+      const freshSku = `${offerInput.sku}`.slice(0, 40) + `-H${Date.now().toString(36)}`;
+      const freshInput: EbayOfferInput = { ...offerInput, sku: freshSku };
+      // Inventory item must exist for the new SKU — caller already wrote original SKU.
+      // Re-throw original if this path isn't usable without re-PUT inventory.
+      const secondMessage =
+        secondError instanceof Error ? secondError.message : message;
+      throw new Error(
+        `${secondMessage} Try changing the SKU slightly and Create draft again.`,
+      );
+    }
   }
 }
 
@@ -345,10 +389,14 @@ export async function publishOffer(accessToken: string, offerId: string) {
 }
 
 export async function getOffersForSku(accessToken: string, sku: string) {
-  const json = (await ebayFetch(
-    accessToken,
-    `/sell/inventory/v1/offer?sku=${encodeURIComponent(sku)}`,
-    { method: "GET" },
-  )) as { offers?: Array<{ offerId?: string; status?: string }> };
-  return json.offers || [];
+  try {
+    const json = (await ebayFetch(
+      accessToken,
+      `/sell/inventory/v1/offer?sku=${encodeURIComponent(sku)}`,
+      { method: "GET" },
+    )) as { offers?: Array<{ offerId?: string; status?: string }> };
+    return json.offers || [];
+  } catch {
+    return [];
+  }
 }

@@ -112,7 +112,9 @@ export async function createOrReplaceInventoryItem(
     aspects: input.aspects,
     imageUrls: input.imageUrls.slice(0, 24),
   };
-  // Brand + MPN must be sent together (eBay 25002 BrandMPN).
+  // Brand + MPN must be paired in aspects (eBay 25002 BrandMPN).
+  // product.mpn only accepts real part numbers — "Does Not Apply" belongs in aspects only
+  // (sending it as product.mpn causes eBay 2004 serialize errors).
   const brand =
     String(input.brand || "").trim() ||
     String(input.aspects?.Brand?.[0] || "").trim() ||
@@ -123,11 +125,15 @@ export async function createOrReplaceInventoryItem(
   const mpn =
     mpnRaw && !/^(n\/?a|none|null|unknown|-)$/i.test(mpnRaw)
       ? mpnRaw.slice(0, 65)
-      : /^(unbranded|generic|does\s*not\s*apply)$/i.test(brand)
-        ? "Does Not Apply"
-        : mpnRaw || "Does Not Apply";
+      : "Does Not Apply";
+  const isPlaceholderMpn = /^does\s*not\s*apply$/i.test(mpn);
+
   product.brand = brand;
-  product.mpn = [mpn];
+  if (!isPlaceholderMpn) {
+    // Inventory Product.mpn is an array of strings for real manufacturer part numbers.
+    product.mpn = [mpn];
+  }
+
   const aspects = { ...(input.aspects || {}) };
   aspects.Brand = [brand];
   aspects.MPN = [mpn];

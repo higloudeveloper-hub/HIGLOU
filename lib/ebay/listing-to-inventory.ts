@@ -10,6 +10,7 @@ import type {
   EbayInventoryItemInput,
   EbayOfferInput,
 } from "@/lib/ebay/inventory-api";
+import { sanitizeEbayAspects } from "@/lib/ebay/sanitize-aspects";
 
 /** eBay Inventory API product.description must be 1–4000 chars. */
 const EBAY_INVENTORY_DESCRIPTION_MAX = 4000;
@@ -64,12 +65,10 @@ export function listingToEbayAspects(listing: ProductListing): EbayAspects {
     const name = key.replace(/^C:/, "").trim();
     const trimmed = String(value || "").trim();
     if (!name || !trimmed) continue;
-    aspects[name] = trimmed
-      .split(/\s*\|\s*|\s*,\s*/)
-      .map((v) => v.trim())
-      .filter(Boolean);
+    // Keep raw string; sanitizeEbayAspects enforces SINGLE/MULTI cardinality.
+    aspects[name] = [trimmed];
   }
-  return aspects;
+  return sanitizeEbayAspects(aspects);
 }
 
 export function listingToInventoryItem(

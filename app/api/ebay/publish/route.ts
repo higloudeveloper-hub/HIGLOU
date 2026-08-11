@@ -22,6 +22,7 @@ import { ensureEbayCompatibleImageUrls } from "@/lib/ebay/ensure-ebay-images";
 import { resolveSellerBusinessPolicyIds } from "@/lib/ebay/account-policies";
 import { loadSellerDraftDefaults } from "@/lib/ebay/draft-defaults";
 import { ensureListableEbayCategory } from "@/lib/ebay/taxonomy-categories";
+import { fetchAspectCardinalityMap } from "@/lib/ebay/sanitize-aspects";
 import { mapProductRow } from "@/lib/products/persistence";
 import type { ProductListing } from "@/types/product";
 import { createEmptyListing } from "@/lib/demo/sample-listing";
@@ -437,7 +438,13 @@ export async function POST(request: Request) {
       );
     }
 
-    await createOrReplaceInventoryItem(accessToken, inventory);
+    const aspectCardinality = await fetchAspectCardinalityMap(
+      accessToken,
+      listing.categoryId,
+    );
+    await createOrReplaceInventoryItem(accessToken, inventory, {
+      aspectCardinality,
+    });
 
     const offerInput = listingToOfferInput(listing, {
       fulfillmentPolicyId: listing.shippingPolicyId,
@@ -486,7 +493,9 @@ export async function POST(request: Request) {
           .slice(0, 40);
         const retrySku = `${freshSku}-H${Date.now().toString(36)}`;
         inventory.sku = retrySku;
-        await createOrReplaceInventoryItem(accessToken, inventory);
+        await createOrReplaceInventoryItem(accessToken, inventory, {
+          aspectCardinality,
+        });
         ({ offerId } = await upsertOfferForSku(accessToken, {
           ...offerInput,
           sku: retrySku,

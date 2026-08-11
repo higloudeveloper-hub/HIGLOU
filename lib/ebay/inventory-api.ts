@@ -1,4 +1,5 @@
 import { getEbayConfig } from "@/lib/ebay/config";
+import { sanitizeEbayAspects } from "@/lib/ebay/sanitize-aspects";
 
 export type EbayAspects = Record<string, string[]>;
 
@@ -105,6 +106,7 @@ function mapCondition(conditionId: string, conditionLabel: string): string {
 export async function createOrReplaceInventoryItem(
   accessToken: string,
   input: EbayInventoryItemInput,
+  options?: { aspectCardinality?: Map<string, "SINGLE" | "MULTI"> },
 ) {
   const product: Record<string, unknown> = {
     title: input.title.slice(0, 80),
@@ -127,17 +129,15 @@ export async function createOrReplaceInventoryItem(
   product.brand = brand;
   product.mpn = mpnProduct;
 
-  // Aspects also need Brand + MPN (item specifics).
-  const aspects: EbayAspects = {};
-  for (const [key, values] of Object.entries(input.aspects || {})) {
-    const name = String(key || "").trim();
-    if (!name || /^brand$/i.test(name) || /^mpn$/i.test(name)) continue;
-    const cleaned = (Array.isArray(values) ? values : [values])
-      .map((v) => String(v || "").trim())
-      .filter(Boolean)
-      .slice(0, 10);
-    if (cleaned.length) aspects[name] = cleaned;
-  }
+  // Aspects: enforce Taxonomy SINGLE/MULTI (Color must be one value — eBay 25002).
+  const aspects = sanitizeEbayAspects(
+    {
+      ...(input.aspects || {}),
+      Brand: [brand],
+      MPN: [mpnProduct],
+    },
+    options?.aspectCardinality,
+  );
   aspects.Brand = [brand];
   aspects.MPN = [mpnProduct];
   product.aspects = aspects;

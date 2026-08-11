@@ -145,6 +145,16 @@ export async function createOrReplaceInventoryItem(
 }
 
 export async function createOffer(accessToken: string, input: EbayOfferInput) {
+  const body = buildOfferBody(input);
+  const json = (await ebayFetch(accessToken, "/sell/inventory/v1/offer", {
+    method: "POST",
+    body: JSON.stringify(body),
+  })) as { offerId?: string };
+
+  return { offerId: String(json.offerId || "") };
+}
+
+function buildOfferBody(input: EbayOfferInput): Record<string, unknown> {
   const listingPolicies: Record<string, string> = {};
   if (input.fulfillmentPolicyId) {
     listingPolicies.fulfillmentPolicyId = input.fulfillmentPolicyId;
@@ -177,13 +187,7 @@ export async function createOffer(accessToken: string, input: EbayOfferInput) {
   if (input.merchantLocationKey) {
     body.merchantLocationKey = input.merchantLocationKey;
   }
-
-  const json = (await ebayFetch(accessToken, "/sell/inventory/v1/offer", {
-    method: "POST",
-    body: JSON.stringify(body),
-  })) as { offerId?: string };
-
-  return { offerId: String(json.offerId || "") };
+  return body;
 }
 
 export async function updateOffer(
@@ -191,31 +195,8 @@ export async function updateOffer(
   offerId: string,
   input: EbayOfferInput,
 ) {
-  const listingPolicies: Record<string, string> = {};
-  if (input.fulfillmentPolicyId) {
-    listingPolicies.fulfillmentPolicyId = input.fulfillmentPolicyId;
-  }
-  if (input.paymentPolicyId) {
-    listingPolicies.paymentPolicyId = input.paymentPolicyId;
-  }
-  if (input.returnPolicyId) {
-    listingPolicies.returnPolicyId = input.returnPolicyId;
-  }
-
-  const body: Record<string, unknown> = {
-    availableQuantity: Math.max(1, input.quantity),
-    categoryId: String(input.categoryId),
-    listingDescription: input.listingDescription,
-    pricingSummary: {
-      price: {
-        value: input.price.toFixed(2),
-        currency: "USD",
-      },
-    },
-  };
-  if (Object.keys(listingPolicies).length) {
-    body.listingPolicies = listingPolicies;
-  }
+  // eBay updateOffer replaces the entire offer — send the full create payload.
+  const body = buildOfferBody(input);
 
   await ebayFetch(
     accessToken,
@@ -226,6 +207,59 @@ export async function updateOffer(
     },
   );
   return { offerId };
+}
+
+export async function deleteOffer(accessToken: string, offerId: string) {
+  try {
+    await ebayFetch(
+      accessToken,
+      `/sell/inventory/v1/offer/${encodeURIComponent(offerId)}`,
+      { method: "DELETE" },
+    );
+  } catch {
+    // Offer may already be gone — ignore.
+  }
+}
+
+/**
+ * Create or refresh an unpublished offer for a SKU.
+ * Recovers from stale/deleted offer IDs returned by getOffersForSku.
+ */
+export async function upsertOfferForSku(
+  accessToken: string,
+  input: EbayOfferInput,
+): Promise<{ offerId: string }> {
+  const existing = await getOffersForSku(accessToken, input.sku);
+  const existingId = existing[0]?.offerId || "";
+
+  if (existingId) {
+    try {
+      await updateOffer(accessToken, existingId, input);
+      return { offerId: existingId };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "";
+      if (!/not available|not found|does not exist/i.test(message)) {
+        throw error;
+      }
+      await deleteOffer(accessToken, existingId);
+    }
+  }
+
+  try {
+    return await createOffer(accessToken, input);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "";
+    // Race: offer already exists for SKU — fetch and update.
+    if (/already exists|Offer entity already exists/i.test(message)) {
+      const again = await getOffersForSku(accessToken, input.sku);
+      const id = again[0]?.offerId || "";
+      if (id) {
+        await updateOffer(accessToken, id, input);
+        return { offerId: id };
+      }
+    }
+    throw error;
+  }
 }
 
 export async function publishOffer(accessToken: string, offerId: string) {

@@ -10,11 +10,9 @@ import {
   getValidAccessToken,
 } from "@/lib/ebay/oauth";
 import {
-  createOffer,
   createOrReplaceInventoryItem,
-  getOffersForSku,
   publishOffer,
-  updateOffer,
+  upsertOfferForSku,
 } from "@/lib/ebay/inventory-api";
 import {
   listingToInventoryItem,
@@ -325,14 +323,7 @@ export async function POST(request: Request) {
       returnPolicyId: listing.returnPolicyId,
     });
 
-    const existing = await getOffersForSku(accessToken, listing.sku);
-    let offerId = existing[0]?.offerId || "";
-    if (offerId) {
-      await updateOffer(accessToken, offerId, offerInput);
-    } else {
-      const created = await createOffer(accessToken, offerInput);
-      offerId = created.offerId;
-    }
+    const { offerId } = await upsertOfferForSku(accessToken, offerInput);
 
     let listingId = "";
     let status = "UNPUBLISHED";

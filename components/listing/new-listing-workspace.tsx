@@ -1366,6 +1366,7 @@ export function NewListingWorkspace({
         offerId?: string;
         listingId?: string | null;
         sellerHubHint?: string;
+        imageCount?: number;
       } | null;
       if (!response.ok) {
         if (body?.code === "EBAY_NOT_CONNECTED") {
@@ -1382,14 +1383,18 @@ export function NewListingWorkspace({
         }
         throw new Error(body?.error || "eBay publish failed");
       }
+      const photoBit =
+        typeof body?.imageCount === "number"
+          ? ` · ${body.imageCount} photo${body.imageCount === 1 ? "" : "s"} on eBay EPS`
+          : "";
       toast.success(
         mode === "live" ? "Published to eBay" : "eBay draft offer created",
         {
           description:
-            body?.sellerHubHint ||
-            (body?.listingId
-              ? `Listing ${body.listingId}`
-              : `Offer ${body?.offerId || ""}`),
+            (body?.sellerHubHint ||
+              (body?.listingId
+                ? `Listing ${body.listingId}`
+                : `Offer ${body?.offerId || ""}`)) + photoBit,
         },
       );
     } catch (error) {

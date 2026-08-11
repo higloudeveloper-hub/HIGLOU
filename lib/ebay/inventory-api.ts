@@ -62,14 +62,21 @@ async function ebayFetch(
   }
   if (!res.ok) {
     const err = json as {
-      errors?: Array<{ message?: string }>;
+      errors?: Array<{
+        message?: string;
+        errorId?: number;
+        longMessage?: string;
+      }>;
       message?: string;
     } | null;
+    const first = err?.errors?.[0];
     const message =
-      err?.errors?.[0]?.message ||
+      first?.longMessage ||
+      first?.message ||
       err?.message ||
       `eBay API ${res.status} on ${path}`;
-    throw new Error(message);
+    const id = first?.errorId ? ` [eBay ${first.errorId}]` : "";
+    throw new Error(`${message}${id}`);
   }
   return json;
 }
@@ -222,41 +229,107 @@ export async function deleteOffer(accessToken: string, offerId: string) {
 }
 
 /**
+ * Ensure a default US warehouse location exists for Inventory offers.
+ * eBay requires at least one location before offers can be published;
+ * Sandbox often rejects offers when none exist.
+ */
+export async function ensureDefaultInventoryLocation(
+  accessToken: string,
+): Promise<string> {
+  const key = "higlou_warehouse_us";
+
+  // Already exists?
+  try {
+    await ebayFetch(
+      accessToken,
+      `/sell/inventory/v1/location/${encodeURIComponent(key)}`,
+      { method: "GET" },
+    );
+    return key;
+  } catch {
+    // create below
+  }
+
+  const body = {
+    name: "Higlou Warehouse",
+    merchantLocationStatus: "ENABLED",
+    locationTypes: ["WAREHOUSE"],
+    location: {
+      address: {
+        addressLine1: "100 Main St",
+        city: "Logansport",
+        stateOrProvince: "IN",
+        postalCode: "46947",
+        country: "US",
+      },
+    },
+  };
+
+  try {
+    await ebayFetch(
+      accessToken,
+      `/sell/inventory/v1/location/${encodeURIComponent(key)}`,
+      { method: "POST", body: JSON.stringify(body) },
+    );
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "";
+    // Already created by a parallel request — treat as success.
+    if (!/already exists|same location|duplicate/i.test(message)) {
+      throw error;
+    }
+  }
+  return key;
+}
+
+/**
  * Create or refresh an unpublished offer for a SKU.
- * Recovers from stale/deleted offer IDs returned by getOffersForSku.
+ * Always attaches a merchant location. Recovers from stale offer IDs.
  */
 export async function upsertOfferForSku(
   accessToken: string,
   input: EbayOfferInput,
 ): Promise<{ offerId: string }> {
-  const existing = await getOffersForSku(accessToken, input.sku);
-  const existingId = existing[0]?.offerId || "";
+  const locationKey =
+    input.merchantLocationKey ||
+    (await ensureDefaultInventoryLocation(accessToken));
+  const offerInput: EbayOfferInput = {
+    ...input,
+    merchantLocationKey: locationKey,
+  };
 
-  if (existingId) {
-    try {
-      await updateOffer(accessToken, existingId, input);
-      return { offerId: existingId };
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "";
-      if (!/not available|not found|does not exist/i.test(message)) {
-        throw error;
+  const existing = await getOffersForSku(accessToken, offerInput.sku);
+
+  // Prefer a clean create when prior offers are stale/broken.
+  for (const offer of existing) {
+    if (offer.offerId) {
+      try {
+        await updateOffer(accessToken, offer.offerId, offerInput);
+        return { offerId: offer.offerId };
+      } catch {
+        await deleteOffer(accessToken, offer.offerId);
       }
-      await deleteOffer(accessToken, existingId);
     }
   }
 
   try {
-    return await createOffer(accessToken, input);
+    return await createOffer(accessToken, offerInput);
   } catch (error) {
     const message = error instanceof Error ? error.message : "";
-    // Race: offer already exists for SKU — fetch and update.
-    if (/already exists|Offer entity already exists/i.test(message)) {
-      const again = await getOffersForSku(accessToken, input.sku);
-      const id = again[0]?.offerId || "";
-      if (id) {
-        await updateOffer(accessToken, id, input);
-        return { offerId: id };
+    if (
+      /already exists|Offer entity already exists|not available/i.test(message)
+    ) {
+      const again = await getOffersForSku(accessToken, offerInput.sku);
+      for (const offer of again) {
+        if (!offer.offerId) continue;
+        try {
+          await updateOffer(accessToken, offer.offerId, offerInput);
+          return { offerId: offer.offerId };
+        } catch {
+          await deleteOffer(accessToken, offer.offerId);
+        }
       }
+      // Last resort: create after deletes.
+      return await createOffer(accessToken, offerInput);
     }
     throw error;
   }

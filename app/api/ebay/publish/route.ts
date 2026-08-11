@@ -20,6 +20,7 @@ import {
   listingToInventoryItem,
   listingToOfferInput,
 } from "@/lib/ebay/listing-to-inventory";
+import { ensureEbayCompatibleImageUrls } from "@/lib/ebay/ensure-ebay-images";
 import { mapProductRow } from "@/lib/products/persistence";
 import type { ProductListing } from "@/types/product";
 import { createEmptyListing } from "@/lib/demo/sample-listing";
@@ -288,9 +289,30 @@ export async function POST(request: Request) {
       auth.user.id,
     );
     const inventory = listingToInventoryItem(listing);
-    if (!inventory.imageUrls.length && data.mode === "live") {
+    try {
+      inventory.imageUrls = await ensureEbayCompatibleImageUrls({
+        urls: inventory.imageUrls,
+        userId: auth.user.id,
+      });
+    } catch (imageError) {
       return NextResponse.json(
-        { error: "Live publish requires at least one HTTPS image URL." },
+        {
+          error:
+            imageError instanceof Error
+              ? imageError.message
+              : "No eBay-compatible image URLs",
+          code: "EBAY_IMAGE_URLS_INVALID",
+        },
+        { status: 400 },
+      );
+    }
+    if (!inventory.imageUrls.length) {
+      return NextResponse.json(
+        {
+          error:
+            "At least one HTTPS JPEG/PNG image is required to create an eBay draft.",
+          code: "EBAY_IMAGE_URLS_INVALID",
+        },
         { status: 400 },
       );
     }

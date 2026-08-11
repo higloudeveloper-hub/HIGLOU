@@ -30,7 +30,11 @@ function publicObjectUrl(path: string): string {
   if (!base) {
     throw new Error("NEXT_PUBLIC_SUPABASE_URL is required for public image URLs");
   }
-  return `${base}/storage/v1/object/public/${PRODUCT_IMAGES_BUCKET}/${path}`;
+  const encoded = path
+    .split("/")
+    .map((seg) => encodeURIComponent(seg))
+    .join("/");
+  return `${base}/storage/v1/object/public/${PRODUCT_IMAGES_BUCKET}/${encoded}`;
 }
 
 export async function POST(request: Request) {

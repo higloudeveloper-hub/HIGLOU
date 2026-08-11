@@ -83,7 +83,9 @@ export function listingToInventoryItem(
   });
   const imageUrls = listing.images
     .map((img) => img.url)
-    .filter((url) => /^https:\/\//i.test(url));
+    .filter((url) => /^https:\/\//i.test(url))
+    .map((url) => url.trim())
+    .filter(Boolean);
 
   return {
     sku: listing.sku,

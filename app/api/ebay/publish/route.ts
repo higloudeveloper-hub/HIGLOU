@@ -414,6 +414,7 @@ export async function POST(request: Request) {
       inventory.imageUrls = await ensureEbayCompatibleImageUrls({
         urls: inventory.imageUrls,
         userId: auth.user.id,
+        accessToken,
       });
     } catch (imageError) {
       return NextResponse.json(

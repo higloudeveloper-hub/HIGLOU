@@ -1,7 +1,44 @@
 import type { ProductListing } from "@/types/product";
 import { enrichItemSpecificsForExport } from "@/lib/ebay/enrich-export-specifics";
 import { estimatePackageAndShipping } from "@/lib/ebay/package-shipping";
-import type { EbayAspects, EbayInventoryItemInput, EbayOfferInput } from "@/lib/ebay/inventory-api";
+import { synthesizeDescriptionSummary } from "@/lib/ebay/description-html";
+import type {
+  EbayAspects,
+  EbayInventoryItemInput,
+  EbayOfferInput,
+} from "@/lib/ebay/inventory-api";
+
+/** eBay Inventory API product.description must be 1–4000 chars. */
+const EBAY_INVENTORY_DESCRIPTION_MAX = 4000;
+
+function clampEbayInventoryDescription(listing: ProductListing): string {
+  const summary = synthesizeDescriptionSummary(listing).trim();
+  const html = String(listing.descriptionHtml || "").trim();
+  // Prefer short plain summary for inventory item; full HTML goes on the offer.
+  let text =
+    summary ||
+    html
+      .replace(/<[^>]+>/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+  if (!text) text = String(listing.title || "Product").trim() || "Product";
+  if (text.length > EBAY_INVENTORY_DESCRIPTION_MAX) {
+    text = `${text.slice(0, EBAY_INVENTORY_DESCRIPTION_MAX - 1).trimEnd()}…`;
+  }
+  return text;
+}
+
+function clampEbayListingDescription(listing: ProductListing): string {
+  const html = String(listing.descriptionHtml || "").trim();
+  const summary = synthesizeDescriptionSummary(listing).trim();
+  // Offer listingDescription allows long HTML; inventory product.description is capped separately.
+  return (
+    html ||
+    summary ||
+    String(listing.title || "Product").trim() ||
+    "Product"
+  );
+}
 
 export function listingToEbayAspects(listing: ProductListing): EbayAspects {
   const enriched = enrichItemSpecificsForExport({
@@ -24,14 +61,17 @@ export function listingToEbayAspects(listing: ProductListing): EbayAspects {
     const name = key.replace(/^C:/, "").trim();
     const trimmed = String(value || "").trim();
     if (!name || !trimmed) continue;
-    aspects[name] = trimmed.split(/\s*\|\s*|\s*,\s*/).map((v) => v.trim()).filter(Boolean);
+    aspects[name] = trimmed
+      .split(/\s*\|\s*|\s*,\s*/)
+      .map((v) => v.trim())
+      .filter(Boolean);
   }
   return aspects;
 }
 
 export function listingToInventoryItem(
   listing: ProductListing,
-  opts?: { quantityOverride?: number },
+  _opts?: { quantityOverride?: number },
 ): EbayInventoryItemInput {
   const pkg = estimatePackageAndShipping({
     title: listing.title,
@@ -48,7 +88,7 @@ export function listingToInventoryItem(
   return {
     sku: listing.sku,
     title: listing.title,
-    description: listing.descriptionHtml || listing.descriptionSummary,
+    description: clampEbayInventoryDescription(listing),
     imageUrls,
     aspects: listingToEbayAspects(listing),
     condition: listing.condition || "New",
@@ -84,7 +124,7 @@ export function listingToOfferInput(
     categoryId: String(listing.categoryId).trim(),
     price: listing.price,
     quantity: Math.max(1, listing.quantity || 1),
-    listingDescription: listing.descriptionHtml || listing.descriptionSummary,
+    listingDescription: clampEbayListingDescription(listing),
     fulfillmentPolicyId: policies.fulfillmentPolicyId || undefined,
     paymentPolicyId: policies.paymentPolicyId || undefined,
     returnPolicyId: policies.returnPolicyId || undefined,

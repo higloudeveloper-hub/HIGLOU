@@ -6,11 +6,9 @@ import {
 } from "@/lib/images/storage";
 import { createAdminClient } from "@/lib/supabase/admin";
 
-const EBAY_IMAGE_EXT = /\.(jpe?g|png|gif|bmp|tiff?)$/i;
-
 /**
- * eBay Inventory imageUrls must be absolute https URLs with a supported
- * image extension. Re-encode path segments and drop invalid entries.
+ * eBay Inventory imageUrls must be absolute https URLs.
+ * Re-encode path segments and drop invalid entries.
  */
 export function normalizeEbayImageUrl(raw: string): string | null {
   const trimmed = String(raw || "").trim();

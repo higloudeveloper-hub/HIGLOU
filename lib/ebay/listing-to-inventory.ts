@@ -102,8 +102,10 @@ export function listingToInventoryItem(
       mpn: listing.mpn,
       model: listing.model,
     });
+  // Compact spaced Home Depot-style MPNs for Inventory BrandMPN validation.
+  const mpnCompact = mpn.replace(/\s+/g, "").slice(0, 65) || "Does Not Apply";
   aspects.Brand = [brand];
-  aspects.MPN = [mpn];
+  aspects.MPN = [mpnCompact === "DoesNotApply" ? "Does Not Apply" : mpnCompact];
 
   return {
     sku: listing.sku,

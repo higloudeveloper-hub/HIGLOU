@@ -109,12 +109,11 @@ export async function createOrReplaceInventoryItem(
   const product: Record<string, unknown> = {
     title: input.title.slice(0, 80),
     description: input.description,
-    aspects: input.aspects,
     imageUrls: input.imageUrls.slice(0, 24),
   };
-  // Brand + MPN must be paired in aspects (eBay 25002 BrandMPN).
-  // Do NOT set product.mpn — production returns 2004 "Could not serialize field
-  // [product.mpn]" for both string and string[] forms. Aspects carry the MPN.
+
+  // BrandMPN (25002): product.brand + product.mpn must both be present for branded items.
+  // Production rejects product.mpn as string[] (2004 serialize) — send a plain string.
   const brand =
     String(input.brand || "").trim() ||
     String(input.aspects?.Brand?.[0] || "").trim() ||
@@ -122,18 +121,17 @@ export async function createOrReplaceInventoryItem(
   const mpnRaw =
     String(input.mpn || "").trim() ||
     String(input.aspects?.MPN?.[0] || "").trim();
-  const mpnAspect =
-    mpnRaw && !/^(n\/?a|none|null|unknown|-)$/i.test(mpnRaw)
-      ? mpnRaw.slice(0, 65)
-      : "Does Not Apply";
+  const mpnDisplay = normalizeEbayMpnDisplay(mpnRaw, brand);
+  const mpnProduct = normalizeEbayMpnProduct(mpnDisplay);
 
   product.brand = brand;
+  product.mpn = mpnProduct;
 
-  // Sanitize aspects: eBay wants Record<string, string[]> with non-empty string values.
+  // Aspects also need Brand + MPN (item specifics).
   const aspects: EbayAspects = {};
   for (const [key, values] of Object.entries(input.aspects || {})) {
     const name = String(key || "").trim();
-    if (!name) continue;
+    if (!name || /^brand$/i.test(name) || /^mpn$/i.test(name)) continue;
     const cleaned = (Array.isArray(values) ? values : [values])
       .map((v) => String(v || "").trim())
       .filter(Boolean)
@@ -141,8 +139,9 @@ export async function createOrReplaceInventoryItem(
     if (cleaned.length) aspects[name] = cleaned;
   }
   aspects.Brand = [brand];
-  aspects.MPN = [mpnAspect];
+  aspects.MPN = [mpnProduct];
   product.aspects = aspects;
+
   if (input.upc && /^\d{12,14}$/.test(input.upc)) {
     product.upc = [input.upc];
   }
@@ -184,6 +183,33 @@ export async function createOrReplaceInventoryItem(
     body: JSON.stringify(body),
   });
   return { sku: input.sku };
+}
+
+/** Display / aspect MPN (keeps readable form when valid). */
+export function normalizeEbayMpnDisplay(mpn: string, brand: string): string {
+  const raw = String(mpn || "").trim();
+  if (raw && !/^(n\/?a|none|null|unknown|-)$/i.test(raw)) {
+    return raw.slice(0, 65);
+  }
+  if (/^(unbranded|generic|does\s*not\s*apply)$/i.test(brand)) {
+    return "Does Not Apply";
+  }
+  return "Does Not Apply";
+}
+
+/**
+ * product.mpn identifier string for Inventory API.
+ * Strip spaces (Home Depot "1008 481 828" → "1008481828") — spaced values
+ * often fail BrandMPN validation.
+ */
+export function normalizeEbayMpnProduct(mpnDisplay: string): string {
+  const compact = String(mpnDisplay || "")
+    .trim()
+    .replace(/\s+/g, "")
+    .slice(0, 65);
+  if (!compact) return "DoesNotApply";
+  if (/^doesnotapply$/i.test(compact)) return "Does Not Apply";
+  return compact;
 }
 
 export async function createOffer(accessToken: string, input: EbayOfferInput) {

@@ -25,7 +25,9 @@ export function resolveBrandMpn(input: {
 }): string {
   const mpn = String(input.mpn || "").trim();
   if (mpn && !/^(n\/?a|none|null|unknown|-)$/i.test(mpn)) {
-    return mpn.slice(0, 65);
+    // Compact spaced catalog numbers (e.g. Home Depot "1008 481 828").
+    const compact = mpn.replace(/\s+/g, "").slice(0, 65);
+    return compact || mpn.slice(0, 65);
   }
   const brand = String(input.brand || "").trim();
   if (!brand || /^(unbranded|generic|does\s*not\s*apply|n\/?a)$/i.test(brand)) {
@@ -33,7 +35,7 @@ export function resolveBrandMpn(input: {
   }
   const model = String(input.model || "").trim();
   if (model && model.length >= 2 && !/^n\/?a$/i.test(model)) {
-    return model.slice(0, 65);
+    return model.replace(/\s+/g, "").slice(0, 65) || model.slice(0, 65);
   }
   return "Does Not Apply";
 }

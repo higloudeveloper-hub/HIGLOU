@@ -51,6 +51,16 @@ describe("enrichItemSpecificsForExport", () => {
     expect(columns["C:MPN"]).toBe("12345-BN");
   });
 
+  it("compacts spaced Home Depot-style MPNs", () => {
+    const { columns } = enrichItemSpecificsForExport({
+      categoryId: "117503",
+      brand: "Hampton Bay",
+      mpn: "1008 481 828",
+      itemSpecifics: [],
+    });
+    expect(columns["C:MPN"]).toBe("1008481828");
+  });
+
   it("fills faucet essentials + Attribute pairs from title cues", () => {
     const { columns, attributePairs } = enrichItemSpecificsForExport({
       categoryId: "99999",

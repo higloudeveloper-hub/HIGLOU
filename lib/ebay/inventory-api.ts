@@ -113,7 +113,8 @@ export async function createOrReplaceInventoryItem(
     imageUrls: input.imageUrls.slice(0, 24),
   };
   // Brand + MPN must be paired in aspects (eBay 25002 BrandMPN).
-  // product.mpn must be a string (not string[]) — arrays trigger eBay 2004 serialize.
+  // Do NOT set product.mpn — production returns 2004 "Could not serialize field
+  // [product.mpn]" for both string and string[] forms. Aspects carry the MPN.
   const brand =
     String(input.brand || "").trim() ||
     String(input.aspects?.Brand?.[0] || "").trim() ||
@@ -125,14 +126,8 @@ export async function createOrReplaceInventoryItem(
     mpnRaw && !/^(n\/?a|none|null|unknown|-)$/i.test(mpnRaw)
       ? mpnRaw.slice(0, 65)
       : "Does Not Apply";
-  const isPlaceholderMpn = /^does\s*not\s*apply$/i.test(mpnAspect);
-  // Compact identifier for product.mpn (Home Depot-style "1008 461 828" → "1008461828")
-  const mpnProduct = mpnAspect.replace(/\s+/g, "").slice(0, 65);
 
   product.brand = brand;
-  if (!isPlaceholderMpn && mpnProduct) {
-    product.mpn = mpnProduct;
-  }
 
   const aspects = { ...(input.aspects || {}) };
   aspects.Brand = [brand];

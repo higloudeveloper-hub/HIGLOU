@@ -39,15 +39,19 @@ async function ebayFetch(
   init: RequestInit = {},
 ) {
   const cfg = getEbayConfig();
+  // eBay Inventory rejects invalid Accept-Language / Content-Language
+  // (Vercel/runtime locale can leak bad values if not set explicitly).
+  const headers = new Headers(init.headers || {});
+  headers.set("Authorization", `Bearer ${accessToken}`);
+  headers.set("Content-Type", "application/json");
+  headers.set("Accept", "application/json");
+  headers.set("Accept-Language", "en-US");
+  headers.set("Content-Language", "en-US");
+  headers.set("X-EBAY-C-MARKETPLACE-ID", "EBAY_US");
+
   const res = await fetch(`${cfg.apiBase}${path}`, {
     ...init,
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      "Content-Type": "application/json",
-      Accept: "application/json",
-      "Content-Language": "en-US",
-      ...(init.headers || {}),
-    },
+    headers,
   });
   const text = await res.text();
   let json: unknown = null;

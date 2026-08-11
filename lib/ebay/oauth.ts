@@ -133,6 +133,9 @@ export async function fetchEbayUserIdentity(accessToken: string): Promise<{
     headers: {
       Authorization: `Bearer ${accessToken}`,
       Accept: "application/json",
+      "Accept-Language": "en-US",
+      "Content-Language": "en-US",
+      "X-EBAY-C-MARKETPLACE-ID": "EBAY_US",
     },
   });
   if (!res.ok) {

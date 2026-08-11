@@ -21,15 +21,20 @@ export async function GET(request: Request) {
   }
 
   // eBay challenge: hash(challengeCode + verificationToken + endpoint)
-  const endpoint =
+  // Endpoint MUST exactly match what is registered in the Developer portal.
+  const endpoint = (
     process.env.EBAY_ACCOUNT_DELETION_ENDPOINT ||
-    `${process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "")}/api/ebay/account-deletion`;
+    `${process.env.NEXT_PUBLIC_APP_URL || ""}/api/ebay/account-deletion`
+  )
+    .replace(/[\r\n\t]+/g, "")
+    .trim()
+    .replace(/\/+$/, "");
 
-  if (!verification) {
+  if (!verification || !endpoint.startsWith("https://")) {
     return NextResponse.json(
       {
         error:
-          "Set EBAY_ACCOUNT_DELETION_VERIFICATION_TOKEN for marketplace deletion challenges",
+          "Set EBAY_ACCOUNT_DELETION_VERIFICATION_TOKEN and EBAY_ACCOUNT_DELETION_ENDPOINT (https) for marketplace deletion challenges",
       },
       { status: 503 },
     );

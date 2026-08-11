@@ -2,7 +2,11 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
 const PUBLIC_PATH_PREFIXES = ["/login", "/forgot-password", "/auth", "/welcome"];
-const PUBLIC_EXACT_PATHS = ["/api/health", "/"];
+const PUBLIC_EXACT_PATHS = [
+  "/api/health",
+  "/",
+  "/api/ebay/account-deletion",
+];
 
 /** Inline — Edge middleware must not import app lib paths that can break the bundle. */
 function cleanEnvUrl(value: string | undefined | null): string {

@@ -24,6 +24,8 @@ export type EbayStoreOfferRow = {
   currentStorePaths: string[];
   /** Numeric StoreCategoryID from Trading (best unchanged signal). */
   currentStoreCategoryId?: string | null;
+  /** Optional second Store folder (StoreCategory2ID). */
+  currentStoreCategory2Id?: string | null;
   /** Extra classify signals (publish path). */
   categoryName?: string | null;
   brand?: string | null;
@@ -32,6 +34,8 @@ export type EbayStoreOfferRow = {
 
 export type StoreOrganizeSuggestion = EbayStoreOfferRow & {
   suggestedPath: string;
+  /** Optional second Store folder (eBay StoreCategory2ID). */
+  suggestedPath2: string | null;
   confidence: number;
   reason: string;
   needsReview: boolean;
@@ -679,7 +683,9 @@ async function assignStoreCategoryViaTrading(
   accessToken: string,
   listingId: string,
   storeCategoryId: string,
+  storeCategory2Id: string = "0",
 ): Promise<void> {
+  const secondId = String(storeCategory2Id || "0").trim() || "0";
   const xml = await tradingApiCall(
     accessToken,
     "ReviseFixedPriceItem",
@@ -691,7 +697,7 @@ async function assignStoreCategoryViaTrading(
     <ItemID>${escapeXml(listingId)}</ItemID>
     <Storefront>
       <StoreCategoryID>${escapeXml(storeCategoryId)}</StoreCategoryID>
-      <StoreCategory2ID>0</StoreCategory2ID>
+      <StoreCategory2ID>${escapeXml(secondId)}</StoreCategory2ID>
     </Storefront>
   </Item>
 </ReviseFixedPriceItemRequest>`,
@@ -711,6 +717,7 @@ async function assignStoreCategoryViaTrading(
 
   // Confirm Storefront stuck — GetItem can lag right after publish/revise.
   let got = "";
+  let got2 = "";
   for (let attempt = 0; attempt < 4; attempt++) {
     if (attempt > 0) await sleep(1500 * attempt);
     const verify = await tradingApiCall(
@@ -727,7 +734,16 @@ async function assignStoreCategoryViaTrading(
     got =
       verify.match(/<StoreCategoryID>([^<]+)<\/StoreCategoryID>/i)?.[1]?.trim() ||
       "";
-    if (got === storeCategoryId) return;
+    got2 =
+      verify
+        .match(/<StoreCategory2ID>([^<]+)<\/StoreCategory2ID>/i)?.[1]
+        ?.trim() || "0";
+    const primaryOk = got === storeCategoryId;
+    const secondaryOk =
+      secondId === "0" || !secondId || got2 === secondId || got2 === "0";
+    // Secondary can lag; accept primary match when secondary was requested and eBay kept 0 briefly.
+    if (primaryOk && (secondId === "0" || got2 === secondId)) return;
+    if (primaryOk && secondaryOk && attempt >= 2) return;
   }
   if (got && got !== "0" && got !== storeCategoryId) {
     throw new Error(
@@ -921,7 +937,9 @@ async function enrichStorefrontFromGetItem(
   const need = rows.filter(
     (r) =>
       r.listingId &&
-      (!r.currentStoreCategoryId || r.currentStoreCategoryId === "0"),
+      (!r.currentStoreCategoryId ||
+        r.currentStoreCategoryId === "0" ||
+        !r.currentStorePaths.length),
   );
   const chunkSize = 6;
   for (let i = 0; i < need.length; i += chunkSize) {
@@ -944,10 +962,23 @@ async function enrichStorefrontFromGetItem(
             xml
               .match(/<StoreCategoryID>([^<]+)<\/StoreCategoryID>/i)?.[1]
               ?.trim() || "";
+          const storeCat2Id =
+            xml
+              .match(/<StoreCategory2ID>([^<]+)<\/StoreCategory2ID>/i)?.[1]
+              ?.trim() || "";
           if (!storeCatId || storeCatId === "0") return;
           row.currentStoreCategoryId = storeCatId;
+          row.currentStoreCategory2Id =
+            storeCat2Id && storeCat2Id !== "0" ? storeCat2Id : null;
           const path = categoriesById.get(storeCatId);
-          row.currentStorePaths = path ? [normalizeStorePath(path)] : [];
+          const path2 =
+            storeCat2Id && storeCat2Id !== "0"
+              ? categoriesById.get(storeCat2Id)
+              : undefined;
+          row.currentStorePaths = [
+            ...(path ? [normalizeStorePath(path)] : []),
+            ...(path2 ? [normalizeStorePath(path2)] : []),
+          ];
         } catch {
           // leave empty — classify will still suggest a folder
         }
@@ -1436,25 +1467,45 @@ export function classifyOffersForStore(
         haystack,
         liveCategories,
       );
+      const preferred2 = pickSecondaryStorePath(
+        haystack,
+        preferred,
+        liveCategories,
+      );
       const suggestedId = resolveStoreCategoryId(preferred, categories);
+      const suggestedId2 = preferred2
+        ? resolveStoreCategoryId(preferred2, categories)
+        : null;
       const current = offer.currentStorePaths[0] || "";
+      const current2 = offer.currentStorePaths[1] || "";
       const unchangedById = Boolean(
         suggestedId &&
           offer.currentStoreCategoryId &&
-          suggestedId === offer.currentStoreCategoryId,
+          suggestedId === offer.currentStoreCategoryId &&
+          (!preferred2 ||
+            !suggestedId2 ||
+            offer.currentStoreCategory2Id === suggestedId2),
       );
       const unchangedByPath =
         Boolean(current) &&
         normalizeStorePath(current) === normalizeStorePath(preferred) &&
-        !/\/other$/i.test(normalizeStorePath(current));
+        !/\/other$/i.test(normalizeStorePath(current)) &&
+        (!preferred2 ||
+          normalizeStorePath(current2) === normalizeStorePath(preferred2));
+      const secondaryBit = preferred2
+        ? ` + "${preferred2.split("/").filter(Boolean).pop()}"`
+        : "";
       return {
         ...offer,
         suggestedPath: preferred,
+        suggestedPath2: preferred2,
         confidence,
         reason:
           preferred !== normalizeStorePath(suggestedPath)
-            ? `${reason} → your folder "${preferred.split("/").filter(Boolean).pop()}"`
-            : reason,
+            ? `${reason} → your folder "${preferred.split("/").filter(Boolean).pop()}"${secondaryBit}`
+            : secondaryBit
+              ? `${reason}${secondaryBit}`
+              : reason,
         needsReview,
         unchanged: unchangedById || unchangedByPath,
       };
@@ -1572,6 +1623,12 @@ const STORE_THEME_HINTS: Array<{
     product: /\b(screw|nail|bolt|hinge|bracket|hardware)\b/i,
     boost: 7,
   },
+  {
+    folder: /smart\s*home|smarthome|automation/,
+    product:
+      /\b(smart|wifi|wi-?fi|alexa|google\s*home|hue|led|rgb|smart\s*bulb|smart\s*light|smart\s*plug|smart\s*switch|nest|ecobee|ring\b|zigbee|zwave|matter\b)\b/i,
+    boost: 11,
+  },
 ];
 
 /** Higlou taxonomy paths that must yield to the seller's real Store folders. */
@@ -1590,6 +1647,10 @@ export const TOOLS_PRODUCT_RE =
 /** Product text that belongs in Lighting. */
 export const LIGHTING_PRODUCT_RE =
   /\b(light|lamp|led|bulb|chandelier|pendant|sconce|hue|flush\s*mount|fixture)\b/i;
+
+/** Product text that also belongs in Smart Home (2nd Store folder). */
+export const SMART_HOME_PRODUCT_RE =
+  /\b(smart|wifi|wi-?fi|alexa|google\s*home|hue|philips\s*hue|smart\s*bulb|smart\s*light|smart\s*plug|smart\s*switch|nest|ecobee|ring\b|smart\s*lock|zwave|zigbee|matter\b|led\b|rgb|voice\s*control|app\s*control|bluetooth\s*bulb|wifi\s*bulb)\b/i;
 
 /** Known eBay leaf Category IDs for bath / plumbing (enrich haystack). */
 const PLUMBING_EBAY_CATEGORY_IDS = new Set([
@@ -1734,7 +1795,7 @@ export function findSellerLightingFolder(
   const matches = usable.filter((c) => {
     const name = normalizeMatchText(c.name);
     if (/^(lighting|lights?|lamps?)$/i.test(name)) return true;
-    return /light|lamp|led/i.test(name) && !/tool|bath|plumb/i.test(name);
+    return /light|lamp|led/i.test(name) && !/tool|bath|plumb|smart/i.test(name);
   });
   if (!matches.length) return null;
   const exact = matches.filter((c) =>
@@ -1742,6 +1803,21 @@ export function findSellerLightingFolder(
   );
   const pool = exact.length ? exact : matches;
   return sortSellerThemeFolders(pool, usable, true)[0] || null;
+}
+
+/** Seller's real Smart Home folder (featured / secondary category). */
+export function findSellerSmartHomeFolder(
+  categories: EbayStoreCategory[],
+): EbayStoreCategory | null {
+  const usable = usableStoreCategories(categories);
+  const matches = usable.filter((c) => {
+    const text = normalizeMatchText(`${c.name} ${c.path}`);
+    return /smart\s*home|smarthome|smart\s*living|home\s*automation|automation/i.test(
+      text,
+    );
+  });
+  if (!matches.length) return null;
+  return sortSellerThemeFolders(matches, usable, true)[0] || null;
 }
 
 /**
@@ -1786,6 +1862,51 @@ export function preferSellerStorePath(
   }
 
   return suggested;
+}
+
+/**
+ * Pick an optional 2nd Store folder (StoreCategory2ID).
+ * Example: LED lamp → Lighting (1st) + Smart Home (2nd).
+ */
+export function pickSecondaryStorePath(
+  haystack: string,
+  primaryPath: string,
+  categories: EbayStoreCategory[],
+): string | null {
+  const primary = normalizeStorePath(primaryPath);
+  const usable = usableStoreCategories(categories);
+
+  const smartHome = findSellerSmartHomeFolder(usable);
+  if (smartHome && SMART_HOME_PRODUCT_RE.test(haystack)) {
+    const path = normalizeStorePath(smartHome.path);
+    if (path !== primary) return path;
+  }
+
+  // Second-best seller folder with a different theme (fill featured categories).
+  const scored = usable
+    .map((cat) => ({
+      cat,
+      score: scoreExistingStoreCategory(haystack, cat, usable),
+    }))
+    .filter((row) => row.score >= 4)
+    .sort((a, b) => b.score - a.score);
+
+  for (const row of scored) {
+    const path = normalizeStorePath(row.cat.path);
+    if (path === primary) continue;
+    // Don't pair Bath with Tools, etc. — only cross-cutting Smart Home-like
+    // or a clearly different strong match already filtered by score.
+    const name = normalizeMatchText(row.cat.name);
+    if (/smart|home automation|featured/i.test(name)) return path;
+    if (
+      smartHome &&
+      normalizeStorePath(smartHome.path) === path
+    ) {
+      return path;
+    }
+  }
+
+  return null;
 }
 
 /** Match folder name words to title with simple plural/singular tolerance. */
@@ -2093,7 +2214,8 @@ export async function autoOrganizeStore(
 
   // Only create folders that were actually suggested and are missing.
   const neededPaths = toApply
-    .map((s) => s.suggestedPath)
+    .flatMap((s) => [s.suggestedPath, s.suggestedPath2])
+    .filter((path): path is string => Boolean(path))
     .filter((path) => !resolveStoreCategoryId(path, categories));
   const ensured = await ensureStorePaths(
     accessToken,
@@ -2107,7 +2229,13 @@ export async function autoOrganizeStore(
     toApply.map((s) => ({
       offerId: s.offerId,
       suggestedPath: s.suggestedPath,
+      suggestedPath2: s.suggestedPath2,
       listingId: s.listingId,
+      title: s.title,
+      brand: s.brand,
+      productType: s.productType,
+      categoryName: s.categoryName,
+      categoryId: s.categoryId,
     })),
     categories,
   );
@@ -2120,6 +2248,10 @@ export async function autoOrganizeStore(
     const to = row.suggestedPath;
     afterByFolder[from] = Math.max(0, (afterByFolder[from] || 0) - 1);
     afterByFolder[to] = (afterByFolder[to] || 0) + 1;
+    if (row.suggestedPath2) {
+      afterByFolder[row.suggestedPath2] =
+        (afterByFolder[row.suggestedPath2] || 0) + 1;
+    }
   }
 
   return {
@@ -2145,7 +2277,8 @@ export function folderDistribution(
 }
 
 /**
- * Set Store folder on a published listing via Trading API only.
+ * Set Store folder(s) on a published listing via Trading API only.
+ * Supports primary StoreCategoryID + optional StoreCategory2ID (max 2).
  * Never calls Inventory APIs (hyphenated Higlou SKUs trigger eBay 25707).
  */
 export async function assignStoreCategoriesToOffer(
@@ -2157,15 +2290,15 @@ export async function assignStoreCategoriesToOffer(
     categories?: EbayStoreCategory[];
     /** Mutator so apply loop can reuse newly created folder IDs. */
     setCategories?: (categories: EbayStoreCategory[]) => void;
-    /** Extra text so plumbing items remap to Bath and Plumbing. */
+    /** Extra text so plumbing/tools/lighting remap to seller folders. */
     haystack?: string;
   },
 ): Promise<void> {
-  const paths = storeCategoryNames
+  const inputPaths = storeCategoryNames
     .map(normalizeStorePath)
     .filter(Boolean)
     .slice(0, 2);
-  if (!paths.length) {
+  if (!inputPaths.length) {
     throw new Error("At least one store category path is required");
   }
 
@@ -2176,7 +2309,6 @@ export async function assignStoreCategoriesToOffer(
     options?.setCategories?.(categories);
   }
 
-  // offerId from Trading scan is the eBay ItemID; listingId may also be set.
   const listingId =
     String(options?.listingId || "").trim() ||
     String(offerId || "").trim();
@@ -2187,95 +2319,130 @@ export async function assignStoreCategoriesToOffer(
     );
   }
 
-  const live = usableStoreCategories(categories);
   const haystack = String(options?.haystack || "");
-  let targetPath = preferSellerStorePath(paths[0], haystack, live);
 
-  // Never create competing Higlou taxonomy leaves when the seller already has
-  // the real folder (Bath and Plumbing / Tools / Lighting).
-  const bath = findSellerBathPlumbingFolder(live);
-  const tools = findSellerToolsFolder(live);
-  const lighting = findSellerLightingFolder(live);
-  if (bath && HIGLOU_PLUMBING_PATH_RE.test(targetPath)) {
-    targetPath = normalizeStorePath(bath.path);
-  } else if (tools && HIGLOU_TOOLS_PATH_RE.test(targetPath)) {
-    targetPath = normalizeStorePath(tools.path);
-  } else if (lighting && HIGLOU_LIGHTING_PATH_RE.test(targetPath)) {
-    targetPath = normalizeStorePath(lighting.path);
-  }
+  const resolveOne = async (
+    rawPath: string,
+    cats: EbayStoreCategory[],
+  ): Promise<{ categoryId: string; categories: EbayStoreCategory[] }> => {
+    let live = usableStoreCategories(cats);
+    let targetPath = preferSellerStorePath(rawPath, haystack, live);
 
-  const exact = live.find(
-    (c) => normalizeStorePath(c.path) === normalizeStorePath(targetPath),
-  );
+    const bath = findSellerBathPlumbingFolder(live);
+    const tools = findSellerToolsFolder(live);
+    const lighting = findSellerLightingFolder(live);
+    const smartHome = findSellerSmartHomeFolder(live);
 
-  if (exact && isLeafStoreCategory(exact.path, live)) {
-    targetPath = normalizeStorePath(exact.path);
-  } else if (exact && !isLeafStoreCategory(exact.path, live)) {
-    // Parent folder — only use a leaf under THIS folder (live categories only).
-    targetPath = pickAssignableStorePath(exact, live);
-    if (!isLeafStoreCategory(targetPath, live)) {
-      targetPath = normalizeStorePath(`${normalizeStorePath(exact.path)}/General`);
+    if (bath && HIGLOU_PLUMBING_PATH_RE.test(targetPath)) {
+      targetPath = normalizeStorePath(bath.path);
+    } else if (tools && HIGLOU_TOOLS_PATH_RE.test(targetPath)) {
+      targetPath = normalizeStorePath(tools.path);
+    } else if (lighting && HIGLOU_LIGHTING_PATH_RE.test(targetPath)) {
+      targetPath = normalizeStorePath(lighting.path);
+    } else if (
+      smartHome &&
+      /smart\s*home|smarthome/i.test(targetPath.replace(/\//g, " "))
+    ) {
+      targetPath = normalizeStorePath(smartHome.path);
     }
-  } else if (!exact) {
-    // Missing path: remap to seller theme folder when possible instead of
-    // creating Higlou /Tools/Power Tools or /Plumbing/Pumps.
-    const themeFolder =
-      bath &&
-      (HIGLOU_PLUMBING_PATH_RE.test(targetPath) ||
-        PLUMBING_PRODUCT_RE.test(haystack)) &&
-      !TOOLS_PRODUCT_RE.test(haystack)
-        ? bath
-        : tools &&
-            (HIGLOU_TOOLS_PATH_RE.test(targetPath) ||
-              TOOLS_PRODUCT_RE.test(haystack)) &&
-            !PLUMBING_PRODUCT_RE.test(haystack)
-          ? tools
-          : lighting &&
-              (HIGLOU_LIGHTING_PATH_RE.test(targetPath) ||
-                LIGHTING_PRODUCT_RE.test(haystack))
-            ? lighting
-            : null;
 
-    if (themeFolder) {
-      targetPath = normalizeStorePath(themeFolder.path);
-      if (!isLeafStoreCategory(targetPath, live)) {
-        targetPath = pickAssignableStorePath(themeFolder, live);
-        if (!isLeafStoreCategory(targetPath, live)) {
-          targetPath = normalizeStorePath(
-            `${normalizeStorePath(themeFolder.path)}/General`,
-          );
-        }
-      }
-    } else if (!isLeafStoreCategory(targetPath, live)) {
-      targetPath = pickLeafStorePath(targetPath, live);
-    }
-  }
-
-  const ensured = await ensureStoreCategoryId(
-    accessToken,
-    targetPath,
-    categories,
-  );
-  options?.setCategories?.(ensured.categories);
-
-  let categoryId = ensured.categoryId;
-  const ensuredLive = usableStoreCategories(ensured.categories);
-  const catMeta = ensured.categories.find((c) => c.categoryId === categoryId);
-  if (catMeta && !isLeafStoreCategory(catMeta.path, ensuredLive)) {
-    const forcedPath = pickAssignableStorePath(catMeta, ensuredLive);
-    const leafPath = isLeafStoreCategory(forcedPath, ensuredLive)
-      ? forcedPath
-      : normalizeStorePath(`${normalizeStorePath(catMeta.path)}/General`);
-    const forced = await ensureStoreCategoryId(
-      accessToken,
-      leafPath,
-      ensured.categories,
+    const exact = live.find(
+      (c) => normalizeStorePath(c.path) === normalizeStorePath(targetPath),
     );
-    categoryId = forced.categoryId;
-    options?.setCategories?.(forced.categories);
+
+    if (exact && isLeafStoreCategory(exact.path, live)) {
+      targetPath = normalizeStorePath(exact.path);
+    } else if (exact && !isLeafStoreCategory(exact.path, live)) {
+      targetPath = pickAssignableStorePath(exact, live);
+      if (!isLeafStoreCategory(targetPath, live)) {
+        targetPath = normalizeStorePath(
+          `${normalizeStorePath(exact.path)}/General`,
+        );
+      }
+    } else if (!exact) {
+      const themeFolder =
+        bath &&
+        (HIGLOU_PLUMBING_PATH_RE.test(targetPath) ||
+          PLUMBING_PRODUCT_RE.test(haystack)) &&
+        !TOOLS_PRODUCT_RE.test(haystack)
+          ? bath
+          : tools &&
+              (HIGLOU_TOOLS_PATH_RE.test(targetPath) ||
+                TOOLS_PRODUCT_RE.test(haystack)) &&
+              !PLUMBING_PRODUCT_RE.test(haystack)
+            ? tools
+            : lighting &&
+                (HIGLOU_LIGHTING_PATH_RE.test(targetPath) ||
+                  LIGHTING_PRODUCT_RE.test(haystack))
+              ? lighting
+              : smartHome && SMART_HOME_PRODUCT_RE.test(haystack)
+                ? smartHome
+                : null;
+
+      if (themeFolder) {
+        targetPath = normalizeStorePath(themeFolder.path);
+        if (!isLeafStoreCategory(targetPath, live)) {
+          targetPath = pickAssignableStorePath(themeFolder, live);
+          if (!isLeafStoreCategory(targetPath, live)) {
+            targetPath = normalizeStorePath(
+              `${normalizeStorePath(themeFolder.path)}/General`,
+            );
+          }
+        }
+      } else if (!isLeafStoreCategory(targetPath, live)) {
+        targetPath = pickLeafStorePath(targetPath, live);
+      }
+    }
+
+    let ensured = await ensureStoreCategoryId(accessToken, targetPath, cats);
+    live = usableStoreCategories(ensured.categories);
+    let categoryId = ensured.categoryId;
+    const catMeta = ensured.categories.find((c) => c.categoryId === categoryId);
+    if (catMeta && !isLeafStoreCategory(catMeta.path, live)) {
+      const forcedPath = pickAssignableStorePath(catMeta, live);
+      const leafPath = isLeafStoreCategory(forcedPath, live)
+        ? forcedPath
+        : normalizeStorePath(`${normalizeStorePath(catMeta.path)}/General`);
+      ensured = await ensureStoreCategoryId(
+        accessToken,
+        leafPath,
+        ensured.categories,
+      );
+      categoryId = ensured.categoryId;
+    }
+    return { categoryId, categories: ensured.categories };
+  };
+
+  // Primary
+  let primary = await resolveOne(inputPaths[0], categories);
+  categories = primary.categories;
+  options?.setCategories?.(categories);
+
+  // Optional secondary (Smart Home, etc.)
+  let secondaryId = "0";
+  let path2 =
+    inputPaths[1] ||
+    pickSecondaryStorePath(haystack, inputPaths[0], usableStoreCategories(categories));
+  if (path2 && normalizeStorePath(path2) !== normalizeStorePath(inputPaths[0])) {
+    try {
+      const secondary = await resolveOne(path2, categories);
+      categories = secondary.categories;
+      options?.setCategories?.(categories);
+      if (secondary.categoryId !== primary.categoryId) {
+        secondaryId = secondary.categoryId;
+      }
+    } catch {
+      // Secondary is best-effort — primary still applies.
+      secondaryId = "0";
+    }
   }
 
-  await assignStoreCategoryViaTrading(accessToken, listingId, categoryId);
+  await assignStoreCategoryViaTrading(
+    accessToken,
+    listingId,
+    primary.categoryId,
+    secondaryId,
+  );
 }
 
 export async function applyStoreOrganizeSuggestions(
@@ -2283,6 +2450,7 @@ export async function applyStoreOrganizeSuggestions(
   suggestions: Array<{
     offerId: string;
     suggestedPath: string;
+    suggestedPath2?: string | null;
     listingId?: string | null;
     skip?: boolean;
     title?: string | null;
@@ -2303,28 +2471,27 @@ export async function applyStoreOrganizeSuggestions(
   for (const row of suggestions) {
     if (row.skip) continue;
     try {
-      await assignStoreCategoriesToOffer(
-        accessToken,
-        row.offerId,
-        [row.suggestedPath],
-        {
-          listingId: row.listingId,
-          categories: liveCategories,
-          haystack: [
-            row.title,
-            row.brand,
-            row.productType,
-            row.categoryName,
-            row.categoryId,
-            row.suggestedPath,
-          ]
-            .filter(Boolean)
-            .join(" "),
-          setCategories: (next) => {
-            liveCategories = next;
-          },
-        },
+      const paths = [row.suggestedPath, row.suggestedPath2].filter(
+        (p): p is string => Boolean(p && String(p).trim()),
       );
+      await assignStoreCategoriesToOffer(accessToken, row.offerId, paths, {
+        listingId: row.listingId,
+        categories: liveCategories,
+        haystack: [
+          row.title,
+          row.brand,
+          row.productType,
+          row.categoryName,
+          row.categoryId,
+          row.suggestedPath,
+          row.suggestedPath2,
+        ]
+          .filter(Boolean)
+          .join(" "),
+        setCategories: (next) => {
+          liveCategories = next;
+        },
+      });
       applied += 1;
     } catch (error) {
       failed.push({
@@ -2354,6 +2521,7 @@ export async function organizeListingOnPublish(
   },
 ): Promise<{
   storePath: string;
+  storePath2: string | null;
   createdFolder: boolean;
   confidence: number;
   reason: string;
@@ -2380,6 +2548,7 @@ export async function organizeListingOnPublish(
 
   let lastError: unknown = null;
   let storePath = "/Home/General Merchandise";
+  let storePath2: string | null = null;
   let reason = "Assigned on publish";
   let confidence = 0.5;
   let createdFolder = false;
@@ -2412,11 +2581,17 @@ export async function organizeListingOnPublish(
         haystack,
         store.categories,
       );
+      storePath2 =
+        suggestion?.suggestedPath2 ||
+        pickSecondaryStorePath(haystack, storePath, store.categories);
       confidence = suggestion?.confidence ?? confidence;
       reason = suggestion?.reason || reason;
 
       const beforeId = resolveStoreCategoryId(storePath, store.categories);
-      await assignStoreCategoriesToOffer(accessToken, listingId, [storePath], {
+      const paths = [storePath, storePath2].filter(
+        (p): p is string => Boolean(p && String(p).trim()),
+      );
+      await assignStoreCategoriesToOffer(accessToken, listingId, paths, {
         listingId,
         categories: store.categories,
         haystack,
@@ -2425,6 +2600,7 @@ export async function organizeListingOnPublish(
 
       return {
         storePath,
+        storePath2,
         createdFolder,
         confidence,
         reason,

@@ -619,6 +619,7 @@ export async function POST(request: Request) {
     let status = "UNPUBLISHED";
     let storeOrganize: {
       storePath: string;
+      storePath2: string | null;
       createdFolder: boolean;
       confidence: number;
       reason: string;
@@ -665,7 +666,7 @@ export async function POST(request: Request) {
     }
 
     const liveHint = storeOrganize
-      ? `Published and filed in Store folder ${storeOrganize.storePath}${storeOrganize.createdFolder ? " (folder created)" : ""}.`
+      ? `Published and filed in Store ${storeOrganize.storePath}${storeOrganize.storePath2 ? ` + ${storeOrganize.storePath2}` : ""}${storeOrganize.createdFolder ? " (folder created)" : ""}.`
       : storeOrganizeWarning
         ? `Listing published to eBay, but Store folder was not set: ${storeOrganizeWarning}`
         : "Listing published to eBay.";

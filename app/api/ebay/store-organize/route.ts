@@ -59,6 +59,10 @@ export async function GET() {
     for (const row of suggestions) {
       const key = row.suggestedPath || "(none)";
       byFolder[key] = (byFolder[key] || 0) + 1;
+      if (row.suggestedPath2) {
+        const key2 = `${row.suggestedPath2} (2nd)`;
+        byFolder[key2] = (byFolder[key2] || 0) + 1;
+      }
     }
 
     return NextResponse.json({
@@ -102,8 +106,14 @@ const applySchema = z.union([
         z.object({
           offerId: z.string().min(1),
           suggestedPath: z.string().min(1),
+          suggestedPath2: z.string().min(1).nullable().optional(),
           listingId: z.string().nullable().optional(),
           skip: z.boolean().optional(),
+          title: z.string().optional(),
+          brand: z.string().optional(),
+          productType: z.string().optional(),
+          categoryName: z.string().optional(),
+          categoryId: z.string().optional(),
         }),
       )
       .min(1)
@@ -182,7 +192,11 @@ export async function POST(request: Request) {
     }
 
     const store = await listSellerStoreCategories(accessToken);
-    const paths = body.items.map((item) => item.suggestedPath);
+    const paths = body.items.flatMap((item) =>
+      [item.suggestedPath, item.suggestedPath2].filter(
+        (p): p is string => Boolean(p),
+      ),
+    );
     const ensured = await ensureStorePaths(
       accessToken,
       paths,

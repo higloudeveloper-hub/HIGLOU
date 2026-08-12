@@ -366,6 +366,46 @@ describe("classifyOffersForStore", () => {
     expect(rows.every((r) => r.suggestedPath === "/Tools")).toBe(true);
   });
 
+  it("assigns LED lamps to Lighting + Smart Home (2nd Store folder)", () => {
+    const live = [
+      {
+        path: "/Lighting",
+        name: "Lighting",
+        categoryId: "9100",
+      },
+      {
+        path: "/Smart Home",
+        name: "Smart Home",
+        categoryId: "9200",
+      },
+      {
+        path: "/Tools",
+        name: "Tools",
+        categoryId: "9002",
+      },
+    ];
+    const [row] = classifyOffersForStore(
+      [
+        {
+          offerId: "led1",
+          sku: "LED1",
+          status: "PUBLISHED",
+          title: "Philips Hue White LED Smart Bulb A19",
+          categoryId: "112581",
+          brand: "Philips Hue",
+          productType: "LED Bulb",
+          listingId: "55",
+          price: 29,
+          currentStorePaths: ["/Lighting"],
+        },
+      ],
+      live,
+    );
+    expect(row.suggestedPath).toBe("/Lighting");
+    expect(row.suggestedPath2).toBe("/Smart Home");
+    expect(row.unchanged).toBe(false);
+  });
+
   it("still prefers Bath and Plumbing when that folder has a child", () => {
     const live = [
       {

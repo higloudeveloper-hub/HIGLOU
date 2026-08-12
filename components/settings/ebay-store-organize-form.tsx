@@ -14,6 +14,7 @@ type Suggestion = {
   listingId: string | null;
   currentStorePaths: string[];
   suggestedPath: string;
+  suggestedPath2?: string | null;
   confidence: number;
   reason: string;
   needsReview: boolean;
@@ -83,7 +84,10 @@ export function EbayStoreOrganizeForm() {
       .map((s) => ({
         offerId: s.offerId,
         suggestedPath: s.suggestedPath,
+        suggestedPath2: s.suggestedPath2 ?? null,
         listingId: s.listingId,
+        title: s.title,
+        categoryId: s.categoryId,
       }));
     if (!items.length) {
       toast.error("Select at least one listing to update");
@@ -194,10 +198,10 @@ export function EbayStoreOrganizeForm() {
   return (
     <div className="space-y-4">
       <div className="rounded-xl border border-emerald-100 bg-emerald-50/70 px-3 py-2.5 text-[12px] text-emerald-900">
-        Higlou reads your <strong>current</strong> eBay Store folders and live
-        listings, then files each product into the best existing folder (for
-        example Bath and Plumbing). Missing folders are created only when none
-        of yours fit. Publish does the same automatically.
+        Higlou files each live listing into your eBay Store folders: primary
+        (e.g. Lighting / Tools / Bath and Plumbing) plus an optional second
+        folder when it fits (e.g. LED → Smart Home). eBay category stays the
+        marketplace leaf. Publish does the same automatically.
       </div>
 
       <div className="flex flex-wrap gap-2">
@@ -321,6 +325,12 @@ export function EbayStoreOrganizeForm() {
                   <td className="px-2 py-2">
                     <p className="font-medium tabular-nums">
                       {row.suggestedPath}
+                      {row.suggestedPath2 ? (
+                        <span className="text-muted-foreground">
+                          {" "}
+                          + {row.suggestedPath2}
+                        </span>
+                      ) : null}
                     </p>
                     <p className="mt-0.5 text-[11px] text-muted-foreground">
                       {row.reason}

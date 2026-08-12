@@ -1472,6 +1472,7 @@ export function NewListingWorkspace({
         imageCount?: number;
         storeOrganize?: {
           storePath?: string;
+          storePath2?: string | null;
           createdFolder?: boolean;
         } | null;
         storeOrganizeWarning?: string | null;
@@ -1496,7 +1497,7 @@ export function NewListingWorkspace({
           ? ` · ${body.imageCount} photo${body.imageCount === 1 ? "" : "s"} on eBay EPS`
           : "";
       const folderBit = body?.storeOrganize?.storePath
-        ? ` · Store ${body.storeOrganize.storePath}${body.storeOrganize.createdFolder ? " (created)" : ""}`
+        ? ` · Store ${body.storeOrganize.storePath}${body.storeOrganize.storePath2 ? ` + ${body.storeOrganize.storePath2}` : ""}${body.storeOrganize.createdFolder ? " (created)" : ""}`
         : "";
       toast.success(
         mode === "live" ? "Published to eBay" : "eBay draft offer created",

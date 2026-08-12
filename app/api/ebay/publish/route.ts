@@ -348,8 +348,15 @@ export async function POST(request: Request) {
       try {
         const resolved = await resolveSellerBusinessPolicyIds(accessToken, {
           marketplaceId: connection.marketplaceId || "EBAY_US",
-          // Ignore stale listing/settings IDs — always use corrected Higlou policies.
-          preferred: {},
+          // Prefer Settings / listing IDs; never invent First Class over a manual policy.
+          preferred: {
+            shippingPolicyId:
+              defaults.shippingPolicyId || listing.shippingPolicyId || "",
+            paymentPolicyId:
+              defaults.paymentPolicyId || listing.paymentPolicyId || "",
+            returnPolicyId:
+              defaults.returnPolicyId || listing.returnPolicyId || "",
+          },
           createIfMissing: true,
         });
         listing.shippingPolicyId = resolved.shippingPolicyId;
@@ -494,6 +501,11 @@ export async function POST(request: Request) {
         const fixed = await ensureHiglouBusinessPolicies(accessToken, {
           marketplaceId: connection.marketplaceId || "EBAY_US",
           forceRecreateFulfillment: true,
+          preferred: {
+            shippingPolicyId: listing.shippingPolicyId,
+            paymentPolicyId: listing.paymentPolicyId,
+            returnPolicyId: listing.returnPolicyId,
+          },
         });
         listing.shippingPolicyId = fixed.shippingPolicyId;
         listing.paymentPolicyId = fixed.paymentPolicyId;

@@ -212,12 +212,9 @@ export function EbayPoliciesForm() {
   return (
     <div className="space-y-3">
       <div className="rounded-xl border border-emerald-100 bg-emerald-50/70 px-3 py-2.5 text-[12px] text-emerald-900">
-        Policies belong to each eBay seller account — they cannot be copied by
-        ID. Import syncs this connected account, or Create Higlou policies makes
-        Creates the 3 eBay policies (shipping / payment / 14-day returns) plus
-        ship-from at 2525 Market St, Logansport, IN. Domestic only, buyer pays,
-        cheapest service. If eBay blocks API create, make them in Seller Hub then
-        Import from eBay.
+        Higlou checks the connected eBay account: if Shipping / Payment / Return
+        already exist, publish uses those policies (the ones you select and Save
+        here). It only creates a policy type when that account has none.
       </div>
 
       <PolicySelect
@@ -284,8 +281,9 @@ export function EbayPoliciesForm() {
         />
       </div>
       <p className="text-xs text-zinc-500">
-        After connecting a new eBay account, use Create Higlou policies once.
-        Publish also auto-creates missing policies for the connected seller.
+        Import from eBay → choose Shipping / Payment / Return → Save. Publish
+        attaches those exact IDs. Create Higlou policies only fills gaps if a
+        type is missing on the account.
       </p>
       <div className="flex flex-wrap gap-2">
         <Button

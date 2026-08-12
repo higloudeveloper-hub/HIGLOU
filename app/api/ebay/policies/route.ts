@@ -113,9 +113,9 @@ export async function POST(request: Request) {
       resolved = await resolveSellerBusinessPolicyIds(accessToken, {
         marketplaceId: connection.marketplaceId || "EBAY_US",
         preferred: {
-          shippingPolicyId: "",
-          paymentPolicyId: "",
-          returnPolicyId: "",
+          shippingPolicyId: String(existing?.shipping_policy_id ?? ""),
+          paymentPolicyId: String(existing?.payment_policy_id ?? ""),
+          returnPolicyId: String(existing?.return_policy_id ?? ""),
         },
         createIfMissing: true,
       });

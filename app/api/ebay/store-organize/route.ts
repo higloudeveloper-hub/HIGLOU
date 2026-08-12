@@ -168,7 +168,7 @@ export async function POST(request: Request) {
 
     if ("mode" in body && body.mode === "auto") {
       const result = await autoOrganizeStore(accessToken, {
-        minConfidence: body.minConfidence ?? 0.3,
+        minConfidence: body.minConfidence ?? 0.15,
         maxItems: 500,
       });
       return NextResponse.json({

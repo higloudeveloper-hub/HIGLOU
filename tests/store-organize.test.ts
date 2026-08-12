@@ -401,8 +401,8 @@ describe("classifyOffersForStore", () => {
       ],
       live,
     );
-    expect(row.suggestedPath).toBe("/Lighting");
-    expect(row.suggestedPath2).toBe("/Smart Home");
+    // Featured Smart Home wins over non-featured Lighting on this store.
+    expect(row.suggestedPath).toBe("/Smart Home");
     expect(row.unchanged).toBe(false);
   });
 

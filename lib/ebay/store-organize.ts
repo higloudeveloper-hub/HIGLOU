@@ -1451,7 +1451,15 @@ export function classifyOffersForStore(
 ): StoreOrganizeSuggestion[] {
   const reviewBelow = options?.reviewBelow ?? 0.45;
   const liveCategories = usableStoreCategories(categories);
+  const namedCategories = namedStoreCategories(categories);
   const taxonomy = mergeTaxonomyCategories(categories);
+  const featuredPaths = new Set(
+    HIGLOU_FEATURED_STORE_FOLDERS.map((name) =>
+      findFeaturedStoreFolder(namedCategories, name),
+    )
+      .filter(Boolean)
+      .map((c) => normalizeStorePath(c!.path)),
+  );
 
   return offers.map((offer) => {
     const haystack = offerClassifyHaystack(offer);
@@ -1461,23 +1469,29 @@ export function classifyOffersForStore(
       confidence: number,
       reason: string,
       needsReview: boolean,
+      suggestedPath2?: string | null,
     ): StoreOrganizeSuggestion => {
-      const preferred = preferSellerStorePath(
-        suggestedPath,
-        haystack,
-        liveCategories,
-      );
-      const preferred2 = pickSecondaryStorePath(
-        haystack,
-        preferred,
-        liveCategories,
-      );
+      // Always try featured folders first (Tools / Smart Home / Outdoor / Bath).
+      const featured = pickFeaturedStoreAssignment(haystack, namedCategories);
+      const preferred = featured
+        ? featured.primary
+        : preferSellerStorePath(suggestedPath, haystack, namedCategories);
+      const preferred2 =
+        featured?.secondary ??
+        pickSecondaryStorePath(haystack, preferred, namedCategories) ??
+        suggestedPath2 ??
+        null;
+
       const suggestedId = resolveStoreCategoryId(preferred, categories);
       const suggestedId2 = preferred2
         ? resolveStoreCategoryId(preferred2, categories)
         : null;
       const current = offer.currentStorePaths[0] || "";
       const current2 = offer.currentStorePaths[1] || "";
+      const currentIsFeatured =
+        Boolean(current) && featuredPaths.has(normalizeStorePath(current));
+      const preferredIsFeatured = featuredPaths.has(normalizeStorePath(preferred));
+
       const unchangedById = Boolean(
         suggestedId &&
           offer.currentStoreCategoryId &&
@@ -1492,6 +1506,16 @@ export function classifyOffersForStore(
         !/\/other$/i.test(normalizeStorePath(current)) &&
         (!preferred2 ||
           normalizeStorePath(current2) === normalizeStorePath(preferred2));
+
+      // If we have a featured target but the item is not in a featured folder yet,
+      // always treat as changed so Organize everything moves it.
+      const needsFeaturedMove =
+        preferredIsFeatured &&
+        (!currentIsFeatured ||
+          normalizeStorePath(current) !== normalizeStorePath(preferred) ||
+          (Boolean(preferred2) &&
+            normalizeStorePath(current2) !== normalizeStorePath(preferred2)));
+
       const secondaryBit = preferred2
         ? ` + "${preferred2.split("/").filter(Boolean).pop()}"`
         : "";
@@ -1499,22 +1523,37 @@ export function classifyOffersForStore(
         ...offer,
         suggestedPath: preferred,
         suggestedPath2: preferred2,
-        confidence,
-        reason:
-          preferred !== normalizeStorePath(suggestedPath)
+        confidence: featured?.confidence ?? confidence,
+        reason: featured
+          ? featured.reason
+          : preferred !== normalizeStorePath(suggestedPath)
             ? `${reason} → your folder "${preferred.split("/").filter(Boolean).pop()}"${secondaryBit}`
             : secondaryBit
               ? `${reason}${secondaryBit}`
               : reason,
-        needsReview,
-        unchanged: unchangedById || unchangedByPath,
+        needsReview: featured ? false : needsReview,
+        unchanged: needsFeaturedMove
+          ? false
+          : unchangedById || unchangedByPath,
       };
     };
 
+    // 0) Featured folders win whenever the product matches them.
+    const featuredHit = pickFeaturedStoreAssignment(haystack, namedCategories);
+    if (featuredHit) {
+      return finalize(
+        featuredHit.primary,
+        featuredHit.confidence,
+        featuredHit.reason,
+        false,
+        featuredHit.secondary,
+      );
+    }
+
     // 1) Prefer the seller's REAL Store folders (e.g. "Bath and Plumbing").
     const liveHit = pickBestExistingStoreCategory(haystack, liveCategories);
-    if (liveHit && liveHit.score >= 4) {
-      const leafPath = pickAssignableStorePath(liveHit.cat, liveCategories);
+    if (liveHit && liveHit.score >= 3) {
+      const leafPath = pickAssignableStorePath(liveHit.cat, namedCategories);
       return finalize(
         leafPath,
         Math.min(0.96, 0.5 + liveHit.score / 20),
@@ -1529,9 +1568,9 @@ export function classifyOffersForStore(
       picked = inferDynamicStorePath(haystack);
     }
 
-    const mapped = mapTaxonomyPathToExistingStore(picked.path, liveCategories);
+    const mapped = mapTaxonomyPathToExistingStore(picked.path, namedCategories);
     if (mapped) {
-      const leafPath = pickAssignableStorePath(mapped, liveCategories);
+      const leafPath = pickAssignableStorePath(mapped, namedCategories);
       return finalize(
         leafPath,
         Math.max(picked.confidence, 0.7),
@@ -1650,23 +1689,23 @@ export const HIGLOU_FEATURED_STORE_FOLDERS = [
 
 /** Product text that belongs in a bath/plumbing Store folder. */
 export const PLUMBING_PRODUCT_RE =
-  /\b(bath|plumb|faucet|pump|toilet|sink|shower|tub|valve|pipe|sump|disposal|vanity|thermostat|spout|drain|cartridge|moen|delta|kohler|grohe|pfister|everbilt|glacier\s*bay|hansgrohe|supply\s*line|angle\s*stop|water\s*heater|bidet|pex|fill\s*valve|flapper|aerator|diverter)\b/i;
+  /\b(bath|plumb|faucet|pump|toilet|sink|shower|tub|valve|pipe|sump|disposal|vanity|thermostat|spout|drain|cartridge|moen|delta|kohler|grohe|pfister|everbilt|glacier\s*bay|hansgrohe|supply\s*line|angle\s*stop|water\s*heater|bidet|pex|fill\s*valve|flapper|aerator|diverter|gib\s*door|garbage\s*disposal|washerless|cartridge|stop\s*valve|ball\s*valve|gate\s*valve|toilet\s*seat|shower\s*head|tub\s*spout|kitchen\s*faucet|bath(room)?\s*faucet|utility\s*pump|submersible|sump\s*pump|transfer\s*pump|plumbing)\b/i;
 
 /** Product text that belongs in a Tools Store folder. */
 export const TOOLS_PRODUCT_RE =
-  /\b(tool|drill|saw|grinder|impact|driver|sander|nailer|stapler|wrench|pliers|screwdriver|multimeter|rotary|oscillating|dewalt|makita|milwaukee|ryobi|ridgid|bosch|metabo|craftsman|hercules|hart|kobalt|porter[\s-]?cable|hilti|wen|skil|dremel)\b/i;
+  /\b(tool|drill|saw|grinder|impact|driver|sander|nailer|stapler|wrench|pliers|screwdriver|multimeter|rotary|oscillating|dewalt|makita|milwaukee|ryobi|ridgid|bosch|metabo|craftsman|hercules|hart|kobalt|porter[\s-]?cable|hilti|wen|skil|dremel|hammer|socket|ratchet|torque|bit\s*set|drill\s*bit|circular\s*saw|reciprocating|jigsaw|miter|angle\s*grinder|heat\s*gun|glue\s*gun|caulk|laser\s*level|tape\s*measure|stud\s*finder|tool\s*bag|tool\s*box|power\s*tool|hand\s*tool|18v|20v|12v\s*max|m18|m12|one\+|forge)\b/i;
 
-/** Product text that belongs in Lighting. */
+/** Product text that belongs in Lighting (often maps → Smart Home on this store). */
 export const LIGHTING_PRODUCT_RE =
-  /\b(light|lamp|led|bulb|chandelier|pendant|sconce|hue|flush\s*mount|fixture)\b/i;
+  /\b(light|lamp|led|bulb|chandelier|pendant|sconce|hue|flush\s*mount|fixture|lantern|night\s*light|string\s*light|flood\s*light|shop\s*light|under\s*cabinet\s*light|vanity\s*light|ceiling\s*light|recessed|downlight|troffer|luminaire)\b/i;
 
 /** Product text that belongs in Outdoor Living. */
 export const OUTDOOR_PRODUCT_RE =
-  /\b(outdoor|patio|garden|lawn|hose|sprinkler|trimmer|blower|grill|bbq|camping|deck|yard|landscape|gazebo|umbrella|fire\s*pit|string\s*light|solar\s*light|planter|weed|mower)\b/i;
+  /\b(outdoor|patio|garden|lawn|hose|sprinkler|trimmer|blower|grill|bbq|camping|deck|yard|landscape|gazebo|umbrella|fire\s*pit|string\s*light|solar\s*light|planter|weed|mower|hedge|leaf\s*blower|pressure\s*washer|outdoor\s*furniture|adirondack|chaise|canopy|gazebo|bird\s*feeder|hose\s*reel)\b/i;
 
-/** Product text that also belongs in Smart Home (2nd Store folder). */
+/** Product text that belongs in Smart Home (featured — lights, wifi, smart plugs, etc.). */
 export const SMART_HOME_PRODUCT_RE =
-  /\b(smart|wifi|wi-?fi|alexa|google\s*home|hue|philips\s*hue|smart\s*bulb|smart\s*light|smart\s*plug|smart\s*switch|nest|ecobee|ring\b|smart\s*lock|zwave|zigbee|matter\b|led\b|rgb|voice\s*control|app\s*control|bluetooth\s*bulb|wifi\s*bulb)\b/i;
+  /\b(smart|wifi|wi-?fi|alexa|google\s*home|hue|philips\s*hue|smart\s*bulb|smart\s*light|smart\s*plug|smart\s*switch|nest|ecobee|ring\b|smart\s*lock|zwave|zigbee|matter\b|led\b|rgb|voice\s*control|app\s*control|bluetooth\s*bulb|wifi\s*bulb|light|lamp|bulb|fixture|chandelier|pendant|sconce|flush\s*mount|thermostat|doorbell|security\s*camera|smart\s*speaker|dimmer|motion\s*sensor|contact\s*sensor|hub\b|bridge\b|smart\s*thermostat|ev\s*charger|nacs|ccs1)\b/i;
 
 /** Known eBay leaf Category IDs for bath / plumbing (enrich haystack). */
 const PLUMBING_EBAY_CATEGORY_IDS = new Set([
@@ -1767,18 +1806,114 @@ function sortSellerThemeFolders(
   });
 }
 
+function namedStoreCategories(
+  categories: EbayStoreCategory[],
+): EbayStoreCategory[] {
+  return categories.filter(
+    (c) =>
+      String(c.name || "").trim() &&
+      !isReservedStoreFolderName(c.name) &&
+      !/\/other$/i.test(normalizeStorePath(c.path)),
+  );
+}
+
 /** Find a seller folder by exact featured name (case-insensitive). */
 export function findFeaturedStoreFolder(
   categories: EbayStoreCategory[],
   featuredName: string,
 ): EbayStoreCategory | null {
-  const usable = usableStoreCategories(categories);
+  // Prefer folders that already have Store category IDs, but still match by name
+  // when GetStore/REST lag so classify can target the featured path.
+  const named = namedStoreCategories(categories);
   const want = normalizeMatchText(featuredName);
-  const exact = usable.filter(
-    (c) => normalizeMatchText(c.name) === want,
-  );
-  if (exact.length) return sortSellerThemeFolders(exact, usable, true)[0];
-  return null;
+  const exact = named.filter((c) => normalizeMatchText(c.name) === want);
+  if (!exact.length) return null;
+  const withId = exact.filter((c) => c.categoryId);
+  const pool = withId.length ? withId : exact;
+  return sortSellerThemeFolders(pool, named, true)[0] || null;
+}
+
+/** Score how well a product belongs in one featured folder. */
+export function scoreFeaturedFolderForProduct(
+  haystack: string,
+  featuredName: string,
+): number {
+  const name = normalizeMatchText(featuredName);
+  const hay = String(haystack || "");
+  if (name === "tools") {
+    if (TOOLS_PRODUCT_RE.test(hay)) return 30;
+    if (/\b(battery|batteries|level|hammer|chisel|mallet)\b/i.test(hay)) return 12;
+    return 0;
+  }
+  if (name === "bath and plumbing") {
+    if (PLUMBING_PRODUCT_RE.test(hay)) return 30;
+    if (/\b(kitchen|bath|fixture|spout|washer|cartridge)\b/i.test(hay)) return 10;
+    return 0;
+  }
+  if (name === "outdoor living") {
+    if (OUTDOOR_PRODUCT_RE.test(hay)) return 30;
+    if (/\b(outdoor|patio|garden|solar)\b/i.test(hay)) return 14;
+    return 0;
+  }
+  if (name === "smart home") {
+    // Lights / LED / wifi / smart — this store has no separate Lighting folder.
+    if (SMART_HOME_PRODUCT_RE.test(hay) && !TOOLS_PRODUCT_RE.test(hay)) return 28;
+    if (LIGHTING_PRODUCT_RE.test(hay) && !TOOLS_PRODUCT_RE.test(hay)) return 26;
+    if (/\b(electronics|speaker|camera|charger|usb|hdmi)\b/i.test(hay) && !TOOLS_PRODUCT_RE.test(hay))
+      return 8;
+    return 0;
+  }
+  return 0;
+}
+
+/**
+ * Force primary (+ optional secondary) into the seller's four featured folders
+ * whenever the product matches any of them.
+ */
+export function pickFeaturedStoreAssignment(
+  haystack: string,
+  categories: EbayStoreCategory[],
+): {
+  primary: string;
+  secondary: string | null;
+  confidence: number;
+  reason: string;
+} | null {
+  const scored: Array<{ cat: EbayStoreCategory; score: number; label: string }> =
+    [];
+
+  for (const label of HIGLOU_FEATURED_STORE_FOLDERS) {
+    const cat = findFeaturedStoreFolder(categories, label);
+    if (!cat) continue;
+    const score = scoreFeaturedFolderForProduct(haystack, label);
+    if (score <= 0) continue;
+    scored.push({ cat, score, label });
+  }
+
+  if (!scored.length) return null;
+  scored.sort((a, b) => b.score - a.score || b.label.length - a.label.length);
+
+  const primary = scored[0]!;
+  let secondary: (typeof scored)[number] | null = null;
+
+  // Prefer Smart Home as 2nd when primary is Outdoor/Bath/Tools and product is also smart/LED.
+  const smart = scored.find((s) => s.label === "Smart Home");
+  if (
+    smart &&
+    smart.label !== primary.label &&
+    (SMART_HOME_PRODUCT_RE.test(haystack) || LIGHTING_PRODUCT_RE.test(haystack))
+  ) {
+    secondary = smart;
+  } else if (scored[1] && scored[1].score >= 10 && scored[1].label !== primary.label) {
+    secondary = scored[1];
+  }
+
+  return {
+    primary: normalizeStorePath(primary.cat.path),
+    secondary: secondary ? normalizeStorePath(secondary.cat.path) : null,
+    confidence: Math.min(0.98, 0.55 + primary.score / 40),
+    reason: `Featured folder "${primary.label}"${secondary ? ` + "${secondary.label}"` : ""}`,
+  };
 }
 
 /** Seller's real bath/plumbing folder (e.g. Bath and Plumbing), preferring broad names. */
@@ -2290,7 +2425,7 @@ export async function autoOrganizeStore(
   beforeByFolder: Record<string, number>;
   afterByFolder: Record<string, number>;
 }> {
-  const minConfidence = options?.minConfidence ?? 0.3;
+  const minConfidence = options?.minConfidence ?? 0.15;
   const maxItems = Math.min(500, Math.max(1, options?.maxItems || 500));
 
   const store = await listSellerStoreCategories(accessToken);

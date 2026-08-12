@@ -86,12 +86,12 @@ const applySchema = z.object({
       z.object({
         offerId: z.string().min(1),
         suggestedPath: z.string().min(1),
+        listingId: z.string().nullable().optional(),
         skip: z.boolean().optional(),
       }),
     )
     .min(1)
     .max(200),
-  /** When true, also apply low-confidence rows (needsReview). */
   includeNeedsReview: z.boolean().optional().default(false),
 });
 
@@ -138,14 +138,18 @@ export async function POST(request: Request) {
       auth.supabase,
       auth.user.id,
     );
+    const store = await listSellerStoreCategories(accessToken);
     const result = await applyStoreOrganizeSuggestions(
       accessToken,
       body.items,
+      store.categories,
     );
     return NextResponse.json({
       ok: true,
       applied: result.applied,
       failed: result.failed,
+      storeSource: store.source,
+      storeWarning: store.warning || null,
     });
   } catch (error) {
     return NextResponse.json(

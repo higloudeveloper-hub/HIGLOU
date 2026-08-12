@@ -9,6 +9,8 @@ import { getEbayConfig } from "@/lib/ebay/config";
 export type EbayStoreCategory = {
   path: string;
   name: string;
+  /** Numeric Store category ID from GetStore (needed for Trading API revise). */
+  categoryId?: string;
 };
 
 export type EbayStoreOfferRow = {
@@ -95,31 +97,89 @@ function normalizeStorePath(path: string): string {
 /** Flatten custom category nodes from Trading API GetStore XML. */
 function parseStoreCategoriesFromXml(xml: string): EbayStoreCategory[] {
   const out: EbayStoreCategory[] = [];
-  // Match CustomCategory blocks with Name; build paths from nested structure is hard in regex.
-  // Prefer flat Name extraction + parent hints when present.
-  const nameRe =
-    /<CustomCategory>[\s\S]*?<CategoryID>(\d+)<\/CategoryID>[\s\S]*?<Name>([^<]+)<\/Name>[\s\S]*?(?:<Order>\d+<\/Order>)?[\s\S]*?<\/CustomCategory>/gi;
-  const names: string[] = [];
-  let m: RegExpExecArray | null;
-  while ((m = nameRe.exec(xml))) {
-    const name = m[2].trim();
-    if (name) names.push(name);
-  }
-  // Also try simpler Name tags under CustomCategories
-  if (!names.length) {
-    const simple = xml.matchAll(/<Name>([^<]+)<\/Name>/g);
-    for (const hit of simple) {
-      const name = hit[1].trim();
-      if (name && !/eBay|Store|Description/i.test(name)) names.push(name);
-    }
-  }
-  for (const name of names) {
+  const blockRe = /<CustomCategory>([\s\S]*?)<\/CustomCategory>/gi;
+  let block: RegExpExecArray | null;
+  while ((block = blockRe.exec(xml))) {
+    const chunk = block[1];
+    const id = chunk.match(/<CategoryID>(\d+)<\/CategoryID>/i)?.[1]?.trim();
+    const name = chunk.match(/<Name>([^<]+)<\/Name>/i)?.[1]?.trim();
+    if (!name) continue;
     const path = normalizeStorePath(`/${name}`);
-    if (path && !out.some((c) => c.path === path)) {
-      out.push({ path, name });
+    if (!path) continue;
+    if (!out.some((c) => c.path === path || (id && c.categoryId === id))) {
+      out.push({ path, name, categoryId: id });
     }
   }
   return out;
+}
+
+async function tradingApiCall(
+  accessToken: string,
+  callName: string,
+  xmlBody: string,
+): Promise<string> {
+  const cfg = getEbayConfig();
+  const res = await fetch(`${cfg.apiBase}/ws/api.dll`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "text/xml",
+      "X-EBAY-API-IAF-TOKEN": accessToken,
+      "X-EBAY-API-CALL-NAME": callName,
+      "X-EBAY-API-SITEID": "0",
+      "X-EBAY-API-COMPATIBILITY-LEVEL": "1193",
+    },
+    body: xmlBody,
+  });
+  const xml = await res.text();
+  if (!res.ok || /<Ack>Failure<\/Ack>/i.test(xml)) {
+    const msg =
+      xml.match(/<LongMessage>([^<]+)<\/LongMessage>/)?.[1] ||
+      xml.match(/<ShortMessage>([^<]+)<\/ShortMessage>/)?.[1] ||
+      `${callName} failed`;
+    throw new Error(msg);
+  }
+  return xml;
+}
+
+function resolveStoreCategoryId(
+  path: string,
+  categories: EbayStoreCategory[],
+): string | null {
+  const needle = normalizeStorePath(path);
+  const exact = categories.find(
+    (c) => normalizeStorePath(c.path) === needle && c.categoryId,
+  );
+  if (exact?.categoryId) return exact.categoryId;
+  const leaf = needle.split("/").filter(Boolean).pop()?.toLowerCase();
+  if (!leaf) return null;
+  const byName = categories.find(
+    (c) => c.categoryId && c.name.trim().toLowerCase() === leaf,
+  );
+  return byName?.categoryId || null;
+}
+
+/** Published listings: revise Storefront only (avoids Inventory SKU 25707). */
+async function assignStoreCategoryViaTrading(
+  accessToken: string,
+  listingId: string,
+  storeCategoryId: string,
+): Promise<void> {
+  const xml = `<?xml version="1.0" encoding="utf-8"?>
+<ReviseFixedPriceItemRequest xmlns="urn:ebay:apis:eBLBaseComponents">
+  <ErrorLanguage>en_US</ErrorLanguage>
+  <WarningLevel>High</WarningLevel>
+  <Item>
+    <ItemID>${listingId}</ItemID>
+    <Storefront>
+      <StoreCategoryID>${storeCategoryId}</StoreCategoryID>
+    </Storefront>
+  </Item>
+</ReviseFixedPriceItemRequest>`;
+  await tradingApiCall(accessToken, "ReviseFixedPriceItem", xml);
+}
+
+function isStrictInventorySku(sku: string): boolean {
+  return /^[A-Za-z0-9]{1,50}$/.test(sku);
 }
 
 /**
@@ -430,13 +490,18 @@ export function classifyOffersForStore(
 }
 
 /**
- * Set storeCategoryNames on an existing offer without dropping other fields.
- * Reads the offer, merges paths, PUTs the full body back.
+ * Set Store folder on an offer/listing.
+ * Prefer Trading ReviseFixedPriceItem when published (avoids Inventory SKU 25707
+ * on hyphenated Higlou SKUs). Fall back to Inventory storeCategoryNames.
  */
 export async function assignStoreCategoriesToOffer(
   accessToken: string,
   offerId: string,
   storeCategoryNames: string[],
+  options?: {
+    listingId?: string | null;
+    categories?: EbayStoreCategory[];
+  },
 ): Promise<void> {
   const paths = storeCategoryNames
     .map(normalizeStorePath)
@@ -444,6 +509,19 @@ export async function assignStoreCategoriesToOffer(
     .slice(0, 2);
   if (!paths.length) {
     throw new Error("At least one store category path is required");
+  }
+
+  const listingId = String(options?.listingId || "").trim();
+  const categories = options?.categories || [];
+  const storeCategoryId = resolveStoreCategoryId(paths[0], categories);
+
+  if (listingId && storeCategoryId) {
+    await assignStoreCategoryViaTrading(
+      accessToken,
+      listingId,
+      storeCategoryId,
+    );
+    return;
   }
 
   const offer = (await inventoryFetch(
@@ -463,14 +541,39 @@ export async function assignStoreCategoriesToOffer(
     pricingSummary?: Record<string, unknown>;
     tax?: Record<string, unknown>;
     listingDuration?: string;
+    listing?: { listingId?: string };
     includeCatalogProductDetails?: boolean;
     hideBuyerDetails?: boolean;
   };
 
+  const liveListingId =
+    listingId || String(offer.listing?.listingId || "").trim();
+  if (liveListingId && storeCategoryId) {
+    await assignStoreCategoryViaTrading(
+      accessToken,
+      liveListingId,
+      storeCategoryId,
+    );
+    return;
+  }
+
   const sku = String(offer.sku || "").trim();
   const categoryId = String(offer.categoryId || "").trim();
   if (!sku || !categoryId) {
-    throw new Error("Offer is missing sku or categoryId — cannot update Store folder");
+    throw new Error(
+      "Offer is missing sku or categoryId — cannot update Store folder",
+    );
+  }
+
+  if (!isStrictInventorySku(sku)) {
+    if (liveListingId) {
+      throw new Error(
+        `SKU "${sku}" is rejected by Inventory API (eBay 25707). Create matching Store folders in Seller Hub and reconnect so Higlou can load Store category IDs, then Apply again (Trading revise uses listing ID).`,
+      );
+    }
+    throw new Error(
+      `SKU "${sku}" has non-alphanumeric characters (eBay 25707). Publish the offer first, or recreate the SKU with letters/numbers only, then organize again.`,
+    );
   }
 
   const body: Record<string, unknown> = {
@@ -503,16 +606,40 @@ export async function assignStoreCategoriesToOffer(
     body.hideBuyerDetails = offer.hideBuyerDetails;
   }
 
-  await inventoryFetch(
-    accessToken,
-    `/sell/inventory/v1/offer/${encodeURIComponent(offerId)}`,
-    { method: "PUT", body: JSON.stringify(body) },
-  );
+  try {
+    await inventoryFetch(
+      accessToken,
+      `/sell/inventory/v1/offer/${encodeURIComponent(offerId)}`,
+      { method: "PUT", body: JSON.stringify(body) },
+    );
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    if (/25707|alphanumeric/i.test(msg) && liveListingId && storeCategoryId) {
+      await assignStoreCategoryViaTrading(
+        accessToken,
+        liveListingId,
+        storeCategoryId,
+      );
+      return;
+    }
+    if (/25707|alphanumeric/i.test(msg)) {
+      throw new Error(
+        `${msg} Tip: create Store folders in Seller Hub with the same names, Scan again (loads category IDs), then Apply — Higlou will revise by listing ID instead of SKU.`,
+      );
+    }
+    throw error;
+  }
 }
 
 export async function applyStoreOrganizeSuggestions(
   accessToken: string,
-  suggestions: Array<{ offerId: string; suggestedPath: string; skip?: boolean }>,
+  suggestions: Array<{
+    offerId: string;
+    suggestedPath: string;
+    listingId?: string | null;
+    skip?: boolean;
+  }>,
+  categories: EbayStoreCategory[] = [],
 ): Promise<{
   applied: number;
   failed: Array<{ offerId: string; error: string }>;
@@ -523,9 +650,12 @@ export async function applyStoreOrganizeSuggestions(
   for (const row of suggestions) {
     if (row.skip) continue;
     try {
-      await assignStoreCategoriesToOffer(accessToken, row.offerId, [
-        row.suggestedPath,
-      ]);
+      await assignStoreCategoriesToOffer(
+        accessToken,
+        row.offerId,
+        [row.suggestedPath],
+        { listingId: row.listingId, categories },
+      );
       applied += 1;
     } catch (error) {
       failed.push({

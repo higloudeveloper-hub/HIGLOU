@@ -11,6 +11,7 @@ type Suggestion = {
   status: string;
   title: string;
   categoryId: string;
+  listingId: string | null;
   currentStorePaths: string[];
   suggestedPath: string;
   confidence: number;
@@ -72,6 +73,7 @@ export function EbayStoreOrganizeForm() {
       .map((s) => ({
         offerId: s.offerId,
         suggestedPath: s.suggestedPath,
+        listingId: s.listingId,
       }));
     if (!items.length) {
       toast.error("Select at least one listing to update");
@@ -109,11 +111,10 @@ export function EbayStoreOrganizeForm() {
   return (
     <div className="space-y-4">
       <div className="rounded-xl border border-emerald-100 bg-emerald-50/70 px-3 py-2.5 text-[12px] text-emerald-900">
-        Higlou reads offers on the connected eBay account, suggests a Store
-        folder for each listing, then applies{" "}
-        <code className="text-[11px]">storeCategoryNames</code> via the Inventory
-        API. Folders must already exist in Seller Hub (or match Higlou defaults).
-        Low-confidence rows stay unchecked for your review.
+        Higlou scans offers and assigns Store folders. For live listings it
+        revises by eBay item ID (avoids SKU error 25707). Create folders in
+        Seller Hub with the same names first so Scan can load category IDs.
+        Low-confidence rows stay unchecked for review.
       </div>
 
       <div className="flex flex-wrap gap-2">

@@ -166,7 +166,7 @@ export async function listSellerBusinessPolicies(
   };
 }
 
-/** Prefer cheapest services first — never create Priority unless nothing else works. */
+/** Prefer cheapest domestic services only — no Priority / no international. */
 const CHEAP_SHIPPING_SERVICE_CODES = [
   "USPSGroundAdvantage",
   "USPSFirstClass",
@@ -174,9 +174,6 @@ const CHEAP_SHIPPING_SERVICE_CODES = [
   "EconomyShipping",
   "ShippingMethodStandard",
   "Other",
-  // Last resorts (more expensive) — only if LSAS rejects cheaper codes.
-  "USPSPriority",
-  "UPSGround",
 ] as const;
 
 function fulfillmentPolicyBody(
@@ -184,12 +181,16 @@ function fulfillmentPolicyBody(
   marketplaceId: string,
   shippingServiceCode: string,
 ) {
-  // Minimal FLAT_RATE — buyer pays. Avoid CALCULATED (LSAS) and extra flags.
+  // Domestic-only FLAT_RATE — buyer pays. No international option.
   return {
     name,
     marketplaceId,
     categoryTypes: [{ name: "ALL_EXCLUDING_MOTORS_VEHICLES", default: true }],
     handlingTime: { value: 1, unit: "DAY" },
+    globalShipping: false,
+    freightShipping: false,
+    localPickup: false,
+    pickupDropOff: false,
     shippingOptions: [
       {
         optionType: "DOMESTIC",
@@ -211,6 +212,7 @@ function fulfillmentPolicyBody(
           },
         ],
       },
+      // Intentionally no INTERNATIONAL shippingOptions.
     ],
   };
 }

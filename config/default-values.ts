@@ -1,4 +1,5 @@
 import { ACCEPTED_UPLOAD_MIME_TYPES } from "@/config/supported-image-formats";
+import { HIGLOU_WAREHOUSE } from "@/config/warehouse";
 
 export const DEFAULT_VALUES = {
   quantity: 1,
@@ -6,10 +7,10 @@ export const DEFAULT_VALUES = {
   currency: "USD",
   condition: "New",
   conditionId: "NEW",
-  /** Higlou warehouse — always used for publish-ready drafts until multi-warehouse exists. */
-  itemLocation: "Logansport, IN",
-  postalCode: "46947",
-  country: "US",
+  /** Higlou warehouse — 2525 Market St, Logansport, IN */
+  itemLocation: HIGLOU_WAREHOUSE.itemLocation,
+  postalCode: HIGLOU_WAREHOUSE.postalCode,
+  country: HIGLOU_WAREHOUSE.country,
   handlingTime: 1,
   returnPolicyId: "",
   shippingPolicyId: "",

@@ -1,5 +1,6 @@
 import { getEbayConfig } from "@/lib/ebay/config";
 import { sanitizeEbayAspects } from "@/lib/ebay/sanitize-aspects";
+import { HIGLOU_WAREHOUSE } from "@/config/warehouse";
 
 export type EbayAspects = Record<string, string[]>;
 
@@ -331,41 +332,49 @@ async function clearOffersForSku(accessToken: string, sku: string) {
 }
 
 /**
- * Ensure a default US warehouse location exists for Inventory offers.
- * eBay requires at least one location before offers can be published;
- * Sandbox often rejects offers when none exist.
+ * Ensure Higlou ship-from location exists (2525 Market St, Logansport, IN).
+ * Required before offers and helps avoid LOGISTICS_INFO_IS_MISSING on policies.
  */
 export async function ensureDefaultInventoryLocation(
   accessToken: string,
 ): Promise<string> {
-  const key = "higlou_warehouse_us";
+  const key = HIGLOU_WAREHOUSE.merchantLocationKey;
 
-  // Already exists?
+  const body = {
+    name: HIGLOU_WAREHOUSE.name,
+    merchantLocationStatus: "ENABLED",
+    locationTypes: ["WAREHOUSE"],
+    location: {
+      address: {
+        addressLine1: HIGLOU_WAREHOUSE.addressLine1,
+        city: HIGLOU_WAREHOUSE.city,
+        stateOrProvince: HIGLOU_WAREHOUSE.stateOrProvince,
+        postalCode: HIGLOU_WAREHOUSE.postalCode,
+        country: HIGLOU_WAREHOUSE.country,
+      },
+    },
+  };
+
+  // Already exists — refresh address details.
   try {
     await ebayFetch(
       accessToken,
       `/sell/inventory/v1/location/${encodeURIComponent(key)}`,
       { method: "GET" },
     );
+    try {
+      await ebayFetch(
+        accessToken,
+        `/sell/inventory/v1/location/${encodeURIComponent(key)}/update_location_details`,
+        { method: "POST", body: JSON.stringify(body) },
+      );
+    } catch {
+      // Some accounts reject update_location_details — location still usable.
+    }
     return key;
   } catch {
     // create below
   }
-
-  const body = {
-    name: "Higlou Warehouse",
-    merchantLocationStatus: "ENABLED",
-    locationTypes: ["WAREHOUSE"],
-    location: {
-      address: {
-        addressLine1: "100 Main St",
-        city: "Logansport",
-        stateOrProvince: "IN",
-        postalCode: "46947",
-        country: "US",
-      },
-    },
-  };
 
   try {
     await ebayFetch(
@@ -375,7 +384,6 @@ export async function ensureDefaultInventoryLocation(
     );
   } catch (error) {
     const message = error instanceof Error ? error.message : "";
-    // Already created by a parallel request — treat as success.
     if (!/already exists|same location|duplicate/i.test(message)) {
       throw error;
     }

@@ -214,9 +214,9 @@ export function EbayPoliciesForm() {
       <div className="rounded-xl border border-emerald-100 bg-emerald-50/70 px-3 py-2.5 text-[12px] text-emerald-900">
         Policies belong to each eBay seller account — they cannot be copied by
         ID. Import syncs this connected account, or Create Higlou policies makes
-        Flat-rate shipping (buyer pays; Ground Advantage when eBay allows),
-        payment, and 14-day returns. If eBay blocks API create
-        (LOGISTICS_INFO_IS_MISSING), create/edit policies in Seller Hub then
+        Creates the 3 eBay policies (shipping / payment / 14-day returns) plus
+        ship-from at 2525 Market St, Logansport, IN. Domestic only, buyer pays,
+        cheapest service. If eBay blocks API create, make them in Seller Hub then
         Import from eBay.
       </div>
 

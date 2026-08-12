@@ -14,7 +14,7 @@ export type SellerDraftDefaults = {
 
 /**
  * Seller defaults for making eBay drafts as complete as the active template allows.
- * Location defaults to Higlou warehouse (Logansport, IN 46947).
+ * Location defaults to Higlou warehouse (2525 Market St, Logansport, IN 46947).
  */
 export async function loadSellerDraftDefaults(options: {
   userId?: string;

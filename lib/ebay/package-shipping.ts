@@ -25,6 +25,44 @@ export type PackageEstimate = {
   reason: string;
 };
 
+/**
+ * TEMP (seller request): force tiny declared package so shipping does not
+ * inflate while using small boxes. WeightMajor/Minor + L×W×D = 1 1 1 1 1.
+ * Set to false when real measured boxes should drive rates again.
+ */
+export const FORCE_MINI_PACKAGE = true;
+
+export const MINI_PACKAGE = {
+  weightLbs: 1,
+  weightOz: 1,
+  lengthIn: 1,
+  widthIn: 1,
+  depthIn: 1,
+} as const;
+
+function buildMiniPackageEstimate(reasonPrefix = "TEMP mini box"): PackageEstimate {
+  const totalOz = MINI_PACKAGE.weightLbs * 16 + MINI_PACKAGE.weightOz;
+  const shippingCost = estimateBuyerPaidShippingCostUsd(totalOz);
+  const service = pickService(totalOz, MINI_PACKAGE.lengthIn);
+  return {
+    weightLbs: MINI_PACKAGE.weightLbs,
+    weightOz: MINI_PACKAGE.weightOz,
+    totalOz,
+    packageType: "PackageThickEnvelope",
+    lengthIn: MINI_PACKAGE.lengthIn,
+    widthIn: MINI_PACKAGE.widthIn,
+    depthIn: MINI_PACKAGE.depthIn,
+    measurementSystem: "ENGLISH",
+    shippingType: "Flat",
+    shippingService: service.shippingService,
+    shippingCost,
+    shippingPriority: 1,
+    weightUnit: "lbs",
+    freeShipping: false,
+    reason: `${reasonPrefix} · buyer pays $${shippingCost.toFixed(2)} · ${MINI_PACKAGE.lengthIn}×${MINI_PACKAGE.widthIn}×${MINI_PACKAGE.depthIn} in · ${MINI_PACKAGE.weightLbs} lb ${MINI_PACKAGE.weightOz} oz`,
+  };
+}
+
 /** Soft padding (inches) so the product fits with light packing material. */
 const PACK_PAD_IN = 0.75;
 
@@ -301,6 +339,10 @@ export function estimatePackageAndShipping(input: {
   /** Optional raw item-specifics text (e.g. Dimensions aspect). */
   dimensionsText?: string | null;
 }): PackageEstimate {
+  if (FORCE_MINI_PACKAGE) {
+    return buildMiniPackageEstimate("TEMP mini box (small stock)");
+  }
+
   const haystack = [
     input.title,
     input.productType,
@@ -501,6 +543,10 @@ export function resolveListingPackage(input: {
   packageDepthIn?: number | null;
   packageSource?: "auto" | "manual" | null;
 }): PackageEstimate & { fromSaved: boolean } {
+  if (FORCE_MINI_PACKAGE) {
+    return { ...buildMiniPackageEstimate("TEMP mini box (forced)"), fromSaved: false };
+  }
+
   const estimate = estimatePackageAndShipping(input);
   if (!listingHasMeasuredPackage(input)) {
     return { ...estimate, fromSaved: false };
@@ -568,6 +614,22 @@ export function seedPackageOnListing<T extends {
   aiPackageWidthIn?: number | null;
   aiPackageDepthIn?: number | null;
 }>(listing: T, force = false): T {
+  if (FORCE_MINI_PACKAGE) {
+    const mini = buildMiniPackageEstimate("TEMP mini box (forced)");
+    return {
+      ...listing,
+      packageWeightLbs: mini.weightLbs,
+      packageWeightOz: mini.weightOz,
+      packageLengthIn: mini.lengthIn,
+      packageWidthIn: mini.widthIn,
+      packageDepthIn: mini.depthIn,
+      packageSource: "auto",
+      shippingService: mini.shippingService,
+      shippingCost: mini.shippingCost,
+      freeShipping: false,
+    };
+  }
+
   if (!force && listing.packageSource === "manual") return listing;
 
   const estimate = estimatePackageAndShipping({

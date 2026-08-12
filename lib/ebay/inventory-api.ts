@@ -210,9 +210,9 @@ export async function createOrReplaceInventoryItem(
         unit: "POUND",
       },
       dimensions: {
-        length: input.packageLengthIn || 10,
-        width: input.packageWidthIn || 8,
-        height: input.packageDepthIn || 4,
+        length: input.packageLengthIn || 1,
+        width: input.packageWidthIn || 1,
+        height: input.packageDepthIn || 1,
         unit: "INCH",
       },
     };

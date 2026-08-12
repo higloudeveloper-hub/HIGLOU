@@ -124,7 +124,7 @@ export function EbayStoreOrganizeForm() {
       const res = await fetch("/api/ebay/store-organize", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mode: "auto", minConfidence: 0.4 }),
+        body: JSON.stringify({ mode: "auto", minConfidence: 0.35 }),
       });
       const body = (await res.json()) as {
         error?: string;
@@ -169,11 +169,10 @@ export function EbayStoreOrganizeForm() {
   return (
     <div className="space-y-4">
       <div className="rounded-xl border border-emerald-100 bg-emerald-50/70 px-3 py-2.5 text-[12px] text-emerald-900">
-        Higlou recognizes the right Store folder and creates it with the eBay
-        API if missing, then moves the listing. If folder create fails,{" "}
-        <strong>reconnect eBay</strong> in Settings (new{" "}
-        <code className="text-[11px]">sell.stores</code> permission), then click
-        Organize everything.
+        Every listing gets a real Store folder (never eBay&apos;s reserved
+        Other). If the folder is missing, Higlou creates it with the API, then
+        moves the item. Reconnect eBay once if folder create asks for{" "}
+        <code className="text-[11px]">sell.stores</code>.
       </div>
 
       <div className="flex flex-wrap gap-2">

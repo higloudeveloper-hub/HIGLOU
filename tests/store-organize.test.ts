@@ -104,4 +104,62 @@ describe("classifyOffersForStore", () => {
     expect(row.reason).toMatch(/will create folder/i);
     expect(row.unchanged).toBe(false);
   });
+
+  it("never dumps laser levels / batteries / scrubbers into Other", () => {
+    const rows = classifyOffersForStore(
+      [
+        {
+          offerId: "a",
+          sku: "A",
+          status: "PUBLISHED",
+          title: "DeWalt Green Cross Line Laser Level with Case",
+          categoryId: "1",
+          listingId: "1",
+          price: 1,
+          currentStorePaths: [],
+        },
+        {
+          offerId: "b",
+          sku: "B",
+          status: "PUBLISHED",
+          title: "M18 REDLITHIUM FORGE HD12.0 Battery Pack",
+          categoryId: "1",
+          listingId: "2",
+          price: 1,
+          currentStorePaths: [],
+        },
+        {
+          offerId: "c",
+          sku: "C",
+          status: "PUBLISHED",
+          title: "Ryobi 11-Piece Scrubber Accessory Kit",
+          categoryId: "1",
+          listingId: "3",
+          price: 1,
+          currentStorePaths: [],
+        },
+        {
+          offerId: "d",
+          sku: "D",
+          status: "PUBLISHED",
+          title: "Philips Hue Econic Outdoor Pedestal Light",
+          categoryId: "1",
+          listingId: "4",
+          price: 1,
+          currentStorePaths: [],
+        },
+      ],
+      [],
+    );
+    expect(rows.map((r) => r.suggestedPath)).toEqual([
+      "/Tools/Measuring",
+      "/Tools/Batteries",
+      "/Home/Cleaning Accessories",
+      "/Lighting/Smart Lighting",
+    ]);
+    for (const row of rows) {
+      expect(row.suggestedPath.toLowerCase()).not.toContain("/other");
+      expect(row.confidence).toBeGreaterThanOrEqual(0.5);
+    }
+  });
 });

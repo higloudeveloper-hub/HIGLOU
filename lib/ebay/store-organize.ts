@@ -34,22 +34,35 @@ export type StoreOrganizeSuggestion = EbayStoreOfferRow & {
   unchanged: boolean;
 };
 
-/** Suggested Store tree — create matching folders in Seller Hub if missing. */
+/** Suggested Store tree — create matching folders via API if missing. Never use eBay reserved "Other". */
 export const HIGLOU_DEFAULT_STORE_PATHS: string[] = [
   "/Lighting",
   "/Lighting/Ceiling Lights",
   "/Lighting/Lamps",
+  "/Lighting/Outdoor",
+  "/Lighting/Smart Lighting",
   "/Plumbing",
   "/Plumbing/Pumps",
   "/Plumbing/Faucets",
   "/Tools",
   "/Tools/Power Tools",
+  "/Tools/Hand Tools",
+  "/Tools/Batteries",
+  "/Tools/Measuring",
+  "/Tools/Accessories",
   "/Home",
   "/Home/Kitchen",
   "/Home/Vacuum & Cleaning",
+  "/Home/Cleaning Accessories",
+  "/Home/Storage",
   "/Automotive",
+  "/Automotive/Parts",
   "/Electronics",
-  "/Other",
+  "/Electronics/Cables & Chargers",
+  "/Hardware",
+  "/Hardware/Fasteners",
+  "/Outdoor",
+  "/Outdoor/Garden",
 ];
 
 async function inventoryFetch(
@@ -1042,8 +1055,26 @@ const CLASSIFY_RULES: Rule[] = [
   },
   {
     path: "/Plumbing",
-    patterns: [/\bplumb/i, /\bvalve\b/i, /\bpipe\b/i, /\bfitting\b/i],
+    patterns: [/\bplumb/i, /\bvalve\b/i, /\bpipe\b/i, /\bfitting\b/i, /\btoilet\b/i],
     weight: 5,
+  },
+  {
+    path: "/Lighting/Smart Lighting",
+    patterns: [/\bhue\b/i, /smart\s*bulb/i, /philips\s*hue/i, /smart\s*light/i, /wifi\s*bulb/i],
+    weight: 11,
+  },
+  {
+    path: "/Lighting/Outdoor",
+    patterns: [
+      /outdoor\s*light/i,
+      /pedestal\s*light/i,
+      /landscape\s*light/i,
+      /path\s*light/i,
+      /flood\s*light/i,
+      /security\s*light/i,
+      /yard\s*light/i,
+    ],
+    weight: 10,
   },
   {
     path: "/Lighting/Ceiling Lights",
@@ -1058,17 +1089,28 @@ const CLASSIFY_RULES: Rule[] = [
   },
   {
     path: "/Lighting/Lamps",
-    patterns: [/\blamp\b/i, /table\s*lamp/i, /floor\s*lamp/i],
+    patterns: [/\blamp\b/i, /table\s*lamp/i, /floor\s*lamp/i, /desk\s*lamp/i],
     weight: 8,
   },
   {
     path: "/Lighting",
-    patterns: [/\blight(ing)?\b/i, /\bled\b/i, /fixture/i, /sconce/i],
+    patterns: [/\blight(ing)?\b/i, /\bled\b/i, /fixture/i, /sconce/i, /\bbulb\b/i],
     weight: 5,
   },
   {
     path: "/Home/Vacuum & Cleaning",
-    patterns: [/\bvacuum\b/i, /roomba/i, /dyson/i, /cleaner/i],
+    patterns: [/\bvacuum\b/i, /roomba/i, /dyson/i, /\bcleaner\b/i, /steam\s*mop/i],
+    weight: 9,
+  },
+  {
+    path: "/Home/Cleaning Accessories",
+    patterns: [
+      /scrubber/i,
+      /mop\s*pad/i,
+      /cleaning\s*kit/i,
+      /brush\s*kit/i,
+      /accessory\s*kit/i,
+    ],
     weight: 9,
   },
   {
@@ -1080,68 +1122,249 @@ const CLASSIFY_RULES: Rule[] = [
       /cutlery/i,
       /kitchen/i,
       /blender/i,
+      /toaster/i,
+      /air\s*fryer/i,
     ],
     weight: 7,
   },
   {
+    path: "/Home/Storage",
+    patterns: [/storage\s*bin/i, /organizer/i, /shelf\b/i, /shelving/i, /cabinet/i],
+    weight: 6,
+  },
+  {
     path: "/Home",
-    patterns: [/comforter/i, /bedding/i, /duvet/i, /home\s*decor/i],
+    patterns: [/comforter/i, /bedding/i, /duvet/i, /home\s*decor/i, /curtain/i],
     weight: 4,
   },
   {
+    path: "/Tools/Batteries",
+    patterns: [
+      /\bbattery\b/i,
+      /batteries/i,
+      /m18\b/i,
+      /m12\b/i,
+      /20v\b/i,
+      /18v\b/i,
+      /lithium/i,
+      /forge\b/i,
+      /powerstack/i,
+      /redlithium/i,
+    ],
+    weight: 10,
+  },
+  {
+    path: "/Tools/Measuring",
+    patterns: [
+      /laser\s*level/i,
+      /\blevel\b/i,
+      /tape\s*measure/i,
+      /stud\s*finder/i,
+      /multimeter/i,
+      /laser\s*measure/i,
+      /cross\s*line/i,
+    ],
+    weight: 10,
+  },
+  {
     path: "/Tools/Power Tools",
-    patterns: [/drill/i, /saw\b/i, /grinder/i, /impact\s*driver/i, /power\s*tool/i],
+    patterns: [
+      /drill/i,
+      /saw\b/i,
+      /grinder/i,
+      /impact\s*driver/i,
+      /power\s*tool/i,
+      /driver.?drill/i,
+      /hammer\s*drill/i,
+      /rotary\s*tool/i,
+      /sander/i,
+      /nailer/i,
+      /stapler/i,
+    ],
+    weight: 9,
+  },
+  {
+    path: "/Tools/Hand Tools",
+    patterns: [
+      /wrench/i,
+      /socket/i,
+      /\bhammer\b/i,
+      /pliers/i,
+      /screwdriver/i,
+      /hand\s*tool/i,
+      /allen\s*key/i,
+      /hex\s*key/i,
+    ],
     weight: 8,
   },
   {
-    path: "/Tools",
-    patterns: [/\btool\b/i, /wrench/i, /socket/i, /hammer/i],
-    weight: 5,
-  },
-  {
-    path: "/Automotive",
-    patterns: [/\batv\b/i, /auto(motive)?/i, /car\s*part/i, /vehicle/i],
+    path: "/Tools/Accessories",
+    patterns: [
+      /bit\s*set/i,
+      /drill\s*bit/i,
+      /blade\s*set/i,
+      /tool\s*bag/i,
+      /tool\s*case/i,
+      /accessory/i,
+    ],
     weight: 7,
   },
   {
-    path: "/Electronics",
-    patterns: [/phone/i, /laptop/i, /tablet/i, /charger/i, /earbuds/i, /hdmi/i],
+    path: "/Tools",
+    patterns: [/\btool\b/i, /dewalt/i, /makita/i, /milwaukee/i, /ryobi/i, /ridgid/i],
+    weight: 4,
+  },
+  {
+    path: "/Automotive/Parts",
+    patterns: [/brake\b/i, /oil\s*filter/i, /spark\s*plug/i, /wiper/i, /car\s*part/i],
+    weight: 8,
+  },
+  {
+    path: "/Automotive",
+    patterns: [/\batv\b/i, /auto(motive)?/i, /vehicle/i, /truck\b/i],
     weight: 6,
+  },
+  {
+    path: "/Electronics/Cables & Chargers",
+    patterns: [/charger/i, /usb.?c/i, /\bcable\b/i, /hdmi/i, /power\s*strip/i, /extension\s*cord/i],
+    weight: 8,
+  },
+  {
+    path: "/Electronics",
+    patterns: [/phone/i, /laptop/i, /tablet/i, /earbuds/i, /speaker/i, /camera/i, /smart\s*home/i],
+    weight: 6,
+  },
+  {
+    path: "/Hardware/Fasteners",
+    patterns: [/\bscrew\b/i, /\bnail\b/i, /bolt\b/i, /anchor\b/i, /fastener/i],
+    weight: 7,
+  },
+  {
+    path: "/Hardware",
+    patterns: [/hinge/i, /bracket/i, /hardware/i, /door\s*knob/i, /lock\s*set/i],
+    weight: 5,
+  },
+  {
+    path: "/Outdoor/Garden",
+    patterns: [/garden/i, /hose\b/i, /sprinkler/i, /lawn/i, /trimmer/i, /blower/i],
+    weight: 7,
+  },
+  {
+    path: "/Outdoor",
+    patterns: [/outdoor/i, /patio/i, /grill\b/i, /camping/i],
+    weight: 4,
   },
 ];
 
+/** Build a real Store path from the title — never returns /Other. */
+export function inferDynamicStorePath(haystack: string): {
+  path: string;
+  confidence: number;
+  reason: string;
+} {
+  const text = String(haystack || "");
+
+  if (/\b(dewalt|makita|milwaukee|ryobi|ridgid|bosch|metabo)\b/i.test(text)) {
+    if (/\bbatter/i.test(text)) {
+      return {
+        path: "/Tools/Batteries",
+        confidence: 0.72,
+        reason: "Tool brand battery → /Tools/Batteries",
+      };
+    }
+    return {
+      path: "/Tools/Power Tools",
+      confidence: 0.55,
+      reason: "Power-tool brand → /Tools/Power Tools",
+    };
+  }
+
+  if (/\b(philips|hue|lutron|ge\s*link|sengled)\b/i.test(text)) {
+    return {
+      path: "/Lighting/Smart Lighting",
+      confidence: 0.7,
+      reason: "Lighting brand → /Lighting/Smart Lighting",
+    };
+  }
+
+  const typeToken =
+    text.match(
+      /\b(drill|saw|grinder|level|battery|batteries|lamp|light|faucet|pump|hose|charger|cable|scrubber|vacuum|speaker|camera|wrench|pliers|sander|nailer)\b/i,
+    )?.[1] || "";
+
+  if (typeToken) {
+    const token = typeToken.toLowerCase();
+    const map: Record<string, string> = {
+      drill: "/Tools/Power Tools",
+      saw: "/Tools/Power Tools",
+      grinder: "/Tools/Power Tools",
+      sander: "/Tools/Power Tools",
+      nailer: "/Tools/Power Tools",
+      level: "/Tools/Measuring",
+      battery: "/Tools/Batteries",
+      batteries: "/Tools/Batteries",
+      lamp: "/Lighting/Lamps",
+      light: "/Lighting",
+      faucet: "/Plumbing/Faucets",
+      pump: "/Plumbing/Pumps",
+      hose: "/Outdoor/Garden",
+      charger: "/Electronics/Cables & Chargers",
+      cable: "/Electronics/Cables & Chargers",
+      scrubber: "/Home/Cleaning Accessories",
+      vacuum: "/Home/Vacuum & Cleaning",
+      speaker: "/Electronics",
+      camera: "/Electronics",
+      wrench: "/Tools/Hand Tools",
+      pliers: "/Tools/Hand Tools",
+    };
+    const mapped = map[token];
+    if (mapped) {
+      return {
+        path: mapped,
+        confidence: 0.62,
+        reason: `Inferred from "${typeToken}" → ${mapped}`,
+      };
+    }
+  }
+
+  const noun =
+    text
+      .replace(/[^a-zA-Z0-9\s]/g, " ")
+      .split(/\s+/)
+      .map((w) => w.trim())
+      .filter((w) => w.length >= 4)
+      .filter(
+        (w) =>
+          !/^(with|from|this|that|case|kit|pack|piece|black|white|inch|only|home|depot|new)$/i.test(
+            w,
+          ),
+      )[0] || "General";
+  const leaf = noun
+    .replace(/[^a-zA-Z0-9]+/g, " ")
+    .trim()
+    .split(/\s+/)
+    .slice(0, 3)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+    .join(" ")
+    .slice(0, 35);
+  const safeLeaf = isReservedStoreFolderName(leaf)
+    ? "General Merchandise"
+    : leaf;
+  return {
+    path: normalizeStorePath(`/Home/${safeLeaf}`),
+    confidence: 0.5,
+    reason: `No taxonomy hit — will create /Home/${safeLeaf}`,
+  };
+}
+
 function pickBestPath(
   haystack: string,
-  available: string[],
 ): { path: string; confidence: number; reason: string } {
-  const availableSet = new Set(available.map(normalizeStorePath));
   let best: { path: string; score: number; reason: string } | null = null;
 
+  // Always match rules even if folders do not exist yet — Organize creates them.
   for (const rule of CLASSIFY_RULES) {
     const path = normalizeStorePath(rule.path);
-    if (!availableSet.has(path)) {
-      // Try parent path if leaf missing
-      const parts = path.split("/").filter(Boolean);
-      while (parts.length > 1) {
-        parts.pop();
-        const parent = normalizeStorePath(`/${parts.join("/")}`);
-        if (availableSet.has(parent)) {
-          const hit = rule.patterns.find((re) => re.test(haystack));
-          if (hit) {
-            const score = rule.weight - 2;
-            if (!best || score > best.score) {
-              best = {
-                path: parent,
-                score,
-                reason: `Matched ${hit.source} → parent ${parent}`,
-              };
-            }
-          }
-          break;
-        }
-      }
-      continue;
-    }
     const hit = rule.patterns.find((re) => re.test(haystack));
     if (!hit) continue;
     if (!best || rule.weight > best.score) {
@@ -1161,15 +1384,7 @@ function pickBestPath(
     };
   }
 
-  const other =
-    available.map(normalizeStorePath).find((p) => /\/other$/i.test(p)) ||
-    available[0] ||
-    "/Other";
-  return {
-    path: normalizeStorePath(other),
-    confidence: 0.35,
-    reason: "No strong keyword match — Other / first available",
-  };
+  return inferDynamicStorePath(haystack);
 }
 
 export function classifyOffersForStore(
@@ -1177,17 +1392,23 @@ export function classifyOffersForStore(
   categories: EbayStoreCategory[],
   options?: { reviewBelow?: number },
 ): StoreOrganizeSuggestion[] {
-  const reviewBelow = options?.reviewBelow ?? 0.55;
-  // Always classify against Higlou taxonomy so missing folders can be created.
+  const reviewBelow = options?.reviewBelow ?? 0.45;
   const taxonomy = mergeTaxonomyCategories(categories);
-  const available = Array.from(
-    new Set(taxonomy.map((c) => normalizeStorePath(c.path)).filter(Boolean)),
-  );
 
   return offers.map((offer) => {
     const haystack = `${offer.title} ${offer.categoryId} ${offer.sku}`;
-    const picked = pickBestPath(haystack, available);
-    const leafPath = pickLeafStorePath(picked.path, taxonomy);
+    let picked = pickBestPath(haystack);
+    // Never leave listings in eBay reserved Other.
+    if (/\/other$/i.test(normalizeStorePath(picked.path))) {
+      picked = inferDynamicStorePath(haystack);
+    }
+    let leafPath = pickLeafStorePath(picked.path, taxonomy);
+    if (/\/other$/i.test(leafPath)) {
+      leafPath = pickLeafStorePath(
+        inferDynamicStorePath(haystack).path,
+        taxonomy,
+      );
+    }
     const suggestedId = resolveStoreCategoryId(leafPath, categories);
     const current = offer.currentStorePaths[0] || "";
     const unchangedById = Boolean(
@@ -1197,7 +1418,8 @@ export function classifyOffersForStore(
     );
     const unchangedByPath =
       Boolean(current) &&
-      normalizeStorePath(current) === normalizeStorePath(leafPath);
+      normalizeStorePath(current) === normalizeStorePath(leafPath) &&
+      !/\/other$/i.test(normalizeStorePath(current));
     const unchanged = unchangedById || unchangedByPath;
     return {
       ...offer,
@@ -1301,7 +1523,7 @@ export async function autoOrganizeStore(
   scanned: number;
   skipped: number;
 }> {
-  const minConfidence = options?.minConfidence ?? 0.4;
+  const minConfidence = options?.minConfidence ?? 0.35;
   const maxItems = Math.min(200, Math.max(1, options?.maxItems || 100));
 
   let store = await listSellerStoreCategories(accessToken);

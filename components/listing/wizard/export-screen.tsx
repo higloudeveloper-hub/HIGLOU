@@ -31,7 +31,7 @@ import {
   EBAY_CREATE_DRAFTS_INCLUDES,
   buildEbayDraftManualSteps,
 } from "@/lib/ebay/draft-completion-checklist";
-import { estimatePackageAndShipping } from "@/lib/ebay/package-shipping";
+import { resolveListingPackage } from "@/lib/ebay/package-shipping";
 import type { ProductListing } from "@/types/product";
 import type { StoreBranding } from "@/config/store-branding";
 import { cn } from "@/lib/utils";
@@ -87,13 +87,19 @@ export function ExportScreen({
   const galleryUrls = listing.images.map((i) => i.url).filter(Boolean);
   const galleryCount = galleryUrls.length;
 
-  const packageInfo = estimatePackageAndShipping({
+  const packageInfo = resolveListingPackage({
     title: listing.title,
     productType: listing.productType || listing.type,
     size: listing.size,
     categoryName: listing.categoryName,
     brand: listing.brand,
     quantity: listing.quantity,
+    packageWeightLbs: listing.packageWeightLbs,
+    packageWeightOz: listing.packageWeightOz,
+    packageLengthIn: listing.packageLengthIn,
+    packageWidthIn: listing.packageWidthIn,
+    packageDepthIn: listing.packageDepthIn,
+    packageSource: listing.packageSource,
   });
 
   const ebayManualSteps = buildEbayDraftManualSteps({

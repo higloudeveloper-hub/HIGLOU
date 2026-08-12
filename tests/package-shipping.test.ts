@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   estimatePackageAndShipping,
+  resolveListingPackage,
   packageEstimateToCsvValues,
   parseProductDimensionsInches,
 } from "@/lib/ebay/package-shipping";
@@ -106,6 +107,24 @@ describe("estimatePackageAndShipping", () => {
     expect(estimate.totalOz).toBeGreaterThan(48);
     expect(estimate.shippingService).toBe("USPSGroundAdvantage");
     expect(estimate.packageType).toBe("Package");
+  });
+
+  it("prefers saved measured package over heuristic", () => {
+    const pkg = resolveListingPackage({
+      title: "Everbilt 1/6 HP Submersible Utility Pump",
+      categoryName: "Water Pumps",
+      packageWeightLbs: 12,
+      packageWeightOz: 4,
+      packageLengthIn: 15,
+      packageWidthIn: 11,
+      packageDepthIn: 9,
+      packageSource: "manual",
+    });
+    expect(pkg.fromSaved).toBe(true);
+    expect(pkg.totalOz).toBe(12 * 16 + 4);
+    expect(pkg.lengthIn).toBe(15);
+    expect(pkg.widthIn).toBe(11);
+    expect(pkg.depthIn).toBe(9);
   });
 });
 

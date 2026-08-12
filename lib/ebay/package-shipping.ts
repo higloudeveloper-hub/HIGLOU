@@ -399,3 +399,134 @@ export function packageEstimateToCsvValues(
 
   return values;
 }
+
+/** True when seller (or seed) provided usable package weight + box size. */
+export function listingHasMeasuredPackage(input: {
+  packageWeightLbs?: number | null;
+  packageWeightOz?: number | null;
+  packageLengthIn?: number | null;
+  packageWidthIn?: number | null;
+  packageDepthIn?: number | null;
+}): boolean {
+  const lbs = Number(input.packageWeightLbs);
+  const oz = Number(input.packageWeightOz);
+  const totalOz =
+    (Number.isFinite(lbs) ? lbs : 0) * 16 + (Number.isFinite(oz) ? oz : 0);
+  const L = Number(input.packageLengthIn);
+  const W = Number(input.packageWidthIn);
+  const D = Number(input.packageDepthIn);
+  return (
+    totalOz >= 1 &&
+    Number.isFinite(L) &&
+    L > 0 &&
+    Number.isFinite(W) &&
+    W > 0 &&
+    Number.isFinite(D) &&
+    D > 0
+  );
+}
+
+/**
+ * Prefer saved listing package fields; fall back to category/title heuristics.
+ * Manual/saved values are the source of truth for Calculated shipping.
+ */
+export function resolveListingPackage(input: {
+  title?: string | null;
+  productType?: string | null;
+  size?: string | null;
+  categoryName?: string | null;
+  brand?: string | null;
+  quantity?: number | null;
+  dimensionsText?: string | null;
+  packageWeightLbs?: number | null;
+  packageWeightOz?: number | null;
+  packageLengthIn?: number | null;
+  packageWidthIn?: number | null;
+  packageDepthIn?: number | null;
+  packageSource?: "auto" | "manual" | null;
+}): PackageEstimate & { fromSaved: boolean } {
+  const estimate = estimatePackageAndShipping(input);
+  if (!listingHasMeasuredPackage(input)) {
+    return { ...estimate, fromSaved: false };
+  }
+
+  const lbs = Math.max(0, Math.floor(Number(input.packageWeightLbs) || 0));
+  const ozRaw = Math.max(0, Math.floor(Number(input.packageWeightOz) || 0));
+  const totalOz = Math.max(1, lbs * 16 + ozRaw);
+  const { lbs: wLbs, oz: wOz } = toLbsOz(totalOz);
+  const lengthIn = Math.max(0.5, Number(input.packageLengthIn) || estimate.lengthIn);
+  const widthIn = Math.max(0.5, Number(input.packageWidthIn) || estimate.widthIn);
+  const depthIn = Math.max(0.5, Number(input.packageDepthIn) || estimate.depthIn);
+  const service = pickService(totalOz, lengthIn);
+  const shippingCost = estimateBuyerPaidShippingCostUsd(totalOz);
+  const measured = input.packageSource === "manual";
+
+  return {
+    weightLbs: wLbs,
+    weightOz: wOz === 0 && wLbs === 0 ? 1 : wOz,
+    totalOz,
+    packageType:
+      totalOz > 16 || Math.max(lengthIn, widthIn, depthIn) > 12
+        ? "Package"
+        : estimate.packageType,
+    lengthIn,
+    widthIn,
+    depthIn,
+    measurementSystem: "ENGLISH",
+    shippingType: "Flat",
+    shippingService: service.shippingService,
+    shippingCost,
+    shippingPriority: 1,
+    weightUnit: "lbs",
+    freeShipping: false,
+    reason: measured
+      ? `Measured box · buyer pays $${shippingCost.toFixed(2)} · ${lengthIn}×${widthIn}×${depthIn} in`
+      : `Saved package · buyer pays $${shippingCost.toFixed(2)} · ${lengthIn}×${widthIn}×${depthIn} in`,
+    fromSaved: true,
+  };
+}
+
+/** Apply heuristic estimate onto a listing when package fields are empty / still auto. */
+export function seedPackageOnListing<T extends {
+  packageWeightLbs?: number | null;
+  packageWeightOz?: number | null;
+  packageLengthIn?: number | null;
+  packageWidthIn?: number | null;
+  packageDepthIn?: number | null;
+  packageSource?: "auto" | "manual";
+  shippingService?: string;
+  shippingCost?: number | null;
+  freeShipping?: boolean;
+  title?: string | null;
+  productType?: string | null;
+  type?: string | null;
+  size?: string | null;
+  categoryName?: string | null;
+  brand?: string | null;
+  quantity?: number | null;
+}>(listing: T, force = false): T {
+  if (!force && listing.packageSource === "manual") return listing;
+  if (!force && listingHasMeasuredPackage(listing)) return listing;
+
+  const estimate = estimatePackageAndShipping({
+    title: listing.title,
+    productType: listing.productType || listing.type,
+    size: listing.size,
+    categoryName: listing.categoryName,
+    brand: listing.brand,
+    quantity: listing.quantity,
+  });
+
+  return {
+    ...listing,
+    packageWeightLbs: estimate.weightLbs,
+    packageWeightOz: estimate.weightOz,
+    packageLengthIn: estimate.lengthIn,
+    packageWidthIn: estimate.widthIn,
+    packageDepthIn: estimate.depthIn,
+    packageSource: "auto",
+    shippingService: estimate.shippingService,
+    shippingCost: estimate.shippingCost,
+    freeShipping: false,
+  };
+}

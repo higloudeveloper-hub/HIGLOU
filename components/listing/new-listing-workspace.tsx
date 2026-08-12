@@ -24,7 +24,10 @@ import {
   buildEbayTitle,
   generateSku,
 } from "@/lib/ebay/listing-helpers";
-import { estimatePackageAndShipping } from "@/lib/ebay/package-shipping";
+import {
+  estimatePackageAndShipping,
+  seedPackageOnListing,
+} from "@/lib/ebay/package-shipping";
 import {
   hasCriticalErrors,
   criticalErrorLabels,
@@ -170,6 +173,28 @@ function mapApiProductToListing(
     itemLocation: String(product.itemLocation || DEFAULT_VALUES.itemLocation),
     postalCode: String(product.postalCode || DEFAULT_VALUES.postalCode),
     country: String(product.country || DEFAULT_VALUES.country),
+    packageWeightLbs:
+      product.packageWeightLbs === null || product.packageWeightLbs === undefined
+        ? null
+        : Number(product.packageWeightLbs),
+    packageWeightOz:
+      product.packageWeightOz === null || product.packageWeightOz === undefined
+        ? null
+        : Number(product.packageWeightOz),
+    packageLengthIn:
+      product.packageLengthIn === null || product.packageLengthIn === undefined
+        ? null
+        : Number(product.packageLengthIn),
+    packageWidthIn:
+      product.packageWidthIn === null || product.packageWidthIn === undefined
+        ? null
+        : Number(product.packageWidthIn),
+    packageDepthIn:
+      product.packageDepthIn === null || product.packageDepthIn === undefined
+        ? null
+        : Number(product.packageDepthIn),
+    packageSource:
+      String(product.packageSource || "auto") === "manual" ? "manual" : "auto",
     createdAt: String(product.createdAt ?? base.createdAt),
     updatedAt: String(product.updatedAt ?? base.updatedAt),
   };
@@ -528,7 +553,7 @@ export function NewListingWorkspace({
       quantity: analysis.quantity || prev.quantity,
     });
 
-    const next: ProductListing = {
+    const nextBase: ProductListing = {
       ...prev,
       title: title.slice(0, 80),
       brand,
@@ -544,9 +569,23 @@ export function NewListingWorkspace({
       itemLocation: prev.itemLocation || DEFAULT_VALUES.itemLocation,
       postalCode: prev.postalCode || DEFAULT_VALUES.postalCode,
       country: prev.country || DEFAULT_VALUES.country,
-      shippingService: shipping.shippingService,
-      shippingCost: shipping.shippingCost,
-      freeShipping: false,
+      ...(prev.packageSource === "manual"
+        ? {
+            shippingService: prev.shippingService || shipping.shippingService,
+            shippingCost: prev.shippingCost ?? shipping.shippingCost,
+            freeShipping: false as const,
+            packageWeightLbs: prev.packageWeightLbs,
+            packageWeightOz: prev.packageWeightOz,
+            packageLengthIn: prev.packageLengthIn,
+            packageWidthIn: prev.packageWidthIn,
+            packageDepthIn: prev.packageDepthIn,
+            packageSource: "manual" as const,
+          }
+        : {
+            shippingService: shipping.shippingService,
+            shippingCost: shipping.shippingCost,
+            freeShipping: false as const,
+          }),
       condition: analysis.condition || prev.condition,
       conditionId:
       analysis.conditionId || prev.conditionId || "NEW",
@@ -582,6 +621,9 @@ export function NewListingWorkspace({
       updatedAt: new Date().toISOString(),
       descriptionHtml: "",
     };
+
+    // Seed package suggestion once; never overwrite seller-measured box.
+    const next = seedPackageOnListing(nextBase, false);
 
     return withFreshDescription(next, storeBranding);
   };
@@ -861,6 +903,12 @@ export function NewListingWorkspace({
         postalCode: String(current.postalCode || ""),
         country: String(current.country || "US"),
         status: current.status || "Needs Review",
+        packageWeightLbs: current.packageWeightLbs,
+        packageWeightOz: current.packageWeightOz,
+        packageLengthIn: current.packageLengthIn,
+        packageWidthIn: current.packageWidthIn,
+        packageDepthIn: current.packageDepthIn,
+        packageSource: current.packageSource || "auto",
         images: current.images
           .filter((image) => /^https:\/\//i.test(image.url))
           .map((image, index) => ({
@@ -1060,6 +1108,12 @@ export function NewListingWorkspace({
           paymentPolicyId: exportListing.paymentPolicyId,
           shippingService: exportListing.shippingService,
           shippingCost: exportListing.shippingCost ?? undefined,
+          packageWeightLbs: exportListing.packageWeightLbs ?? undefined,
+          packageWeightOz: exportListing.packageWeightOz ?? undefined,
+          packageLengthIn: exportListing.packageLengthIn ?? undefined,
+          packageWidthIn: exportListing.packageWidthIn ?? undefined,
+          packageDepthIn: exportListing.packageDepthIn ?? undefined,
+          packageSource: exportListing.packageSource || "auto",
           // Official Create Drafts template (eBay rejects invented Create/Schedule INFO).
           exportMode: "draft",
         }),
@@ -1245,6 +1299,12 @@ export function NewListingWorkspace({
           paymentPolicyId: publishListing.paymentPolicyId,
           shippingService: publishListing.shippingService,
           shippingCost: publishListing.shippingCost ?? undefined,
+          packageWeightLbs: publishListing.packageWeightLbs ?? undefined,
+          packageWeightOz: publishListing.packageWeightOz ?? undefined,
+          packageLengthIn: publishListing.packageLengthIn ?? undefined,
+          packageWidthIn: publishListing.packageWidthIn ?? undefined,
+          packageDepthIn: publishListing.packageDepthIn ?? undefined,
+          packageSource: publishListing.packageSource || "auto",
           exportMode: "draft",
         }),
       });
@@ -1313,6 +1373,16 @@ export function NewListingWorkspace({
         updatedAt: new Date().toISOString(),
       }));
     }
+
+    if (mode === "live" && fresh.packageSource !== "manual") {
+      toast.error("Measure the shipping box first", {
+        description:
+          "In Review → Shipping, enter the real weight (lb/oz) and L×W×H inches until the badge says Measured, then publish live.",
+      });
+      setStep("review");
+      return;
+    }
+
     await persistDraft({ quiet: true, draft: fresh });
 
     setPublishingEbay(true);
@@ -1357,6 +1427,12 @@ export function NewListingWorkspace({
             shippingPolicyId: fresh.shippingPolicyId,
             returnPolicyId: fresh.returnPolicyId,
             paymentPolicyId: fresh.paymentPolicyId,
+            packageWeightLbs: fresh.packageWeightLbs,
+            packageWeightOz: fresh.packageWeightOz,
+            packageLengthIn: fresh.packageLengthIn,
+            packageWidthIn: fresh.packageWidthIn,
+            packageDepthIn: fresh.packageDepthIn,
+            packageSource: fresh.packageSource || "auto",
           },
         }),
       });

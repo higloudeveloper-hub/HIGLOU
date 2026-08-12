@@ -39,7 +39,10 @@ import {
   SHIPPING_SERVICE_OPTIONS,
   findShippingServiceOption,
 } from "@/config/shipping-services";
-import { estimatePackageAndShipping } from "@/lib/ebay/package-shipping";
+import {
+  resolveListingPackage,
+  seedPackageOnListing,
+} from "@/lib/ebay/package-shipping";
 import {
   TITLE_HELPER_ACTIONS,
   isCategoryPerfectMatch,
@@ -135,13 +138,19 @@ export function ReviewScreen({
 
   const packageInfo = useMemo(
     () =>
-      estimatePackageAndShipping({
+      resolveListingPackage({
         title: listing.title,
         productType: listing.productType || listing.type,
         size: listing.size,
         categoryName: listing.categoryName,
         brand: listing.brand,
         quantity: listing.quantity,
+        packageWeightLbs: listing.packageWeightLbs,
+        packageWeightOz: listing.packageWeightOz,
+        packageLengthIn: listing.packageLengthIn,
+        packageWidthIn: listing.packageWidthIn,
+        packageDepthIn: listing.packageDepthIn,
+        packageSource: listing.packageSource,
       }),
     [
       listing.title,
@@ -151,8 +160,15 @@ export function ReviewScreen({
       listing.categoryName,
       listing.brand,
       listing.quantity,
+      listing.packageWeightLbs,
+      listing.packageWeightOz,
+      listing.packageLengthIn,
+      listing.packageWidthIn,
+      listing.packageDepthIn,
+      listing.packageSource,
     ],
   );
+  const packageMeasured = listing.packageSource === "manual";
   const recommendedService = packageInfo.shippingService;
   const selectedService =
     listing.shippingService || recommendedService || "USPSGroundAdvantage";
@@ -737,25 +753,160 @@ export function ReviewScreen({
                   </Select>
                 </Field>
                 <Field label="Package weight">
-                  <div className="flex h-10 items-center gap-2 rounded-lg border border-border/70 bg-muted/20 px-3 text-[13px] font-medium">
-                    <span className="tabular-nums">
-                      {packageInfo.weightLbs} lb
-                    </span>
-                    <span className="text-muted-foreground">·</span>
-                    <span className="tabular-nums">
-                      {packageInfo.weightOz} oz
-                    </span>
-                    <span className="ml-auto text-[12px] text-muted-foreground">
-                      Auto
+                  <div className="flex items-center gap-2">
+                    <Input
+                      type="number"
+                      min={0}
+                      step={1}
+                      className="h-10 tabular-nums"
+                      value={
+                        listing.packageWeightLbs ?? packageInfo.weightLbs
+                      }
+                      onChange={(e) => {
+                        const lbs = Math.max(
+                          0,
+                          Math.floor(Number(e.target.value) || 0),
+                        );
+                        onUpdate("packageWeightLbs", lbs);
+                        onUpdate("packageSource", "manual");
+                      }}
+                      aria-label="Package weight pounds"
+                    />
+                    <span className="text-[12px] text-muted-foreground">lb</span>
+                    <Input
+                      type="number"
+                      min={0}
+                      max={15}
+                      step={1}
+                      className="h-10 tabular-nums"
+                      value={
+                        listing.packageWeightOz ?? packageInfo.weightOz
+                      }
+                      onChange={(e) => {
+                        const oz = Math.min(
+                          15,
+                          Math.max(0, Math.floor(Number(e.target.value) || 0)),
+                        );
+                        onUpdate("packageWeightOz", oz);
+                        onUpdate("packageSource", "manual");
+                      }}
+                      aria-label="Package weight ounces"
+                    />
+                    <span className="text-[12px] text-muted-foreground">oz</span>
+                    <span
+                      className={cn(
+                        "ml-auto shrink-0 rounded-md px-2 py-1 text-[11px] font-semibold",
+                        packageMeasured
+                          ? "bg-emerald-100 text-emerald-900"
+                          : "bg-muted text-muted-foreground",
+                      )}
+                    >
+                      {packageMeasured ? "Measured" : "Suggested"}
                     </span>
                   </div>
                 </Field>
-                <Field label="Package dimensions">
-                  <div className="flex h-10 items-center rounded-lg border border-border/70 bg-muted/20 px-3 text-[13px] font-medium tabular-nums">
-                    {packageInfo.lengthIn} × {packageInfo.widthIn} ×{" "}
-                    {packageInfo.depthIn} in
+                <Field label="Package dimensions (inches)">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Input
+                      type="number"
+                      min={0.5}
+                      step={0.5}
+                      className="h-10 w-20 tabular-nums"
+                      value={
+                        listing.packageLengthIn ?? packageInfo.lengthIn
+                      }
+                      onChange={(e) => {
+                        onUpdate(
+                          "packageLengthIn",
+                          Math.max(0.5, Number(e.target.value) || 0.5),
+                        );
+                        onUpdate("packageSource", "manual");
+                      }}
+                      aria-label="Package length inches"
+                    />
+                    <span className="text-muted-foreground">×</span>
+                    <Input
+                      type="number"
+                      min={0.5}
+                      step={0.5}
+                      className="h-10 w-20 tabular-nums"
+                      value={
+                        listing.packageWidthIn ?? packageInfo.widthIn
+                      }
+                      onChange={(e) => {
+                        onUpdate(
+                          "packageWidthIn",
+                          Math.max(0.5, Number(e.target.value) || 0.5),
+                        );
+                        onUpdate("packageSource", "manual");
+                      }}
+                      aria-label="Package width inches"
+                    />
+                    <span className="text-muted-foreground">×</span>
+                    <Input
+                      type="number"
+                      min={0.5}
+                      step={0.5}
+                      className="h-10 w-20 tabular-nums"
+                      value={
+                        listing.packageDepthIn ?? packageInfo.depthIn
+                      }
+                      onChange={(e) => {
+                        onUpdate(
+                          "packageDepthIn",
+                          Math.max(0.5, Number(e.target.value) || 0.5),
+                        );
+                        onUpdate("packageSource", "manual");
+                      }}
+                      aria-label="Package depth inches"
+                    />
+                    <span className="text-[12px] text-muted-foreground">in</span>
                   </div>
                 </Field>
+                <div className="sm:col-span-2 flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-[12.5px] text-muted-foreground">
+                    Use the real ready-to-ship box (with packing). Calculated
+                    shipping charges the buyer from these numbers.
+                  </p>
+                  <button
+                    type="button"
+                    className="text-[12.5px] font-medium text-foreground underline-offset-2 hover:underline"
+                    onClick={() => {
+                      const seeded = seedPackageOnListing(listing, true);
+                      onUpdate(
+                        "packageWeightLbs",
+                        seeded.packageWeightLbs ?? null,
+                      );
+                      onUpdate(
+                        "packageWeightOz",
+                        seeded.packageWeightOz ?? null,
+                      );
+                      onUpdate(
+                        "packageLengthIn",
+                        seeded.packageLengthIn ?? null,
+                      );
+                      onUpdate(
+                        "packageWidthIn",
+                        seeded.packageWidthIn ?? null,
+                      );
+                      onUpdate(
+                        "packageDepthIn",
+                        seeded.packageDepthIn ?? null,
+                      );
+                      onUpdate("packageSource", "auto");
+                      onUpdate(
+                        "shippingService",
+                        seeded.shippingService || recommendedService,
+                      );
+                      onUpdate(
+                        "shippingCost",
+                        seeded.shippingCost ?? packageInfo.shippingCost,
+                      );
+                    }}
+                  >
+                    Reset to estimate
+                  </button>
+                </div>
               </div>
               <p className="mt-3 text-[12.5px] text-muted-foreground">
                 Pick a service for reference when you finish the draft on eBay.

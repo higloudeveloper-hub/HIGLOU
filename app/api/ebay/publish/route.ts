@@ -31,7 +31,7 @@ import type { ProductListing } from "@/types/product";
 import { createEmptyListing } from "@/lib/demo/sample-listing";
 import { DEFAULT_VALUES } from "@/config/default-values";
 import { isListableEbayCategoryId } from "@/config/ebay-categories";
-import { estimatePackageAndShipping } from "@/lib/ebay/package-shipping";
+import { resolveListingPackage } from "@/lib/ebay/package-shipping";
 
 const bodySchema = z.object({
   productId: z.string().uuid().optional(),
@@ -79,6 +79,12 @@ const bodySchema = z.object({
       shippingPolicyId: z.string().optional().default(""),
       returnPolicyId: z.string().optional().default(""),
       paymentPolicyId: z.string().optional().default(""),
+      packageWeightLbs: z.number().int().min(0).nullable().optional(),
+      packageWeightOz: z.number().int().min(0).max(15).nullable().optional(),
+      packageLengthIn: z.number().min(0).nullable().optional(),
+      packageWidthIn: z.number().min(0).nullable().optional(),
+      packageDepthIn: z.number().min(0).nullable().optional(),
+      packageSource: z.enum(["auto", "manual"]).optional().default("auto"),
     })
     .optional(),
 });
@@ -126,6 +132,12 @@ function snapshotToListing(
     shippingPolicyId: snap.shippingPolicyId,
     returnPolicyId: snap.returnPolicyId,
     paymentPolicyId: snap.paymentPolicyId,
+    packageWeightLbs: snap.packageWeightLbs ?? null,
+    packageWeightOz: snap.packageWeightOz ?? null,
+    packageLengthIn: snap.packageLengthIn ?? null,
+    packageWidthIn: snap.packageWidthIn ?? null,
+    packageDepthIn: snap.packageDepthIn ?? null,
+    packageSource: snap.packageSource === "manual" ? "manual" : "auto",
     status: "Ready",
   };
 }
@@ -185,6 +197,28 @@ function dbRowToListing(
     itemLocation: String(mapped.itemLocation || ""),
     postalCode: String(mapped.postalCode || ""),
     country: String(mapped.country || "US"),
+    packageWeightLbs:
+      mapped.packageWeightLbs === null || mapped.packageWeightLbs === undefined
+        ? null
+        : Number(mapped.packageWeightLbs),
+    packageWeightOz:
+      mapped.packageWeightOz === null || mapped.packageWeightOz === undefined
+        ? null
+        : Number(mapped.packageWeightOz),
+    packageLengthIn:
+      mapped.packageLengthIn === null || mapped.packageLengthIn === undefined
+        ? null
+        : Number(mapped.packageLengthIn),
+    packageWidthIn:
+      mapped.packageWidthIn === null || mapped.packageWidthIn === undefined
+        ? null
+        : Number(mapped.packageWidthIn),
+    packageDepthIn:
+      mapped.packageDepthIn === null || mapped.packageDepthIn === undefined
+        ? null
+        : Number(mapped.packageDepthIn),
+    packageSource:
+      String(mapped.packageSource || "auto") === "manual" ? "manual" : "auto",
     status: (mapped.status as ProductListing["status"]) || "Ready",
     images: Array.isArray(mapped.images)
       ? (mapped.images as ProductListing["images"])
@@ -332,6 +366,17 @@ export async function POST(request: Request) {
       );
     }
 
+    if (data.mode === "live" && listing.packageSource !== "manual") {
+      return NextResponse.json(
+        {
+          error:
+            "Enter the real ready-to-ship box weight and L×W×H in Review → Shipping (badge should say Measured), then publish live. Suggested estimates are only for drafts.",
+          code: "PACKAGE_MEASUREMENTS_REQUIRED",
+        },
+        { status: 400 },
+      );
+    }
+
     // Draft + live both require policies that belong to the *currently*
     // connected eBay seller. IDs from a previous account cause 25087.
     {
@@ -346,13 +391,19 @@ export async function POST(request: Request) {
       });
 
       try {
-        const pkgEstimate = estimatePackageAndShipping({
+        const pkgEstimate = resolveListingPackage({
           title: listing.title,
           productType: listing.productType || listing.type,
           size: listing.size,
           categoryName: listing.categoryName,
           brand: listing.brand,
           quantity: listing.quantity,
+          packageWeightLbs: listing.packageWeightLbs,
+          packageWeightOz: listing.packageWeightOz,
+          packageLengthIn: listing.packageLengthIn,
+          packageWidthIn: listing.packageWidthIn,
+          packageDepthIn: listing.packageDepthIn,
+          packageSource: listing.packageSource,
         });
         const resolved = await resolveSellerBusinessPolicyIds(accessToken, {
           marketplaceId: connection.marketplaceId || "EBAY_US",
@@ -376,6 +427,12 @@ export async function POST(request: Request) {
         if (!(typeof listing.shippingCost === "number" && listing.shippingCost > 0)) {
           listing.shippingCost = pkgEstimate.shippingCost;
         }
+        // Keep resolved package on listing for inventory item
+        listing.packageWeightLbs = pkgEstimate.weightLbs;
+        listing.packageWeightOz = pkgEstimate.weightOz;
+        listing.packageLengthIn = pkgEstimate.lengthIn;
+        listing.packageWidthIn = pkgEstimate.widthIn;
+        listing.packageDepthIn = pkgEstimate.depthIn;
 
         await auth.supabase.from("ebay_policy_settings").upsert(
           {

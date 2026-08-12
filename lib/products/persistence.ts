@@ -102,6 +102,35 @@ export const productBodySchema = z.object({
   postalCode: softString.optional().default(""),
   country: softString.optional().default("US"),
   status: softStatus.optional().default("Uploaded"),
+  packageWeightLbs: z.preprocess((value) => {
+    if (value === null || value === undefined || value === "") return null;
+    const num = Math.floor(Number(value));
+    return Number.isFinite(num) && num >= 0 ? num : null;
+  }, z.number().int().nullable().optional()),
+  packageWeightOz: z.preprocess((value) => {
+    if (value === null || value === undefined || value === "") return null;
+    const num = Math.floor(Number(value));
+    return Number.isFinite(num) && num >= 0 && num <= 15 ? num : null;
+  }, z.number().int().nullable().optional()),
+  packageLengthIn: z.preprocess((value) => {
+    if (value === null || value === undefined || value === "") return null;
+    const num = Number(value);
+    return Number.isFinite(num) && num >= 0 ? num : null;
+  }, z.number().nullable().optional()),
+  packageWidthIn: z.preprocess((value) => {
+    if (value === null || value === undefined || value === "") return null;
+    const num = Number(value);
+    return Number.isFinite(num) && num >= 0 ? num : null;
+  }, z.number().nullable().optional()),
+  packageDepthIn: z.preprocess((value) => {
+    if (value === null || value === undefined || value === "") return null;
+    const num = Number(value);
+    return Number.isFinite(num) && num >= 0 ? num : null;
+  }, z.number().nullable().optional()),
+  packageSource: z
+    .enum(["auto", "manual"])
+    .optional()
+    .default("auto"),
   images: z
     .array(
       z.object({
@@ -179,6 +208,28 @@ export function mapProductRow(
     itemLocation: row.item_location,
     postalCode: row.postal_code,
     country: row.country,
+    packageWeightLbs:
+      row.package_weight_lbs === null || row.package_weight_lbs === undefined
+        ? null
+        : Number(row.package_weight_lbs),
+    packageWeightOz:
+      row.package_weight_oz === null || row.package_weight_oz === undefined
+        ? null
+        : Number(row.package_weight_oz),
+    packageLengthIn:
+      row.package_length_in === null || row.package_length_in === undefined
+        ? null
+        : Number(row.package_length_in),
+    packageWidthIn:
+      row.package_width_in === null || row.package_width_in === undefined
+        ? null
+        : Number(row.package_width_in),
+    packageDepthIn:
+      row.package_depth_in === null || row.package_depth_in === undefined
+        ? null
+        : Number(row.package_depth_in),
+    packageSource:
+      String(row.package_source || "auto") === "manual" ? "manual" : "auto",
     status: row.status,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -229,6 +280,12 @@ export function toDbColumns(data: z.infer<typeof productBodySchema>) {
     item_location: data.itemLocation,
     postal_code: data.postalCode,
     country: data.country,
+    package_weight_lbs: data.packageWeightLbs ?? 0,
+    package_weight_oz: data.packageWeightOz ?? 0,
+    package_length_in: data.packageLengthIn ?? 0,
+    package_width_in: data.packageWidthIn ?? 0,
+    package_depth_in: data.packageDepthIn ?? 0,
+    package_source: data.packageSource || "auto",
     status: data.status,
     updated_at: new Date().toISOString(),
   };

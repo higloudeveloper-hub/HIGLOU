@@ -3,7 +3,7 @@ import {
   enrichItemSpecificsForExport,
   resolveBrandMpn,
 } from "@/lib/ebay/enrich-export-specifics";
-import { estimatePackageAndShipping } from "@/lib/ebay/package-shipping";
+import { resolveListingPackage } from "@/lib/ebay/package-shipping";
 import { synthesizeDescriptionSummary } from "@/lib/ebay/description-html";
 import type {
   EbayAspects,
@@ -71,11 +71,8 @@ export function listingToEbayAspects(listing: ProductListing): EbayAspects {
   return sanitizeEbayAspects(aspects);
 }
 
-export function listingToInventoryItem(
-  listing: ProductListing,
-  _opts?: { quantityOverride?: number },
-): EbayInventoryItemInput {
-  const pkg = estimatePackageAndShipping({
+function listingPackageInput(listing: ProductListing) {
+  return {
     title: listing.title,
     productType: listing.productType || listing.type,
     size: listing.size,
@@ -83,10 +80,25 @@ export function listingToInventoryItem(
     brand: listing.brand,
     quantity: listing.quantity,
     dimensionsText: listing.itemSpecifics
-      ?.filter((f) => /dimension|size|length|width|height|depth/i.test(f.key || f.label))
+      ?.filter((f) =>
+        /dimension|size|length|width|height|depth/i.test(f.key || f.label),
+      )
       .map((f) => `${f.label} ${f.value}`)
       .join(" "),
-  });
+    packageWeightLbs: listing.packageWeightLbs,
+    packageWeightOz: listing.packageWeightOz,
+    packageLengthIn: listing.packageLengthIn,
+    packageWidthIn: listing.packageWidthIn,
+    packageDepthIn: listing.packageDepthIn,
+    packageSource: listing.packageSource,
+  };
+}
+
+export function listingToInventoryItem(
+  listing: ProductListing,
+  _opts?: { quantityOverride?: number },
+): EbayInventoryItemInput {
+  const pkg = resolveListingPackage(listingPackageInput(listing));
   const imageUrls = listing.images
     .map((img) => img.url)
     .filter((url) => /^https:\/\//i.test(url))
@@ -143,20 +155,7 @@ export function listingToOfferInput(
     throw new Error("Numeric eBay category ID is required");
   }
 
-  const pkg = estimatePackageAndShipping({
-    title: listing.title,
-    productType: listing.productType || listing.type,
-    size: listing.size,
-    categoryName: listing.categoryName,
-    brand: listing.brand,
-    quantity: listing.quantity,
-    dimensionsText: listing.itemSpecifics
-      ?.filter((f) =>
-        /dimension|size|length|width|height|depth/i.test(f.key || f.label),
-      )
-      .map((f) => `${f.label} ${f.value}`)
-      .join(" "),
-  });
+  const pkg = resolveListingPackage(listingPackageInput(listing));
 
   const buyerShipping =
     typeof listing.shippingCost === "number" && listing.shippingCost > 0

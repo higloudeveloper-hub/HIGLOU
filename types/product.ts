@@ -81,6 +81,14 @@ export interface ProductListing {
   freeShipping: boolean;
   shippingCost: number | null;
   shippingService: string;
+  /** Package ready to ship (source of truth when packageSource is manual). */
+  packageWeightLbs: number | null;
+  packageWeightOz: number | null;
+  packageLengthIn: number | null;
+  packageWidthIn: number | null;
+  packageDepthIn: number | null;
+  /** auto = heuristic; manual = seller measured the real box. */
+  packageSource: "auto" | "manual";
   createdAt: string;
   updatedAt: string;
 }

@@ -19,8 +19,8 @@ import {
   loadSellerDraftDefaults,
 } from "@/lib/ebay/draft-defaults";
 import {
-  estimatePackageAndShipping,
   packageEstimateToCsvValues,
+  resolveListingPackage,
 } from "@/lib/ebay/package-shipping";
 import { enrichItemSpecificsForExport } from "@/lib/ebay/enrich-export-specifics";
 import { requireUser } from "@/lib/auth/require-user";
@@ -97,6 +97,10 @@ const bodySchema = z.object({
   ),
   packageWeightLbs: z.number().int().min(0).optional(),
   packageWeightOz: z.number().int().min(0).max(15).optional(),
+  packageLengthIn: z.number().min(0).optional(),
+  packageWidthIn: z.number().min(0).optional(),
+  packageDepthIn: z.number().min(0).optional(),
+  packageSource: z.enum(["auto", "manual"]).optional(),
   exportMode: z.enum(["draft", "publish"]).default("draft"),
 });
 
@@ -372,24 +376,21 @@ export async function POST(request: Request) {
       },
     });
 
-    const packageEstimate = estimatePackageAndShipping({
+    const packageEstimate = resolveListingPackage({
       title: data.title,
       productType: data.productType,
       size: data.size,
       categoryName,
       brand: data.brand,
       quantity: data.quantity,
+      packageWeightLbs: data.packageWeightLbs,
+      packageWeightOz: data.packageWeightOz,
+      packageLengthIn: data.packageLengthIn,
+      packageWidthIn: data.packageWidthIn,
+      packageDepthIn: data.packageDepthIn,
+      packageSource: data.packageSource,
     });
 
-    if (
-      typeof data.packageWeightLbs === "number" &&
-      typeof data.packageWeightOz === "number"
-    ) {
-      packageEstimate.weightLbs = data.packageWeightLbs;
-      packageEstimate.weightOz = data.packageWeightOz;
-      packageEstimate.totalOz =
-        data.packageWeightLbs * 16 + data.packageWeightOz;
-    }
     if (data.shippingService?.trim()) {
       packageEstimate.shippingService = data.shippingService.trim();
     }

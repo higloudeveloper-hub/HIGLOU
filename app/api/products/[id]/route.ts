@@ -76,6 +76,12 @@ const fieldMap: Record<string, string> = {
   postalCode: "postal_code",
   country: "country",
   status: "status",
+  packageWeightLbs: "package_weight_lbs",
+  packageWeightOz: "package_weight_oz",
+  packageLengthIn: "package_length_in",
+  packageWidthIn: "package_width_in",
+  packageDepthIn: "package_depth_in",
+  packageSource: "package_source",
 };
 
 export async function GET(_request: Request, context: RouteContext) {

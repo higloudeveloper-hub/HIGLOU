@@ -1,19 +1,12 @@
 "use client";
 
-import { Check, ChevronRight } from "lucide-react";
+import { Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   WIZARD_PROGRESS_STEPS,
   wizardStepToProgressIndex,
   type WizardStep,
 } from "@/components/listing/wizard/types";
-
-const STEP_SUB: Record<(typeof WIZARD_PROGRESS_STEPS)[number]["id"], string> = {
-  photos: "",
-  analyzing: "Analyzing your product…",
-  review: "Confirm your eBay draft",
-  export: "Review your listing",
-};
 
 export function WizardProgress({
   step,
@@ -30,7 +23,7 @@ export function WizardProgress({
   return (
     <nav
       aria-label="Listing progress"
-      className={cn("mx-auto hidden items-center gap-1 md:flex", className)}
+      className={cn("mx-auto flex items-center gap-1 sm:gap-1.5", className)}
     >
       {WIZARD_PROGRESS_STEPS.map((item, i) => {
         const resolved: "done" | "active" | "todo" = exported
@@ -44,21 +37,27 @@ export function WizardProgress({
               : "todo";
 
         return (
-          <div key={item.id} className="flex items-center gap-1">
+          <div key={item.id} className="flex items-center gap-1 sm:gap-1.5">
             {i > 0 ? (
-              <ChevronRight className="mx-0.5 h-3.5 w-3.5 text-muted-foreground/50" />
+              <span
+                aria-hidden
+                className={cn(
+                  "hidden h-px w-3 sm:block sm:w-5",
+                  resolved === "todo" ? "bg-border" : "bg-brand/50",
+                )}
+              />
             ) : null}
             <div
               className={cn(
-                "flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[12px] font-medium transition-colors",
+                "flex items-center gap-1.5 rounded-full px-2 py-1 text-[11px] font-semibold transition-colors sm:px-2.5 sm:text-[12px]",
                 resolved === "done" && "text-muted-foreground",
-                resolved === "active" && "bg-brand-soft text-brand-foreground",
+                resolved === "active" && "bg-brand-soft text-foreground",
                 resolved === "todo" && "text-muted-foreground/55",
               )}
             >
               <span
                 className={cn(
-                  "grid size-4 place-items-center rounded-full text-[10px]",
+                  "grid size-4 place-items-center rounded-full text-[10px] sm:size-[1.05rem]",
                   resolved === "done" && "bg-success-soft text-success",
                   resolved === "active" && "bg-brand text-brand-foreground",
                   resolved === "todo" && "bg-muted text-muted-foreground",
@@ -70,16 +69,11 @@ export function WizardProgress({
                   i + 1
                 )}
               </span>
-              <span className="hidden lg:inline">{item.label}</span>
+              <span className="hidden sm:inline">{item.label}</span>
             </div>
           </div>
         );
       })}
-      {STEP_SUB[WIZARD_PROGRESS_STEPS[active]?.id ?? "photos"] ? (
-        <span className="ml-2 hidden text-[11px] text-muted-foreground xl:inline">
-          {STEP_SUB[WIZARD_PROGRESS_STEPS[active]?.id ?? "photos"]}
-        </span>
-      ) : null}
     </nav>
   );
 }

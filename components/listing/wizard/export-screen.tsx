@@ -177,8 +177,8 @@ export function ExportScreen({
       active: false,
     },
     {
-      label: "Review & Export",
-      sub: "Final step",
+      label: "Publish",
+      sub: "Send to eBay or export CSV",
       active: true,
     },
   ];
@@ -439,12 +439,67 @@ export function ExportScreen({
             </div>
           </div>
 
+          <div className="rounded-3xl border-2 border-brand/35 bg-gradient-to-br from-brand-soft/50 to-surface p-5 shadow-sm">
+            <p className="text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">
+              Step 1 · Publish to eBay
+            </p>
+            <h3 className="mt-1 text-[15px] font-semibold text-foreground">
+              Send this listing to your eBay store
+            </h3>
+            <p className="mt-0.5 text-[12px] text-muted-foreground">
+              {ebayConnected
+                ? `Connected as ${ebayUsername || "seller"} — create an unpublished draft, or publish live when ready.`
+                : ebayConfigured
+                  ? "Connect your eBay seller account once, then publish drafts from Higlou."
+                  : "Connect eBay in Settings first, then come back here to publish."}
+            </p>
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              {ebayConnected ? (
+                <>
+                  <button
+                    type="button"
+                    disabled={exportDisabled || publishingEbay || !onPublishToEbay}
+                    onClick={() => onPublishToEbay?.("draft")}
+                    className="inline-flex items-center gap-2 rounded-xl bg-foreground px-4 py-2.5 text-[13px] font-semibold text-background disabled:opacity-50"
+                  >
+                    <Store className="h-4 w-4" />
+                    {publishingEbay ? "Sending to eBay…" : "Create eBay draft"}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={exportDisabled || publishingEbay || !onPublishToEbay}
+                    onClick={() => onPublishToEbay?.("live")}
+                    className="inline-flex items-center gap-2 rounded-xl border border-border bg-surface px-4 py-2.5 text-[13px] font-semibold text-foreground disabled:opacity-50"
+                  >
+                    Publish live
+                  </button>
+                </>
+              ) : (
+                <a
+                  href={
+                    ebayConfigured
+                      ? "/api/ebay/oauth/start"
+                      : "/settings#ebay-store"
+                  }
+                  className="inline-flex items-center gap-2 rounded-xl bg-foreground px-4 py-2.5 text-[13px] font-semibold text-background"
+                >
+                  <Store className="h-4 w-4" />
+                  {ebayConfigured
+                    ? "Connect eBay account"
+                    : "Open Settings → Connect eBay"}
+                </a>
+              )}
+            </div>
+          </div>
+
           <div className="rounded-3xl border border-border bg-surface p-5 shadow-sm">
-            <h3 className="text-[15px] font-semibold">Export to eBay</h3>
+            <p className="text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">
+              Step 2 · Optional exports
+            </p>
+            <h3 className="mt-1 text-[15px] font-semibold">Export CSV for Seller Hub</h3>
             <p className="mt-0.5 text-[12px] text-muted-foreground">
               Official Create Drafts CSV — the <strong>same file</strong> also
-              imports into Don Baraton Admin (Category ID places each item in
-              Bedding, Lighting, Kitchen &amp; Appliances…).
+              imports into Don Baraton Admin when needed.
             </p>
             {storeBranding && onStoreBrandingChange ? (
               <div className="mt-3 rounded-2xl border-2 border-amber-400 bg-amber-50 p-1">
@@ -456,11 +511,11 @@ export function ExportScreen({
               </div>
             ) : (
               <div className="mt-3 rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-[12px] text-amber-950">
-                Abre{" "}
+                Open{" "}
                 <a className="font-semibold underline" href="/settings#branding">
                   Settings → Store branding
                 </a>{" "}
-                para elegir tienda y plantilla HTML.
+                to pick store and HTML template.
               </div>
             )}
             <div className="mt-3 rounded-xl border border-amber-300/70 bg-amber-50/80 px-3 py-2.5 text-[12px] text-amber-950">
@@ -526,64 +581,17 @@ export function ExportScreen({
             ) : null}
           </div>
 
-          <div className="rounded-3xl border-2 border-blue-500/30 bg-gradient-to-br from-blue-50 to-white p-5 shadow-sm">
-            <h3 className="text-[15px] font-semibold text-blue-950">
-              Publish to your eBay store
-            </h3>
-            <p className="mt-0.5 text-[12px] text-muted-foreground">
-              {ebayConnected
-                ? `Connected as ${ebayUsername || "seller"} — create an unpublished offer (draft) or publish live when policies are set.`
-                : ebayConfigured
-                  ? "Connect your real eBay seller account once, then publish drafts directly from Higlou."
-                  : "Admin: add Production eBay OAuth env vars, then each seller can Connect their store."}
-            </p>
-            <div className="mt-3 flex flex-wrap items-center gap-2">
-              {ebayConnected ? (
-                <>
-                  <button
-                    type="button"
-                    disabled={exportDisabled || publishingEbay || !onPublishToEbay}
-                    onClick={() => onPublishToEbay?.("draft")}
-                    className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-[13px] font-semibold text-white disabled:opacity-50"
-                  >
-                    <Store className="h-4 w-4" />
-                    {publishingEbay ? "Sending to eBay…" : "Create eBay draft"}
-                  </button>
-                  <button
-                    type="button"
-                    disabled={exportDisabled || publishingEbay || !onPublishToEbay}
-                    onClick={() => onPublishToEbay?.("live")}
-                    className="inline-flex items-center gap-2 rounded-xl border border-blue-300 bg-white px-4 py-2.5 text-[13px] font-semibold text-blue-900 disabled:opacity-50"
-                  >
-                    Publish live
-                  </button>
-                </>
-              ) : (
-                <a
-                  href={
-                    ebayConfigured
-                      ? "/api/ebay/oauth/start"
-                      : "/settings#ebay-store"
-                  }
-                  className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-[13px] font-semibold text-white"
-                >
-                  <Store className="h-4 w-4" />
-                  {ebayConfigured
-                    ? "Connect real eBay account"
-                    : "Open Settings → eBay store"}
-                </a>
-              )}
-            </div>
-          </div>
-
           <div className="rounded-3xl border border-[#c8102e]/25 bg-gradient-to-br from-[#fff5f6] to-white p-5 shadow-sm">
-            <h3 className="text-[15px] font-semibold text-[#9b0c24]">
+            <p className="text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">
+              Also available
+            </p>
+            <h3 className="mt-1 text-[15px] font-semibold text-[#9b0c24]">
               Don Baraton Marketplace
             </h3>
             <p className="mt-0.5 text-[12px] text-muted-foreground">
-              Pushes the same eBay Seller Hub CSV to{" "}
+              Pushes the same listing CSV to{" "}
               <span className="font-medium">www.donbaraton.shop</span> (create/update
-              by SKU). Export CSV already syncs when credentials are set.
+              by SKU).
             </p>
             <div className="mt-3 flex flex-wrap items-center gap-2">
               <button

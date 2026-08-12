@@ -2,7 +2,15 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { ArrowRight, Sparkles } from "lucide-react";
+import {
+  ArrowRight,
+  Check,
+  Circle,
+  Sparkles,
+  Store,
+  Truck,
+  Palette,
+} from "lucide-react";
 import { AppShell } from "@/components/layout/app-shell";
 import { createClient } from "@/lib/supabase/client";
 import { formatRelativeTime } from "@/lib/format-relative-time";
@@ -25,9 +33,10 @@ type CsvRow = {
   productId?: string | null;
 };
 
-type CostsSummary = {
-  snapshot?: { productsProcessed?: number };
-  projection?: { estimatedAiCostToDate?: number };
+type SetupState = {
+  ebayConnected: boolean;
+  policiesReady: boolean;
+  brandingReady: boolean;
 };
 
 function firstNameFromEmail(email: string | null | undefined) {
@@ -50,8 +59,11 @@ export default function HomeWorkspacePage() {
   const [name, setName] = useState<string | null>(null);
   const [products, setProducts] = useState<ProductRow[]>([]);
   const [exportsList, setExportsList] = useState<CsvRow[]>([]);
-  const [aiCost, setAiCost] = useState<number | null>(null);
-  const [listingsCount, setListingsCount] = useState<number | null>(null);
+  const [setup, setSetup] = useState<SetupState>({
+    ebayConnected: false,
+    policiesReady: false,
+    brandingReady: false,
+  });
 
   useEffect(() => {
     let cancelled = false;
@@ -97,12 +109,43 @@ export default function HomeWorkspacePage() {
 
     void (async () => {
       try {
-        const res = await fetch("/api/costs");
-        if (!res.ok) return;
-        const body = (await res.json()) as CostsSummary;
+        const [connRes, policyRes, brandRes] = await Promise.all([
+          fetch("/api/ebay/connection"),
+          fetch("/api/settings/policies"),
+          fetch("/api/settings/branding"),
+        ]);
+        const conn = connRes.ok
+          ? ((await connRes.json()) as { connected?: boolean })
+          : null;
+        const policies = policyRes.ok
+          ? ((await policyRes.json()) as {
+              policies?: {
+                shippingPolicyId?: string;
+                returnPolicyId?: string;
+                paymentPolicyId?: string;
+              };
+            })
+          : null;
+        const branding = brandRes.ok
+          ? ((await brandRes.json()) as {
+              branding?: { storeName?: string };
+              storeName?: string;
+            })
+          : null;
         if (cancelled) return;
-        setListingsCount(body.snapshot?.productsProcessed ?? null);
-        setAiCost(body.projection?.estimatedAiCostToDate ?? null);
+        const p = policies?.policies;
+        setSetup({
+          ebayConnected: Boolean(conn?.connected),
+          policiesReady: Boolean(
+            p?.shippingPolicyId?.trim() &&
+              p?.returnPolicyId?.trim() &&
+              p?.paymentPolicyId?.trim(),
+          ),
+          brandingReady: Boolean(
+            branding?.branding?.storeName?.trim() ||
+              branding?.storeName?.trim(),
+          ),
+        });
       } catch {
         /* degrade gracefully */
       }
@@ -124,92 +167,134 @@ export default function HomeWorkspacePage() {
     [products],
   );
 
-  const avgConfidence = useMemo(() => {
-    const reviewed = products.filter((p) =>
-      Boolean(p.title?.trim() && p.brand?.trim()),
-    ).length;
-    if (!products.length) return null;
-    return Math.round((reviewed / products.length) * 100);
-  }, [products]);
-
-  const monthListings = listingsCount ?? products.length;
-  const draftsReady = drafts.length;
-  const greeting = name ? `Welcome back, ${name}` : "Welcome back";
+  const greeting = name ? `Welcome back, ${name}` : "Welcome to Higlou";
+  const setupItems = [
+    {
+      done: setup.ebayConnected,
+      title: "Connect eBay",
+      body: "Link your seller account",
+      href: "/settings#ebay-store",
+      icon: Store,
+    },
+    {
+      done: setup.policiesReady,
+      title: "Shipping & returns",
+      body: "Create or import the 3 policies",
+      href: "/settings#policies",
+      icon: Truck,
+    },
+    {
+      done: setup.brandingReady,
+      title: "Store branding",
+      body: "Name and listing look",
+      href: "/settings#branding",
+      icon: Palette,
+    },
+  ] as const;
+  const setupDoneCount = setupItems.filter((i) => i.done).length;
+  const setupComplete = setupDoneCount === setupItems.length;
 
   return (
     <AppShell hideHeader>
       <div className="mx-auto max-w-3xl">
-        <section className="relative overflow-hidden pb-12 pt-4">
+        <section className="relative overflow-hidden pb-10 pt-2">
           <div
             aria-hidden
-            className="pointer-events-none absolute -left-24 -top-16 size-72 rounded-full bg-[radial-gradient(circle_at_center,rgba(244,201,40,0.12),transparent_70%)]"
+            className="pointer-events-none absolute -left-24 -top-16 size-72 rounded-full bg-[radial-gradient(circle_at_center,rgba(244,201,40,0.16),transparent_70%)]"
           />
-          <p className="text-[11px] font-semibold tracking-[0.22em] text-zinc-400">
-            HIGLOU STUDIO
+          <p className="text-[11px] font-semibold tracking-[0.22em] text-muted-foreground">
+            HIGLOU
           </p>
-          <h1 className="mt-4 text-3xl font-semibold tracking-tight text-zinc-950 sm:text-4xl">
+          <h1 className="mt-3 text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">
             {greeting}
           </h1>
-          <p className="mt-3 max-w-lg text-base text-zinc-500">
-            Upload photos, I analyze the product, then you export a perfect CSV
-            for eBay and publish the same listing to your marketplace.
+          <p className="mt-3 max-w-lg text-base text-muted-foreground">
+            Photos in. eBay draft out — four clear steps, every time.
           </p>
-          <Link
-            href="/listings/new"
-            className="mt-8 inline-flex h-12 items-center gap-2 rounded-xl bg-zinc-950 px-6 text-sm font-medium text-white transition hover:bg-zinc-800"
-          >
-            <Sparkles className="size-4" />
-            New Listing
-          </Link>
-        </section>
-
-        <section className="border-t border-zinc-200/80 py-8">
-          <p className="text-xs font-medium uppercase tracking-wide text-zinc-400">
-            This month
-          </p>
-          <div className="mt-4 flex flex-wrap gap-x-8 gap-y-3 text-sm text-zinc-600">
-            <span>
-              <strong className="font-semibold text-zinc-950">
-                {monthListings}
-              </strong>{" "}
-              Listings
-            </span>
-            <span>
-              <strong className="font-semibold text-zinc-950">
-                {avgConfidence != null ? `${avgConfidence}%` : "—"}
-              </strong>{" "}
-              AI Confidence
-            </span>
-            <span>
-              <strong className="font-semibold text-zinc-950">
-                {aiCost != null ? `$${aiCost.toFixed(2)}` : "—"}
-              </strong>{" "}
-              AI Cost
-            </span>
-            <span>
-              Drafts Ready:{" "}
-              <strong className="font-semibold text-zinc-950">
-                {draftsReady}
-              </strong>
-            </span>
+          <div className="mt-8 flex flex-wrap items-center gap-3">
+            <Link
+              href="/listings/new"
+              className="inline-flex h-12 items-center gap-2 rounded-xl bg-foreground px-6 text-sm font-semibold text-background transition hover:opacity-90"
+            >
+              <Sparkles className="size-4" />
+              New Listing
+            </Link>
+            {!setupComplete ? (
+              <Link
+                href="/settings#ebay-store"
+                className="inline-flex h-12 items-center gap-2 rounded-xl border border-border bg-surface px-5 text-sm font-medium text-foreground hover:bg-muted"
+              >
+                Finish setup
+                <ArrowRight className="size-4" />
+              </Link>
+            ) : null}
           </div>
         </section>
 
-        <section className="space-y-4 border-t border-zinc-200/80 py-8">
+        <section className="border-t border-border/80 py-8">
           <div className="flex items-baseline justify-between gap-3">
-            <h2 className="text-lg font-semibold tracking-tight text-zinc-950">
+            <h2 className="text-lg font-semibold tracking-tight text-foreground">
+              Get ready to sell
+            </h2>
+            <p className="text-sm text-muted-foreground">
+              {setupDoneCount}/{setupItems.length} done
+            </p>
+          </div>
+          <div className="mt-4 grid gap-3 sm:grid-cols-3">
+            {setupItems.map((item, index) => {
+              const Icon = item.icon;
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className={cn(
+                    "rounded-2xl border px-4 py-4 transition",
+                    item.done
+                      ? "border-success/30 bg-success-soft/40"
+                      : "border-border bg-surface hover:bg-muted/60",
+                  )}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">
+                      Step {index + 1}
+                    </span>
+                    {item.done ? (
+                      <Check className="size-4 text-success" strokeWidth={3} />
+                    ) : (
+                      <Circle className="size-4 text-muted-foreground/50" />
+                    )}
+                  </div>
+                  <div className="mt-3 flex items-center gap-2">
+                    <Icon className="size-4 text-foreground/80" />
+                    <p className="text-sm font-semibold text-foreground">
+                      {item.title}
+                    </p>
+                  </div>
+                  <p className="mt-1 text-[12px] text-muted-foreground">
+                    {item.body}
+                  </p>
+                </Link>
+              );
+            })}
+          </div>
+        </section>
+
+        <section className="space-y-4 border-t border-border/80 py-8">
+          <div className="flex items-baseline justify-between gap-3">
+            <h2 className="text-lg font-semibold tracking-tight text-foreground">
               Continue working
             </h2>
             <Link
               href="/listings"
-              className="text-sm text-zinc-500 hover:text-zinc-900"
+              className="text-sm text-muted-foreground hover:text-foreground"
             >
               All listings
             </Link>
           </div>
           {drafts.length === 0 ? (
-            <p className="text-sm text-zinc-500">
-              No drafts yet — drop photos and I&apos;ll start a listing for you.
+            <p className="text-sm text-muted-foreground">
+              No drafts yet — start a listing and Higlou will draft it from
+              photos.
             </p>
           ) : (
             <div className="grid gap-3 sm:grid-cols-2">
@@ -217,9 +302,9 @@ export default function HomeWorkspacePage() {
                 <Link
                   key={draft.id}
                   href={`/listings/${draft.id}`}
-                  className="group flex gap-3 rounded-2xl bg-white p-3 transition hover:bg-zinc-50"
+                  className="group flex gap-3 rounded-2xl border border-border/70 bg-surface p-3 transition hover:bg-muted/50"
                 >
-                  <div className="size-16 shrink-0 overflow-hidden rounded-xl bg-zinc-100">
+                  <div className="size-16 shrink-0 overflow-hidden rounded-xl bg-muted">
                     {draft.coverUrl ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img
@@ -228,45 +313,44 @@ export default function HomeWorkspacePage() {
                         className="size-full object-cover"
                       />
                     ) : (
-                      <div className="flex size-full items-center justify-center text-[10px] text-zinc-400">
+                      <div className="flex size-full items-center justify-center text-[10px] text-muted-foreground">
                         No photo
                       </div>
                     )}
                   </div>
                   <div className="min-w-0 flex-1 py-0.5">
-                    <p className="truncate text-sm font-medium text-zinc-950">
+                    <p className="truncate text-sm font-medium text-foreground">
                       {draft.title || "Untitled listing"}
                     </p>
-                    <p className="mt-0.5 truncate text-xs text-zinc-500">
-                      {draft.brand || "Brand TBD"} ·{" "}
-                      {statusTone(draft.status)}
+                    <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                      {draft.brand || "Brand TBD"} · {statusTone(draft.status)}
                     </p>
-                    <p className="mt-1 text-[11px] text-zinc-400">
+                    <p className="mt-1 text-[11px] text-muted-foreground/80">
                       Edited {formatRelativeTime(draft.updatedAt)}
                     </p>
                   </div>
-                  <ArrowRight className="mt-1 size-4 shrink-0 text-zinc-300 transition group-hover:text-zinc-600" />
+                  <ArrowRight className="mt-1 size-4 shrink-0 text-muted-foreground/40 transition group-hover:text-foreground" />
                 </Link>
               ))}
             </div>
           )}
         </section>
 
-        <section className="space-y-4 border-t border-zinc-200/80 py-8">
+        <section className="space-y-4 border-t border-border/80 py-8">
           <div className="flex items-baseline justify-between gap-3">
-            <h2 className="text-lg font-semibold tracking-tight text-zinc-950">
+            <h2 className="text-lg font-semibold tracking-tight text-foreground">
               Recent exports
             </h2>
             <Link
               href="/exports"
-              className="text-sm text-zinc-500 hover:text-zinc-900"
+              className="text-sm text-muted-foreground hover:text-foreground"
             >
               View all
             </Link>
           </div>
           {exportsList.length === 0 ? (
-            <p className="text-sm text-zinc-500">
-              When you export a CSV, I&apos;ll keep it here.
+            <p className="text-sm text-muted-foreground">
+              When you export a CSV, it shows up here.
             </p>
           ) : (
             <ul className="space-y-2">
@@ -274,15 +358,13 @@ export default function HomeWorkspacePage() {
                 <li key={row.id}>
                   <a
                     href={`/api/csv-history/${row.id}/download`}
-                    className={cn(
-                      "flex items-center justify-between gap-3 rounded-xl px-1 py-2.5 text-sm transition hover:bg-white",
-                    )}
+                    className="flex items-center justify-between gap-3 rounded-xl px-1 py-2.5 text-sm transition hover:bg-surface"
                   >
-                    <span className="truncate font-medium text-zinc-800">
+                    <span className="truncate font-medium text-foreground">
                       {row.fileName}
                     </span>
-                    <span className="shrink-0 text-xs text-zinc-400">
-                      CSV exported {formatRelativeTime(row.createdAt)}
+                    <span className="shrink-0 text-xs text-muted-foreground">
+                      {formatRelativeTime(row.createdAt)}
                     </span>
                   </a>
                 </li>

@@ -13,7 +13,7 @@ import {
 import { cn } from "@/lib/utils";
 import { signOut } from "@/app/login/sign-out";
 
-const NAV = [
+export const STUDIO_NAV = [
   {
     href: "/home",
     label: "Home",
@@ -35,8 +35,8 @@ const NAV = [
     match: (path: string) => path === "/exports" || path.startsWith("/exports/"),
   },
   {
-    href: "/settings#branding",
-    label: "Store & templates",
+    href: "/settings",
+    label: "Settings",
     icon: Settings,
     match: (path: string) =>
       path === "/settings" ||
@@ -46,19 +46,37 @@ const NAV = [
   },
 ] as const;
 
-export function AppSidebar() {
+export function AppSidebar({
+  onNavigate,
+  className,
+}: {
+  onNavigate?: () => void;
+  className?: string;
+}) {
   const pathname = usePathname();
   const onNewListing = pathname === "/listings/new";
 
   return (
-    <aside className="flex h-full w-[15.5rem] shrink-0 flex-col border-r border-zinc-200/70 bg-white">
+    <aside
+      className={cn(
+        "flex h-full w-[15.5rem] shrink-0 flex-col border-r border-border/80 bg-surface",
+        className,
+      )}
+    >
       <div className="px-5 pb-4 pt-7">
-        <Link href="/home" className="group block">
-          <div className="text-[11px] font-semibold tracking-[0.2em] text-zinc-400 transition group-hover:text-zinc-500">
-            STORE STUDIO
-          </div>
-          <div className="mt-1.5 text-[15px] font-semibold leading-snug tracking-tight text-zinc-950">
-            Multi-store listings
+        <Link href="/home" onClick={onNavigate} className="group block">
+          <div className="flex items-center gap-2.5">
+            <span className="grid size-8 place-items-center rounded-lg bg-brand-gradient text-brand-foreground shadow-sm">
+              <Sparkles className="size-4" strokeWidth={2.5} />
+            </span>
+            <div>
+              <div className="text-[17px] font-semibold leading-none tracking-tight text-foreground">
+                Higlou
+              </div>
+              <div className="mt-1 text-[11px] text-muted-foreground">
+                eBay listings, step by step
+              </div>
+            </div>
           </div>
         </Link>
       </div>
@@ -66,11 +84,12 @@ export function AppSidebar() {
       <div className="px-3 pb-4">
         <Link
           href="/listings/new"
+          onClick={onNavigate}
           className={cn(
-            "flex items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-sm font-medium transition",
+            "flex items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-sm font-semibold transition",
             onNewListing
-              ? "bg-zinc-950 text-white"
-              : "bg-zinc-950 text-white hover:bg-zinc-800",
+              ? "bg-brand text-brand-foreground shadow-sm"
+              : "bg-foreground text-background hover:opacity-90",
           )}
         >
           <Sparkles className="size-3.5" />
@@ -79,18 +98,19 @@ export function AppSidebar() {
       </div>
 
       <nav className="flex-1 space-y-0.5 px-3">
-        {NAV.map((item) => {
+        {STUDIO_NAV.map((item) => {
           const Icon = item.icon;
           const active = item.match(pathname);
           return (
             <Link
               key={item.href}
               href={item.href}
+              onClick={onNavigate}
               className={cn(
                 "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors",
                 active
-                  ? "bg-zinc-100 text-zinc-950"
-                  : "text-zinc-500 hover:bg-zinc-50 hover:text-zinc-900",
+                  ? "bg-brand-soft text-foreground"
+                  : "text-muted-foreground hover:bg-muted hover:text-foreground",
               )}
             >
               <Icon className="size-4 opacity-80" />
@@ -104,14 +124,14 @@ export function AppSidebar() {
         <form action={signOut}>
           <button
             type="submit"
-            className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-sm text-zinc-500 hover:bg-zinc-50 hover:text-zinc-900"
+            className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-sm text-muted-foreground hover:bg-muted hover:text-foreground"
           >
             <LogOut className="size-4" />
             Sign out
           </button>
         </form>
-        <p className="mt-3 px-3 text-[11px] leading-relaxed text-zinc-400">
-          Analyze → perfect CSV for eBay &amp; marketplace
+        <p className="mt-3 px-3 text-[11px] leading-relaxed text-muted-foreground">
+          Photos → AI draft → edit → publish to eBay
         </p>
       </div>
     </aside>

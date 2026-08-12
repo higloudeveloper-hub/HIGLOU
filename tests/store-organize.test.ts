@@ -221,4 +221,127 @@ describe("classifyOffersForStore", () => {
     expect(rows[2].suggestedPath).toBe("/Bath and Plumbing");
     expect(rows[0].reason).toMatch(/Bath and Plumbing/i);
   });
+
+  it("remaps Higlou Plumbing taxonomy to Bath and Plumbing on publish-like titles", () => {
+    const live = [
+      {
+        path: "/Bath and Plumbing",
+        name: "Bath and Plumbing",
+        categoryId: "9001",
+      },
+      {
+        path: "/Plumbing/Pumps",
+        name: "Pumps",
+        categoryId: "9003",
+      },
+      {
+        path: "/Plumbing/Faucets",
+        name: "Faucets",
+        categoryId: "9004",
+      },
+    ];
+    const rows = classifyOffersForStore(
+      [
+        {
+          offerId: "a",
+          sku: "A",
+          status: "PUBLISHED",
+          title: "Delta Bathroom Sink Faucet",
+          categoryId: "63897",
+          brand: "Delta",
+          productType: "Faucet",
+          categoryName: "Faucets",
+          listingId: "1",
+          price: 40,
+          currentStorePaths: [],
+        },
+        {
+          offerId: "b",
+          sku: "B",
+          status: "PUBLISHED",
+          title: "Kohler Toilet Fill Valve",
+          categoryId: "20591",
+          brand: "Kohler",
+          listingId: "2",
+          price: 20,
+          currentStorePaths: [],
+        },
+      ],
+      live,
+    );
+    expect(rows.every((r) => r.suggestedPath === "/Bath and Plumbing")).toBe(
+      true,
+    );
+  });
+
+  it("keeps power tools out of Bath and Plumbing", () => {
+    const live = [
+      {
+        path: "/Bath and Plumbing",
+        name: "Bath and Plumbing",
+        categoryId: "9001",
+      },
+      {
+        path: "/Tools",
+        name: "Tools",
+        categoryId: "9002",
+      },
+    ];
+    const [row] = classifyOffersForStore(
+      [
+        {
+          offerId: "t1",
+          sku: "T1",
+          status: "PUBLISHED",
+          title: "Ryobi 18V ONE+ Rotary Tool",
+          categoryId: "20779",
+          brand: "Ryobi",
+          productType: "Rotary Tool",
+          listingId: "99",
+          price: 59,
+          currentStorePaths: [],
+        },
+      ],
+      live,
+    );
+    expect(row.suggestedPath.toLowerCase()).not.toContain("bath");
+    expect(row.suggestedPath.toLowerCase()).toMatch(/tool/);
+  });
+
+  it("still prefers Bath and Plumbing when that folder has a child", () => {
+    const live = [
+      {
+        path: "/Bath and Plumbing",
+        name: "Bath and Plumbing",
+        categoryId: "9001",
+      },
+      {
+        path: "/Bath and Plumbing/General",
+        name: "General",
+        categoryId: "9005",
+      },
+      {
+        path: "/Plumbing/Pumps",
+        name: "Pumps",
+        categoryId: "9003",
+      },
+    ];
+    const [row] = classifyOffersForStore(
+      [
+        {
+          offerId: "p1",
+          sku: "P1",
+          status: "PUBLISHED",
+          title: "Everbilt Submersible Utility Pump",
+          categoryId: "61573",
+          listingId: "11",
+          price: 49,
+          currentStorePaths: [],
+        },
+      ],
+      live,
+    );
+    expect(row.suggestedPath.startsWith("/Bath and Plumbing")).toBe(true);
+    expect(row.suggestedPath.toLowerCase()).not.toContain("/plumbing/pumps");
+  });
 });

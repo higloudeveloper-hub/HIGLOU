@@ -638,6 +638,9 @@ export async function POST(request: Request) {
             title: listing.title,
             sku: listing.sku,
             categoryId: listing.categoryId,
+            categoryName: listing.categoryName,
+            brand: listing.brand,
+            productType: listing.productType || listing.type,
           });
         } catch (organizeError) {
           storeOrganizeWarning =
@@ -663,7 +666,9 @@ export async function POST(request: Request) {
 
     const liveHint = storeOrganize
       ? `Published and filed in Store folder ${storeOrganize.storePath}${storeOrganize.createdFolder ? " (folder created)" : ""}.`
-      : "Listing published to eBay.";
+      : storeOrganizeWarning
+        ? `Listing published to eBay, but Store folder was not set: ${storeOrganizeWarning}`
+        : "Listing published to eBay.";
 
     return NextResponse.json({
       ok: true,

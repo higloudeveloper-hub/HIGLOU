@@ -24,6 +24,10 @@ export type EbayStoreOfferRow = {
   currentStorePaths: string[];
   /** Numeric StoreCategoryID from Trading (best unchanged signal). */
   currentStoreCategoryId?: string | null;
+  /** Extra classify signals (publish path). */
+  categoryName?: string | null;
+  brand?: string | null;
+  productType?: string | null;
 };
 
 export type StoreOrganizeSuggestion = EbayStoreOfferRow & {
@@ -705,21 +709,26 @@ async function assignStoreCategoryViaTrading(
     );
   }
 
-  // Confirm Storefront stuck — ActiveList sometimes omits it until GetItem.
-  const verify = await tradingApiCall(
-    accessToken,
-    "GetItem",
-    `<?xml version="1.0" encoding="utf-8"?>
+  // Confirm Storefront stuck — GetItem can lag right after publish/revise.
+  let got = "";
+  for (let attempt = 0; attempt < 4; attempt++) {
+    if (attempt > 0) await sleep(1500 * attempt);
+    const verify = await tradingApiCall(
+      accessToken,
+      "GetItem",
+      `<?xml version="1.0" encoding="utf-8"?>
 <GetItemRequest xmlns="urn:ebay:apis:eBLBaseComponents">
   <ErrorLanguage>en_US</ErrorLanguage>
   <ItemID>${escapeXml(listingId)}</ItemID>
   <OutputSelector>ItemID</OutputSelector>
   <OutputSelector>Storefront</OutputSelector>
 </GetItemRequest>`,
-  );
-  const got =
-    verify.match(/<StoreCategoryID>([^<]+)<\/StoreCategoryID>/i)?.[1]?.trim() ||
-    "";
+    );
+    got =
+      verify.match(/<StoreCategoryID>([^<]+)<\/StoreCategoryID>/i)?.[1]?.trim() ||
+      "";
+    if (got === storeCategoryId) return;
+  }
   if (got && got !== "0" && got !== storeCategoryId) {
     throw new Error(
       `Store folder did not stick (wanted ${storeCategoryId}, eBay has ${got}). Use a leaf Store category with no subfolders.`,
@@ -1410,22 +1419,24 @@ export function classifyOffersForStore(
   options?: { reviewBelow?: number },
 ): StoreOrganizeSuggestion[] {
   const reviewBelow = options?.reviewBelow ?? 0.45;
-  const liveCategories = categories.filter(
-    (c) =>
-      c.categoryId &&
-      !isReservedStoreFolderName(c.name) &&
-      !/\/other$/i.test(normalizeStorePath(c.path)),
-  );
+  const liveCategories = usableStoreCategories(categories);
   const taxonomy = mergeTaxonomyCategories(categories);
 
   return offers.map((offer) => {
-    const haystack = `${offer.title} ${offer.categoryId} ${offer.sku}`;
+    const haystack = offerClassifyHaystack(offer);
 
-    // 1) Prefer the seller's REAL Store folders (e.g. "Bath and Plumbing").
-    const liveHit = pickBestExistingStoreCategory(haystack, liveCategories);
-    if (liveHit && liveHit.score >= 4) {
-      const leafPath = pickAssignableStorePath(liveHit.cat, liveCategories);
-      const suggestedId = liveHit.cat.categoryId || null;
+    const finalize = (
+      suggestedPath: string,
+      confidence: number,
+      reason: string,
+      needsReview: boolean,
+    ): StoreOrganizeSuggestion => {
+      const preferred = preferSellerStorePath(
+        suggestedPath,
+        haystack,
+        liveCategories,
+      );
+      const suggestedId = resolveStoreCategoryId(preferred, categories);
       const current = offer.currentStorePaths[0] || "";
       const unchangedById = Boolean(
         suggestedId &&
@@ -1434,15 +1445,31 @@ export function classifyOffersForStore(
       );
       const unchangedByPath =
         Boolean(current) &&
-        normalizeStorePath(current) === normalizeStorePath(leafPath);
+        normalizeStorePath(current) === normalizeStorePath(preferred) &&
+        !/\/other$/i.test(normalizeStorePath(current));
       return {
         ...offer,
-        suggestedPath: leafPath,
-        confidence: Math.min(0.96, 0.5 + liveHit.score / 20),
-        reason: `Matched your Store folder "${liveHit.cat.name}"`,
-        needsReview: false,
+        suggestedPath: preferred,
+        confidence,
+        reason:
+          preferred !== normalizeStorePath(suggestedPath)
+            ? `${reason} → your folder "${preferred.split("/").filter(Boolean).pop()}"`
+            : reason,
+        needsReview,
         unchanged: unchangedById || unchangedByPath,
       };
+    };
+
+    // 1) Prefer the seller's REAL Store folders (e.g. "Bath and Plumbing").
+    const liveHit = pickBestExistingStoreCategory(haystack, liveCategories);
+    if (liveHit && liveHit.score >= 4) {
+      const leafPath = pickAssignableStorePath(liveHit.cat, liveCategories);
+      return finalize(
+        leafPath,
+        Math.min(0.96, 0.5 + liveHit.score / 20),
+        `Matched your Store folder "${liveHit.cat.name}"`,
+        false,
+      );
     }
 
     // 2) Higlou taxonomy, then map onto an existing folder when possible.
@@ -1454,24 +1481,12 @@ export function classifyOffersForStore(
     const mapped = mapTaxonomyPathToExistingStore(picked.path, liveCategories);
     if (mapped) {
       const leafPath = pickAssignableStorePath(mapped, liveCategories);
-      const suggestedId = mapped.categoryId || null;
-      const current = offer.currentStorePaths[0] || "";
-      const unchangedById = Boolean(
-        suggestedId &&
-          offer.currentStoreCategoryId &&
-          suggestedId === offer.currentStoreCategoryId,
+      return finalize(
+        leafPath,
+        Math.max(picked.confidence, 0.7),
+        `${picked.reason} → your folder "${mapped.name}"`,
+        false,
       );
-      const unchangedByPath =
-        Boolean(current) &&
-        normalizeStorePath(current) === normalizeStorePath(leafPath);
-      return {
-        ...offer,
-        suggestedPath: leafPath,
-        confidence: Math.max(picked.confidence, 0.7),
-        reason: `${picked.reason} → your folder "${mapped.name}"`,
-        needsReview: false,
-        unchanged: unchangedById || unchangedByPath,
-      };
     }
 
     // 3) No usable existing folder — suggest Higlou path (Organize will create it).
@@ -1482,30 +1497,16 @@ export function classifyOffersForStore(
         taxonomy,
       );
     }
-    const suggestedId = resolveStoreCategoryId(leafPath, categories);
-    const current = offer.currentStorePaths[0] || "";
-    const unchangedById = Boolean(
-      suggestedId &&
-        offer.currentStoreCategoryId &&
-        suggestedId === offer.currentStoreCategoryId,
+    return finalize(
+      leafPath,
+      picked.confidence,
+      leafPath !== picked.path
+        ? `${picked.reason} (leaf ${leafPath})`
+        : resolveStoreCategoryId(leafPath, categories)
+          ? picked.reason
+          : `${picked.reason} · will create folder`,
+      picked.confidence < reviewBelow,
     );
-    const unchangedByPath =
-      Boolean(current) &&
-      normalizeStorePath(current) === normalizeStorePath(leafPath) &&
-      !/\/other$/i.test(normalizeStorePath(current));
-    return {
-      ...offer,
-      suggestedPath: leafPath,
-      confidence: picked.confidence,
-      reason:
-        leafPath !== picked.path
-          ? `${picked.reason} (leaf ${leafPath})`
-          : suggestedId
-            ? picked.reason
-            : `${picked.reason} · will create folder`,
-      needsReview: picked.confidence < reviewBelow,
-      unchanged: unchangedById || unchangedByPath,
-    };
   });
 }
 
@@ -1527,7 +1528,7 @@ const STORE_THEME_HINTS: Array<{
   {
     folder: /bath|plumb/,
     product:
-      /\b(bath|plumb|faucet|pump|toilet|sink|shower|tub|valve|pipe|sump|disposal|vanity|thermostat|fixture|spout|drain|washer|cartridge)\b/i,
+      /\b(bath|plumb|faucet|pump|toilet|sink|shower|tub|valve|pipe|sump|disposal|vanity|thermostat|fixture|spout|drain|washer|cartridge|moen|delta|kohler|grohe|pfister|everbilt|glacier\s*bay|hansgrohe|supply\s*line|angle\s*stop|water\s*heater|bidet|pex|gib\s*door|fill\s*valve|flapper|aerator|diverter)\b/i,
     boost: 12,
   },
   {
@@ -1572,6 +1573,112 @@ const STORE_THEME_HINTS: Array<{
     boost: 7,
   },
 ];
+
+/** Higlou taxonomy paths that must yield to the seller's Bath and Plumbing folder. */
+const HIGLOU_PLUMBING_PATH_RE = /^\/plumbing(\/|$)/i;
+
+/** Product text that belongs in a bath/plumbing Store folder. */
+export const PLUMBING_PRODUCT_RE =
+  /\b(bath|plumb|faucet|pump|toilet|sink|shower|tub|valve|pipe|sump|disposal|vanity|thermostat|spout|drain|cartridge|moen|delta|kohler|grohe|pfister|everbilt|glacier\s*bay|hansgrohe|supply\s*line|angle\s*stop|water\s*heater|bidet|pex|fill\s*valve|flapper|aerator|diverter)\b/i;
+
+/** Known eBay leaf Category IDs for bath / plumbing (enrich haystack). */
+const PLUMBING_EBAY_CATEGORY_IDS = new Set([
+  "63897",
+  "20589",
+  "20595",
+  "177033",
+  "260882",
+  "61573",
+  "20621",
+  "20601",
+  "41964",
+  "116375",
+  "116376",
+  "116377",
+  "3299",
+  "20585",
+  "20591",
+  "71282",
+  "63898",
+]);
+
+function offerClassifyHaystack(offer: EbayStoreOfferRow): string {
+  const catId = String(offer.categoryId || "").replace(/\D/g, "");
+  const plumbingCatHint = PLUMBING_EBAY_CATEGORY_IDS.has(catId)
+    ? " plumbing bath faucet pump shower"
+    : "";
+  return [
+    offer.title,
+    offer.brand,
+    offer.productType,
+    offer.categoryName,
+    offer.sku,
+    catId,
+    plumbingCatHint,
+  ]
+    .filter(Boolean)
+    .join(" ");
+}
+
+function usableStoreCategories(
+  categories: EbayStoreCategory[],
+): EbayStoreCategory[] {
+  return categories.filter(
+    (c) =>
+      c.categoryId &&
+      !isReservedStoreFolderName(c.name) &&
+      !/\/other$/i.test(normalizeStorePath(c.path)),
+  );
+}
+
+/** Seller's real bath/plumbing folder (e.g. Bath and Plumbing), preferring broad names. */
+export function findSellerBathPlumbingFolder(
+  categories: EbayStoreCategory[],
+): EbayStoreCategory | null {
+  const usable = usableStoreCategories(categories);
+  const matches = usable.filter((c) =>
+    /bath|plumb/i.test(normalizeMatchText(`${c.name} ${c.path}`)),
+  );
+  if (!matches.length) return null;
+  matches.sort((a, b) => {
+    const aWords = normalizeMatchText(a.name)
+      .split(" ")
+      .filter((w) => w.length >= 3 && w !== "and").length;
+    const bWords = normalizeMatchText(b.name)
+      .split(" ")
+      .filter((w) => w.length >= 3 && w !== "and").length;
+    if (bWords !== aWords) return bWords - aWords;
+    // Prefer leaf when scores tie (assignable directly).
+    const aLeaf = isLeafStoreCategory(a.path, usable) ? 1 : 0;
+    const bLeaf = isLeafStoreCategory(b.path, usable) ? 1 : 0;
+    if (bLeaf !== aLeaf) return bLeaf - aLeaf;
+    return (
+      normalizeMatchText(b.name).length - normalizeMatchText(a.name).length
+    );
+  });
+  return matches[0];
+}
+
+/**
+ * Never dump plumbing items into Higlou /Plumbing/* when the seller already
+ * has Bath and Plumbing (or similar). Same idea for other themes later.
+ */
+export function preferSellerStorePath(
+  suggestedPath: string,
+  haystack: string,
+  categories: EbayStoreCategory[],
+): string {
+  const suggested = normalizeStorePath(suggestedPath);
+  const bath = findSellerBathPlumbingFolder(categories);
+  if (
+    bath &&
+    (HIGLOU_PLUMBING_PATH_RE.test(suggested) ||
+      PLUMBING_PRODUCT_RE.test(haystack))
+  ) {
+    return normalizeStorePath(bath.path);
+  }
+  return suggested;
+}
 
 function scoreExistingStoreCategory(
   haystack: string,
@@ -1626,19 +1733,13 @@ export function pickBestExistingStoreCategory(
   haystack: string,
   categories: EbayStoreCategory[],
 ): { cat: EbayStoreCategory; score: number } | null {
-  const usable = categories.filter(
-    (c) =>
-      c.categoryId &&
-      !isReservedStoreFolderName(c.name) &&
-      !/\/other$/i.test(normalizeStorePath(c.path)),
-  );
+  const usable = usableStoreCategories(categories);
   if (!usable.length) return null;
 
-  const leaves = usable.filter((c) => isLeafStoreCategory(c.path, usable));
-  const pool = leaves.length ? leaves : usable;
-
+  // Score ALL folders (including parents like Bath and Plumbing). Restricting
+  // to leaves made competing /Plumbing/Pumps win while Bath and Plumbing lost.
   let best: { cat: EbayStoreCategory; score: number } | null = null;
-  for (const cat of pool) {
+  for (const cat of usable) {
     const score = scoreExistingStoreCategory(haystack, cat, usable);
     if (
       !best ||
@@ -1710,9 +1811,8 @@ export function mapTaxonomyPathToExistingStore(
 
   if (!theme) return null;
 
-  const leaves = usable.filter((c) => isLeafStoreCategory(c.path, usable));
-  const pool = leaves.length ? leaves : usable;
-  const matches = pool.filter((c) =>
+  // Include parents (Bath and Plumbing) — not only leaves.
+  const matches = usable.filter((c) =>
     theme.test(normalizeMatchText(`${c.name} ${c.path}`)),
   );
   if (!matches.length) return null;
@@ -1739,8 +1839,21 @@ function pickAssignableStorePath(
 ): string {
   const path = normalizeStorePath(cat.path);
   if (isLeafStoreCategory(path, categories)) return path;
-  // Parent with children — pick first leaf child, else force /General under it.
-  return pickLeafStorePath(path, categories);
+  // Parent with children — only pick a leaf UNDER this folder (never a sibling
+  // like /Plumbing/Pumps when the match was /Bath and Plumbing).
+  const prefix = `${path}/`;
+  const childLeaves = categories
+    .map((c) => normalizeStorePath(c.path))
+    .filter(
+      (p) =>
+        p.startsWith(prefix) &&
+        isLeafStoreCategory(p, categories) &&
+        !/\/other$/i.test(p),
+    )
+    .sort((a, b) => a.length - b.length);
+  if (childLeaves[0]) return childLeaves[0];
+  // Keep the parent path; assign will create a General leaf under it if needed.
+  return path;
 }
 
 function mergeTaxonomyCategories(
@@ -1915,6 +2028,8 @@ export async function assignStoreCategoriesToOffer(
     categories?: EbayStoreCategory[];
     /** Mutator so apply loop can reuse newly created folder IDs. */
     setCategories?: (categories: EbayStoreCategory[]) => void;
+    /** Extra text so plumbing items remap to Bath and Plumbing. */
+    haystack?: string;
   },
 ): Promise<void> {
   const paths = storeCategoryNames
@@ -1943,9 +2058,43 @@ export async function assignStoreCategoriesToOffer(
     );
   }
 
-  // Final leaf path using Higlou taxonomy + live store folders.
-  const taxonomy = mergeTaxonomyCategories(categories);
-  const targetPath = pickLeafStorePath(paths[0], taxonomy);
+  const live = usableStoreCategories(categories);
+  const haystack = String(options?.haystack || "");
+  let targetPath = preferSellerStorePath(paths[0], haystack, live);
+
+  // Never create competing Higlou /Plumbing/* when Bath and Plumbing exists.
+  const bath = findSellerBathPlumbingFolder(live);
+  if (bath && HIGLOU_PLUMBING_PATH_RE.test(targetPath)) {
+    targetPath = normalizeStorePath(bath.path);
+  }
+
+  const exact = live.find(
+    (c) => normalizeStorePath(c.path) === normalizeStorePath(targetPath),
+  );
+
+  if (exact && isLeafStoreCategory(exact.path, live)) {
+    targetPath = normalizeStorePath(exact.path);
+  } else if (exact && !isLeafStoreCategory(exact.path, live)) {
+    // Parent folder — only use a leaf under THIS folder (live categories only).
+    targetPath = pickAssignableStorePath(exact, live);
+    if (!isLeafStoreCategory(targetPath, live)) {
+      targetPath = normalizeStorePath(`${normalizeStorePath(exact.path)}/General`);
+    }
+  } else if (!exact) {
+    // Missing path: create only the suggested path. Use live cats for leaf check —
+    // do NOT merge Higlou taxonomy (that forced /Plumbing → /Plumbing/Pumps).
+    if (bath && (HIGLOU_PLUMBING_PATH_RE.test(targetPath) || PLUMBING_PRODUCT_RE.test(haystack))) {
+      targetPath = normalizeStorePath(bath.path);
+      if (!isLeafStoreCategory(targetPath, live)) {
+        targetPath = pickAssignableStorePath(bath, live);
+        if (!isLeafStoreCategory(targetPath, live)) {
+          targetPath = normalizeStorePath(`${normalizeStorePath(bath.path)}/General`);
+        }
+      }
+    } else if (!isLeafStoreCategory(targetPath, live)) {
+      targetPath = pickLeafStorePath(targetPath, live);
+    }
+  }
 
   const ensured = await ensureStoreCategoryId(
     accessToken,
@@ -1955,15 +2104,16 @@ export async function assignStoreCategoriesToOffer(
   options?.setCategories?.(ensured.categories);
 
   let categoryId = ensured.categoryId;
+  const ensuredLive = usableStoreCategories(ensured.categories);
   const catMeta = ensured.categories.find((c) => c.categoryId === categoryId);
-  if (catMeta && !isLeafStoreCategory(catMeta.path, ensured.categories)) {
-    const forcedPath = pickLeafStorePath(
-      catMeta.path,
-      mergeTaxonomyCategories(ensured.categories),
-    );
+  if (catMeta && !isLeafStoreCategory(catMeta.path, ensuredLive)) {
+    const forcedPath = pickAssignableStorePath(catMeta, ensuredLive);
+    const leafPath = isLeafStoreCategory(forcedPath, ensuredLive)
+      ? forcedPath
+      : normalizeStorePath(`${normalizeStorePath(catMeta.path)}/General`);
     const forced = await ensureStoreCategoryId(
       accessToken,
-      forcedPath,
+      leafPath,
       ensured.categories,
     );
     categoryId = forced.categoryId;
@@ -1980,6 +2130,11 @@ export async function applyStoreOrganizeSuggestions(
     suggestedPath: string;
     listingId?: string | null;
     skip?: boolean;
+    title?: string | null;
+    brand?: string | null;
+    productType?: string | null;
+    categoryName?: string | null;
+    categoryId?: string | null;
   }>,
   categories: EbayStoreCategory[] = [],
 ): Promise<{
@@ -2000,6 +2155,16 @@ export async function applyStoreOrganizeSuggestions(
         {
           listingId: row.listingId,
           categories: liveCategories,
+          haystack: [
+            row.title,
+            row.brand,
+            row.productType,
+            row.categoryName,
+            row.categoryId,
+            row.suggestedPath,
+          ]
+            .filter(Boolean)
+            .join(" "),
           setCategories: (next) => {
             liveCategories = next;
           },
@@ -2018,8 +2183,8 @@ export async function applyStoreOrganizeSuggestions(
 }
 
 /**
- * After live publish: classify title → create Store folder if missing → assign.
- * Keeps the eBay Store organized as each new product goes live.
+ * After live publish: classify title → prefer seller folders (Bath and Plumbing)
+ * → create only if missing → assign with retries (eBay lags right after publish).
  */
 export async function organizeListingOnPublish(
   accessToken: string,
@@ -2028,6 +2193,9 @@ export async function organizeListingOnPublish(
     title: string;
     sku?: string;
     categoryId?: string;
+    categoryName?: string;
+    brand?: string;
+    productType?: string;
   },
 ): Promise<{
   storePath: string;
@@ -2040,34 +2208,78 @@ export async function organizeListingOnPublish(
     throw new Error("organizeListingOnPublish requires a numeric eBay listingId");
   }
 
-  const store = await listSellerStoreCategories(accessToken);
-  const [suggestion] = classifyOffersForStore(
-    [
-      {
-        offerId: listingId,
-        sku: String(input.sku || listingId),
-        status: "PUBLISHED",
-        title: String(input.title || "").trim() || listingId,
-        categoryId: String(input.categoryId || ""),
-        listingId,
-        price: null,
-        currentStorePaths: [],
-      },
-    ],
-    store.categories,
-  );
-
-  const storePath = suggestion?.suggestedPath || "/Home/General Merchandise";
-  const beforeId = resolveStoreCategoryId(storePath, store.categories);
-  await assignStoreCategoriesToOffer(accessToken, listingId, [storePath], {
+  const title = String(input.title || "").trim() || listingId;
+  const haystack = offerClassifyHaystack({
+    offerId: listingId,
+    sku: String(input.sku || listingId),
+    status: "PUBLISHED",
+    title,
+    categoryId: String(input.categoryId || ""),
     listingId,
-    categories: store.categories,
+    price: null,
+    currentStorePaths: [],
+    categoryName: input.categoryName,
+    brand: input.brand,
+    productType: input.productType,
   });
 
-  return {
-    storePath,
-    createdFolder: !beforeId,
-    confidence: suggestion?.confidence ?? 0.5,
-    reason: suggestion?.reason || "Assigned on publish",
-  };
+  let lastError: unknown = null;
+  let storePath = "/Home/General Merchandise";
+  let reason = "Assigned on publish";
+  let confidence = 0.5;
+  let createdFolder = false;
+
+  for (let attempt = 0; attempt < 5; attempt++) {
+    if (attempt > 0) await sleep(2000 * attempt);
+    try {
+      const store = await listSellerStoreCategories(accessToken);
+      const [suggestion] = classifyOffersForStore(
+        [
+          {
+            offerId: listingId,
+            sku: String(input.sku || listingId),
+            status: "PUBLISHED",
+            title,
+            categoryId: String(input.categoryId || ""),
+            listingId,
+            price: null,
+            currentStorePaths: [],
+            categoryName: input.categoryName,
+            brand: input.brand,
+            productType: input.productType,
+          },
+        ],
+        store.categories,
+      );
+
+      storePath = preferSellerStorePath(
+        suggestion?.suggestedPath || storePath,
+        haystack,
+        store.categories,
+      );
+      confidence = suggestion?.confidence ?? confidence;
+      reason = suggestion?.reason || reason;
+
+      const beforeId = resolveStoreCategoryId(storePath, store.categories);
+      await assignStoreCategoriesToOffer(accessToken, listingId, [storePath], {
+        listingId,
+        categories: store.categories,
+        haystack,
+      });
+      createdFolder = !beforeId;
+
+      return {
+        storePath,
+        createdFolder,
+        confidence,
+        reason,
+      };
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  throw lastError instanceof Error
+    ? lastError
+    : new Error(String(lastError || "Store organize on publish failed"));
 }

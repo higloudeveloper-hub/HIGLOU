@@ -1474,6 +1474,7 @@ export function NewListingWorkspace({
           storePath?: string;
           createdFolder?: boolean;
         } | null;
+        storeOrganizeWarning?: string | null;
       } | null;
       if (!response.ok) {
         if (body?.code === "EBAY_NOT_CONNECTED") {
@@ -1509,6 +1510,11 @@ export function NewListingWorkspace({
             folderBit,
         },
       );
+      if (body?.storeOrganizeWarning) {
+        toast.warning("Published, but Store folder failed", {
+          description: body.storeOrganizeWarning,
+        });
+      }
     } catch (error) {
       toast.error(
         error instanceof Error ? error.message : "eBay publish failed",

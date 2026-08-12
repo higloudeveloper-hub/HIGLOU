@@ -97,6 +97,16 @@ describe("estimatePackageAndShipping", () => {
     );
     expect(values.PackageType).toBeTruthy();
   });
+
+  it("estimates utility pumps as Ground Advantage parcels, not envelopes", () => {
+    const estimate = estimatePackageAndShipping({
+      title: "Everbilt 1/6 HP Submersible Utility Pump",
+      categoryName: "Water Pumps",
+    });
+    expect(estimate.totalOz).toBeGreaterThan(48);
+    expect(estimate.shippingService).toBe("USPSGroundAdvantage");
+    expect(estimate.packageType).toBe("Package");
+  });
 });
 
 describe("category guard + warehouse defaults", () => {

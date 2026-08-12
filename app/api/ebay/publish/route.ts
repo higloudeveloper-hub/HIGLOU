@@ -346,6 +346,14 @@ export async function POST(request: Request) {
       });
 
       try {
+        const pkgEstimate = estimatePackageAndShipping({
+          title: listing.title,
+          productType: listing.productType || listing.type,
+          size: listing.size,
+          categoryName: listing.categoryName,
+          brand: listing.brand,
+          quantity: listing.quantity,
+        });
         const resolved = await resolveSellerBusinessPolicyIds(accessToken, {
           marketplaceId: connection.marketplaceId || "EBAY_US",
           // Prefer Settings / listing IDs; never invent First Class over a manual policy.
@@ -358,6 +366,7 @@ export async function POST(request: Request) {
               defaults.returnPolicyId || listing.returnPolicyId || "",
           },
           createIfMissing: true,
+          packageWeightOz: pkgEstimate.totalOz,
         });
         listing.shippingPolicyId = resolved.shippingPolicyId;
         listing.returnPolicyId = resolved.returnPolicyId;
@@ -365,15 +374,7 @@ export async function POST(request: Request) {
         listing.shippingService = "USPSGroundAdvantage";
         listing.freeShipping = false;
         if (!(typeof listing.shippingCost === "number" && listing.shippingCost > 0)) {
-          const pkg = estimatePackageAndShipping({
-            title: listing.title,
-            productType: listing.productType || listing.type,
-            size: listing.size,
-            categoryName: listing.categoryName,
-            brand: listing.brand,
-            quantity: listing.quantity,
-          });
-          listing.shippingCost = pkg.shippingCost;
+          listing.shippingCost = pkgEstimate.shippingCost;
         }
 
         await auth.supabase.from("ebay_policy_settings").upsert(
@@ -496,6 +497,14 @@ export async function POST(request: Request) {
           sku: retrySku,
         }));
         listing.sku = retrySku;
+      } else if (
+        /25007|216138|weight limit|Standard Envelope|Package weight is over/i.test(
+          message,
+        )
+      ) {
+        throw new Error(
+          "eBay rejected the shipping policy: package weight is over the service limit (often eBay Standard Envelope = 3 oz max). In Seller Hub → Business policies, edit your shipping policy to USPS Ground Advantage (buyer pays), then in Higlou Settings click Import from eBay, select that policy, Save, and publish again.",
+        );
       } else if (/25087|216118|shipping service option|Fulfillment policy/i.test(message)) {
         // Fulfillment policy exists but has no valid shipping services (or belongs to another seller).
         const fixed = await ensureHiglouBusinessPolicies(accessToken, {

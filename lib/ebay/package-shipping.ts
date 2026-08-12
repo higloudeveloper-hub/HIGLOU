@@ -221,6 +221,19 @@ function categoryHeuristic(haystack: string): CategoryHeuristic | null {
   if (/\b(cookware|pan|skillet|pot)\b/.test(haystack)) {
     return { unitOz: 64, lengthIn: 14, widthIn: 14, depthIn: 5 };
   }
+  if (
+    /\b(pump|sump|submersible|utility\s*pump|water\s*pump|transfer\s*pump)\b/.test(
+      haystack,
+    )
+  ) {
+    return {
+      unitOz: 176, // ~11 lb retail boxed utility pump
+      lengthIn: 14,
+      widthIn: 10,
+      depthIn: 10,
+      packageType: "Package",
+    };
+  }
   if (/\b(atv|generator|appliance)\b/.test(haystack)) {
     return {
       unitOz: 480,

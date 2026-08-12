@@ -356,33 +356,132 @@ async function fulfillmentLooksCorrect(
   policyId: string,
 ): Promise<boolean> {
   try {
-    const json = (await accountFetch(
-      accessToken,
-      `/sell/account/v1/fulfillment_policy/${encodeURIComponent(policyId)}`,
-    )) as {
-      shippingOptions?: Array<{
-        costType?: string;
-        shippingServices?: Array<{
-          shippingServiceCode?: string;
-          freeShipping?: boolean;
-          shippingCost?: { value?: string };
-        }>;
-      }>;
-    };
-    const option = json.shippingOptions?.[0];
+    const detail = await getFulfillmentPolicyDetail(accessToken, policyId);
+    const option = detail.shippingOptions?.[0];
     const service = option?.shippingServices?.[0];
     const cost = Number(service?.shippingCost?.value || 0);
     const costType = String(option?.costType || "").toUpperCase();
-    // Accept flat buyer-paid. Reject calculated (LSAS) and free shipping.
+    const code = String(service?.shippingServiceCode || "");
+    // Accept flat buyer-paid parcel services. Reject envelope / free / calculated.
     return (
       costType === "FLAT_RATE" &&
-      Boolean(service?.shippingServiceCode) &&
+      Boolean(code) &&
+      !isEnvelopeOrUltraLightService(code) &&
       service?.freeShipping !== true &&
       cost > 0
     );
   } catch {
     return false;
   }
+}
+
+type FulfillmentPolicyDetail = {
+  name?: string;
+  shippingOptions?: Array<{
+    costType?: string;
+    shippingServices?: Array<{
+      shippingServiceCode?: string;
+      freeShipping?: boolean;
+      shippingCost?: { value?: string };
+    }>;
+  }>;
+};
+
+async function getFulfillmentPolicyDetail(
+  accessToken: string,
+  policyId: string,
+): Promise<FulfillmentPolicyDetail> {
+  return (await accountFetch(
+    accessToken,
+    `/sell/account/v1/fulfillment_policy/${encodeURIComponent(policyId)}`,
+  )) as FulfillmentPolicyDetail;
+}
+
+/** eBay Standard Envelope / First Class letter — max ~3 oz. Useless for pumps etc. */
+function isEnvelopeOrUltraLightService(code: string): boolean {
+  return /StandardEnvelope|eBayStandardEnvelope|US_eBayStandardEnvelope|FirstClassMail|USPSFirstClassLetter/i.test(
+    code,
+  );
+}
+
+/** Max ounces a fulfillment policy's primary service can carry. */
+export function maxOuncesForShippingService(code: string): number {
+  if (isEnvelopeOrUltraLightService(code)) return 3;
+  if (/FirstClass|USPSFirstClass/i.test(code) && !/Package|Parcel/i.test(code)) {
+    return 15.99;
+  }
+  // Ground Advantage / Parcel / Priority / UPS — parcel scale
+  return 1120; // 70 lb
+}
+
+export async function fulfillmentSupportsPackageWeight(
+  accessToken: string,
+  policyId: string,
+  packageWeightOz: number,
+): Promise<{
+  ok: boolean;
+  serviceCode: string;
+  maxOz: number;
+  name: string;
+}> {
+  const detail = await getFulfillmentPolicyDetail(accessToken, policyId);
+  const service =
+    detail.shippingOptions?.[0]?.shippingServices?.[0]?.shippingServiceCode ||
+    "";
+  const maxOz = maxOuncesForShippingService(service);
+  return {
+    ok: packageWeightOz <= maxOz && !isEnvelopeOrUltraLightService(service),
+    serviceCode: service,
+    maxOz,
+    name: String(detail.name || policyId),
+  };
+}
+
+/**
+ * Prefer Settings IDs, then any account policy that can ship this package weight.
+ * Skips eBay Standard Envelope (3 oz) for normal parcels.
+ */
+export async function pickFulfillmentPolicyForPackage(
+  accessToken: string,
+  fulfillment: EbayPolicyOption[],
+  preferredId: string | undefined,
+  packageWeightOz: number,
+): Promise<EbayPolicyOption | null> {
+  if (!fulfillment.length) return null;
+
+  const preferred = preferredId?.trim();
+  if (preferred) {
+    const match = fulfillment.find((p) => p.id === preferred);
+    if (match) {
+      try {
+        const check = await fulfillmentSupportsPackageWeight(
+          accessToken,
+          match.id,
+          packageWeightOz,
+        );
+        if (check.ok) return match;
+      } catch {
+        // fall through
+      }
+    }
+  }
+
+  const manuals = fulfillment.filter((p) => !isHiglouPolicyName(p.name));
+  const higlou = fulfillment.filter((p) => isHiglouPolicyName(p.name));
+  for (const candidate of [...manuals, ...higlou]) {
+    if (preferred && candidate.id === preferred) continue;
+    try {
+      const check = await fulfillmentSupportsPackageWeight(
+        accessToken,
+        candidate.id,
+        packageWeightOz,
+      );
+      if (check.ok) return candidate;
+    } catch {
+      // skip
+    }
+  }
+  return null;
 }
 
 async function returnLooksCorrect(
@@ -557,8 +656,8 @@ export async function ensureHiglouBusinessPolicies(
 
 /**
  * Resolve policy IDs for the connected seller.
- * 1) Use Settings/listing IDs when they exist on this account.
- * 2) Otherwise use policies already on the account.
+ * 1) Use Settings/listing IDs when they exist on this account AND can ship the package.
+ * 2) Otherwise use other account policies that support the package weight.
  * 3) Create only types that are completely missing (if createIfMissing).
  */
 export async function resolveSellerBusinessPolicyIds(
@@ -567,11 +666,14 @@ export async function resolveSellerBusinessPolicyIds(
     marketplaceId?: string;
     preferred?: Partial<ResolvedEbayPolicyIds>;
     createIfMissing?: boolean;
+    /** When set, skip envelope/3oz policies that cannot carry this package. */
+    packageWeightOz?: number;
   },
 ): Promise<ResolvedEbayPolicyIds> {
   const marketplaceId = options?.marketplaceId || "EBAY_US";
   const listed = await listSellerBusinessPolicies(accessToken, marketplaceId);
   const preferred = options?.preferred;
+  const packageWeightOz = Math.max(1, Number(options?.packageWeightOz) || 0);
 
   const byId = (rows: EbayPolicyOption[], id?: string) => {
     const needle = id?.trim();
@@ -579,10 +681,25 @@ export async function resolveSellerBusinessPolicyIds(
     return rows.find((p) => p.id === needle) || null;
   };
 
-  // Exact Settings / listing IDs win when they belong to this seller.
-  let shipping =
-    byId(listed.fulfillment, preferred?.shippingPolicyId) ||
-    pickShippingPolicy(listed.fulfillment, preferred?.shippingPolicyId);
+  let shipping: EbayPolicyOption | null = null;
+  if (packageWeightOz > 0 && listed.fulfillment.length > 0) {
+    shipping = await pickFulfillmentPolicyForPackage(
+      accessToken,
+      listed.fulfillment,
+      preferred?.shippingPolicyId,
+      packageWeightOz,
+    );
+    if (!shipping) {
+      throw new Error(
+        `Your eBay shipping policy uses a service that cannot carry this package (~${Math.round(packageWeightOz)} oz). eBay Standard Envelope is limited to 3 oz. In Seller Hub → Business policies, edit shipping to USPS Ground Advantage (buyer pays), then Import from eBay in Higlou and Save.`,
+      );
+    }
+  } else {
+    shipping =
+      byId(listed.fulfillment, preferred?.shippingPolicyId) ||
+      pickShippingPolicy(listed.fulfillment, preferred?.shippingPolicyId);
+  }
+
   let payment =
     byId(listed.payment, preferred?.paymentPolicyId) ||
     pickDefaultPolicy(listed.payment, preferred?.paymentPolicyId);
@@ -604,7 +721,6 @@ export async function resolveSellerBusinessPolicyIds(
     );
   }
 
-  // Only creates types that are missing on the account.
   const ensured = await ensureHiglouBusinessPolicies(accessToken, {
     marketplaceId,
     preferred: {
@@ -615,6 +731,20 @@ export async function resolveSellerBusinessPolicyIds(
     forceRecreateFulfillment: false,
     forceRecreateReturn: false,
   });
+
+  if (packageWeightOz > 0) {
+    const check = await fulfillmentSupportsPackageWeight(
+      accessToken,
+      ensured.shippingPolicyId,
+      packageWeightOz,
+    );
+    if (!check.ok) {
+      throw new Error(
+        `Shipping policy "${check.name}" uses ${check.serviceCode || "a light service"} (max ~${check.maxOz} oz) but this package is ~${Math.round(packageWeightOz)} oz. Edit that policy in Seller Hub to USPS Ground Advantage, then Import from eBay.`,
+      );
+    }
+  }
+
   return {
     shippingPolicyId: ensured.shippingPolicyId,
     paymentPolicyId: ensured.paymentPolicyId,

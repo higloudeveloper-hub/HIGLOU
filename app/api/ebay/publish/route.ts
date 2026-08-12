@@ -19,7 +19,10 @@ import {
   listingToOfferInput,
 } from "@/lib/ebay/listing-to-inventory";
 import { ensureEbayCompatibleImageUrls } from "@/lib/ebay/ensure-ebay-images";
-import { resolveSellerBusinessPolicyIds } from "@/lib/ebay/account-policies";
+import {
+  ensureHiglouBusinessPolicies,
+  resolveSellerBusinessPolicyIds,
+} from "@/lib/ebay/account-policies";
 import { loadSellerDraftDefaults } from "@/lib/ebay/draft-defaults";
 import { ensureListableEbayCategory } from "@/lib/ebay/taxonomy-categories";
 import { fetchAspectCardinalityMap } from "@/lib/ebay/sanitize-aspects";
@@ -328,8 +331,9 @@ export async function POST(request: Request) {
       );
     }
 
-    // Live publish needs business policy IDs — fill from Settings, then eBay Account API.
-    if (data.mode === "live") {
+    // Draft + live both require policies that belong to the *currently*
+    // connected eBay seller. IDs from a previous account cause 25087.
+    {
       const defaults = await loadSellerDraftDefaults({
         userId: auth.user.id,
         supabase: auth.supabase,
@@ -339,70 +343,46 @@ export async function POST(request: Request) {
           paymentPolicyId: listing.paymentPolicyId,
         },
       });
-      listing.shippingPolicyId =
-        listing.shippingPolicyId?.trim() || defaults.shippingPolicyId;
-      listing.returnPolicyId =
-        listing.returnPolicyId?.trim() || defaults.returnPolicyId;
-      listing.paymentPolicyId =
-        listing.paymentPolicyId?.trim() || defaults.paymentPolicyId;
+      const preferred = {
+        shippingPolicyId:
+          listing.shippingPolicyId?.trim() || defaults.shippingPolicyId,
+        returnPolicyId:
+          listing.returnPolicyId?.trim() || defaults.returnPolicyId,
+        paymentPolicyId:
+          listing.paymentPolicyId?.trim() || defaults.paymentPolicyId,
+      };
 
-      if (
-        !listing.shippingPolicyId?.trim() ||
-        !listing.returnPolicyId?.trim() ||
-        !listing.paymentPolicyId?.trim()
-      ) {
-        try {
-          const resolved = await resolveSellerBusinessPolicyIds(accessToken, {
-            marketplaceId: connection.marketplaceId || "EBAY_US",
-            preferred: {
-              shippingPolicyId: listing.shippingPolicyId,
-              returnPolicyId: listing.returnPolicyId,
-              paymentPolicyId: listing.paymentPolicyId,
-            },
-          });
-          listing.shippingPolicyId =
-            listing.shippingPolicyId?.trim() || resolved.shippingPolicyId;
-          listing.returnPolicyId =
-            listing.returnPolicyId?.trim() || resolved.returnPolicyId;
-          listing.paymentPolicyId =
-            listing.paymentPolicyId?.trim() || resolved.paymentPolicyId;
+      try {
+        const resolved = await resolveSellerBusinessPolicyIds(accessToken, {
+          marketplaceId: connection.marketplaceId || "EBAY_US",
+          preferred,
+          createIfMissing: true,
+        });
+        listing.shippingPolicyId = resolved.shippingPolicyId;
+        listing.returnPolicyId = resolved.returnPolicyId;
+        listing.paymentPolicyId = resolved.paymentPolicyId;
 
-          await auth.supabase.from("ebay_policy_settings").upsert(
-            {
-              user_id: auth.user.id,
-              shipping_policy_id: listing.shippingPolicyId,
-              return_policy_id: listing.returnPolicyId,
-              payment_policy_id: listing.paymentPolicyId,
-              default_item_location: defaults.itemLocation,
-              default_postal_code:
-                defaults.postalCode || DEFAULT_VALUES.postalCode,
-              default_handling_time: defaults.handlingTime,
-              updated_at: new Date().toISOString(),
-            },
-            { onConflict: "user_id" },
-          );
-        } catch (policyError) {
-          return NextResponse.json(
-            {
-              error:
-                policyError instanceof Error
-                  ? policyError.message
-                  : `Live publish needs shipping, return, and payment policies. Import them in Settings → eBay policies, or use draft mode.`,
-              code: "EBAY_POLICIES_REQUIRED",
-            },
-            { status: 400 },
-          );
-        }
-      }
-
-      const missing: string[] = [];
-      if (!listing.shippingPolicyId?.trim()) missing.push("shipping policy");
-      if (!listing.returnPolicyId?.trim()) missing.push("return policy");
-      if (!listing.paymentPolicyId?.trim()) missing.push("payment policy");
-      if (missing.length) {
+        await auth.supabase.from("ebay_policy_settings").upsert(
+          {
+            user_id: auth.user.id,
+            shipping_policy_id: listing.shippingPolicyId,
+            return_policy_id: listing.returnPolicyId,
+            payment_policy_id: listing.paymentPolicyId,
+            default_item_location: defaults.itemLocation,
+            default_postal_code:
+              defaults.postalCode || DEFAULT_VALUES.postalCode,
+            default_handling_time: defaults.handlingTime,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: "user_id" },
+        );
+      } catch (policyError) {
         return NextResponse.json(
           {
-            error: `Live publish needs ${missing.join(", ")}. Import them in Settings → eBay policies, or use draft mode.`,
+            error:
+              policyError instanceof Error
+                ? policyError.message
+                : "Could not resolve or create eBay business policies for this seller account.",
             code: "EBAY_POLICIES_REQUIRED",
           },
           { status: 400 },
@@ -502,6 +482,31 @@ export async function POST(request: Request) {
           sku: retrySku,
         }));
         listing.sku = retrySku;
+      } else if (/25087|216118|shipping service option|Fulfillment policy/i.test(message)) {
+        // Fulfillment policy exists but has no valid shipping services (or belongs to another seller).
+        const fixed = await ensureHiglouBusinessPolicies(accessToken, {
+          marketplaceId: connection.marketplaceId || "EBAY_US",
+          forceRecreateFulfillment: true,
+        });
+        listing.shippingPolicyId = fixed.shippingPolicyId;
+        listing.paymentPolicyId = fixed.paymentPolicyId;
+        listing.returnPolicyId = fixed.returnPolicyId;
+        await auth.supabase.from("ebay_policy_settings").upsert(
+          {
+            user_id: auth.user.id,
+            shipping_policy_id: listing.shippingPolicyId,
+            return_policy_id: listing.returnPolicyId,
+            payment_policy_id: listing.paymentPolicyId,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: "user_id" },
+        );
+        ({ offerId } = await upsertOfferForSku(accessToken, {
+          ...offerInput,
+          fulfillmentPolicyId: listing.shippingPolicyId,
+          paymentPolicyId: listing.paymentPolicyId,
+          returnPolicyId: listing.returnPolicyId,
+        }));
       } else {
         throw offerError;
       }

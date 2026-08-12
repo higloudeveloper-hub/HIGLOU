@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/auth/require-user";
 import {
+  ensureHiglouBusinessPolicies,
   listSellerBusinessPolicies,
   resolveSellerBusinessPolicyIds,
 } from "@/lib/ebay/account-policies";
@@ -51,10 +52,12 @@ export async function GET() {
 }
 
 /**
- * Import default shipping/payment/return policy IDs from eBay into
- * ebay_policy_settings (keeps location / handling defaults if already set).
+ * Import or create Higlou-equivalent business policies on the connected eBay account,
+ * then save IDs into ebay_policy_settings.
+ *
+ * Body (optional): { create: true, recreateFulfillment: true }
  */
-export async function POST() {
+export async function POST(request: Request) {
   const auth = await requireUser();
   if (!auth.ok) return auth.response;
 
@@ -75,25 +78,44 @@ export async function POST() {
       auth.user.id,
     );
 
+    const json = (await request.json().catch(() => ({}))) as {
+      create?: boolean;
+      recreateFulfillment?: boolean;
+    };
+
     const { data: existing } = await auth.supabase
       .from("ebay_policy_settings")
       .select("*")
       .eq("user_id", auth.user.id)
       .maybeSingle();
 
+    let created: string[] = [];
+    let resolved;
+
+    if (json.create || json.recreateFulfillment) {
+      const ensured = await ensureHiglouBusinessPolicies(accessToken, {
+        marketplaceId: connection.marketplaceId || "EBAY_US",
+        forceRecreateFulfillment: Boolean(json.recreateFulfillment),
+      });
+      resolved = ensured;
+      created = ensured.created;
+    } else {
+      resolved = await resolveSellerBusinessPolicyIds(accessToken, {
+        marketplaceId: connection.marketplaceId || "EBAY_US",
+        preferred: {
+          // Ignore stale IDs from a previous eBay account — only use if still valid.
+          shippingPolicyId: "",
+          paymentPolicyId: "",
+          returnPolicyId: "",
+        },
+        createIfMissing: true,
+      });
+    }
+
     const listed = await listSellerBusinessPolicies(
       accessToken,
       connection.marketplaceId || "EBAY_US",
     );
-
-    const resolved = await resolveSellerBusinessPolicyIds(accessToken, {
-      marketplaceId: connection.marketplaceId || "EBAY_US",
-      preferred: {
-        shippingPolicyId: String(existing?.shipping_policy_id ?? ""),
-        paymentPolicyId: String(existing?.payment_policy_id ?? ""),
-        returnPolicyId: String(existing?.return_policy_id ?? ""),
-      },
-    });
 
     const payload = {
       user_id: auth.user.id,
@@ -124,6 +146,7 @@ export async function POST() {
 
     return NextResponse.json({
       ok: true,
+      created,
       available: listed,
       policies: {
         paymentPolicyId: String(saved.payment_policy_id ?? ""),

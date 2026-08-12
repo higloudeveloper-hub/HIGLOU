@@ -19,21 +19,27 @@ export type ResolvedEbayPolicyIds = {
   returnPolicyId: string;
 };
 
+const HIGLOU_FULFILLMENT_NAME = "Higlou Domestic Shipping";
+const HIGLOU_PAYMENT_NAME = "Higlou Payment";
+const HIGLOU_RETURN_NAME = "Higlou Returns";
+
 async function accountFetch(
   accessToken: string,
   path: string,
+  init: RequestInit = {},
 ): Promise<unknown> {
   const cfg = getEbayConfig();
+  const headers = new Headers(init.headers || {});
+  headers.set("Authorization", `Bearer ${accessToken}`);
+  headers.set("Accept", "application/json");
+  headers.set("Content-Type", "application/json");
+  headers.set("Accept-Language", "en-US");
+  headers.set("Content-Language", "en-US");
+  headers.set("X-EBAY-C-MARKETPLACE-ID", "EBAY_US");
+
   const res = await fetch(`${cfg.apiBase}${path}`, {
-    method: "GET",
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      Accept: "application/json",
-      "Content-Type": "application/json",
-      "Accept-Language": "en-US",
-      "Content-Language": "en-US",
-      "X-EBAY-C-MARKETPLACE-ID": "EBAY_US",
-    },
+    ...init,
+    headers,
   });
   const text = await res.text();
   let json: unknown = null;
@@ -44,7 +50,11 @@ async function accountFetch(
   }
   if (!res.ok) {
     const err = json as {
-      errors?: Array<{ message?: string; longMessage?: string; errorId?: number }>;
+      errors?: Array<{
+        message?: string;
+        longMessage?: string;
+        errorId?: number;
+      }>;
       message?: string;
     } | null;
     const first = err?.errors?.[0];
@@ -71,7 +81,7 @@ function mapNamedPolicies(
     .filter((p) => p.id);
 }
 
-/** Prefer a policy whose name looks like a default; otherwise first. */
+/** Prefer Higlou-named policy, then default-ish name, then first. */
 export function pickDefaultPolicy(
   options: EbayPolicyOption[],
   preferredId?: string,
@@ -82,6 +92,8 @@ export function pickDefaultPolicy(
     const match = options.find((p) => p.id === preferred);
     if (match) return match;
   }
+  const higlou = options.find((p) => /higlou/i.test(p.name));
+  if (higlou) return higlou;
   const namedDefault = options.find((p) =>
     /default|standard|primary|main/i.test(p.name),
   );
@@ -111,43 +123,213 @@ export async function listSellerBusinessPolicies(
     ),
   ]);
 
-  const fulfillment = mapNamedPolicies(
-    (fulfillmentJson as { fulfillmentPolicies?: Array<Record<string, unknown>> })
-      ?.fulfillmentPolicies,
-    "fulfillmentPolicyId",
-  );
-  const payment = mapNamedPolicies(
-    (paymentJson as { paymentPolicies?: Array<Record<string, unknown>> })
-      ?.paymentPolicies,
-    "paymentPolicyId",
-  );
-  const returns = mapNamedPolicies(
-    (returnJson as { returnPolicies?: Array<Record<string, unknown>> })
-      ?.returnPolicies,
-    "returnPolicyId",
-  );
-
   return {
     marketplaceId: marketplaceId || "EBAY_US",
-    fulfillment,
-    payment,
-    return: returns,
+    fulfillment: mapNamedPolicies(
+      (fulfillmentJson as { fulfillmentPolicies?: Array<Record<string, unknown>> })
+        ?.fulfillmentPolicies,
+      "fulfillmentPolicyId",
+    ),
+    payment: mapNamedPolicies(
+      (paymentJson as { paymentPolicies?: Array<Record<string, unknown>> })
+        ?.paymentPolicies,
+      "paymentPolicyId",
+    ),
+    return: mapNamedPolicies(
+      (returnJson as { returnPolicies?: Array<Record<string, unknown>> })
+        ?.returnPolicies,
+      "returnPolicyId",
+    ),
   };
 }
 
-/** Resolve one shipping/payment/return policy ID for live publish. */
+async function createFulfillmentPolicy(
+  accessToken: string,
+  marketplaceId: string,
+  shippingServiceCode: string,
+  name = HIGLOU_FULFILLMENT_NAME,
+): Promise<string> {
+  const json = (await accountFetch(
+    accessToken,
+    "/sell/account/v1/fulfillment_policy",
+    {
+      method: "POST",
+      body: JSON.stringify({
+        name,
+        marketplaceId,
+        categoryTypes: [
+          { name: "ALL_EXCLUDING_MOTORS_VEHICLES", default: true },
+        ],
+        handlingTime: { value: 1, unit: "DAY" },
+        shippingOptions: [
+          {
+            optionType: "DOMESTIC",
+            costType: "FLAT_RATE",
+            shippingServices: [
+              {
+                sortOrder: 1,
+                shippingServiceCode,
+                freeShipping: false,
+                buyerResponsibleForShipping: false,
+                shippingCost: { value: "6.99", currency: "USD" },
+                additionalShippingCost: { value: "0.00", currency: "USD" },
+              },
+            ],
+          },
+        ],
+      }),
+    },
+  )) as { fulfillmentPolicyId?: string };
+
+  const id = String(json.fulfillmentPolicyId || "").trim();
+  if (!id) throw new Error("eBay did not return fulfillmentPolicyId");
+  return id;
+}
+
+async function createPaymentPolicy(
+  accessToken: string,
+  marketplaceId: string,
+): Promise<string> {
+  // Managed Payments sellers typically need an empty paymentMethods list.
+  const json = (await accountFetch(
+    accessToken,
+    "/sell/account/v1/payment_policy",
+    {
+      method: "POST",
+      body: JSON.stringify({
+        name: HIGLOU_PAYMENT_NAME,
+        marketplaceId,
+        categoryTypes: [
+          { name: "ALL_EXCLUDING_MOTORS_VEHICLES", default: true },
+        ],
+        immediatePay: false,
+        paymentMethods: [],
+      }),
+    },
+  )) as { paymentPolicyId?: string };
+
+  const id = String(json.paymentPolicyId || "").trim();
+  if (!id) throw new Error("eBay did not return paymentPolicyId");
+  return id;
+}
+
+async function createReturnPolicy(
+  accessToken: string,
+  marketplaceId: string,
+): Promise<string> {
+  const json = (await accountFetch(
+    accessToken,
+    "/sell/account/v1/return_policy",
+    {
+      method: "POST",
+      body: JSON.stringify({
+        name: HIGLOU_RETURN_NAME,
+        marketplaceId,
+        categoryTypes: [
+          { name: "ALL_EXCLUDING_MOTORS_VEHICLES", default: true },
+        ],
+        returnsAccepted: true,
+        returnPeriod: { value: 30, unit: "DAY" },
+        refundMethod: "MONEY_BACK",
+        returnShippingCostPayer: "BUYER",
+        returnMethod: "REPLACEMENT",
+      }),
+    },
+  )) as { returnPolicyId?: string };
+
+  const id = String(json.returnPolicyId || "").trim();
+  if (!id) throw new Error("eBay did not return returnPolicyId");
+  return id;
+}
+
+/**
+ * Ensure the connected seller has usable Higlou business policies.
+ * Creates missing payment/return/fulfillment policies (cannot copy across accounts).
+ */
+export async function ensureHiglouBusinessPolicies(
+  accessToken: string,
+  options?: {
+    marketplaceId?: string;
+    forceRecreateFulfillment?: boolean;
+  },
+): Promise<ResolvedEbayPolicyIds & { available: EbaySellerPolicies; created: string[] }> {
+  const marketplaceId = options?.marketplaceId || "EBAY_US";
+  await ensureSellingPolicyOptIn(accessToken);
+
+  let listed = await listSellerBusinessPolicies(accessToken, marketplaceId);
+  const created: string[] = [];
+
+  let payment = pickDefaultPolicy(listed.payment);
+  if (!payment) {
+    const id = await createPaymentPolicy(accessToken, marketplaceId);
+    created.push("payment");
+    payment = { id, name: HIGLOU_PAYMENT_NAME };
+  }
+
+  let returns = pickDefaultPolicy(listed.return);
+  if (!returns) {
+    const id = await createReturnPolicy(accessToken, marketplaceId);
+    created.push("return");
+    returns = { id, name: HIGLOU_RETURN_NAME };
+  }
+
+  let shipping = pickDefaultPolicy(listed.fulfillment);
+  if (!shipping || options?.forceRecreateFulfillment) {
+    // Prefer Ground Advantage (matches Higlou UI), then Priority.
+    const serviceCodes = ["USPSGroundAdvantage", "USPSPriority", "USPSFirstClass"];
+    const policyName = options?.forceRecreateFulfillment
+      ? `${HIGLOU_FULFILLMENT_NAME} ${Date.now().toString(36)}`
+      : HIGLOU_FULFILLMENT_NAME;
+    let lastError: Error | null = null;
+    let id = "";
+    for (const code of serviceCodes) {
+      try {
+        id = await createFulfillmentPolicy(
+          accessToken,
+          marketplaceId,
+          code,
+          policyName,
+        );
+        lastError = null;
+        break;
+      } catch (error) {
+        lastError = error instanceof Error ? error : new Error(String(error));
+      }
+    }
+    if (!id) {
+      throw (
+        lastError ||
+        new Error("Could not create eBay fulfillment (shipping) policy")
+      );
+    }
+    created.push("fulfillment");
+    shipping = { id, name: policyName };
+  }
+
+  listed = await listSellerBusinessPolicies(accessToken, marketplaceId);
+
+  return {
+    shippingPolicyId: shipping.id,
+    paymentPolicyId: payment.id,
+    returnPolicyId: returns.id,
+    available: listed,
+    created,
+  };
+}
+
+/** Resolve one shipping/payment/return policy ID; create Higlou defaults if missing. */
 export async function resolveSellerBusinessPolicyIds(
   accessToken: string,
   options?: {
     marketplaceId?: string;
     preferred?: Partial<ResolvedEbayPolicyIds>;
+    createIfMissing?: boolean;
   },
 ): Promise<ResolvedEbayPolicyIds> {
-  const listed = await listSellerBusinessPolicies(
-    accessToken,
-    options?.marketplaceId || "EBAY_US",
-  );
+  const marketplaceId = options?.marketplaceId || "EBAY_US";
+  const listed = await listSellerBusinessPolicies(accessToken, marketplaceId);
 
+  // preferred IDs from a prior eBay account are ignored unless they exist here.
   const shipping = pickDefaultPolicy(
     listed.fulfillment,
     options?.preferred?.shippingPolicyId,
@@ -161,19 +343,30 @@ export async function resolveSellerBusinessPolicyIds(
     options?.preferred?.returnPolicyId,
   );
 
-  const missing: string[] = [];
-  if (!shipping) missing.push("shipping (fulfillment)");
-  if (!payment) missing.push("payment");
-  if (!returns) missing.push("return");
-  if (missing.length) {
+  if (shipping && payment && returns) {
+    return {
+      shippingPolicyId: shipping.id,
+      paymentPolicyId: payment.id,
+      returnPolicyId: returns.id,
+    };
+  }
+
+  if (options?.createIfMissing === false) {
+    const missing: string[] = [];
+    if (!shipping) missing.push("shipping (fulfillment)");
+    if (!payment) missing.push("payment");
+    if (!returns) missing.push("return");
     throw new Error(
-      `No eBay business policies found for ${missing.join(", ")}. Create them in Seller Hub → Account → Business policies, then try again.`,
+      `No eBay business policies found for ${missing.join(", ")}. Create them in Seller Hub or use Create Higlou policies.`,
     );
   }
 
+  const ensured = await ensureHiglouBusinessPolicies(accessToken, {
+    marketplaceId,
+  });
   return {
-    shippingPolicyId: shipping!.id,
-    paymentPolicyId: payment!.id,
-    returnPolicyId: returns!.id,
+    shippingPolicyId: ensured.shippingPolicyId,
+    paymentPolicyId: ensured.paymentPolicyId,
+    returnPolicyId: ensured.returnPolicyId,
   };
 }

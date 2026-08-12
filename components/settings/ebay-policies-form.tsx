@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { DEFAULT_VALUES } from "@/config/default-values";
-import { Loader2, Download } from "lucide-react";
+import { Loader2, Download, PlusCircle } from "lucide-react";
 
 type Policies = {
   paymentPolicyId: string;
@@ -87,6 +87,7 @@ export function EbayPoliciesForm() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [creating, setCreating] = useState(false);
 
   useEffect(() => {
     void (async () => {
@@ -138,20 +139,57 @@ export function EbayPoliciesForm() {
   const importFromEbay = async () => {
     setImporting(true);
     try {
-      const res = await fetch("/api/ebay/policies", { method: "POST" });
+      const res = await fetch("/api/ebay/policies", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ create: true }),
+      });
       const body = (await res.json().catch(() => null)) as {
         error?: string;
         policies?: Policies;
         available?: Available;
+        created?: string[];
       } | null;
       if (!res.ok) throw new Error(body?.error || "Import failed");
       if (body?.policies) setPolicies(body.policies);
       if (body?.available) setAvailable(body.available);
-      toast.success("Imported business policies from your eBay account");
+      const created = body?.created?.length
+        ? ` Created: ${body.created.join(", ")}.`
+        : "";
+      toast.success(
+        `Synced business policies from this eBay account.${created}`,
+      );
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Import failed");
     } finally {
       setImporting(false);
+    }
+  };
+
+  const createHiglouPolicies = async () => {
+    setCreating(true);
+    try {
+      const res = await fetch("/api/ebay/policies", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ create: true, recreateFulfillment: true }),
+      });
+      const body = (await res.json().catch(() => null)) as {
+        error?: string;
+        policies?: Policies;
+        available?: Available;
+        created?: string[];
+      } | null;
+      if (!res.ok) throw new Error(body?.error || "Create failed");
+      if (body?.policies) setPolicies(body.policies);
+      if (body?.available) setAvailable(body.available);
+      toast.success(
+        "Created Higlou shipping / payment / return policies on this eBay account",
+      );
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Create failed");
+    } finally {
+      setCreating(false);
     }
   };
 
@@ -162,8 +200,10 @@ export function EbayPoliciesForm() {
   return (
     <div className="space-y-3">
       <div className="rounded-xl border border-emerald-100 bg-emerald-50/70 px-3 py-2.5 text-[12px] text-emerald-900">
-        Pull shipping, return, and payment policy IDs from your connected eBay
-        seller account — required for Publish live.
+        Policies belong to each eBay seller account — they cannot be copied by
+        ID. Import syncs this connected account, or Create Higlou policies makes
+        shipping / payment / return defaults (USPS Ground Advantage, 30-day
+        returns). Required for draft and live publish.
       </div>
 
       <PolicySelect
@@ -230,14 +270,14 @@ export function EbayPoliciesForm() {
         />
       </div>
       <p className="text-xs text-zinc-500">
-        Policy IDs are also applied automatically when you Publish live if they
-        are empty.
+        After connecting a new eBay account, use Create Higlou policies once.
+        Publish also auto-creates missing policies for the connected seller.
       </p>
       <div className="flex flex-wrap gap-2">
         <Button
           type="button"
           variant="outline"
-          disabled={importing || saving}
+          disabled={importing || saving || creating}
           onClick={() => void importFromEbay()}
         >
           {importing ? (
@@ -248,8 +288,22 @@ export function EbayPoliciesForm() {
           {importing ? "Importing…" : "Import from eBay"}
         </Button>
         <Button
+          type="button"
+          variant="outline"
+          disabled={creating || saving || importing}
+          onClick={() => void createHiglouPolicies()}
+          title="Create shipping, payment, and return policies on the connected eBay account"
+        >
+          {creating ? (
+            <Loader2 className="size-4 animate-spin" />
+          ) : (
+            <PlusCircle className="size-4" />
+          )}
+          {creating ? "Creating…" : "Create Higlou policies"}
+        </Button>
+        <Button
           onClick={() => void save()}
-          disabled={saving || importing}
+          disabled={saving || importing || creating}
           title={saving ? "Saving policies…" : "Save eBay business policy IDs"}
         >
           {saving ? "Saving…" : "Save policies"}

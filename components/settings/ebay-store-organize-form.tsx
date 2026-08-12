@@ -169,10 +169,11 @@ export function EbayStoreOrganizeForm() {
   return (
     <div className="space-y-4">
       <div className="rounded-xl border border-emerald-100 bg-emerald-50/70 px-3 py-2.5 text-[12px] text-emerald-900">
-        Higlou recognizes the right Store folder from each title. If that folder
-        does not exist yet, it creates it with the eBay API, then moves the
-        listing. Use <strong>Organize everything</strong> for one-click
-        auto-sort.
+        Higlou recognizes the right Store folder and creates it with the eBay
+        API if missing, then moves the listing. If folder create fails,{" "}
+        <strong>reconnect eBay</strong> in Settings (new{" "}
+        <code className="text-[11px]">sell.stores</code> permission), then click
+        Organize everything.
       </div>
 
       <div className="flex flex-wrap gap-2">

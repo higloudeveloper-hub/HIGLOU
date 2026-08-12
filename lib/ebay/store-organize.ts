@@ -248,8 +248,8 @@ function sleep(ms: number) {
 async function waitForStoreCategoryTask(
   accessToken: string,
   taskId: string,
-): Promise<void> {
-  for (let attempt = 0; attempt < 24; attempt++) {
+): Promise<string> {
+  for (let attempt = 0; attempt < 30; attempt++) {
     const xml = await tradingApiCall(
       accessToken,
       "GetStoreCategoryUpdateStatus",
@@ -261,25 +261,66 @@ async function waitForStoreCategoryTask(
     );
     const status =
       xml.match(/<Status>([^<]+)<\/Status>/i)?.[1]?.trim() || "";
-    if (/Complete/i.test(status)) return;
+    if (/Complete/i.test(status)) return xml;
     if (/Failed/i.test(status)) {
-      throw new Error(`SetStoreCategories task ${taskId} failed`);
+      const msg =
+        xml.match(/<LongMessage>([^<]+)<\/LongMessage>/)?.[1] ||
+        `SetStoreCategories task ${taskId} failed`;
+      throw new Error(msg);
     }
-    await sleep(500);
+    await sleep(700);
   }
   throw new Error(`SetStoreCategories task ${taskId} timed out`);
 }
 
-/** Create one Store folder under parent (-999 = top level). */
+function findCategoryIdByName(
+  categories: EbayStoreCategory[],
+  name: string,
+  parentPath: string,
+): string | null {
+  const needle = name.trim().toLowerCase();
+  const parent = normalizeStorePath(parentPath);
+  const expected = normalizeStorePath(`${parent}/${name}`);
+  const exact = categories.find(
+    (c) =>
+      c.categoryId &&
+      normalizeStorePath(c.path) === expected,
+  );
+  if (exact?.categoryId) return exact.categoryId;
+
+  const underParent = categories.filter((c) => {
+    if (!c.categoryId) return false;
+    if (c.name.trim().toLowerCase() !== needle) return false;
+    if (!parent || parent === "/") {
+      // Top-level: path has one segment
+      return c.path.split("/").filter(Boolean).length === 1;
+    }
+    return normalizeStorePath(c.path).startsWith(`${parent}/`);
+  });
+  return underParent[0]?.categoryId || null;
+}
+
+/**
+ * Create one Store folder. Returns new CategoryID (Trading, then Stores REST).
+ */
 async function addStoreCategory(
   accessToken: string,
   name: string,
   parentCategoryId: string,
-): Promise<void> {
-  const xml = await tradingApiCall(
-    accessToken,
-    "SetStoreCategories",
-    `<?xml version="1.0" encoding="utf-8"?>
+  parentPath: string,
+  known: EbayStoreCategory[],
+): Promise<{ categoryId: string; categories: EbayStoreCategory[] }> {
+  const beforeIds = new Set(
+    known.map((c) => c.categoryId).filter(Boolean) as string[],
+  );
+  let lastError = "";
+
+  // 1) Trading SetStoreCategories
+  try {
+    const xml = await tradingApiCall(
+      accessToken,
+      "SetStoreCategories",
+      `<?xml version="1.0" encoding="utf-8"?>
 <SetStoreCategoriesRequest xmlns="urn:ebay:apis:eBLBaseComponents">
   <ErrorLanguage>en_US</ErrorLanguage>
   <WarningLevel>High</WarningLevel>
@@ -291,13 +332,235 @@ async function addStoreCategory(
     </CustomCategory>
   </StoreCategories>
 </SetStoreCategoriesRequest>`,
+    );
+    const taskId = xml.match(/<TaskID>(\d+)<\/TaskID>/i)?.[1];
+    const status =
+      xml.match(/<Status>([^<]+)<\/Status>/i)?.[1]?.trim() || "";
+    if (taskId && !/Complete/i.test(status)) {
+      await waitForStoreCategoryTask(accessToken, taskId);
+    }
+
+    // Prefer GetStore / REST with retries until the new CategoryID appears.
+    for (let attempt = 0; attempt < 6; attempt++) {
+      if (attempt > 0) await sleep(800);
+      const refreshed = await listSellerStoreCategories(accessToken);
+      const restCats = await listStoreCategoriesViaRest(accessToken).catch(
+        () => [] as EbayStoreCategory[],
+      );
+      if (
+        (refreshed.source === "ebay" && refreshed.categories.length) ||
+        restCats.length
+      ) {
+        const merged = mergeCategoryLists(
+          known,
+          refreshed.categories,
+          restCats,
+        );
+        const id =
+          findCategoryIdByName(merged, name, parentPath) ||
+          merged.find(
+            (c) =>
+              c.categoryId &&
+              !beforeIds.has(c.categoryId) &&
+              c.name.trim().toLowerCase() === name.trim().toLowerCase(),
+          )?.categoryId;
+        if (id) return { categoryId: id, categories: merged };
+      }
+    }
+    lastError =
+      "SetStoreCategories finished but GetStore did not return the new folder ID yet";
+  } catch (error) {
+    lastError = error instanceof Error ? error.message : String(error);
+  }
+
+  // 2) Sell Stores REST API (needs sell.stores scope — reconnect eBay if missing)
+  try {
+    const rest = await addStoreCategoryViaRest(
+      accessToken,
+      name,
+      parentCategoryId === "-999" ? null : parentCategoryId,
+    );
+    if (rest.categoryId) {
+      const path = normalizeStorePath(`${parentPath}/${name}`);
+      const merged = mergeCategoryLists(known, [
+        { path, name, categoryId: rest.categoryId },
+      ]);
+      return { categoryId: rest.categoryId, categories: merged };
+    }
+    // Async task — poll GetStore / getStoreCategories
+    for (let attempt = 0; attempt < 8; attempt++) {
+      await sleep(900);
+      const refreshed = await listSellerStoreCategories(accessToken);
+      const restCats = await listStoreCategoriesViaRest(accessToken).catch(
+        () => [] as EbayStoreCategory[],
+      );
+      const merged = mergeCategoryLists(
+        known,
+        refreshed.categories,
+        restCats,
+      );
+      const id = findCategoryIdByName(merged, name, parentPath);
+      if (id) return { categoryId: id, categories: merged };
+    }
+    lastError =
+      rest.error ||
+      lastError ||
+      "Stores API created a task but folder ID never appeared";
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    lastError = `${lastError ? `${lastError} | ` : ""}${msg}`;
+  }
+
+  throw new Error(
+    `Could not create Store folder "${normalizeStorePath(`${parentPath}/${name}`)}": ${lastError}. If this mentions scope/stores, reconnect eBay in Settings so Higlou gets sell.stores permission.`,
   );
-  const taskId = xml.match(/<TaskID>(\d+)<\/TaskID>/i)?.[1];
-  if (taskId) await waitForStoreCategoryTask(accessToken, taskId);
+}
+
+function mergeCategoryLists(
+  ...lists: EbayStoreCategory[][]
+): EbayStoreCategory[] {
+  const byPath = new Map<string, EbayStoreCategory>();
+  const byId = new Map<string, EbayStoreCategory>();
+  for (const list of lists) {
+    for (const cat of list) {
+      const path = normalizeStorePath(cat.path);
+      const next = {
+        path: path || normalizeStorePath(`/${cat.name}`),
+        name: cat.name,
+        categoryId: cat.categoryId,
+      };
+      if (next.categoryId) byId.set(next.categoryId, next);
+      if (next.path) {
+        const prev = byPath.get(next.path);
+        byPath.set(next.path, {
+          ...prev,
+          ...next,
+          categoryId: next.categoryId || prev?.categoryId,
+        });
+      }
+    }
+  }
+  const out = Array.from(byPath.values());
+  for (const cat of byId.values()) {
+    if (!out.some((c) => c.categoryId === cat.categoryId)) out.push(cat);
+  }
+  return out;
+}
+
+async function addStoreCategoryViaRest(
+  accessToken: string,
+  name: string,
+  parentCategoryId: string | null,
+): Promise<{ categoryId?: string; error?: string }> {
+  const cfg = getEbayConfig();
+  const qs =
+    parentCategoryId && parentCategoryId !== "-999"
+      ? `?destinationCategoryId=${encodeURIComponent(parentCategoryId)}`
+      : "";
+  const res = await fetch(
+    `${cfg.apiBase}/sell/stores/v1/store/categories${qs}`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify({ name }),
+    },
+  );
+  const text = await res.text();
+  let json: Record<string, unknown> = {};
+  try {
+    json = text ? (JSON.parse(text) as Record<string, unknown>) : {};
+  } catch {
+    json = { raw: text };
+  }
+
+  if (res.status === 401 || res.status === 403) {
+    throw new Error(
+      "Missing eBay sell.stores permission — reconnect eBay in Settings",
+    );
+  }
+
+  const categoryId = String(
+    json.categoryId ||
+      json.storeCategoryId ||
+      (json.category as { categoryId?: string } | undefined)?.categoryId ||
+      "",
+  ).trim();
+  if (res.ok && categoryId) return { categoryId };
+
+  // 202 Accepted — async
+  if (res.status === 202 || res.ok) {
+    return { categoryId: categoryId || undefined };
+  }
+
+  const errors = json.errors as
+    | Array<{ message?: string; longMessage?: string }>
+    | undefined;
+  const msg =
+    errors?.[0]?.longMessage ||
+    errors?.[0]?.message ||
+    (typeof json.message === "string" ? json.message : "") ||
+    `Stores API ${res.status}`;
+  return { error: msg };
+}
+
+async function listStoreCategoriesViaRest(
+  accessToken: string,
+): Promise<EbayStoreCategory[]> {
+  const cfg = getEbayConfig();
+  const res = await fetch(`${cfg.apiBase}/sell/stores/v1/store/categories`, {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      Accept: "application/json",
+    },
+  });
+  if (!res.ok) return [];
+  const json = (await res.json()) as {
+    storeCategories?: Array<{
+      categoryId?: string;
+      name?: string;
+      categoryName?: string;
+      childrenCategories?: unknown;
+    }>;
+  };
+
+  const out: EbayStoreCategory[] = [];
+  const walk = (
+    nodes: Array<{
+      categoryId?: string;
+      name?: string;
+      categoryName?: string;
+      childCategory?: unknown;
+      childrenCategories?: unknown;
+      children?: unknown;
+    }>,
+    parentPath: string,
+  ) => {
+    for (const node of nodes || []) {
+      const name = String(node.name || node.categoryName || "").trim();
+      if (!name) continue;
+      const path = normalizeStorePath(`${parentPath}/${name}`);
+      const categoryId = String(node.categoryId || "").trim() || undefined;
+      out.push({ path, name, categoryId });
+      const children = (node.childrenCategories ||
+        node.childCategory ||
+        node.children ||
+        []) as typeof nodes;
+      if (Array.isArray(children) && children.length) {
+        walk(children, path);
+      }
+    }
+  };
+  walk(json.storeCategories || [], "");
+  return out;
 }
 
 /**
- * Resolve Store category ID for a path; create missing folders via Trading API.
+ * Resolve Store category ID for a path; create missing folders via Trading/REST API.
  */
 export async function ensureStoreCategoryId(
   accessToken: string,
@@ -305,6 +568,17 @@ export async function ensureStoreCategoryId(
   categories: EbayStoreCategory[],
 ): Promise<{ categoryId: string; categories: EbayStoreCategory[] }> {
   let cats = categories;
+  // Prefer live GetStore + REST tree so we don't recreate existing folders.
+  try {
+    const live = await listSellerStoreCategories(accessToken);
+    const rest = await listStoreCategoriesViaRest(accessToken).catch(
+      () => [] as EbayStoreCategory[],
+    );
+    cats = mergeCategoryLists(cats, live.categories, rest);
+  } catch {
+    // keep provided cats
+  }
+
   const needle = normalizeStorePath(path);
   const existing = resolveStoreCategoryId(needle, cats);
   if (existing) return { categoryId: existing, categories: cats };
@@ -317,27 +591,29 @@ export async function ensureStoreCategoryId(
   let parentId = "-999";
   let built = "";
   for (const part of parts) {
+    const parentPath = built || "/";
     built = normalizeStorePath(`${built}/${part}`);
-    let id = resolveStoreCategoryId(built, cats);
+    let id =
+      resolveStoreCategoryId(built, cats) ||
+      findCategoryIdByName(cats, part, parentPath === "/" ? "" : parentPath);
     if (!id) {
-      try {
-        await addStoreCategory(accessToken, part, parentId);
-      } catch (error) {
-        const msg = error instanceof Error ? error.message : String(error);
-        // Folder may already exist under another parent — refresh and retry resolve.
-        if (!/already|duplicate|exist/i.test(msg)) {
-          // Still refresh; another seller session may have created it.
-        }
-      }
-      const refreshed = await listSellerStoreCategories(accessToken);
-      if (refreshed.source === "ebay" && refreshed.categories.length) {
-        cats = refreshed.categories;
-      }
-      id = resolveStoreCategoryId(built, cats);
+      const created = await addStoreCategory(
+        accessToken,
+        part,
+        parentId,
+        parentPath === "/" ? "" : parentPath,
+        cats,
+      );
+      cats = created.categories;
+      id = created.categoryId;
+      // Keep local map even if GetStore lags.
+      cats = mergeCategoryLists(cats, [
+        { path: built, name: part, categoryId: id },
+      ]);
     }
     if (!id) {
       throw new Error(
-        `Could not create or find Store folder "${built}". Open Seller Hub → Store → Categories, create it, reconnect eBay, then Scan again.`,
+        `Could not create or find Store folder "${built}". Reconnect eBay in Settings (needed for creating folders), then try Organize everything again.`,
       );
     }
     parentId = id;
@@ -423,6 +699,9 @@ export async function listSellerStoreCategories(
   <CategoryStructureOnly>true</CategoryStructureOnly>
 </GetStoreRequest>`;
 
+  let tradingCats: EbayStoreCategory[] = [];
+  let tradingWarning = "";
+
   try {
     const res = await fetch(`${cfg.apiBase}/ws/api.dll`, {
       method: "POST",
@@ -437,43 +716,45 @@ export async function listSellerStoreCategories(
     });
     const xml = await res.text();
     if (!res.ok || /<Ack>Failure<\/Ack>/i.test(xml)) {
-      const msg =
+      tradingWarning =
         xml.match(/<ShortMessage>([^<]+)<\/ShortMessage>/)?.[1] ||
         xml.match(/<LongMessage>([^<]+)<\/LongMessage>/)?.[1] ||
         "GetStore failed";
-      return {
-        categories: HIGLOU_DEFAULT_STORE_PATHS.map((path) => ({
-          path,
-          name: path.split("/").filter(Boolean).pop() || path,
-        })),
-        source: "default",
-        warning: `Could not load eBay Store categories (${msg}). Using Higlou default paths — create matching folders in Seller Hub → Store → Categories.`,
-      };
+    } else {
+      tradingCats = parseStoreCategoriesFromXml(xml);
     }
-    const parsed = parseStoreCategoriesFromXml(xml);
-    if (!parsed.length) {
-      return {
-        categories: HIGLOU_DEFAULT_STORE_PATHS.map((path) => ({
-          path,
-          name: path.split("/").filter(Boolean).pop() || path,
-        })),
-        source: "default",
-        warning:
-          "No custom Store categories found on this account. Using Higlou defaults — create these folders in Seller Hub, then re-scan.",
-      };
-    }
-    return { categories: parsed, source: "ebay" };
   } catch (error) {
-    const msg = error instanceof Error ? error.message : String(error);
+    tradingWarning = error instanceof Error ? error.message : String(error);
+  }
+
+  const restCats = await listStoreCategoriesViaRest(accessToken).catch(
+    () => [] as EbayStoreCategory[],
+  );
+  const merged = mergeCategoryLists(tradingCats, restCats).filter(
+    (c) => c.categoryId,
+  );
+
+  if (merged.length) {
     return {
-      categories: HIGLOU_DEFAULT_STORE_PATHS.map((path) => ({
-        path,
-        name: path.split("/").filter(Boolean).pop() || path,
-      })),
-      source: "default",
-      warning: `Store category lookup failed (${msg}). Using Higlou default paths.`,
+      categories: merged,
+      source: "ebay",
+      warning: tradingWarning
+        ? `GetStore note: ${tradingWarning}. Using Store category IDs from available eBay APIs.`
+        : undefined,
     };
   }
+
+  return {
+    categories: HIGLOU_DEFAULT_STORE_PATHS.map((path) => ({
+      path,
+      name: path.split("/").filter(Boolean).pop() || path,
+    })),
+    source: "default",
+    warning:
+      tradingWarning
+        ? `Could not load eBay Store categories (${tradingWarning}). Using Higlou defaults — Organize will create folders via API (reconnect eBay if create fails).`
+        : "No custom Store categories found yet. Organize will create Higlou folders via the eBay API.",
+  };
 }
 
 /**

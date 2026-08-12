@@ -169,10 +169,10 @@ export function EbayStoreOrganizeForm() {
   return (
     <div className="space-y-4">
       <div className="rounded-xl border border-emerald-100 bg-emerald-50/70 px-3 py-2.5 text-[12px] text-emerald-900">
-        Every listing gets a real Store folder (never eBay&apos;s reserved
-        Other). If the folder is missing, Higlou creates it with the API, then
-        moves the item. Reconnect eBay once if folder create asks for{" "}
-        <code className="text-[11px]">sell.stores</code>.
+        Higlou reads your <strong>current</strong> eBay Store folders and live
+        listings, then files each product into the best existing folder (for
+        example Bath and Plumbing). Missing folders are created only when none
+        of yours fit. Publish does the same automatically.
       </div>
 
       <div className="flex flex-wrap gap-2">

@@ -162,4 +162,47 @@ describe("classifyOffersForStore", () => {
       expect(row.confidence).toBeGreaterThanOrEqual(0.5);
     }
   });
+
+  it("uses the seller's existing Bath and Plumbing folder", () => {
+    const live = [
+      {
+        path: "/Bath and Plumbing",
+        name: "Bath and Plumbing",
+        categoryId: "9001",
+      },
+      {
+        path: "/Tools",
+        name: "Tools",
+        categoryId: "9002",
+      },
+    ];
+    const rows = classifyOffersForStore(
+      [
+        {
+          offerId: "p1",
+          sku: "P1",
+          status: "PUBLISHED",
+          title: "Everbilt Submersible Utility Pump",
+          categoryId: "61573",
+          listingId: "11",
+          price: 49,
+          currentStorePaths: [],
+        },
+        {
+          offerId: "p2",
+          sku: "P2",
+          status: "PUBLISHED",
+          title: "Moen Kitchen Faucet Brushed Nickel",
+          categoryId: "20621",
+          listingId: "12",
+          price: 89,
+          currentStorePaths: [],
+        },
+      ],
+      live,
+    );
+    expect(rows[0].suggestedPath).toBe("/Bath and Plumbing");
+    expect(rows[1].suggestedPath).toBe("/Bath and Plumbing");
+    expect(rows[0].reason).toMatch(/Bath and Plumbing/i);
+  });
 });

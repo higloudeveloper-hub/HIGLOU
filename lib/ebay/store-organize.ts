@@ -1045,18 +1045,35 @@ type Rule = { path: string; patterns: RegExp[]; weight: number };
 const CLASSIFY_RULES: Rule[] = [
   {
     path: "/Plumbing/Pumps",
-    patterns: [/\bpump\b/i, /\bsump\b/i, /\bsubmersible\b/i, /water\s*pump/i],
+    patterns: [/\bpump\b/i, /\bsump\b/i, /\bsubmersible\b/i, /water\s*pump/i, /utility\s*pump/i],
     weight: 10,
   },
   {
     path: "/Plumbing/Faucets",
-    patterns: [/\bfaucet\b/i, /\btap\b/i, /kitchen\s*faucet/i, /bath.*faucet/i],
+    patterns: [
+      /\bfaucet\b/i,
+      /\btap\b/i,
+      /kitchen\s*faucet/i,
+      /bath.*faucet/i,
+      /\bshower\s*head\b/i,
+      /\bsink\b/i,
+    ],
     weight: 9,
   },
   {
     path: "/Plumbing",
-    patterns: [/\bplumb/i, /\bvalve\b/i, /\bpipe\b/i, /\bfitting\b/i, /\btoilet\b/i],
-    weight: 5,
+    patterns: [
+      /\bplumb/i,
+      /\bbath\b/i,
+      /\bvalve\b/i,
+      /\bpipe\b/i,
+      /\bfitting\b/i,
+      /\btoilet\b/i,
+      /\btub\b/i,
+      /vanity/i,
+      /garbage\s*disposal/i,
+    ],
+    weight: 6,
   },
   {
     path: "/Lighting/Smart Lighting",
@@ -1393,15 +1410,71 @@ export function classifyOffersForStore(
   options?: { reviewBelow?: number },
 ): StoreOrganizeSuggestion[] {
   const reviewBelow = options?.reviewBelow ?? 0.45;
+  const liveCategories = categories.filter(
+    (c) =>
+      c.categoryId &&
+      !isReservedStoreFolderName(c.name) &&
+      !/\/other$/i.test(normalizeStorePath(c.path)),
+  );
   const taxonomy = mergeTaxonomyCategories(categories);
 
   return offers.map((offer) => {
     const haystack = `${offer.title} ${offer.categoryId} ${offer.sku}`;
+
+    // 1) Prefer the seller's REAL Store folders (e.g. "Bath and Plumbing").
+    const liveHit = pickBestExistingStoreCategory(haystack, liveCategories);
+    if (liveHit && liveHit.score >= 5) {
+      const leafPath = pickAssignableStorePath(liveHit.cat, liveCategories);
+      const suggestedId = liveHit.cat.categoryId || null;
+      const current = offer.currentStorePaths[0] || "";
+      const unchangedById = Boolean(
+        suggestedId &&
+          offer.currentStoreCategoryId &&
+          suggestedId === offer.currentStoreCategoryId,
+      );
+      const unchangedByPath =
+        Boolean(current) &&
+        normalizeStorePath(current) === normalizeStorePath(leafPath);
+      return {
+        ...offer,
+        suggestedPath: leafPath,
+        confidence: Math.min(0.96, 0.5 + liveHit.score / 20),
+        reason: `Matched your Store folder "${liveHit.cat.name}"`,
+        needsReview: false,
+        unchanged: unchangedById || unchangedByPath,
+      };
+    }
+
+    // 2) Higlou taxonomy, then map onto an existing folder when possible.
     let picked = pickBestPath(haystack);
-    // Never leave listings in eBay reserved Other.
     if (/\/other$/i.test(normalizeStorePath(picked.path))) {
       picked = inferDynamicStorePath(haystack);
     }
+
+    const mapped = mapTaxonomyPathToExistingStore(picked.path, liveCategories);
+    if (mapped) {
+      const leafPath = pickAssignableStorePath(mapped, liveCategories);
+      const suggestedId = mapped.categoryId || null;
+      const current = offer.currentStorePaths[0] || "";
+      const unchangedById = Boolean(
+        suggestedId &&
+          offer.currentStoreCategoryId &&
+          suggestedId === offer.currentStoreCategoryId,
+      );
+      const unchangedByPath =
+        Boolean(current) &&
+        normalizeStorePath(current) === normalizeStorePath(leafPath);
+      return {
+        ...offer,
+        suggestedPath: leafPath,
+        confidence: Math.max(picked.confidence, 0.7),
+        reason: `${picked.reason} → your folder "${mapped.name}"`,
+        needsReview: false,
+        unchanged: unchangedById || unchangedByPath,
+      };
+    }
+
+    // 3) No usable existing folder — suggest Higlou path (Organize will create it).
     let leafPath = pickLeafStorePath(picked.path, taxonomy);
     if (/\/other$/i.test(leafPath)) {
       leafPath = pickLeafStorePath(
@@ -1420,7 +1493,6 @@ export function classifyOffersForStore(
       Boolean(current) &&
       normalizeStorePath(current) === normalizeStorePath(leafPath) &&
       !/\/other$/i.test(normalizeStorePath(current));
-    const unchanged = unchangedById || unchangedByPath;
     return {
       ...offer,
       suggestedPath: leafPath,
@@ -1432,9 +1504,201 @@ export function classifyOffersForStore(
             ? picked.reason
             : `${picked.reason} · will create folder`,
       needsReview: picked.confidence < reviewBelow,
-      unchanged,
+      unchanged: unchangedById || unchangedByPath,
     };
   });
+}
+
+function normalizeMatchText(value: string): string {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/&/g, " and ")
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/** Theme keywords for matching seller folder names ↔ product titles. */
+const STORE_THEME_HINTS: Array<{
+  folder: RegExp;
+  product: RegExp;
+  boost: number;
+}> = [
+  {
+    folder: /bath|plumb/,
+    product:
+      /\b(bath|plumb|faucet|pump|toilet|sink|shower|tub|valve|pipe|sump|disposal|vanity)\b/i,
+    boost: 10,
+  },
+  {
+    folder: /light|lamp|led/,
+    product: /\b(light|lamp|led|bulb|fixture|hue|chandelier|pendant|sconce)\b/i,
+    boost: 10,
+  },
+  {
+    folder: /tool|power|drill/,
+    product:
+      /\b(tool|drill|saw|grinder|impact|dewalt|makita|milwaukee|ryobi|ridgid|battery|level)\b/i,
+    boost: 10,
+  },
+  {
+    folder: /batter/,
+    product: /\b(battery|batteries|m18|m12|lithium|18v|20v)\b/i,
+    boost: 10,
+  },
+  {
+    folder: /electr|cable|charg/,
+    product: /\b(charger|cable|usb|hdmi|electronics|speaker|phone)\b/i,
+    boost: 8,
+  },
+  {
+    folder: /clean|vacuum|home/,
+    product: /\b(vacuum|cleaner|scrubber|mop|kitchen|home)\b/i,
+    boost: 7,
+  },
+  {
+    folder: /auto|car|vehicle/,
+    product: /\b(auto|car|vehicle|truck|brake|wiper)\b/i,
+    boost: 8,
+  },
+  {
+    folder: /outdoor|garden|lawn/,
+    product: /\b(outdoor|garden|lawn|hose|trimmer|blower|patio)\b/i,
+    boost: 8,
+  },
+  {
+    folder: /hardware|fastener/,
+    product: /\b(screw|nail|bolt|hinge|bracket|hardware)\b/i,
+    boost: 7,
+  },
+];
+
+function scoreExistingStoreCategory(
+  haystack: string,
+  cat: EbayStoreCategory,
+): number {
+  const hay = normalizeMatchText(haystack);
+  const name = normalizeMatchText(cat.name);
+  const path = normalizeMatchText(cat.path);
+  const folderText = `${name} ${path}`;
+  let score = 0;
+
+  for (const word of name.split(" ").filter((w) => w.length >= 3)) {
+    if (word === "and" || word === "the" || word === "for") continue;
+    if (new RegExp(`\\b${word}\\b`, "i").test(hay)) score += 4;
+  }
+
+  for (const hint of STORE_THEME_HINTS) {
+    if (hint.folder.test(folderText) && hint.product.test(haystack)) {
+      score += hint.boost;
+    }
+  }
+
+  return score;
+}
+
+export function pickBestExistingStoreCategory(
+  haystack: string,
+  categories: EbayStoreCategory[],
+): { cat: EbayStoreCategory; score: number } | null {
+  const usable = categories.filter(
+    (c) =>
+      c.categoryId &&
+      !isReservedStoreFolderName(c.name) &&
+      !/\/other$/i.test(normalizeStorePath(c.path)),
+  );
+  if (!usable.length) return null;
+
+  const leaves = usable.filter((c) => isLeafStoreCategory(c.path, usable));
+  const pool = leaves.length ? leaves : usable;
+
+  let best: { cat: EbayStoreCategory; score: number } | null = null;
+  for (const cat of pool) {
+    const score = scoreExistingStoreCategory(haystack, cat);
+    if (!best || score > best.score) best = { cat, score };
+  }
+  return best && best.score > 0 ? best : null;
+}
+
+/**
+ * Map a Higlou taxonomy path onto the closest existing seller Store folder.
+ * e.g. /Plumbing/Pumps → /Bath and Plumbing
+ */
+export function mapTaxonomyPathToExistingStore(
+  taxonomyPath: string,
+  categories: EbayStoreCategory[],
+): EbayStoreCategory | null {
+  const needle = normalizeStorePath(taxonomyPath);
+  if (!needle || /\/other$/i.test(needle)) return null;
+
+  const usable = categories.filter(
+    (c) =>
+      c.categoryId &&
+      !isReservedStoreFolderName(c.name) &&
+      !/\/other$/i.test(normalizeStorePath(c.path)),
+  );
+  if (!usable.length) return null;
+
+  // Exact path / name match first
+  const exact = usable.find(
+    (c) => normalizeStorePath(c.path) === needle,
+  );
+  if (exact) return exact;
+  const leafName = needle.split("/").filter(Boolean).pop()?.toLowerCase();
+  if (leafName) {
+    const byName = usable.find(
+      (c) => c.name.trim().toLowerCase() === leafName,
+    );
+    if (byName) return byName;
+  }
+
+  // Theme map: Higlou department → seller folder regex
+  const theme =
+    /plumbing|pump|faucet|bath|toilet|sink|shower/i.test(needle)
+      ? /bath|plumb|pump|faucet|sink|toilet/
+      : /lighting|lamp|led|bulb|hue/i.test(needle)
+        ? /light|lamp|led|bulb|hue/
+        : /batter/i.test(needle)
+          ? /batter|power/
+          : /tool|drill|measur|hand tool|power tool/i.test(needle)
+            ? /tool|drill|power|measur|batter/
+            : /vacuum|clean|kitchen|home/i.test(needle)
+              ? /home|clean|vacuum|kitchen/
+              : /electr|cable|charg/i.test(needle)
+                ? /electr|cable|charg/
+                : /auto/i.test(needle)
+                  ? /auto|car|vehicle/
+                  : /outdoor|garden/i.test(needle)
+                    ? /outdoor|garden|lawn/
+                    : /hardware|fastener/i.test(needle)
+                      ? /hardware|fastener/
+                      : null;
+
+  if (!theme) return null;
+
+  const leaves = usable.filter((c) => isLeafStoreCategory(c.path, usable));
+  const pool = leaves.length ? leaves : usable;
+  const matches = pool.filter((c) =>
+    theme.test(normalizeMatchText(`${c.name} ${c.path}`)),
+  );
+  if (!matches.length) return null;
+
+  // Prefer longer / more specific names
+  matches.sort(
+    (a, b) =>
+      normalizeMatchText(b.name).length - normalizeMatchText(a.name).length,
+  );
+  return matches[0];
+}
+
+function pickAssignableStorePath(
+  cat: EbayStoreCategory,
+  categories: EbayStoreCategory[],
+): string {
+  const path = normalizeStorePath(cat.path);
+  if (isLeafStoreCategory(path, categories)) return path;
+  // Parent with children — pick first leaf child, else force /General under it.
+  return pickLeafStorePath(path, categories);
 }
 
 function mergeTaxonomyCategories(

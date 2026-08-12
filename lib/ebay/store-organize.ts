@@ -315,7 +315,41 @@ async function addStoreCategory(
   );
   let lastError = "";
 
-  // 1) Trading SetStoreCategories
+  // Prefer Stores REST first (clearer create + categoryName), then Trading.
+  try {
+    const rest = await addStoreCategoryViaRest(
+      accessToken,
+      name,
+      parentCategoryId === "-999" ? null : parentCategoryId,
+    );
+    if (rest.categoryId) {
+      const path = normalizeStorePath(`${parentPath}/${name}`);
+      const merged = mergeCategoryLists(known, [
+        { path, name, categoryId: rest.categoryId },
+      ]);
+      return { categoryId: rest.categoryId, categories: merged };
+    }
+    if (!rest.error) {
+      for (let attempt = 0; attempt < 8; attempt++) {
+        await sleep(900);
+        const refreshed = await listSellerStoreCategories(accessToken);
+        const restCats = await listStoreCategoriesViaRest(accessToken).catch(
+          () => [] as EbayStoreCategory[],
+        );
+        const merged = mergeCategoryLists(
+          known,
+          refreshed.categories,
+          restCats,
+        );
+        const id = findCategoryIdByName(merged, name, parentPath);
+        if (id) return { categoryId: id, categories: merged };
+      }
+    }
+    lastError = rest.error || lastError;
+  } catch (error) {
+    lastError = error instanceof Error ? error.message : String(error);
+  }
+
   try {
     const xml = await tradingApiCall(
       accessToken,
@@ -340,7 +374,6 @@ async function addStoreCategory(
       await waitForStoreCategoryTask(accessToken, taskId);
     }
 
-    // Prefer GetStore / REST with retries until the new CategoryID appears.
     for (let attempt = 0; attempt < 6; attempt++) {
       if (attempt > 0) await sleep(800);
       const refreshed = await listSellerStoreCategories(accessToken);
@@ -368,44 +401,8 @@ async function addStoreCategory(
       }
     }
     lastError =
-      "SetStoreCategories finished but GetStore did not return the new folder ID yet";
-  } catch (error) {
-    lastError = error instanceof Error ? error.message : String(error);
-  }
-
-  // 2) Sell Stores REST API (needs sell.stores scope — reconnect eBay if missing)
-  try {
-    const rest = await addStoreCategoryViaRest(
-      accessToken,
-      name,
-      parentCategoryId === "-999" ? null : parentCategoryId,
-    );
-    if (rest.categoryId) {
-      const path = normalizeStorePath(`${parentPath}/${name}`);
-      const merged = mergeCategoryLists(known, [
-        { path, name, categoryId: rest.categoryId },
-      ]);
-      return { categoryId: rest.categoryId, categories: merged };
-    }
-    // Async task — poll GetStore / getStoreCategories
-    for (let attempt = 0; attempt < 8; attempt++) {
-      await sleep(900);
-      const refreshed = await listSellerStoreCategories(accessToken);
-      const restCats = await listStoreCategoriesViaRest(accessToken).catch(
-        () => [] as EbayStoreCategory[],
-      );
-      const merged = mergeCategoryLists(
-        known,
-        refreshed.categories,
-        restCats,
-      );
-      const id = findCategoryIdByName(merged, name, parentPath);
-      if (id) return { categoryId: id, categories: merged };
-    }
-    lastError =
-      rest.error ||
       lastError ||
-      "Stores API created a task but folder ID never appeared";
+      "SetStoreCategories finished but GetStore did not return the new folder ID yet";
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
     lastError = `${lastError ? `${lastError} | ` : ""}${msg}`;
@@ -447,28 +444,51 @@ function mergeCategoryLists(
   return out;
 }
 
+function isReservedStoreFolderName(name: string): boolean {
+  const n = String(name || "").trim();
+  return !n || /^other$/i.test(n);
+}
+
+function resolveBuiltinOtherCategoryId(
+  categories: EbayStoreCategory[],
+): string | null {
+  const other = categories.find(
+    (c) =>
+      c.categoryId &&
+      (c.name.trim().toLowerCase() === "other" ||
+        normalizeStorePath(c.path) === "/other"),
+  );
+  return other?.categoryId || null;
+}
+
 async function addStoreCategoryViaRest(
   accessToken: string,
   name: string,
   parentCategoryId: string | null,
 ): Promise<{ categoryId?: string; error?: string }> {
+  if (isReservedStoreFolderName(name)) {
+    return {
+      error: `eBay reserves the Store folder name "${name}" — use the built-in Other category instead of creating it`,
+    };
+  }
+
   const cfg = getEbayConfig();
-  const qs =
-    parentCategoryId && parentCategoryId !== "-999"
-      ? `?destinationCategoryId=${encodeURIComponent(parentCategoryId)}`
-      : "";
-  const res = await fetch(
-    `${cfg.apiBase}/sell/stores/v1/store/categories${qs}`,
-    {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        "Content-Type": "application/json",
-        Accept: "application/json",
-      },
-      body: JSON.stringify({ name }),
+  const body: Record<string, string> = {
+    categoryName: name.slice(0, 35),
+  };
+  if (parentCategoryId && parentCategoryId !== "-999") {
+    body.destinationParentCategoryId = parentCategoryId;
+  }
+
+  const res = await fetch(`${cfg.apiBase}/sell/stores/v1/store/categories`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+      Accept: "application/json",
     },
-  );
+    body: JSON.stringify(body),
+  });
   const text = await res.text();
   let json: Record<string, unknown> = {};
   try {
@@ -489,11 +509,11 @@ async function addStoreCategoryViaRest(
       (json.category as { categoryId?: string } | undefined)?.categoryId ||
       "",
   ).trim();
-  if (res.ok && categoryId) return { categoryId };
-
-  // 202 Accepted — async
-  if (res.status === 202 || res.ok) {
-    return { categoryId: categoryId || undefined };
+  if ((res.ok || res.status === 202) && categoryId) {
+    return { categoryId };
+  }
+  if (res.ok || res.status === 202) {
+    return { categoryId: undefined };
   }
 
   const errors = json.errors as
@@ -580,12 +600,27 @@ export async function ensureStoreCategoryId(
   }
 
   const needle = normalizeStorePath(path);
+
+  // eBay's built-in "Other" cannot be created via API.
+  if (/^\/other$/i.test(needle)) {
+    const otherId = resolveBuiltinOtherCategoryId(cats);
+    if (otherId) return { categoryId: otherId, categories: cats };
+    throw new Error(
+      'eBay reserves the Store folder "Other" — it already exists on every Store and cannot be created. Assign listings to another Higlou folder, or leave them in Other from Seller Hub.',
+    );
+  }
+
   const existing = resolveStoreCategoryId(needle, cats);
   if (existing) return { categoryId: existing, categories: cats };
 
   const parts = needle.split("/").filter(Boolean);
   if (!parts.length) {
     throw new Error("Store category path is empty");
+  }
+  if (parts.some((part) => isReservedStoreFolderName(part))) {
+    throw new Error(
+      `Cannot create Store folder "${needle}" — eBay does not allow empty names or the reserved name "Other".`,
+    );
   }
 
   let parentId = "-999";
@@ -1217,7 +1252,12 @@ export async function ensureStorePaths(
       : (await listSellerStoreCategories(accessToken)).categories;
   const created: string[] = [];
   const uniquePaths = Array.from(
-    new Set(paths.map(normalizeStorePath).filter(Boolean)),
+    new Set(
+      paths
+        .map(normalizeStorePath)
+        .filter(Boolean)
+        .filter((p) => !/^\/other$/i.test(p)),
+    ),
   );
 
   for (const path of uniquePaths) {
@@ -1237,9 +1277,13 @@ export async function ensureHiglouStoreTree(
   accessToken: string,
   categories: EbayStoreCategory[] = [],
 ): Promise<{ categories: EbayStoreCategory[]; created: string[] }> {
+  const taxonomy = mergeTaxonomyCategories([]);
   const leafDefaults = HIGLOU_DEFAULT_STORE_PATHS.filter((path) => {
-    const taxonomy = mergeTaxonomyCategories([]);
-    return isLeafStoreCategory(path, taxonomy);
+    const normalized = normalizeStorePath(path);
+    if (/^\/other$/i.test(normalized)) return false; // reserved by eBay
+    const leaf = normalized.split("/").filter(Boolean).pop() || "";
+    if (isReservedStoreFolderName(leaf)) return false;
+    return isLeafStoreCategory(normalized, taxonomy);
   });
   return ensureStorePaths(accessToken, leafDefaults, categories);
 }

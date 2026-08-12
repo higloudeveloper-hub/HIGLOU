@@ -83,4 +83,25 @@ describe("classifyOffersForStore", () => {
     );
     expect(row.suggestedPath).toBe("/Lighting/Ceiling Lights");
   });
+
+  it("suggests Higlou taxonomy folders even when store has none yet", () => {
+    const [row] = classifyOffersForStore(
+      [
+        {
+          offerId: "3",
+          sku: "PUMP2",
+          status: "PUBLISHED",
+          title: "Utility Water Pump 1/4 HP",
+          categoryId: "61573",
+          listingId: "123",
+          price: 40,
+          currentStorePaths: [],
+        },
+      ],
+      [],
+    );
+    expect(row.suggestedPath).toBe("/Plumbing/Pumps");
+    expect(row.reason).toMatch(/will create folder/i);
+    expect(row.unchanged).toBe(false);
+  });
 });

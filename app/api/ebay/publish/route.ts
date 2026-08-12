@@ -12,6 +12,7 @@ import {
 import {
   createOrReplaceInventoryItem,
   publishOffer,
+  sanitizeEbayUpc,
   upsertOfferForSku,
 } from "@/lib/ebay/inventory-api";
 import { organizeListingOnPublish } from "@/lib/ebay/store-organize";
@@ -485,9 +486,36 @@ export async function POST(request: Request) {
       accessToken,
       listing.categoryId,
     );
-    await createOrReplaceInventoryItem(accessToken, inventory, {
-      aspectCardinality,
-    });
+
+    // Drop bad OCR UPCs before Inventory PUT (invalid checksum → eBay 25002).
+    inventory.upc = undefined;
+    const safeUpc = sanitizeEbayUpc(listing.upc);
+    if (safeUpc) inventory.upc = safeUpc;
+    else listing.upc = "";
+
+    try {
+      await createOrReplaceInventoryItem(accessToken, inventory, {
+        aspectCardinality,
+      });
+    } catch (inventoryError) {
+      const invMsg =
+        inventoryError instanceof Error
+          ? inventoryError.message
+          : String(inventoryError);
+      // Catalog-unknown or still-invalid UPC: retry without product.upc.
+      if (/25002|invalid value.*upc|upc has an invalid/i.test(invMsg)) {
+        inventory.upc = undefined;
+        listing.upc = "";
+        for (const key of Object.keys(inventory.aspects || {})) {
+          if (/^upc$/i.test(key)) delete inventory.aspects[key];
+        }
+        await createOrReplaceInventoryItem(accessToken, inventory, {
+          aspectCardinality,
+        });
+      } else {
+        throw inventoryError;
+      }
+    }
 
     const offerInput = listingToOfferInput(listing, {
       fulfillmentPolicyId: listing.shippingPolicyId,

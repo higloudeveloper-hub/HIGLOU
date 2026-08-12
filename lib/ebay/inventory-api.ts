@@ -1,6 +1,34 @@
 import { getEbayConfig } from "@/lib/ebay/config";
 import { sanitizeEbayAspects } from "@/lib/ebay/sanitize-aspects";
 import { HIGLOU_WAREHOUSE } from "@/config/warehouse";
+import { validateBarcode } from "@/lib/barcode/validators";
+
+/**
+ * Only send UPC/EAN values eBay will accept (valid GS1 checksum).
+ * Bad OCR/barcode reads cause error 25002 — omit them instead.
+ */
+export function sanitizeEbayUpc(raw?: string | null): string | undefined {
+  const value = String(raw || "")
+    .replace(/\s+/g, "")
+    .trim();
+  if (!value) return undefined;
+  if (/^(does\s*not\s*apply|n\/?a|none|null)$/i.test(value)) {
+    return undefined;
+  }
+  const checked = validateBarcode(value, { requireChecksum: true });
+  if (!checked.ok) return undefined;
+  if (!["UPC_A", "EAN_8", "EAN_13", "UPC_E"].includes(checked.format)) {
+    return undefined;
+  }
+  // Prefer expanded UPC-A when we only have UPC-E.
+  if (checked.format === "UPC_E") {
+    const expanded = validateBarcode(checked.value, { requireChecksum: true });
+    return expanded.ok && /^\d{12}$/.test(expanded.value)
+      ? expanded.value
+      : undefined;
+  }
+  return checked.value;
+}
 
 export type EbayAspects = Record<string, string[]>;
 
@@ -145,10 +173,18 @@ export async function createOrReplaceInventoryItem(
   );
   aspects.Brand = [brand];
   aspects.MPN = [mpnProduct];
+  // Never send invalid UPC in aspects either (same 25002 failure mode).
+  for (const key of Object.keys(aspects)) {
+    if (!/^upc$/i.test(key)) continue;
+    const cleaned = sanitizeEbayUpc(aspects[key]?.[0]);
+    if (cleaned) aspects[key] = [cleaned];
+    else delete aspects[key];
+  }
   product.aspects = aspects;
 
-  if (input.upc && /^\d{12,14}$/.test(input.upc)) {
-    product.upc = [input.upc];
+  const upc = sanitizeEbayUpc(input.upc);
+  if (upc) {
+    product.upc = [upc];
   }
 
   const body: Record<string, unknown> = {

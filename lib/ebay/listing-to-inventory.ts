@@ -122,6 +122,12 @@ export function listingToInventoryItem(
   aspects.Brand = [brand];
   aspects.MPN = [mpnCompact === "DoesNotApply" ? "Does Not Apply" : mpnCompact];
 
+  // Strip invalid UPC from aspects — eBay 25002 rejects bad check digits.
+  for (const key of Object.keys(aspects)) {
+    if (!/^upc$/i.test(key)) continue;
+    delete aspects[key];
+  }
+
   return {
     sku: listing.sku,
     title: listing.title,

@@ -1,6 +1,6 @@
 /**
  * Higlou eBay Store organization — list offers, resolve Store category paths,
- * classify listings, and assign storeCategoryNames via Inventory API.
+ * and assign folders via Trading ReviseFixedPriceItem (not Inventory updateOffer).
  * Scope: Higlou only (higloudeveloper-hub/HIGLOU).
  */
 
@@ -94,20 +94,55 @@ function normalizeStorePath(path: string): string {
   return p;
 }
 
-/** Flatten custom category nodes from Trading API GetStore XML. */
-function parseStoreCategoriesFromXml(xml: string): EbayStoreCategory[] {
+function escapeXml(value: string): string {
+  return String(value || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
+}
+
+/**
+ * Flatten CustomCategory + nested ChildCategory nodes from GetStore XML.
+ * Exported for unit tests.
+ */
+export function parseStoreCategoriesFromXml(xml: string): EbayStoreCategory[] {
   const out: EbayStoreCategory[] = [];
-  const blockRe = /<CustomCategory>([\s\S]*?)<\/CustomCategory>/gi;
-  let block: RegExpExecArray | null;
-  while ((block = blockRe.exec(xml))) {
-    const chunk = block[1];
-    const id = chunk.match(/<CategoryID>(\d+)<\/CategoryID>/i)?.[1]?.trim();
-    const name = chunk.match(/<Name>([^<]+)<\/Name>/i)?.[1]?.trim();
-    if (!name) continue;
-    const path = normalizeStorePath(`/${name}`);
-    if (!path) continue;
-    if (!out.some((c) => c.path === path || (id && c.categoryId === id))) {
-      out.push({ path, name, categoryId: id });
+  const tokenRe =
+    /<\/?(?:CustomCategory|ChildCategory)>|<CategoryID>(\d+)<\/CategoryID>|<Name>([^<]*)<\/Name>/gi;
+  const stack: Array<{ id?: string; name?: string }> = [];
+  let match: RegExpExecArray | null;
+  while ((match = tokenRe.exec(xml))) {
+    const token = match[0];
+    if (/^<(CustomCategory|ChildCategory)>/i.test(token)) {
+      stack.push({});
+      continue;
+    }
+    if (/^<\/(CustomCategory|ChildCategory)>/i.test(token)) {
+      const node = stack.pop();
+      if (!node?.name) continue;
+      const names = [
+        ...stack.map((frame) => frame.name).filter(Boolean),
+        node.name,
+      ] as string[];
+      const path = normalizeStorePath(`/${names.join("/")}`);
+      if (!path) continue;
+      if (
+        !out.some(
+          (c) =>
+            c.path === path ||
+            (node.id && c.categoryId === node.id),
+        )
+      ) {
+        out.push({ path, name: node.name, categoryId: node.id });
+      }
+      continue;
+    }
+    if (!stack.length) continue;
+    if (match[1]) stack[stack.length - 1].id = match[1];
+    else if (typeof match[2] === "string") {
+      stack[stack.length - 1].name = match[2].trim();
     }
   }
   return out;
@@ -158,7 +193,112 @@ function resolveStoreCategoryId(
   return byName?.categoryId || null;
 }
 
-/** Published listings: revise Storefront only (avoids Inventory SKU 25707). */
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function waitForStoreCategoryTask(
+  accessToken: string,
+  taskId: string,
+): Promise<void> {
+  for (let attempt = 0; attempt < 24; attempt++) {
+    const xml = await tradingApiCall(
+      accessToken,
+      "GetStoreCategoryUpdateStatus",
+      `<?xml version="1.0" encoding="utf-8"?>
+<GetStoreCategoryUpdateStatusRequest xmlns="urn:ebay:apis:eBLBaseComponents">
+  <ErrorLanguage>en_US</ErrorLanguage>
+  <TaskID>${escapeXml(taskId)}</TaskID>
+</GetStoreCategoryUpdateStatusRequest>`,
+    );
+    const status =
+      xml.match(/<Status>([^<]+)<\/Status>/i)?.[1]?.trim() || "";
+    if (/Complete/i.test(status)) return;
+    if (/Failed/i.test(status)) {
+      throw new Error(`SetStoreCategories task ${taskId} failed`);
+    }
+    await sleep(500);
+  }
+  throw new Error(`SetStoreCategories task ${taskId} timed out`);
+}
+
+/** Create one Store folder under parent (-999 = top level). */
+async function addStoreCategory(
+  accessToken: string,
+  name: string,
+  parentCategoryId: string,
+): Promise<void> {
+  const xml = await tradingApiCall(
+    accessToken,
+    "SetStoreCategories",
+    `<?xml version="1.0" encoding="utf-8"?>
+<SetStoreCategoriesRequest xmlns="urn:ebay:apis:eBLBaseComponents">
+  <ErrorLanguage>en_US</ErrorLanguage>
+  <WarningLevel>High</WarningLevel>
+  <Action>Add</Action>
+  <DestinationParentCategoryID>${escapeXml(parentCategoryId)}</DestinationParentCategoryID>
+  <StoreCategories>
+    <CustomCategory>
+      <Name>${escapeXml(name)}</Name>
+    </CustomCategory>
+  </StoreCategories>
+</SetStoreCategoriesRequest>`,
+  );
+  const taskId = xml.match(/<TaskID>(\d+)<\/TaskID>/i)?.[1];
+  if (taskId) await waitForStoreCategoryTask(accessToken, taskId);
+}
+
+/**
+ * Resolve Store category ID for a path; create missing folders via Trading API.
+ */
+export async function ensureStoreCategoryId(
+  accessToken: string,
+  path: string,
+  categories: EbayStoreCategory[],
+): Promise<{ categoryId: string; categories: EbayStoreCategory[] }> {
+  let cats = categories;
+  const needle = normalizeStorePath(path);
+  const existing = resolveStoreCategoryId(needle, cats);
+  if (existing) return { categoryId: existing, categories: cats };
+
+  const parts = needle.split("/").filter(Boolean);
+  if (!parts.length) {
+    throw new Error("Store category path is empty");
+  }
+
+  let parentId = "-999";
+  let built = "";
+  for (const part of parts) {
+    built = normalizeStorePath(`${built}/${part}`);
+    let id = resolveStoreCategoryId(built, cats);
+    if (!id) {
+      try {
+        await addStoreCategory(accessToken, part, parentId);
+      } catch (error) {
+        const msg = error instanceof Error ? error.message : String(error);
+        // Folder may already exist under another parent — refresh and retry resolve.
+        if (!/already|duplicate|exist/i.test(msg)) {
+          // Still refresh; another seller session may have created it.
+        }
+      }
+      const refreshed = await listSellerStoreCategories(accessToken);
+      if (refreshed.source === "ebay" && refreshed.categories.length) {
+        cats = refreshed.categories;
+      }
+      id = resolveStoreCategoryId(built, cats);
+    }
+    if (!id) {
+      throw new Error(
+        `Could not create or find Store folder "${built}". Open Seller Hub → Store → Categories, create it, reconnect eBay, then Scan again.`,
+      );
+    }
+    parentId = id;
+  }
+
+  return { categoryId: parentId, categories: cats };
+}
+
+/** Published listings: revise Storefront only (never Inventory SKU / 25707). */
 async function assignStoreCategoryViaTrading(
   accessToken: string,
   listingId: string,
@@ -169,17 +309,13 @@ async function assignStoreCategoryViaTrading(
   <ErrorLanguage>en_US</ErrorLanguage>
   <WarningLevel>High</WarningLevel>
   <Item>
-    <ItemID>${listingId}</ItemID>
+    <ItemID>${escapeXml(listingId)}</ItemID>
     <Storefront>
-      <StoreCategoryID>${storeCategoryId}</StoreCategoryID>
+      <StoreCategoryID>${escapeXml(storeCategoryId)}</StoreCategoryID>
     </Storefront>
   </Item>
 </ReviseFixedPriceItemRequest>`;
   await tradingApiCall(accessToken, "ReviseFixedPriceItem", xml);
-}
-
-function isStrictInventorySku(sku: string): boolean {
-  return /^[A-Za-z0-9]{1,50}$/.test(sku);
 }
 
 /**
@@ -490,9 +626,8 @@ export function classifyOffersForStore(
 }
 
 /**
- * Set Store folder on an offer/listing.
- * Prefer Trading ReviseFixedPriceItem when published (avoids Inventory SKU 25707
- * on hyphenated Higlou SKUs). Fall back to Inventory storeCategoryNames.
+ * Set Store folder on a published listing via Trading API only.
+ * Never uses Inventory updateOffer (Higlou SKUs with hyphens trigger eBay 25707).
  */
 export async function assignStoreCategoriesToOffer(
   accessToken: string,
@@ -501,6 +636,8 @@ export async function assignStoreCategoriesToOffer(
   options?: {
     listingId?: string | null;
     categories?: EbayStoreCategory[];
+    /** Mutator so apply loop can reuse newly created folder IDs. */
+    setCategories?: (categories: EbayStoreCategory[]) => void;
   },
 ): Promise<void> {
   const paths = storeCategoryNames
@@ -511,124 +648,44 @@ export async function assignStoreCategoriesToOffer(
     throw new Error("At least one store category path is required");
   }
 
-  const listingId = String(options?.listingId || "").trim();
-  const categories = options?.categories || [];
-  const storeCategoryId = resolveStoreCategoryId(paths[0], categories);
-
-  if (listingId && storeCategoryId) {
-    await assignStoreCategoryViaTrading(
-      accessToken,
-      listingId,
-      storeCategoryId,
-    );
-    return;
+  let categories = options?.categories || [];
+  if (!categories.some((c) => c.categoryId)) {
+    const store = await listSellerStoreCategories(accessToken);
+    categories = store.categories;
+    options?.setCategories?.(categories);
   }
 
-  const offer = (await inventoryFetch(
-    accessToken,
-    `/sell/inventory/v1/offer/${encodeURIComponent(offerId)}`,
-    { method: "GET" },
-  )) as {
-    sku?: string;
-    marketplaceId?: string;
-    format?: string;
-    availableQuantity?: number;
-    categoryId?: string;
-    secondaryCategoryId?: string;
-    listingDescription?: string;
-    merchantLocationKey?: string;
-    listingPolicies?: Record<string, unknown>;
-    pricingSummary?: Record<string, unknown>;
-    tax?: Record<string, unknown>;
-    listingDuration?: string;
-    listing?: { listingId?: string };
-    includeCatalogProductDetails?: boolean;
-    hideBuyerDetails?: boolean;
-  };
-
-  const liveListingId =
-    listingId || String(offer.listing?.listingId || "").trim();
-  if (liveListingId && storeCategoryId) {
-    await assignStoreCategoryViaTrading(
-      accessToken,
-      liveListingId,
-      storeCategoryId,
-    );
-    return;
-  }
-
-  const sku = String(offer.sku || "").trim();
-  const categoryId = String(offer.categoryId || "").trim();
-  if (!sku || !categoryId) {
-    throw new Error(
-      "Offer is missing sku or categoryId — cannot update Store folder",
-    );
-  }
-
-  if (!isStrictInventorySku(sku)) {
-    if (liveListingId) {
-      throw new Error(
-        `SKU "${sku}" is rejected by Inventory API (eBay 25707). Create matching Store folders in Seller Hub and reconnect so Higlou can load Store category IDs, then Apply again (Trading revise uses listing ID).`,
-      );
-    }
-    throw new Error(
-      `SKU "${sku}" has non-alphanumeric characters (eBay 25707). Publish the offer first, or recreate the SKU with letters/numbers only, then organize again.`,
-    );
-  }
-
-  const body: Record<string, unknown> = {
-    sku,
-    marketplaceId: String(offer.marketplaceId || "EBAY_US"),
-    format: offer.format || "FIXED_PRICE",
-    availableQuantity: Math.max(1, Number(offer.availableQuantity) || 1),
-    categoryId,
-    listingDescription: offer.listingDescription || "",
-    pricingSummary: offer.pricingSummary || {
-      price: { value: "0.99", currency: "USD" },
-    },
-    storeCategoryNames: paths,
-  };
-  if (offer.secondaryCategoryId) {
-    body.secondaryCategoryId = offer.secondaryCategoryId;
-  }
-  if (offer.merchantLocationKey) {
-    body.merchantLocationKey = offer.merchantLocationKey;
-  }
-  if (offer.listingPolicies) {
-    body.listingPolicies = offer.listingPolicies;
-  }
-  if (offer.tax) body.tax = offer.tax;
-  if (offer.listingDuration) body.listingDuration = offer.listingDuration;
-  if (typeof offer.includeCatalogProductDetails === "boolean") {
-    body.includeCatalogProductDetails = offer.includeCatalogProductDetails;
-  }
-  if (typeof offer.hideBuyerDetails === "boolean") {
-    body.hideBuyerDetails = offer.hideBuyerDetails;
-  }
-
-  try {
-    await inventoryFetch(
+  let listingId = String(options?.listingId || "").trim();
+  if (!listingId) {
+    const offer = (await inventoryFetch(
       accessToken,
       `/sell/inventory/v1/offer/${encodeURIComponent(offerId)}`,
-      { method: "PUT", body: JSON.stringify(body) },
-    );
-  } catch (error) {
-    const msg = error instanceof Error ? error.message : String(error);
-    if (/25707|alphanumeric/i.test(msg) && liveListingId && storeCategoryId) {
-      await assignStoreCategoryViaTrading(
-        accessToken,
-        liveListingId,
-        storeCategoryId,
-      );
-      return;
-    }
-    if (/25707|alphanumeric/i.test(msg)) {
-      throw new Error(
-        `${msg} Tip: create Store folders in Seller Hub with the same names, Scan again (loads category IDs), then Apply — Higlou will revise by listing ID instead of SKU.`,
-      );
-    }
-    throw error;
+      { method: "GET" },
+    )) as {
+      listing?: { listingId?: string };
+      status?: string;
+    };
+    listingId = String(offer.listing?.listingId || "").trim();
   }
+
+  if (!listingId) {
+    throw new Error(
+      "This offer is not published yet. Publish the listing on eBay first, then Apply Organize Store (Trading revise uses the item ID — never the SKU).",
+    );
+  }
+
+  const ensured = await ensureStoreCategoryId(
+    accessToken,
+    paths[0],
+    categories,
+  );
+  options?.setCategories?.(ensured.categories);
+
+  await assignStoreCategoryViaTrading(
+    accessToken,
+    listingId,
+    ensured.categoryId,
+  );
 }
 
 export async function applyStoreOrganizeSuggestions(
@@ -646,6 +703,7 @@ export async function applyStoreOrganizeSuggestions(
 }> {
   let applied = 0;
   const failed: Array<{ offerId: string; error: string }> = [];
+  let liveCategories = categories;
 
   for (const row of suggestions) {
     if (row.skip) continue;
@@ -654,7 +712,13 @@ export async function applyStoreOrganizeSuggestions(
         accessToken,
         row.offerId,
         [row.suggestedPath],
-        { listingId: row.listingId, categories },
+        {
+          listingId: row.listingId,
+          categories: liveCategories,
+          setCategories: (next) => {
+            liveCategories = next;
+          },
+        },
       );
       applied += 1;
     } catch (error) {

@@ -13,18 +13,18 @@ export function generateSku(parts: {
   size?: string;
   color?: string;
 }): string {
+  // eBay Inventory SKUs: alphanumeric only, max 50 (error 25707 if hyphens).
   const normalize = (value?: string) =>
     (value || "")
       .toUpperCase()
-      .replace(/[^A-Z0-9]+/g, "-")
-      .replace(/^-+|-+$/g, "")
-      .slice(0, 20);
+      .replace(/[^A-Z0-9]+/g, "")
+      .slice(0, 16);
 
   const brand = normalize(parts.brand).slice(0, 4) || "ITEM";
-  const model = normalize(parts.model) || "MODEL";
+  const model = normalize(parts.model).slice(0, 16) || "MODEL";
   const size = normalize(parts.size).slice(0, 6) || "SZ";
   const color = normalize(parts.color).slice(0, 6) || "CLR";
-  return `${brand}-${model}-${size}-${color}`.replace(/-+/g, "-");
+  return `${brand}${model}${size}${color}`.slice(0, 50);
 }
 
 export function buildEbayTitle(parts: {

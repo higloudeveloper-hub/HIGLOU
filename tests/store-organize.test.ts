@@ -2,7 +2,41 @@ import { describe, expect, it } from "vitest";
 import {
   classifyOffersForStore,
   HIGLOU_DEFAULT_STORE_PATHS,
+  parseStoreCategoriesFromXml,
 } from "@/lib/ebay/store-organize";
+
+describe("parseStoreCategoriesFromXml", () => {
+  it("parses nested ChildCategory paths with IDs", () => {
+    const xml = `<?xml version="1.0"?>
+<GetStoreResponse>
+  <CustomCategories>
+    <CustomCategory>
+      <CategoryID>111</CategoryID>
+      <Name>Plumbing</Name>
+      <ChildCategory>
+        <CategoryID>222</CategoryID>
+        <Name>Pumps</Name>
+      </ChildCategory>
+    </CustomCategory>
+  </CustomCategories>
+</GetStoreResponse>`;
+    const cats = parseStoreCategoriesFromXml(xml);
+    expect(cats).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          path: "/Plumbing",
+          name: "Plumbing",
+          categoryId: "111",
+        }),
+        expect.objectContaining({
+          path: "/Plumbing/Pumps",
+          name: "Pumps",
+          categoryId: "222",
+        }),
+      ]),
+    );
+  });
+});
 
 describe("classifyOffersForStore", () => {
   const categories = HIGLOU_DEFAULT_STORE_PATHS.map((path) => ({
@@ -15,7 +49,7 @@ describe("classifyOffersForStore", () => {
       [
         {
           offerId: "1",
-          sku: "PUMP-1",
+          sku: "PUMP1",
           status: "PUBLISHED",
           title: "Everbilt 1/6 HP Submersible Utility Pump",
           categoryId: "61573",
@@ -36,7 +70,7 @@ describe("classifyOffersForStore", () => {
       [
         {
           offerId: "2",
-          sku: "LIGHT-1",
+          sku: "LIGHT1",
           status: "PUBLISHED",
           title: "Matte Black Flush Mount Ceiling Light 14 inch",
           categoryId: "117503",

@@ -531,9 +531,9 @@ export async function POST(request: Request) {
       } else if (/25713|not available/i.test(message)) {
         // Sandbox/production sometimes sticks a dead offer on the SKU — retry with a fresh SKU.
         const freshSku = `${inventory.sku}`
-          .replace(/-H[a-z0-9]+$/i, "")
+          .replace(/[^A-Za-z0-9]/g, "")
           .slice(0, 40);
-        const retrySku = `${freshSku}-H${Date.now().toString(36)}`;
+        const retrySku = `${freshSku}H${Date.now().toString(36)}`.slice(0, 50);
         inventory.sku = retrySku;
         await createOrReplaceInventoryItem(accessToken, inventory, {
           aspectCardinality,

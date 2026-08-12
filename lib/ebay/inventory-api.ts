@@ -455,8 +455,11 @@ export async function upsertOfferForSku(
       return await createOffer(accessToken, offerInput);
     } catch (secondError) {
       // Last resort: new SKU so Sandbox inventory isn't stuck on a dead offer.
-      const freshSku = `${offerInput.sku}`.slice(0, 40) + `-H${Date.now().toString(36)}`;
-      const freshInput: EbayOfferInput = { ...offerInput, sku: freshSku };
+      const freshSku = `${offerInput.sku}`
+        .replace(/[^A-Za-z0-9]/g, "")
+        .slice(0, 40);
+      const retrySku = `${freshSku}H${Date.now().toString(36)}`.slice(0, 50);
+      const freshInput: EbayOfferInput = { ...offerInput, sku: retrySku };
       // Inventory item must exist for the new SKU — caller already wrote original SKU.
       // Re-throw original if this path isn't usable without re-PUT inventory.
       const secondMessage =

@@ -93,9 +93,15 @@ export function EbayStoreOrganizeForm() {
       };
       if (!res.ok) throw new Error(body.error || "Apply failed");
       const failCount = body.failed?.length || 0;
+      if (failCount && (body.applied ?? 0) === 0) {
+        throw new Error(
+          body.failed?.[0]?.error ||
+            "Could not update Store folders. Publish listings first, then Apply again.",
+        );
+      }
       toast.success(`Updated ${body.applied ?? 0} listings`, {
         description: failCount
-          ? `${failCount} failed — check Store folders exist in Seller Hub`
+          ? `${failCount} failed: ${body.failed?.[0]?.error || "see Seller Hub folders"}`
           : "Store categories assigned",
       });
       await runScan();
@@ -111,10 +117,10 @@ export function EbayStoreOrganizeForm() {
   return (
     <div className="space-y-4">
       <div className="rounded-xl border border-emerald-100 bg-emerald-50/70 px-3 py-2.5 text-[12px] text-emerald-900">
-        Higlou scans offers and assigns Store folders. For live listings it
-        revises by eBay item ID (avoids SKU error 25707). Create folders in
-        Seller Hub with the same names first so Scan can load category IDs.
-        Low-confidence rows stay unchecked for review.
+        Higlou assigns Store folders by eBay item ID (Trading API) — never by
+        SKU — so hyphenated inventory SKUs no longer trigger error 25707.
+        Missing folders are created automatically when your account has an eBay
+        Store. Listings must be published first.
       </div>
 
       <div className="flex flex-wrap gap-2">

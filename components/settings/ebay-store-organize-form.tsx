@@ -151,10 +151,21 @@ export function EbayStoreOrganizeForm() {
       };
       if (!res.ok) throw new Error(body.error || "Auto organize failed");
       const failCount = body.failed?.length || 0;
+      const limitHit = body.failed?.some((f) =>
+        /daily call limit|usage limit|GetApiAccessRules/i.test(f.error),
+      );
       if (failCount && (body.applied ?? 0) === 0) {
         throw new Error(
           body.failed?.[0]?.error ||
             "Could not organize Store. Confirm the account has an eBay Store subscription.",
+        );
+      }
+      if (limitHit) {
+        toast.error(
+          body.failed?.find((f) =>
+            /daily call limit|usage limit|GetApiAccessRules/i.test(f.error),
+          )?.error ||
+            "eBay API daily limit reached. Wait a few hours, then Organize again.",
         );
       }
       const folderDelta = Object.keys({

@@ -171,6 +171,17 @@ export function parseStoreCategoriesFromXml(xml: string): EbayStoreCategory[] {
   return out;
 }
 
+const EBAY_USAGE_LIMIT_RE =
+  /exceeded usage limit|call usage|GetApiAccessRules|usage limit has been exceeded|Call usage limit/i;
+
+export function isEbayUsageLimitError(error: unknown): boolean {
+  const msg = error instanceof Error ? error.message : String(error || "");
+  return EBAY_USAGE_LIMIT_RE.test(msg);
+}
+
+const EBAY_USAGE_LIMIT_MESSAGE =
+  "eBay API daily call limit reached. Wait a few hours (or until tomorrow), then try Organize again — Higlou now uses fewer calls per listing.";
+
 async function tradingApiCall(
   accessToken: string,
   callName: string,
@@ -195,6 +206,9 @@ async function tradingApiCall(
       xml.match(/<LongMessage>([^<]+)<\/LongMessage>/)?.[1] ||
       xml.match(/<ShortMessage>([^<]+)<\/ShortMessage>/)?.[1] ||
       `${callName} failed`;
+    if (EBAY_USAGE_LIMIT_RE.test(msg) || EBAY_USAGE_LIMIT_RE.test(xml)) {
+      throw new Error(EBAY_USAGE_LIMIT_MESSAGE);
+    }
     throw new Error(msg);
   }
   return xml;
@@ -715,46 +729,8 @@ async function assignStoreCategoryViaTrading(
     );
   }
 
-  // Confirm Storefront stuck — GetItem can lag right after publish/revise.
-  let got = "";
-  let got2 = "";
-  for (let attempt = 0; attempt < 4; attempt++) {
-    if (attempt > 0) await sleep(1500 * attempt);
-    const verify = await tradingApiCall(
-      accessToken,
-      "GetItem",
-      `<?xml version="1.0" encoding="utf-8"?>
-<GetItemRequest xmlns="urn:ebay:apis:eBLBaseComponents">
-  <ErrorLanguage>en_US</ErrorLanguage>
-  <ItemID>${escapeXml(listingId)}</ItemID>
-  <OutputSelector>ItemID</OutputSelector>
-  <OutputSelector>Storefront</OutputSelector>
-</GetItemRequest>`,
-    );
-    got =
-      verify.match(/<StoreCategoryID>([^<]+)<\/StoreCategoryID>/i)?.[1]?.trim() ||
-      "";
-    got2 =
-      verify
-        .match(/<StoreCategory2ID>([^<]+)<\/StoreCategory2ID>/i)?.[1]
-        ?.trim() || "0";
-    const primaryOk = got === storeCategoryId;
-    const secondaryOk =
-      secondId === "0" || !secondId || got2 === secondId || got2 === "0";
-    // Secondary can lag; accept primary match when secondary was requested and eBay kept 0 briefly.
-    if (primaryOk && (secondId === "0" || got2 === secondId)) return;
-    if (primaryOk && secondaryOk && attempt >= 2) return;
-  }
-  if (got && got !== "0" && got !== storeCategoryId) {
-    throw new Error(
-      `Store folder did not stick (wanted ${storeCategoryId}, eBay has ${got}). Use a leaf Store category with no subfolders.`,
-    );
-  }
-  if (!got || got === "0") {
-    throw new Error(
-      "eBay did not keep the Store folder (often means the folder is a parent with subfolders, or the account has no eBay Store).",
-    );
-  }
+  // Trust ReviseFixedPriceItem Ack=Success. Extra GetItem verifies burned the
+  // app's daily Trading call limit (1 revise + up to 4 GetItem per listing).
 }
 
 /**
@@ -793,6 +769,9 @@ export async function listSellerStoreCategories(
         xml.match(/<ShortMessage>([^<]+)<\/ShortMessage>/)?.[1] ||
         xml.match(/<LongMessage>([^<]+)<\/LongMessage>/)?.[1] ||
         "GetStore failed";
+      if (EBAY_USAGE_LIMIT_RE.test(tradingWarning) || EBAY_USAGE_LIMIT_RE.test(xml)) {
+        throw new Error(EBAY_USAGE_LIMIT_MESSAGE);
+      }
     } else {
       tradingCats = parseStoreCategoriesFromXml(xml);
     }
@@ -835,7 +814,14 @@ export async function listSellerStoreCategories(
  */
 async function listSellerOffersViaTrading(
   accessToken: string,
-  options?: { limit?: number; maxPages?: number },
+  options?: {
+    limit?: number;
+    maxPages?: number;
+    /** Per-item GetItem Storefront fill — burns call quota; off by default. */
+    enrichStorefront?: boolean;
+    /** Cap GetItem enrich calls when enrichStorefront is true. */
+    enrichStorefrontMax?: number;
+  },
 ): Promise<EbayStoreOfferRow[]> {
   const pageSize = Math.min(100, Math.max(1, options?.limit || 50));
   const maxPages = Math.min(40, Math.max(1, options?.maxPages || 10));
@@ -890,10 +876,18 @@ async function listSellerOffersViaTrading(
       const storeCatId =
         block.match(/<StoreCategoryID>([^<]+)<\/StoreCategoryID>/i)?.[1]
           ?.trim() || "";
+      const storeCat2Id =
+        block.match(/<StoreCategory2ID>([^<]+)<\/StoreCategory2ID>/i)?.[1]
+          ?.trim() || "";
       const currentPath =
         (storeCatId &&
           storeCatId !== "0" &&
           categoriesById.get(storeCatId)) ||
+        "";
+      const currentPath2 =
+        (storeCat2Id &&
+          storeCat2Id !== "0" &&
+          categoriesById.get(storeCat2Id)) ||
         "";
       const priceRaw =
         block.match(
@@ -910,9 +904,14 @@ async function listSellerOffersViaTrading(
         categoryId,
         listingId,
         price: Number(priceRaw) || null,
-        currentStorePaths: currentPath ? [normalizeStorePath(currentPath)] : [],
+        currentStorePaths: [
+          ...(currentPath ? [normalizeStorePath(currentPath)] : []),
+          ...(currentPath2 ? [normalizeStorePath(currentPath2)] : []),
+        ],
         currentStoreCategoryId:
           storeCatId && storeCatId !== "0" ? storeCatId : null,
+        currentStoreCategory2Id:
+          storeCat2Id && storeCat2Id !== "0" ? storeCat2Id : null,
       });
     }
 
@@ -924,8 +923,12 @@ async function listSellerOffersViaTrading(
     if (page >= totalPages || itemBlocks.length === 0) break;
   }
 
-  // ActiveList often omits Storefront — fill via GetItem so re-scan sees Apply.
-  await enrichStorefrontFromGetItem(accessToken, rows, categoriesById);
+  // Optional only — default off so Organize does not burn the daily quota.
+  if (options?.enrichStorefront) {
+    await enrichStorefrontFromGetItem(accessToken, rows, categoriesById, {
+      maxItems: options.enrichStorefrontMax ?? 25,
+    });
+  }
   return rows;
 }
 
@@ -933,15 +936,19 @@ async function enrichStorefrontFromGetItem(
   accessToken: string,
   rows: EbayStoreOfferRow[],
   categoriesById: Map<string, string>,
+  options?: { maxItems?: number },
 ): Promise<void> {
-  const need = rows.filter(
-    (r) =>
-      r.listingId &&
-      (!r.currentStoreCategoryId ||
-        r.currentStoreCategoryId === "0" ||
-        !r.currentStorePaths.length),
-  );
-  const chunkSize = 6;
+  const maxItems = Math.min(100, Math.max(0, options?.maxItems ?? 25));
+  const need = rows
+    .filter(
+      (r) =>
+        r.listingId &&
+        (!r.currentStoreCategoryId ||
+          r.currentStoreCategoryId === "0" ||
+          !r.currentStorePaths.length),
+    )
+    .slice(0, maxItems);
+  const chunkSize = 4;
   for (let i = 0; i < need.length; i += chunkSize) {
     const chunk = need.slice(i, i + chunkSize);
     await Promise.all(
@@ -979,7 +986,8 @@ async function enrichStorefrontFromGetItem(
             ...(path ? [normalizeStorePath(path)] : []),
             ...(path2 ? [normalizeStorePath(path2)] : []),
           ];
-        } catch {
+        } catch (error) {
+          if (isEbayUsageLimitError(error)) throw error;
           // leave empty — classify will still suggest a folder
         }
       }),
@@ -989,12 +997,18 @@ async function enrichStorefrontFromGetItem(
 
 export async function listSellerOffers(
   accessToken: string,
-  options?: { limit?: number; maxPages?: number },
+  options?: {
+    limit?: number;
+    maxPages?: number;
+    enrichStorefront?: boolean;
+    enrichStorefrontMax?: number;
+  },
 ): Promise<EbayStoreOfferRow[]> {
   // Prefer Trading — Inventory update/create rejects hyphenated Higlou SKUs (25707).
   try {
     return await listSellerOffersViaTrading(accessToken, options);
   } catch (tradingError) {
+    if (isEbayUsageLimitError(tradingError)) throw tradingError;
     try {
       return await listSellerOffersViaInventory(accessToken, options);
     } catch (inventoryError) {
@@ -2795,6 +2809,8 @@ export async function applyStoreOrganizeSuggestions(
         offerId: row.offerId,
         error: error instanceof Error ? error.message : String(error),
       });
+      // Stop burning remaining quota / queue when eBay daily limit is hit.
+      if (isEbayUsageLimitError(error)) break;
     }
   }
 

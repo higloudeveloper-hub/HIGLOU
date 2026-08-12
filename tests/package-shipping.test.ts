@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   estimatePackageAndShipping,
+  parseShippingWeightFromText,
   resolveListingPackage,
   packageEstimateToCsvValues,
   parseProductDimensionsInches,
@@ -97,6 +98,14 @@ describe("estimatePackageAndShipping", () => {
       estimate.shippingCost.toFixed(2),
     );
     expect(values.PackageType).toBeTruthy();
+  });
+
+  it("parses labeled shipping weight from packaging text", () => {
+    const labeled = parseShippingWeightFromText(
+      "Everbilt Utility Pump Net Wt 11.2 lb Made in China",
+    );
+    expect(labeled).not.toBeNull();
+    expect(labeled!.totalOz).toBeGreaterThan(160);
   });
 
   it("estimates utility pumps as Ground Advantage parcels, not envelopes", () => {

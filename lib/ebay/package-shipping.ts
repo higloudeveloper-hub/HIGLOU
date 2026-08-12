@@ -144,6 +144,51 @@ function toLbsOz(totalOz: number): { lbs: number; oz: number } {
   return { lbs, oz: oz === 0 && lbs > 0 ? 0 : oz || (lbs === 0 ? 1 : 0) };
 }
 
+/** Parse shipping/net weight from packaging OCR, title, or specs text. */
+export function parseShippingWeightFromText(text: string): {
+  totalOz: number;
+  source: string;
+} | null {
+  const raw = String(text || "");
+  if (!raw.trim()) return null;
+
+  const patterns: Array<{ re: RegExp; toOz: (n: number) => number; label: string }> = [
+    {
+      re: /(?:net\s*wt\.?|shipping\s*weight|ship\s*wt\.?|weight)\s*[:=]?\s*(\d+(?:\.\d+)?)\s*(?:lb|lbs|pounds?)\b/i,
+      toOz: (n) => n * 16,
+      label: "labeled-lb",
+    },
+    {
+      re: /(?:net\s*wt\.?|shipping\s*weight|ship\s*wt\.?|weight)\s*[:=]?\s*(\d+(?:\.\d+)?)\s*(?:oz|ounces?)\b/i,
+      toOz: (n) => n,
+      label: "labeled-oz",
+    },
+    {
+      re: /(?:net\s*wt\.?|shipping\s*weight|ship\s*wt\.?|weight)\s*[:=]?\s*(\d+(?:\.\d+)?)\s*(?:kg|kilograms?)\b/i,
+      toOz: (n) => n * 35.274,
+      label: "labeled-kg",
+    },
+    {
+      re: /\b(\d+(?:\.\d+)?)\s*(?:lb|lbs|pounds?)\b/i,
+      toOz: (n) => n * 16,
+      label: "loose-lb",
+    },
+  ];
+
+  for (const p of patterns) {
+    const m = raw.match(p.re);
+    if (!m) continue;
+    const n = Number(m[1]);
+    if (!Number.isFinite(n) || n <= 0) continue;
+    // Ignore tiny "1 lb" false positives from nutrition unless labeled shipping/net
+    if (p.label === "loose-lb" && n < 2) continue;
+    const totalOz = Math.max(1, Math.round(p.toOz(n)));
+    if (totalOz > 1120) continue; // >70 lb unlikely for standard parcel path
+    return { totalOz, source: p.label };
+  }
+  return null;
+}
+
 function pickService(totalOz: number, longestIn: number): {
   shippingService: string;
   reason: string;
@@ -330,6 +375,17 @@ export function estimatePackageAndShipping(input: {
     unitOz = 10;
   }
 
+  // Prefer printed / title shipping weight when present (OCR / label / "11 lb").
+  const labeledWeight = parseShippingWeightFromText(
+    [input.dimensionsText, input.title, input.size, input.productType]
+      .filter(Boolean)
+      .join(" "),
+  );
+  if (labeledWeight) {
+    unitOz = Math.max(unitOz, Math.round(labeledWeight.totalOz / qty));
+    dimNote = `${dimNote} · ${labeledWeight.source} weight`;
+  }
+
   // Prefer Package when any edge > 0.75" (rare envelope path).
   if (Math.min(lengthIn, widthIn, depthIn) > 0.75 && packageType === "PackageThickEnvelope") {
     packageType = "PackageThickEnvelope";
@@ -486,7 +542,7 @@ export function resolveListingPackage(input: {
   };
 }
 
-/** Apply heuristic estimate onto a listing when package fields are empty / still auto. */
+/** Apply automatic package (AI / OCR / heuristic) onto a listing. Never overwrites manual edits. */
 export function seedPackageOnListing<T extends {
   packageWeightLbs?: number | null;
   packageWeightOz?: number | null;
@@ -504,9 +560,15 @@ export function seedPackageOnListing<T extends {
   categoryName?: string | null;
   brand?: string | null;
   quantity?: number | null;
+  dimensionsText?: string | null;
+  /** Optional AI analysis package fields */
+  aiPackageWeightLbs?: number | null;
+  aiPackageWeightOz?: number | null;
+  aiPackageLengthIn?: number | null;
+  aiPackageWidthIn?: number | null;
+  aiPackageDepthIn?: number | null;
 }>(listing: T, force = false): T {
   if (!force && listing.packageSource === "manual") return listing;
-  if (!force && listingHasMeasuredPackage(listing)) return listing;
 
   const estimate = estimatePackageAndShipping({
     title: listing.title,
@@ -515,18 +577,50 @@ export function seedPackageOnListing<T extends {
     categoryName: listing.categoryName,
     brand: listing.brand,
     quantity: listing.quantity,
+    dimensionsText: listing.dimensionsText,
   });
+
+  const aiLbs = Number(listing.aiPackageWeightLbs);
+  const aiOz = Number(listing.aiPackageWeightOz);
+  const aiL = Number(listing.aiPackageLengthIn);
+  const aiW = Number(listing.aiPackageWidthIn);
+  const aiD = Number(listing.aiPackageDepthIn);
+  const aiWeightOk =
+    Number.isFinite(aiLbs) &&
+    aiLbs >= 0 &&
+    Number.isFinite(aiOz) &&
+    aiOz >= 0 &&
+    aiLbs * 16 + aiOz >= 1;
+  const aiDimsOk =
+    Number.isFinite(aiL) &&
+    aiL > 0 &&
+    Number.isFinite(aiW) &&
+    aiW > 0 &&
+    Number.isFinite(aiD) &&
+    aiD > 0;
+
+  const weightLbs = aiWeightOk ? Math.floor(aiLbs) : estimate.weightLbs;
+  const weightOz = aiWeightOk
+    ? Math.min(15, Math.floor(aiOz))
+    : estimate.weightOz;
+  const lengthIn = aiDimsOk ? aiL : estimate.lengthIn;
+  const widthIn = aiDimsOk ? aiW : estimate.widthIn;
+  const depthIn = aiDimsOk ? aiD : estimate.depthIn;
+
+  const totalOz = Math.max(1, weightLbs * 16 + weightOz);
+  const shippingCost = estimateBuyerPaidShippingCostUsd(totalOz);
+  const service = pickService(totalOz, lengthIn);
 
   return {
     ...listing,
-    packageWeightLbs: estimate.weightLbs,
-    packageWeightOz: estimate.weightOz,
-    packageLengthIn: estimate.lengthIn,
-    packageWidthIn: estimate.widthIn,
-    packageDepthIn: estimate.depthIn,
+    packageWeightLbs: weightLbs,
+    packageWeightOz: weightOz,
+    packageLengthIn: lengthIn,
+    packageWidthIn: widthIn,
+    packageDepthIn: depthIn,
     packageSource: "auto",
-    shippingService: estimate.shippingService,
-    shippingCost: estimate.shippingCost,
+    shippingService: service.shippingService,
+    shippingCost,
     freeShipping: false,
   };
 }

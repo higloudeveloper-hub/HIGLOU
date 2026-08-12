@@ -366,17 +366,6 @@ export async function POST(request: Request) {
       );
     }
 
-    if (data.mode === "live" && listing.packageSource !== "manual") {
-      return NextResponse.json(
-        {
-          error:
-            "Enter the real ready-to-ship box weight and L×W×H in Review → Shipping (badge should say Measured), then publish live. Suggested estimates are only for drafts.",
-          code: "PACKAGE_MEASUREMENTS_REQUIRED",
-        },
-        { status: 400 },
-      );
-    }
-
     // Draft + live both require policies that belong to the *currently*
     // connected eBay seller. IDs from a previous account cause 25087.
     {

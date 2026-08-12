@@ -26,6 +26,7 @@ import {
 } from "@/lib/ebay/listing-helpers";
 import {
   estimatePackageAndShipping,
+  listingHasMeasuredPackage,
   seedPackageOnListing,
 } from "@/lib/ebay/package-shipping";
 import {
@@ -551,6 +552,12 @@ export function NewListingWorkspace({
       categoryName: category.categoryName,
       brand,
       quantity: analysis.quantity || prev.quantity,
+      dimensionsText: [
+        ...(analysis.detectedText || []),
+        size,
+        title,
+        productType,
+      ].join(" "),
     });
 
     const nextBase: ProductListing = {
@@ -569,23 +576,9 @@ export function NewListingWorkspace({
       itemLocation: prev.itemLocation || DEFAULT_VALUES.itemLocation,
       postalCode: prev.postalCode || DEFAULT_VALUES.postalCode,
       country: prev.country || DEFAULT_VALUES.country,
-      ...(prev.packageSource === "manual"
-        ? {
-            shippingService: prev.shippingService || shipping.shippingService,
-            shippingCost: prev.shippingCost ?? shipping.shippingCost,
-            freeShipping: false as const,
-            packageWeightLbs: prev.packageWeightLbs,
-            packageWeightOz: prev.packageWeightOz,
-            packageLengthIn: prev.packageLengthIn,
-            packageWidthIn: prev.packageWidthIn,
-            packageDepthIn: prev.packageDepthIn,
-            packageSource: "manual" as const,
-          }
-        : {
-            shippingService: shipping.shippingService,
-            shippingCost: shipping.shippingCost,
-            freeShipping: false as const,
-          }),
+      shippingService: shipping.shippingService,
+      shippingCost: shipping.shippingCost,
+      freeShipping: false,
       condition: analysis.condition || prev.condition,
       conditionId:
       analysis.conditionId || prev.conditionId || "NEW",
@@ -622,8 +615,38 @@ export function NewListingWorkspace({
       descriptionHtml: "",
     };
 
-    // Seed package suggestion once; never overwrite seller-measured box.
-    const next = seedPackageOnListing(nextBase, false);
+    // Auto package from AI label/vision + OCR + category heuristics.
+    // Only keep seller edits when they explicitly marked Measured (manual).
+    const next =
+      prev.packageSource === "manual"
+        ? {
+            ...nextBase,
+            packageWeightLbs: prev.packageWeightLbs,
+            packageWeightOz: prev.packageWeightOz,
+            packageLengthIn: prev.packageLengthIn,
+            packageWidthIn: prev.packageWidthIn,
+            packageDepthIn: prev.packageDepthIn,
+            packageSource: "manual" as const,
+            shippingService: prev.shippingService || shipping.shippingService,
+            shippingCost: prev.shippingCost ?? shipping.shippingCost,
+          }
+        : seedPackageOnListing(
+            {
+              ...nextBase,
+              dimensionsText: [
+                ...(analysis.detectedText || []),
+                size,
+                title,
+                productType,
+              ].join(" "),
+              aiPackageWeightLbs: analysis.packageWeightLbs,
+              aiPackageWeightOz: analysis.packageWeightOz,
+              aiPackageLengthIn: analysis.packageLengthIn,
+              aiPackageWidthIn: analysis.packageWidthIn,
+              aiPackageDepthIn: analysis.packageDepthIn,
+            },
+            true,
+          );
 
     return withFreshDescription(next, storeBranding);
   };
@@ -1374,21 +1397,25 @@ export function NewListingWorkspace({
       }));
     }
 
-    if (mode === "live" && fresh.packageSource !== "manual") {
-      toast.error("Measure the shipping box first", {
-        description:
-          "In Review → Shipping, enter the real weight (lb/oz) and L×W×H inches until the badge says Measured, then publish live.",
-      });
-      setStep("review");
-      return;
+    // Ensure auto package exists before publish (AI/heuristic) if still empty.
+    const withPackage =
+      fresh.packageSource === "manual"
+        ? fresh
+        : seedPackageOnListing(
+            fresh,
+            !listingHasMeasuredPackage(fresh),
+          );
+
+    if (withPackage !== fresh) {
+      setListing((prev) => ({ ...prev, ...withPackage }));
     }
 
-    await persistDraft({ quiet: true, draft: fresh });
+    await persistDraft({ quiet: true, draft: withPackage });
 
     setPublishingEbay(true);
     try {
       const productId =
-        /^[0-9a-f-]{36}$/i.test(fresh.id) ? fresh.id : undefined;
+        /^[0-9a-f-]{36}$/i.test(withPackage.id) ? withPackage.id : undefined;
       const response = await fetch("/api/ebay/publish", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1396,43 +1423,43 @@ export function NewListingWorkspace({
           productId,
           mode,
           listing: {
-            sku: fresh.sku,
-            title: fresh.title,
-            descriptionHtml: fresh.descriptionHtml,
-            descriptionSummary: fresh.descriptionSummary,
-            categoryId: fresh.categoryId,
-            categoryName: fresh.categoryName,
-            brand: fresh.brand,
-            model: fresh.model,
-            mpn: fresh.mpn,
-            upc: fresh.upc,
-            size: fresh.size,
-            productType: fresh.productType || fresh.type,
-            type: fresh.type,
-            condition: fresh.condition,
-            conditionId: fresh.conditionId,
-            price: fresh.price,
-            quantity: fresh.quantity,
-            colors: fresh.colors,
-            materials: fresh.materials,
-            features: fresh.features,
-            itemSpecifics: fresh.itemSpecifics.map((f) => ({
+            sku: withPackage.sku,
+            title: withPackage.title,
+            descriptionHtml: withPackage.descriptionHtml,
+            descriptionSummary: withPackage.descriptionSummary,
+            categoryId: withPackage.categoryId,
+            categoryName: withPackage.categoryName,
+            brand: withPackage.brand,
+            model: withPackage.model,
+            mpn: withPackage.mpn,
+            upc: withPackage.upc,
+            size: withPackage.size,
+            productType: withPackage.productType || withPackage.type,
+            type: withPackage.type,
+            condition: withPackage.condition,
+            conditionId: withPackage.conditionId,
+            price: withPackage.price,
+            quantity: withPackage.quantity,
+            colors: withPackage.colors,
+            materials: withPackage.materials,
+            features: withPackage.features,
+            itemSpecifics: withPackage.itemSpecifics.map((f) => ({
               key: f.key,
               value: f.value,
               label: f.label,
             })),
-            images: fresh.images
+            images: withPackage.images
               .filter((img) => /^https:\/\//i.test(img.url))
               .map((img) => ({ url: img.url })),
-            shippingPolicyId: fresh.shippingPolicyId,
-            returnPolicyId: fresh.returnPolicyId,
-            paymentPolicyId: fresh.paymentPolicyId,
-            packageWeightLbs: fresh.packageWeightLbs,
-            packageWeightOz: fresh.packageWeightOz,
-            packageLengthIn: fresh.packageLengthIn,
-            packageWidthIn: fresh.packageWidthIn,
-            packageDepthIn: fresh.packageDepthIn,
-            packageSource: fresh.packageSource || "auto",
+            shippingPolicyId: withPackage.shippingPolicyId,
+            returnPolicyId: withPackage.returnPolicyId,
+            paymentPolicyId: withPackage.paymentPolicyId,
+            packageWeightLbs: withPackage.packageWeightLbs,
+            packageWeightOz: withPackage.packageWeightOz,
+            packageLengthIn: withPackage.packageLengthIn,
+            packageWidthIn: withPackage.packageWidthIn,
+            packageDepthIn: withPackage.packageDepthIn,
+            packageSource: withPackage.packageSource || "auto",
           },
         }),
       });

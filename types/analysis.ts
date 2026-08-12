@@ -163,6 +163,12 @@ export const analysisResultSchema = z
       .optional()
       .catch([])
       .default([]),
+    /** Ready-to-ship package for eBay Calculated shipping (from label or visual estimate). */
+    packageWeightLbs: softNumber,
+    packageWeightOz: softNumber,
+    packageLengthIn: softNumber,
+    packageWidthIn: softNumber,
+    packageDepthIn: softNumber,
   })
   .passthrough()
   .transform((data) => {
@@ -308,4 +314,5 @@ Hard rules:
 - Identify the most specific leaf that matches the ACTUAL product (ATV → Motors/ATV leaf, never clothing; athletic shoe ≠ jean).
 - Populate itemSpecifics appropriate to that category so the draft is as complete as possible.
 - colors, materials, features, setIncludes, missingItems, defects MUST be JSON arrays of strings (e.g. ["Black"]), never a bare string.
-- Include warnings for uncertain or missing identity data.`;
+- Include warnings for uncertain or missing identity data.
+- Shipping package (REQUIRED for eBay Calculated): fill packageWeightLbs, packageWeightOz (0–15), packageLengthIn, packageWidthIn, packageDepthIn in inches for the READY-TO-SHIP retail box (product + typical light packing). Prefer printed shipping/net weight and box size on the packaging/label. If not printed, estimate from the boxed product visible in photos (do not use tiny envelope sizes for pumps, appliances, cookware, etc.).`;

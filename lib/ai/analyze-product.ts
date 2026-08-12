@@ -621,6 +621,7 @@ CRITICAL — Identify AND fully describe ANY product (not limited to tip example
 10) Condition: report honest condition from photos. Also return defects[] and conditionNotes.
 11) Package: setIncludes[] / missingItems[] only when clearly evidenced; otherwise empty arrays.
 12) When ocrStatus.visionFailed or ocrStatus.weak is true, prioritize careful visual reading of text in images before leaving model/mpn/features empty.
+13) Shipping box for eBay Calculated (always fill): packageWeightLbs (int), packageWeightOz (0–15), packageLengthIn, packageWidthIn, packageDepthIn (inches). Prefer printed shipping/net weight and carton size on packaging. If not printed, estimate the retail box you see (ready to ship). Never use 3 oz / envelope sizes for heavy goods (pumps, appliances, vacuums, cookware).
 
 tipExamples (optional hints only):
 ${JSON.stringify(getEbayCategoryExamplesForPrompt())}
@@ -631,6 +632,8 @@ price (number|null), quantity, size, type, colors[], materials[], pattern, style
 features[], setIncludes[], missingItems[], defects[], conditionNotes,
 numberOfItems (number|null), careInstructions[], countryOfManufacture,
 descriptionSummary, detectedText[], warnings[],
+packageWeightLbs (number|null), packageWeightOz (number|null),
+packageLengthIn (number|null), packageWidthIn (number|null), packageDepthIn (number|null),
 confidence:{brand,model,upc,category,size,condition},
 fieldMeta:{ [field]: { confidence, source: image|user|inferred, needs_review } },
 itemSpecifics:[{key,label,value,confidence?}].`,

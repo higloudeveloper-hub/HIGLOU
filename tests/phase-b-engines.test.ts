@@ -37,6 +37,11 @@ function baseAnalysis(partial: Partial<AnalysisResult> = {}): AnalysisResult {
     descriptionSummary: "",
     detectedText: [],
     warnings: [],
+    packageWeightLbs: null,
+    packageWeightOz: null,
+    packageLengthIn: null,
+    packageWidthIn: null,
+    packageDepthIn: null,
     confidence: {
       brand: 0.9,
       model: 0.8,

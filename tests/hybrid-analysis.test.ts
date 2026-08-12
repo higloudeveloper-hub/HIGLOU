@@ -84,6 +84,11 @@ describe("fusion engine", () => {
     descriptionSummary: "",
     detectedText: [],
     warnings: [],
+    packageWeightLbs: null,
+    packageWeightOz: null,
+    packageLengthIn: null,
+    packageWidthIn: null,
+    packageDepthIn: null,
     confidence: {
       brand: 0.5,
       model: 0,

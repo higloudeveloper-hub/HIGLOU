@@ -797,11 +797,11 @@ export function ReviewScreen({
                       className={cn(
                         "ml-auto shrink-0 rounded-md px-2 py-1 text-[11px] font-semibold",
                         packageMeasured
-                          ? "bg-emerald-100 text-emerald-900"
-                          : "bg-muted text-muted-foreground",
+                          ? "bg-amber-100 text-amber-950"
+                          : "bg-emerald-100 text-emerald-900",
                       )}
                     >
-                      {packageMeasured ? "Measured" : "Suggested"}
+                      {packageMeasured ? "Edited" : "Auto"}
                     </span>
                   </div>
                 </Field>
@@ -865,8 +865,8 @@ export function ReviewScreen({
                 </Field>
                 <div className="sm:col-span-2 flex flex-wrap items-center justify-between gap-2">
                   <p className="text-[12.5px] text-muted-foreground">
-                    Use the real ready-to-ship box (with packing). Calculated
-                    shipping charges the buyer from these numbers.
+                    Filled automatically from packaging photos, OCR, and product
+                    type. Edit only if you want to override.
                   </p>
                   <button
                     type="button"
@@ -904,7 +904,7 @@ export function ReviewScreen({
                       );
                     }}
                   >
-                    Reset to estimate
+                    Re-run auto estimate
                   </button>
                 </div>
               </div>

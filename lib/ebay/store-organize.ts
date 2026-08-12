@@ -1682,3 +1682,58 @@ export async function applyStoreOrganizeSuggestions(
 
   return { applied, failed };
 }
+
+/**
+ * After live publish: classify title → create Store folder if missing → assign.
+ * Keeps the eBay Store organized as each new product goes live.
+ */
+export async function organizeListingOnPublish(
+  accessToken: string,
+  input: {
+    listingId: string;
+    title: string;
+    sku?: string;
+    categoryId?: string;
+  },
+): Promise<{
+  storePath: string;
+  createdFolder: boolean;
+  confidence: number;
+  reason: string;
+}> {
+  const listingId = String(input.listingId || "").trim();
+  if (!listingId || !/^\d+$/.test(listingId)) {
+    throw new Error("organizeListingOnPublish requires a numeric eBay listingId");
+  }
+
+  const store = await listSellerStoreCategories(accessToken);
+  const [suggestion] = classifyOffersForStore(
+    [
+      {
+        offerId: listingId,
+        sku: String(input.sku || listingId),
+        status: "PUBLISHED",
+        title: String(input.title || "").trim() || listingId,
+        categoryId: String(input.categoryId || ""),
+        listingId,
+        price: null,
+        currentStorePaths: [],
+      },
+    ],
+    store.categories,
+  );
+
+  const storePath = suggestion?.suggestedPath || "/Home/General Merchandise";
+  const beforeId = resolveStoreCategoryId(storePath, store.categories);
+  await assignStoreCategoriesToOffer(accessToken, listingId, [storePath], {
+    listingId,
+    categories: store.categories,
+  });
+
+  return {
+    storePath,
+    createdFolder: !beforeId,
+    confidence: suggestion?.confidence ?? 0.5,
+    reason: suggestion?.reason || "Assigned on publish",
+  };
+}

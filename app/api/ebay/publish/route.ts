@@ -14,6 +14,7 @@ import {
   publishOffer,
   upsertOfferForSku,
 } from "@/lib/ebay/inventory-api";
+import { organizeListingOnPublish } from "@/lib/ebay/store-organize";
 import {
   listingToInventoryItem,
   listingToOfferInput,
@@ -588,10 +589,35 @@ export async function POST(request: Request) {
 
     let listingId = "";
     let status = "UNPUBLISHED";
+    let storeOrganize: {
+      storePath: string;
+      createdFolder: boolean;
+      confidence: number;
+      reason: string;
+    } | null = null;
+    let storeOrganizeWarning: string | null = null;
+
     if (data.mode === "live") {
       const published = await publishOffer(accessToken, offerId);
       listingId = published.listingId;
       status = "PUBLISHED";
+
+      // Same pattern as Settings → Organize Store: classify → create folder → assign.
+      if (listingId) {
+        try {
+          storeOrganize = await organizeListingOnPublish(accessToken, {
+            listingId,
+            title: listing.title,
+            sku: listing.sku,
+            categoryId: listing.categoryId,
+          });
+        } catch (organizeError) {
+          storeOrganizeWarning =
+            organizeError instanceof Error
+              ? organizeError.message
+              : String(organizeError);
+        }
+      }
     }
 
     if (productId) {
@@ -607,6 +633,10 @@ export async function POST(request: Request) {
         .eq("user_id", auth.user.id);
     }
 
+    const liveHint = storeOrganize
+      ? `Published and filed in Store folder ${storeOrganize.storePath}${storeOrganize.createdFolder ? " (folder created)" : ""}.`
+      : "Listing published to eBay.";
+
     return NextResponse.json({
       ok: true,
       mode: data.mode,
@@ -617,10 +647,14 @@ export async function POST(request: Request) {
       imageHost: "ebay-eps",
       ebayUsername: connection.ebayUsername,
       env: connection.env,
+      storeOrganize,
+      storeOrganizeWarning,
       sellerHubHint:
         data.mode === "draft"
           ? "Offer created unpublished with eBay-hosted photos. Finish location/policies in Seller Hub if needed, then publish."
-          : "Listing published to eBay.",
+          : storeOrganizeWarning
+            ? `${liveHint} Store organize note: ${storeOrganizeWarning}`
+            : liveHint,
     });
   } catch (error) {
     return NextResponse.json(

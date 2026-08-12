@@ -162,8 +162,9 @@ export default function SettingsPage() {
               Organize eBay Store
             </h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              Recognizes the right Store folder, creates it via eBay API if
-              missing, then sorts live listings automatically.
+              Every live publish also files the listing into the right Store
+              folder (creates it if missing). Use Organize everything to catch
+              up older listings.
             </p>
           </div>
           <div className="rounded-2xl border border-border/70 bg-surface p-5 sm:p-6">

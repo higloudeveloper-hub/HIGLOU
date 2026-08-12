@@ -1470,6 +1470,10 @@ export function NewListingWorkspace({
         listingId?: string | null;
         sellerHubHint?: string;
         imageCount?: number;
+        storeOrganize?: {
+          storePath?: string;
+          createdFolder?: boolean;
+        } | null;
       } | null;
       if (!response.ok) {
         if (body?.code === "EBAY_NOT_CONNECTED") {
@@ -1490,6 +1494,9 @@ export function NewListingWorkspace({
         typeof body?.imageCount === "number"
           ? ` · ${body.imageCount} photo${body.imageCount === 1 ? "" : "s"} on eBay EPS`
           : "";
+      const folderBit = body?.storeOrganize?.storePath
+        ? ` · Store ${body.storeOrganize.storePath}${body.storeOrganize.createdFolder ? " (created)" : ""}`
+        : "";
       toast.success(
         mode === "live" ? "Published to eBay" : "eBay draft offer created",
         {
@@ -1497,7 +1504,9 @@ export function NewListingWorkspace({
             (body?.sellerHubHint ||
               (body?.listingId
                 ? `Listing ${body.listingId}`
-                : `Offer ${body?.offerId || ""}`)) + photoBit,
+                : `Offer ${body?.offerId || ""}`)) +
+            photoBit +
+            folderBit,
         },
       );
     } catch (error) {

@@ -162,8 +162,8 @@ export default function SettingsPage() {
               Organize eBay Store
             </h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              Scan the connected account and place each offer into the right
-              Store folder. Higlou only — uses your live eBay Inventory API.
+              Scan live eBay listings and place each one into the right Store
+              folder (Trading API — no Inventory SKUs).
             </p>
           </div>
           <div className="rounded-2xl border border-border/70 bg-surface p-5 sm:p-6">

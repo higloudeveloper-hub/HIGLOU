@@ -386,7 +386,124 @@ export async function listSellerStoreCategories(
   }
 }
 
+/**
+ * List active listings via Trading GetMyeBaySelling (no Inventory SKU checks).
+ */
+async function listSellerOffersViaTrading(
+  accessToken: string,
+  options?: { limit?: number; maxPages?: number },
+): Promise<EbayStoreOfferRow[]> {
+  const pageSize = Math.min(100, Math.max(1, options?.limit || 50));
+  const maxPages = Math.min(40, Math.max(1, options?.maxPages || 10));
+  const rows: EbayStoreOfferRow[] = [];
+  const categoriesById = new Map<string, string>();
+
+  // Prefetch store category id → path for currentStorePaths.
+  try {
+    const store = await listSellerStoreCategories(accessToken);
+    for (const cat of store.categories) {
+      if (cat.categoryId) categoriesById.set(cat.categoryId, cat.path);
+    }
+  } catch {
+    // optional
+  }
+
+  for (let page = 1; page <= maxPages; page++) {
+    const xml = await tradingApiCall(
+      accessToken,
+      "GetMyeBaySelling",
+      `<?xml version="1.0" encoding="utf-8"?>
+<GetMyeBaySellingRequest xmlns="urn:ebay:apis:eBLBaseComponents">
+  <ErrorLanguage>en_US</ErrorLanguage>
+  <WarningLevel>High</WarningLevel>
+  <ActiveList>
+    <Include>true</Include>
+    <IncludeNotes>false</IncludeNotes>
+    <Pagination>
+      <EntriesPerPage>${pageSize}</EntriesPerPage>
+      <PageNumber>${page}</PageNumber>
+    </Pagination>
+  </ActiveList>
+</GetMyeBaySellingRequest>`,
+    );
+
+    const itemBlocks = xml.match(/<Item>([\s\S]*?)<\/Item>/gi) || [];
+    for (const block of itemBlocks) {
+      const listingId =
+        block.match(/<ItemID>([^<]+)<\/ItemID>/i)?.[1]?.trim() || "";
+      if (!listingId) continue;
+      const title =
+        block.match(/<Title>([^<]*)<\/Title>/i)?.[1]?.trim() || listingId;
+      const sku =
+        block.match(/<SKU>([^<]*)<\/SKU>/i)?.[1]?.trim() ||
+        block.match(/<CustomLabel>([^<]*)<\/CustomLabel>/i)?.[1]?.trim() ||
+        listingId;
+      const categoryId =
+        block.match(
+          /<PrimaryCategory>[\s\S]*?<CategoryID>([^<]+)<\/CategoryID>/i,
+        )?.[1]?.trim() || "";
+      const storeCatId =
+        block.match(/<StoreCategoryID>([^<]+)<\/StoreCategoryID>/i)?.[1]
+          ?.trim() || "";
+      const currentPath =
+        (storeCatId && categoriesById.get(storeCatId)) ||
+        (storeCatId ? `/${storeCatId}` : "");
+      const priceRaw =
+        block.match(
+          /<SellingStatus>[\s\S]*?<CurrentPrice[^>]*>([^<]+)<\/CurrentPrice>/i,
+        )?.[1] ||
+        block.match(/<BuyItNowPrice[^>]*>([^<]+)<\/BuyItNowPrice>/i)?.[1] ||
+        "";
+      rows.push({
+        // Use listing id as stable key — Apply never needs Inventory offerId.
+        offerId: listingId,
+        sku,
+        status: "PUBLISHED",
+        title,
+        categoryId,
+        listingId,
+        price: Number(priceRaw) || null,
+        currentStorePaths: currentPath ? [normalizeStorePath(currentPath)] : [],
+      });
+    }
+
+    const totalPages = Number(
+      xml.match(
+        /<ActiveList>[\s\S]*?<PaginationResult>[\s\S]*?<TotalNumberOfPages>(\d+)<\/TotalNumberOfPages>/i,
+      )?.[1] || "1",
+    );
+    if (page >= totalPages || itemBlocks.length === 0) break;
+  }
+
+  return rows;
+}
+
 export async function listSellerOffers(
+  accessToken: string,
+  options?: { limit?: number; maxPages?: number },
+): Promise<EbayStoreOfferRow[]> {
+  // Prefer Trading — Inventory update/create rejects hyphenated Higlou SKUs (25707).
+  try {
+    return await listSellerOffersViaTrading(accessToken, options);
+  } catch (tradingError) {
+    try {
+      return await listSellerOffersViaInventory(accessToken, options);
+    } catch (inventoryError) {
+      const invMsg =
+        inventoryError instanceof Error
+          ? inventoryError.message
+          : String(inventoryError);
+      if (/25707|alphanumeric/i.test(invMsg)) {
+        throw tradingError instanceof Error
+          ? tradingError
+          : new Error(String(tradingError));
+      }
+      throw inventoryError;
+    }
+  }
+}
+
+async function listSellerOffersViaInventory(
   accessToken: string,
   options?: { limit?: number; maxPages?: number },
 ): Promise<EbayStoreOfferRow[]> {
@@ -417,9 +534,12 @@ export async function listSellerOffers(
 
     const batch = json.offers || [];
     for (const offer of batch) {
-      const offerId = String(offer.offerId || "").trim();
       const sku = String(offer.sku || "").trim();
-      if (!offerId || !sku) continue;
+      const listingId = offer.listing?.listingId
+        ? String(offer.listing.listingId)
+        : null;
+      // Organize Store only works on published items (Trading revise).
+      if (!listingId) continue;
       const title =
         String(offer.listing?.title || "").trim() ||
         String(offer.listingDescription || "")
@@ -427,16 +547,15 @@ export async function listSellerOffers(
           .replace(/\s+/g, " ")
           .trim()
           .slice(0, 120) ||
-        sku;
+        sku ||
+        listingId;
       rows.push({
-        offerId,
-        sku,
+        offerId: listingId,
+        sku: sku || listingId,
         status: String(offer.status || "").toUpperCase(),
         title,
         categoryId: String(offer.categoryId || ""),
-        listingId: offer.listing?.listingId
-          ? String(offer.listing.listingId)
-          : null,
+        listingId,
         price: Number(offer.pricingSummary?.price?.value) || null,
         currentStorePaths: (offer.storeCategoryNames || [])
           .map(normalizeStorePath)
@@ -627,7 +746,7 @@ export function classifyOffersForStore(
 
 /**
  * Set Store folder on a published listing via Trading API only.
- * Never uses Inventory updateOffer (Higlou SKUs with hyphens trigger eBay 25707).
+ * Never calls Inventory APIs (hyphenated Higlou SKUs trigger eBay 25707).
  */
 export async function assignStoreCategoriesToOffer(
   accessToken: string,
@@ -655,22 +774,14 @@ export async function assignStoreCategoriesToOffer(
     options?.setCategories?.(categories);
   }
 
-  let listingId = String(options?.listingId || "").trim();
-  if (!listingId) {
-    const offer = (await inventoryFetch(
-      accessToken,
-      `/sell/inventory/v1/offer/${encodeURIComponent(offerId)}`,
-      { method: "GET" },
-    )) as {
-      listing?: { listingId?: string };
-      status?: string;
-    };
-    listingId = String(offer.listing?.listingId || "").trim();
-  }
+  // offerId from Trading scan is the eBay ItemID; listingId may also be set.
+  const listingId =
+    String(options?.listingId || "").trim() ||
+    String(offerId || "").trim();
 
-  if (!listingId) {
+  if (!listingId || !/^\d+$/.test(listingId)) {
     throw new Error(
-      "This offer is not published yet. Publish the listing on eBay first, then Apply Organize Store (Trading revise uses the item ID — never the SKU).",
+      "Missing eBay item ID. Only published listings can be organized. Scan again after publishing.",
     );
   }
 

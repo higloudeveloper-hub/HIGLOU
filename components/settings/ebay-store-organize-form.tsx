@@ -117,10 +117,9 @@ export function EbayStoreOrganizeForm() {
   return (
     <div className="space-y-4">
       <div className="rounded-xl border border-emerald-100 bg-emerald-50/70 px-3 py-2.5 text-[12px] text-emerald-900">
-        Higlou assigns Store folders by eBay item ID (Trading API) — never by
-        SKU — so hyphenated inventory SKUs no longer trigger error 25707.
-        Missing folders are created automatically when your account has an eBay
-        Store. Listings must be published first.
+        Organize Store uses eBay Trading only (active listings by item ID). It
+        never reads or writes Inventory SKUs, so error 25707 cannot happen here.
+        Your account needs an eBay Store. Scan → review → Apply selected.
       </div>
 
       <div className="flex flex-wrap gap-2">

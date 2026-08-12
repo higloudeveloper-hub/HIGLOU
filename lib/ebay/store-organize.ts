@@ -1614,9 +1614,9 @@ const STORE_THEME_HINTS: Array<{
     boost: 8,
   },
   {
-    folder: /outdoor|garden|lawn/,
-    product: /\b(outdoor|garden|lawn|hose|trimmer|blower|patio)\b/i,
-    boost: 8,
+    folder: /outdoor|garden|lawn|patio|living/,
+    product: /\b(outdoor|garden|lawn|hose|trimmer|blower|patio|grill|deck|yard|landscape|camping)\b/i,
+    boost: 10,
   },
   {
     folder: /hardware|fastener/,
@@ -1635,6 +1635,18 @@ const STORE_THEME_HINTS: Array<{
 const HIGLOU_PLUMBING_PATH_RE = /^\/plumbing(\/|$)/i;
 const HIGLOU_TOOLS_PATH_RE = /^\/tools(\/|$)/i;
 const HIGLOU_LIGHTING_PATH_RE = /^\/lighting(\/|$)/i;
+const HIGLOU_OUTDOOR_PATH_RE = /^\/outdoor(\/|$)/i;
+
+/**
+ * Seller's featured eBay Store folders (exact names on the live store).
+ * Primary + optional secondary assignments target these first.
+ */
+export const HIGLOU_FEATURED_STORE_FOLDERS = [
+  "Tools",
+  "Smart Home",
+  "Outdoor Living",
+  "Bath and Plumbing",
+] as const;
 
 /** Product text that belongs in a bath/plumbing Store folder. */
 export const PLUMBING_PRODUCT_RE =
@@ -1647,6 +1659,10 @@ export const TOOLS_PRODUCT_RE =
 /** Product text that belongs in Lighting. */
 export const LIGHTING_PRODUCT_RE =
   /\b(light|lamp|led|bulb|chandelier|pendant|sconce|hue|flush\s*mount|fixture)\b/i;
+
+/** Product text that belongs in Outdoor Living. */
+export const OUTDOOR_PRODUCT_RE =
+  /\b(outdoor|patio|garden|lawn|hose|sprinkler|trimmer|blower|grill|bbq|camping|deck|yard|landscape|gazebo|umbrella|fire\s*pit|string\s*light|solar\s*light|planter|weed|mower)\b/i;
 
 /** Product text that also belongs in Smart Home (2nd Store folder). */
 export const SMART_HOME_PRODUCT_RE =
@@ -1751,10 +1767,26 @@ function sortSellerThemeFolders(
   });
 }
 
+/** Find a seller folder by exact featured name (case-insensitive). */
+export function findFeaturedStoreFolder(
+  categories: EbayStoreCategory[],
+  featuredName: string,
+): EbayStoreCategory | null {
+  const usable = usableStoreCategories(categories);
+  const want = normalizeMatchText(featuredName);
+  const exact = usable.filter(
+    (c) => normalizeMatchText(c.name) === want,
+  );
+  if (exact.length) return sortSellerThemeFolders(exact, usable, true)[0];
+  return null;
+}
+
 /** Seller's real bath/plumbing folder (e.g. Bath and Plumbing), preferring broad names. */
 export function findSellerBathPlumbingFolder(
   categories: EbayStoreCategory[],
 ): EbayStoreCategory | null {
+  const featured = findFeaturedStoreFolder(categories, "Bath and Plumbing");
+  if (featured) return featured;
   const usable = usableStoreCategories(categories);
   const matches = usable.filter((c) =>
     /bath|plumb/i.test(normalizeMatchText(`${c.name} ${c.path}`)),
@@ -1767,6 +1799,8 @@ export function findSellerBathPlumbingFolder(
 export function findSellerToolsFolder(
   categories: EbayStoreCategory[],
 ): EbayStoreCategory | null {
+  const featured = findFeaturedStoreFolder(categories, "Tools");
+  if (featured) return featured;
   const usable = usableStoreCategories(categories);
   const matches = usable.filter((c) => {
     const name = normalizeMatchText(c.name);
@@ -1774,8 +1808,7 @@ export function findSellerToolsFolder(
     if (/batter/i.test(name)) return false;
     if (/^(tools?)$/i.test(name)) return true;
     if (/^\/tools?$/i.test(path)) return true;
-    // "Power Tools" only if there is no top-level Tools
-    return /tool/i.test(name) && !/bath|plumb|light|lamp/i.test(name);
+    return /tool/i.test(name) && !/bath|plumb|light|lamp|outdoor|smart/i.test(name);
   });
   if (!matches.length) return null;
   const exact = matches.filter(
@@ -1787,7 +1820,7 @@ export function findSellerToolsFolder(
   return sortSellerThemeFolders(pool, usable, true)[0] || null;
 }
 
-/** Seller's real Lighting folder. */
+/** Seller's real Lighting folder (optional — many stores use Smart Home instead). */
 export function findSellerLightingFolder(
   categories: EbayStoreCategory[],
 ): EbayStoreCategory | null {
@@ -1795,7 +1828,10 @@ export function findSellerLightingFolder(
   const matches = usable.filter((c) => {
     const name = normalizeMatchText(c.name);
     if (/^(lighting|lights?|lamps?)$/i.test(name)) return true;
-    return /light|lamp|led/i.test(name) && !/tool|bath|plumb|smart/i.test(name);
+    return (
+      /light|lamp/i.test(name) &&
+      !/tool|bath|plumb|smart|outdoor/i.test(name)
+    );
   });
   if (!matches.length) return null;
   const exact = matches.filter((c) =>
@@ -1805,10 +1841,12 @@ export function findSellerLightingFolder(
   return sortSellerThemeFolders(pool, usable, true)[0] || null;
 }
 
-/** Seller's real Smart Home folder (featured / secondary category). */
+/** Seller's real Smart Home folder (featured). */
 export function findSellerSmartHomeFolder(
   categories: EbayStoreCategory[],
 ): EbayStoreCategory | null {
+  const featured = findFeaturedStoreFolder(categories, "Smart Home");
+  if (featured) return featured;
   const usable = usableStoreCategories(categories);
   const matches = usable.filter((c) => {
     const text = normalizeMatchText(`${c.name} ${c.path}`);
@@ -1820,9 +1858,24 @@ export function findSellerSmartHomeFolder(
   return sortSellerThemeFolders(matches, usable, true)[0] || null;
 }
 
+/** Seller's real Outdoor Living folder (featured). */
+export function findSellerOutdoorLivingFolder(
+  categories: EbayStoreCategory[],
+): EbayStoreCategory | null {
+  const featured = findFeaturedStoreFolder(categories, "Outdoor Living");
+  if (featured) return featured;
+  const usable = usableStoreCategories(categories);
+  const matches = usable.filter((c) => {
+    const text = normalizeMatchText(`${c.name} ${c.path}`);
+    return /outdoor|patio|garden|lawn/i.test(text);
+  });
+  if (!matches.length) return null;
+  return sortSellerThemeFolders(matches, usable, true)[0] || null;
+}
+
 /**
- * Prefer the seller's real Store folders over Higlou taxonomy leaves
- * (/Plumbing/Pumps, /Tools/Power Tools, …).
+ * Prefer the seller's featured Store folders
+ * (Tools, Smart Home, Outdoor Living, Bath and Plumbing).
  */
 export function preferSellerStorePath(
   suggestedPath: string,
@@ -1830,6 +1883,16 @@ export function preferSellerStorePath(
   categories: EbayStoreCategory[],
 ): string {
   const suggested = normalizeStorePath(suggestedPath);
+
+  const tools = findSellerToolsFolder(categories);
+  if (
+    tools &&
+    (HIGLOU_TOOLS_PATH_RE.test(suggested) || TOOLS_PRODUCT_RE.test(haystack)) &&
+    !PLUMBING_PRODUCT_RE.test(haystack) &&
+    !OUTDOOR_PRODUCT_RE.test(haystack)
+  ) {
+    return normalizeStorePath(tools.path);
+  }
 
   const bath = findSellerBathPlumbingFolder(categories);
   if (
@@ -1841,32 +1904,51 @@ export function preferSellerStorePath(
     return normalizeStorePath(bath.path);
   }
 
-  const tools = findSellerToolsFolder(categories);
+  const outdoor = findSellerOutdoorLivingFolder(categories);
   if (
-    tools &&
-    (HIGLOU_TOOLS_PATH_RE.test(suggested) || TOOLS_PRODUCT_RE.test(haystack)) &&
-    !PLUMBING_PRODUCT_RE.test(haystack)
+    outdoor &&
+    (HIGLOU_OUTDOOR_PATH_RE.test(suggested) ||
+      OUTDOOR_PRODUCT_RE.test(haystack) ||
+      (/outdoor/i.test(suggested) && LIGHTING_PRODUCT_RE.test(haystack)))
   ) {
-    return normalizeStorePath(tools.path);
+    return normalizeStorePath(outdoor.path);
   }
 
   const lighting = findSellerLightingFolder(categories);
+  const smartHome = findSellerSmartHomeFolder(categories);
   if (
     lighting &&
     (HIGLOU_LIGHTING_PATH_RE.test(suggested) ||
       LIGHTING_PRODUCT_RE.test(haystack)) &&
     !TOOLS_PRODUCT_RE.test(haystack) &&
-    !PLUMBING_PRODUCT_RE.test(haystack)
+    !PLUMBING_PRODUCT_RE.test(haystack) &&
+    !OUTDOOR_PRODUCT_RE.test(haystack)
   ) {
     return normalizeStorePath(lighting.path);
+  }
+
+  // No Lighting folder on this store — LED / smart lights go to Smart Home.
+  if (
+    smartHome &&
+    (HIGLOU_LIGHTING_PATH_RE.test(suggested) ||
+      LIGHTING_PRODUCT_RE.test(haystack) ||
+      SMART_HOME_PRODUCT_RE.test(haystack)) &&
+    !TOOLS_PRODUCT_RE.test(haystack) &&
+    !PLUMBING_PRODUCT_RE.test(haystack) &&
+    !OUTDOOR_PRODUCT_RE.test(haystack)
+  ) {
+    return normalizeStorePath(smartHome.path);
   }
 
   return suggested;
 }
 
 /**
- * Pick an optional 2nd Store folder (StoreCategory2ID).
- * Example: LED lamp → Lighting (1st) + Smart Home (2nd).
+ * Pick an optional 2nd Store folder (StoreCategory2ID) from featured set.
+ * Examples:
+ *   LED bulb → Lighting or Smart Home (1st) + Smart Home (2nd if different)
+ *   Outdoor LED → Outdoor Living + Smart Home
+ *   Smart plug → Smart Home only (no 2nd)
  */
 export function pickSecondaryStorePath(
   haystack: string,
@@ -1875,35 +1957,35 @@ export function pickSecondaryStorePath(
 ): string | null {
   const primary = normalizeStorePath(primaryPath);
   const usable = usableStoreCategories(categories);
-
   const smartHome = findSellerSmartHomeFolder(usable);
+  const outdoor = findSellerOutdoorLivingFolder(usable);
+  const tools = findSellerToolsFolder(usable);
+  const bath = findSellerBathPlumbingFolder(usable);
+
+  const candidates: EbayStoreCategory[] = [];
+
+  // LED / smart / wifi → always try Smart Home as 2nd when primary is elsewhere.
   if (smartHome && SMART_HOME_PRODUCT_RE.test(haystack)) {
-    const path = normalizeStorePath(smartHome.path);
-    if (path !== primary) return path;
+    candidates.push(smartHome);
   }
 
-  // Second-best seller folder with a different theme (fill featured categories).
-  const scored = usable
-    .map((cat) => ({
-      cat,
-      score: scoreExistingStoreCategory(haystack, cat, usable),
-    }))
-    .filter((row) => row.score >= 4)
-    .sort((a, b) => b.score - a.score);
+  // Outdoor + lighting/LED → Outdoor Living as secondary if primary was Smart Home.
+  if (outdoor && OUTDOOR_PRODUCT_RE.test(haystack)) {
+    candidates.push(outdoor);
+  }
 
-  for (const row of scored) {
-    const path = normalizeStorePath(row.cat.path);
-    if (path === primary) continue;
-    // Don't pair Bath with Tools, etc. — only cross-cutting Smart Home-like
-    // or a clearly different strong match already filtered by score.
-    const name = normalizeMatchText(row.cat.name);
-    if (/smart|home automation|featured/i.test(name)) return path;
-    if (
-      smartHome &&
-      normalizeStorePath(smartHome.path) === path
-    ) {
-      return path;
-    }
+  // Tool-ish secondary rarely; skip if primary is already Tools.
+  if (tools && TOOLS_PRODUCT_RE.test(haystack) && !OUTDOOR_PRODUCT_RE.test(haystack)) {
+    candidates.push(tools);
+  }
+
+  if (bath && PLUMBING_PRODUCT_RE.test(haystack)) {
+    candidates.push(bath);
+  }
+
+  for (const cat of candidates) {
+    const path = normalizeStorePath(cat.path);
+    if (path !== primary) return path;
   }
 
   return null;
@@ -1947,6 +2029,18 @@ function scoreExistingStoreCategory(
     TOOLS_PRODUCT_RE.test(haystack)
   ) {
     score += 14;
+  }
+
+  // Boost the seller's four featured folders when the product matches.
+  for (const featured of HIGLOU_FEATURED_STORE_FOLDERS) {
+    if (normalizeMatchText(featured) !== name) continue;
+    if (featured === "Tools" && TOOLS_PRODUCT_RE.test(haystack)) score += 16;
+    if (featured === "Bath and Plumbing" && PLUMBING_PRODUCT_RE.test(haystack))
+      score += 16;
+    if (featured === "Outdoor Living" && OUTDOOR_PRODUCT_RE.test(haystack))
+      score += 16;
+    if (featured === "Smart Home" && SMART_HOME_PRODUCT_RE.test(haystack))
+      score += 16;
   }
 
   for (const hint of STORE_THEME_HINTS) {
@@ -2332,16 +2426,20 @@ export async function assignStoreCategoriesToOffer(
     const tools = findSellerToolsFolder(live);
     const lighting = findSellerLightingFolder(live);
     const smartHome = findSellerSmartHomeFolder(live);
+    const outdoor = findSellerOutdoorLivingFolder(live);
 
     if (bath && HIGLOU_PLUMBING_PATH_RE.test(targetPath)) {
       targetPath = normalizeStorePath(bath.path);
     } else if (tools && HIGLOU_TOOLS_PATH_RE.test(targetPath)) {
       targetPath = normalizeStorePath(tools.path);
+    } else if (outdoor && HIGLOU_OUTDOOR_PATH_RE.test(targetPath)) {
+      targetPath = normalizeStorePath(outdoor.path);
     } else if (lighting && HIGLOU_LIGHTING_PATH_RE.test(targetPath)) {
       targetPath = normalizeStorePath(lighting.path);
     } else if (
       smartHome &&
-      /smart\s*home|smarthome/i.test(targetPath.replace(/\//g, " "))
+      (/smart\s*home|smarthome/i.test(targetPath.replace(/\//g, " ")) ||
+        HIGLOU_LIGHTING_PATH_RE.test(targetPath))
     ) {
       targetPath = normalizeStorePath(smartHome.path);
     }
@@ -2369,15 +2467,22 @@ export async function assignStoreCategoriesToOffer(
           : tools &&
               (HIGLOU_TOOLS_PATH_RE.test(targetPath) ||
                 TOOLS_PRODUCT_RE.test(haystack)) &&
-              !PLUMBING_PRODUCT_RE.test(haystack)
+              !PLUMBING_PRODUCT_RE.test(haystack) &&
+              !OUTDOOR_PRODUCT_RE.test(haystack)
             ? tools
-            : lighting &&
-                (HIGLOU_LIGHTING_PATH_RE.test(targetPath) ||
-                  LIGHTING_PRODUCT_RE.test(haystack))
-              ? lighting
-              : smartHome && SMART_HOME_PRODUCT_RE.test(haystack)
-                ? smartHome
-                : null;
+            : outdoor &&
+                (HIGLOU_OUTDOOR_PATH_RE.test(targetPath) ||
+                  OUTDOOR_PRODUCT_RE.test(haystack))
+              ? outdoor
+              : lighting &&
+                  (HIGLOU_LIGHTING_PATH_RE.test(targetPath) ||
+                    LIGHTING_PRODUCT_RE.test(haystack))
+                ? lighting
+                : smartHome &&
+                    (SMART_HOME_PRODUCT_RE.test(haystack) ||
+                      LIGHTING_PRODUCT_RE.test(haystack))
+                  ? smartHome
+                  : null;
 
       if (themeFolder) {
         targetPath = normalizeStorePath(themeFolder.path);

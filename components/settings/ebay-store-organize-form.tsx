@@ -198,10 +198,11 @@ export function EbayStoreOrganizeForm() {
   return (
     <div className="space-y-4">
       <div className="rounded-xl border border-emerald-100 bg-emerald-50/70 px-3 py-2.5 text-[12px] text-emerald-900">
-        Higlou files each live listing into your eBay Store folders: primary
-        (e.g. Lighting / Tools / Bath and Plumbing) plus an optional second
-        folder when it fits (e.g. LED → Smart Home). eBay category stays the
-        marketplace leaf. Publish does the same automatically.
+        Featured Store folders: <strong>Tools</strong>,{" "}
+        <strong>Smart Home</strong>, <strong>Outdoor Living</strong>,{" "}
+        <strong>Bath and Plumbing</strong>. Each listing gets the eBay
+        marketplace category plus up to two of these Store folders (example:
+        outdoor LED → Outdoor Living + Smart Home).
       </div>
 
       <div className="flex flex-wrap gap-2">

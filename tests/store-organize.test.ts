@@ -406,6 +406,83 @@ describe("classifyOffersForStore", () => {
     expect(row.unchanged).toBe(false);
   });
 
+  it("maps into the four featured folders Tools / Smart Home / Outdoor Living / Bath and Plumbing", () => {
+    const featured = [
+      { path: "/Tools", name: "Tools", categoryId: "1" },
+      { path: "/Smart Home", name: "Smart Home", categoryId: "2" },
+      { path: "/Outdoor Living", name: "Outdoor Living", categoryId: "3" },
+      {
+        path: "/Bath and Plumbing",
+        name: "Bath and Plumbing",
+        categoryId: "4",
+      },
+    ];
+    const rows = classifyOffersForStore(
+      [
+        {
+          offerId: "1",
+          sku: "1",
+          status: "PUBLISHED",
+          title: "Ryobi 18V Drill",
+          categoryId: "20779",
+          brand: "Ryobi",
+          listingId: "1",
+          price: 1,
+          currentStorePaths: [],
+        },
+        {
+          offerId: "2",
+          sku: "2",
+          status: "PUBLISHED",
+          title: "Philips Hue LED Smart Bulb",
+          categoryId: "112581",
+          brand: "Philips",
+          listingId: "2",
+          price: 1,
+          currentStorePaths: [],
+        },
+        {
+          offerId: "3",
+          sku: "3",
+          status: "PUBLISHED",
+          title: "Patio Umbrella Outdoor Living",
+          categoryId: "20524",
+          listingId: "3",
+          price: 1,
+          currentStorePaths: [],
+        },
+        {
+          offerId: "4",
+          sku: "4",
+          status: "PUBLISHED",
+          title: "Moen Kitchen Faucet",
+          categoryId: "63897",
+          brand: "Moen",
+          listingId: "4",
+          price: 1,
+          currentStorePaths: [],
+        },
+        {
+          offerId: "5",
+          sku: "5",
+          status: "PUBLISHED",
+          title: "Solar LED Outdoor String Lights",
+          categoryId: "117503",
+          listingId: "5",
+          price: 1,
+          currentStorePaths: [],
+        },
+      ],
+      featured,
+    );
+    expect(rows[0].suggestedPath).toBe("/Tools");
+    expect(rows[1].suggestedPath).toBe("/Smart Home");
+    expect(rows[2].suggestedPath).toBe("/Outdoor Living");
+    expect(rows[3].suggestedPath).toBe("/Bath and Plumbing");
+    expect(rows[4].suggestedPath).toBe("/Outdoor Living");
+    expect(rows[4].suggestedPath2).toBe("/Smart Home");
+  });
+
   it("still prefers Bath and Plumbing when that folder has a child", () => {
     const live = [
       {

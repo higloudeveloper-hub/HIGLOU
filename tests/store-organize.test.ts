@@ -171,6 +171,11 @@ describe("classifyOffersForStore", () => {
         categoryId: "9001",
       },
       {
+        path: "/Plumbing/Pumps",
+        name: "Pumps",
+        categoryId: "9003",
+      },
+      {
         path: "/Tools",
         name: "Tools",
         categoryId: "9002",
@@ -198,11 +203,22 @@ describe("classifyOffersForStore", () => {
           price: 89,
           currentStorePaths: [],
         },
+        {
+          offerId: "p3",
+          sku: "P3",
+          status: "PUBLISHED",
+          title: "Glacier Bay Aragon Single Handle Tub and Shower Set Chrome",
+          categoryId: "20601",
+          listingId: "13",
+          price: 69,
+          currentStorePaths: ["/Other"],
+        },
       ],
       live,
     );
     expect(rows[0].suggestedPath).toBe("/Bath and Plumbing");
     expect(rows[1].suggestedPath).toBe("/Bath and Plumbing");
+    expect(rows[2].suggestedPath).toBe("/Bath and Plumbing");
     expect(rows[0].reason).toMatch(/Bath and Plumbing/i);
   });
 });

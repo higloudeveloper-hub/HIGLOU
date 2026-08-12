@@ -51,10 +51,15 @@ export async function GET() {
     );
     const store = await listSellerStoreCategories(accessToken);
     const offers = await listSellerOffers(accessToken, {
-      limit: 50,
-      maxPages: 10,
+      limit: 100,
+      maxPages: 40,
     });
     const suggestions = classifyOffersForStore(offers, store.categories);
+    const byFolder: Record<string, number> = {};
+    for (const row of suggestions) {
+      const key = row.suggestedPath || "(none)";
+      byFolder[key] = (byFolder[key] || 0) + 1;
+    }
 
     return NextResponse.json({
       ok: true,
@@ -69,6 +74,7 @@ export async function GET() {
         willCreate: suggestions.filter(
           (s) => !s.unchanged && /will create folder/i.test(s.reason),
         ).length,
+        byFolder,
       },
       suggestions,
     });
@@ -101,7 +107,7 @@ const applySchema = z.union([
         }),
       )
       .min(1)
-      .max(200),
+      .max(500),
     includeNeedsReview: z.boolean().optional().default(false),
   }),
 ]);
@@ -152,7 +158,8 @@ export async function POST(request: Request) {
 
     if ("mode" in body && body.mode === "auto") {
       const result = await autoOrganizeStore(accessToken, {
-        minConfidence: body.minConfidence,
+        minConfidence: body.minConfidence ?? 0.3,
+        maxItems: 500,
       });
       return NextResponse.json({
         ok: true,
@@ -162,6 +169,8 @@ export async function POST(request: Request) {
         createdFolders: result.createdFolders,
         scanned: result.scanned,
         skipped: result.skipped,
+        beforeByFolder: result.beforeByFolder,
+        afterByFolder: result.afterByFolder,
       });
     }
 

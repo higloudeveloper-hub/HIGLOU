@@ -1423,7 +1423,7 @@ export function classifyOffersForStore(
 
     // 1) Prefer the seller's REAL Store folders (e.g. "Bath and Plumbing").
     const liveHit = pickBestExistingStoreCategory(haystack, liveCategories);
-    if (liveHit && liveHit.score >= 5) {
+    if (liveHit && liveHit.score >= 4) {
       const leafPath = pickAssignableStorePath(liveHit.cat, liveCategories);
       const suggestedId = liveHit.cat.categoryId || null;
       const current = offer.currentStorePaths[0] || "";
@@ -1527,8 +1527,8 @@ const STORE_THEME_HINTS: Array<{
   {
     folder: /bath|plumb/,
     product:
-      /\b(bath|plumb|faucet|pump|toilet|sink|shower|tub|valve|pipe|sump|disposal|vanity)\b/i,
-    boost: 10,
+      /\b(bath|plumb|faucet|pump|toilet|sink|shower|tub|valve|pipe|sump|disposal|vanity|thermostat|fixture|spout|drain|washer|cartridge)\b/i,
+    boost: 12,
   },
   {
     folder: /light|lamp|led/,
@@ -1576,6 +1576,7 @@ const STORE_THEME_HINTS: Array<{
 function scoreExistingStoreCategory(
   haystack: string,
   cat: EbayStoreCategory,
+  allCategories: EbayStoreCategory[],
 ): number {
   const hay = normalizeMatchText(haystack);
   const name = normalizeMatchText(cat.name);
@@ -1583,14 +1584,38 @@ function scoreExistingStoreCategory(
   const folderText = `${name} ${path}`;
   let score = 0;
 
-  for (const word of name.split(" ").filter((w) => w.length >= 3)) {
-    if (word === "and" || word === "the" || word === "for") continue;
+  const significantWords = name
+    .split(" ")
+    .filter((w) => w.length >= 3 && !/^(and|the|for|with)$/i.test(w));
+
+  for (const word of significantWords) {
     if (new RegExp(`\\b${word}\\b`, "i").test(hay)) score += 4;
   }
 
   for (const hint of STORE_THEME_HINTS) {
-    if (hint.folder.test(folderText) && hint.product.test(haystack)) {
-      score += hint.boost;
+    if (!(hint.folder.test(folderText) && hint.product.test(haystack))) {
+      continue;
+    }
+    score += hint.boost;
+
+    // Prefer broad seller folders ("Bath and Plumbing") over narrow leaves ("Pumps").
+    if (significantWords.length >= 2) {
+      score += 8;
+    } else if (significantWords.length === 1) {
+      const hasBroaderPeer = allCategories.some((peer) => {
+        if (peer.categoryId === cat.categoryId) return false;
+        const peerName = normalizeMatchText(peer.name);
+        const peerWords = peerName
+          .split(" ")
+          .filter((w) => w.length >= 3 && !/^(and|the|for|with)$/i.test(w));
+        return (
+          peerWords.length >= 2 &&
+          hint.folder.test(peerName) &&
+          Boolean(peer.categoryId) &&
+          !isReservedStoreFolderName(peer.name)
+        );
+      });
+      if (hasBroaderPeer) score -= 8;
     }
   }
 
@@ -1614,10 +1639,19 @@ export function pickBestExistingStoreCategory(
 
   let best: { cat: EbayStoreCategory; score: number } | null = null;
   for (const cat of pool) {
-    const score = scoreExistingStoreCategory(haystack, cat);
-    if (!best || score > best.score) best = { cat, score };
+    const score = scoreExistingStoreCategory(haystack, cat, usable);
+    if (
+      !best ||
+      score > best.score ||
+      (score === best.score &&
+        normalizeMatchText(cat.name).length >
+          normalizeMatchText(best.cat.name).length)
+    ) {
+      best = { cat, score };
+    }
   }
-  return best && best.score > 0 ? best : null;
+  // Threshold 4: theme match on a broad seller folder is enough.
+  return best && best.score >= 4 ? best : null;
 }
 
 /**
@@ -1683,11 +1717,19 @@ export function mapTaxonomyPathToExistingStore(
   );
   if (!matches.length) return null;
 
-  // Prefer longer / more specific names
-  matches.sort(
-    (a, b) =>
-      normalizeMatchText(b.name).length - normalizeMatchText(a.name).length,
-  );
+  // Prefer longer / more specific seller folder names (Bath and Plumbing > Pumps).
+  matches.sort((a, b) => {
+    const aWords = normalizeMatchText(a.name)
+      .split(" ")
+      .filter((w) => w.length >= 3 && w !== "and").length;
+    const bWords = normalizeMatchText(b.name)
+      .split(" ")
+      .filter((w) => w.length >= 3 && w !== "and").length;
+    if (bWords !== aWords) return bWords - aWords;
+    return (
+      normalizeMatchText(b.name).length - normalizeMatchText(a.name).length
+    );
+  });
   return matches[0];
 }
 
@@ -1775,7 +1817,9 @@ export async function ensureHiglouStoreTree(
 }
 
 /**
- * One-shot: ensure folders → classify → assign all listings that need a move.
+ * One-shot: classify every active listing against YOUR Store folders, create
+ * only missing suggested paths, then assign. Does not bootstrap Higlou's full
+ * default tree (that competed with folders like Bath and Plumbing).
  */
 export async function autoOrganizeStore(
   accessToken: string,
@@ -1786,24 +1830,29 @@ export async function autoOrganizeStore(
   createdFolders: string[];
   scanned: number;
   skipped: number;
+  beforeByFolder: Record<string, number>;
+  afterByFolder: Record<string, number>;
 }> {
-  const minConfidence = options?.minConfidence ?? 0.35;
-  const maxItems = Math.min(200, Math.max(1, options?.maxItems || 100));
+  const minConfidence = options?.minConfidence ?? 0.3;
+  const maxItems = Math.min(500, Math.max(1, options?.maxItems || 500));
 
-  let store = await listSellerStoreCategories(accessToken);
-  const tree = await ensureHiglouStoreTree(accessToken, store.categories);
-  let categories = tree.categories;
+  const store = await listSellerStoreCategories(accessToken);
+  let categories = store.categories;
 
   const offers = await listSellerOffers(accessToken, {
-    limit: 50,
-    maxPages: 10,
+    limit: 100,
+    maxPages: 40,
   });
+  const beforeByFolder = folderDistribution(offers);
   const suggestions = classifyOffersForStore(offers, categories);
   const toApply = suggestions
     .filter((s) => !s.unchanged && s.confidence >= minConfidence)
     .slice(0, maxItems);
 
-  const neededPaths = toApply.map((s) => s.suggestedPath);
+  // Only create folders that were actually suggested and are missing.
+  const neededPaths = toApply
+    .map((s) => s.suggestedPath)
+    .filter((path) => !resolveStoreCategoryId(path, categories));
   const ensured = await ensureStorePaths(
     accessToken,
     neededPaths,
@@ -1821,15 +1870,36 @@ export async function autoOrganizeStore(
     categories,
   );
 
+  const failedIds = new Set(result.failed.map((f) => f.offerId));
+  const afterByFolder = { ...beforeByFolder };
+  for (const row of toApply) {
+    if (failedIds.has(row.offerId)) continue;
+    const from = row.currentStorePaths[0] || "(none)";
+    const to = row.suggestedPath;
+    afterByFolder[from] = Math.max(0, (afterByFolder[from] || 0) - 1);
+    afterByFolder[to] = (afterByFolder[to] || 0) + 1;
+  }
+
   return {
     applied: result.applied,
     failed: result.failed,
-    createdFolders: Array.from(
-      new Set([...tree.created, ...ensured.created]),
-    ),
+    createdFolders: ensured.created,
     scanned: offers.length,
     skipped: suggestions.length - toApply.length,
+    beforeByFolder,
+    afterByFolder,
   };
+}
+
+export function folderDistribution(
+  offers: Array<{ currentStorePaths: string[] }>,
+): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const offer of offers) {
+    const key = offer.currentStorePaths[0] || "(none)";
+    out[key] = (out[key] || 0) + 1;
+  }
+  return out;
 }
 
 /**

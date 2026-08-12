@@ -34,6 +34,7 @@ type ScanResponse = {
     unchanged: number;
     ready: number;
     willCreate?: number;
+    byFolder?: Record<string, number>;
   };
   suggestions?: Suggestion[];
 };
@@ -54,11 +55,19 @@ export function EbayStoreOrganizeForm() {
       setScan(body);
       const next: Record<string, boolean> = {};
       for (const row of body.suggestions || []) {
-        next[row.offerId] = !row.unchanged && !row.needsReview;
+        // Pre-select everything that still needs a move (including review rows).
+        next[row.offerId] = !row.unchanged;
       }
       setSelected(next);
+      const topFolders = Object.entries(body.summary?.byFolder || {})
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 3)
+        .map(([path, n]) => `${path} ${n}`)
+        .join(" · ");
       toast.success("Store scan complete", {
-        description: `${body.summary?.offerCount ?? 0} offers · ${body.summary?.willCreate ?? 0} folders to create`,
+        description:
+          topFolders ||
+          `${body.summary?.offerCount ?? 0} offers analyzed`,
       });
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Scan failed");
@@ -124,7 +133,7 @@ export function EbayStoreOrganizeForm() {
       const res = await fetch("/api/ebay/store-organize", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mode: "auto", minConfidence: 0.35 }),
+        body: JSON.stringify({ mode: "auto", minConfidence: 0.3 }),
       });
       const body = (await res.json()) as {
         error?: string;
@@ -133,6 +142,8 @@ export function EbayStoreOrganizeForm() {
         skipped?: number;
         createdFolders?: string[];
         failed?: Array<{ offerId: string; error: string }>;
+        beforeByFolder?: Record<string, number>;
+        afterByFolder?: Record<string, number>;
       };
       if (!res.ok) throw new Error(body.error || "Auto organize failed");
       const failCount = body.failed?.length || 0;
@@ -142,9 +153,23 @@ export function EbayStoreOrganizeForm() {
             "Could not organize Store. Confirm the account has an eBay Store subscription.",
         );
       }
+      const folderDelta = Object.keys({
+        ...(body.beforeByFolder || {}),
+        ...(body.afterByFolder || {}),
+      })
+        .map((path) => {
+          const before = body.beforeByFolder?.[path] || 0;
+          const after = body.afterByFolder?.[path] || 0;
+          if (before === after) return null;
+          return `${path}: ${before}→${after}`;
+        })
+        .filter(Boolean)
+        .slice(0, 4)
+        .join(" · ");
       toast.success(`Organized ${body.applied ?? 0} listings`, {
         description: [
           `Scanned ${body.scanned ?? 0}`,
+          folderDelta || null,
           body.createdFolders?.length
             ? `created ${body.createdFolders.length} folders`
             : null,
@@ -221,15 +246,33 @@ export function EbayStoreOrganizeForm() {
       ) : null}
 
       {scan?.summary ? (
-        <div className="flex flex-wrap gap-3 text-[12.5px] text-muted-foreground">
-          <span className="inline-flex items-center gap-1.5">
-            <FolderTree className="size-3.5" />
-            {scan.summary.offerCount} offers
-          </span>
-          <span>{scan.summary.ready} ready</span>
-          <span>{scan.summary.needsReview} review</span>
-          <span>{scan.summary.unchanged} already OK</span>
-          <span>{scan.summary.willCreate ?? 0} folders to create</span>
+        <div className="space-y-2">
+          <div className="flex flex-wrap gap-3 text-[12.5px] text-muted-foreground">
+            <span className="inline-flex items-center gap-1.5">
+              <FolderTree className="size-3.5" />
+              {scan.summary.offerCount} offers
+            </span>
+            <span>{scan.summary.ready} ready</span>
+            <span>{scan.summary.needsReview} review</span>
+            <span>{scan.summary.unchanged} already OK</span>
+            <span>{scan.summary.willCreate ?? 0} folders to create</span>
+          </div>
+          {scan.summary.byFolder &&
+          Object.keys(scan.summary.byFolder).length ? (
+            <div className="flex flex-wrap gap-2 text-[11.5px] text-emerald-900">
+              {Object.entries(scan.summary.byFolder)
+                .sort((a, b) => b[1] - a[1])
+                .slice(0, 8)
+                .map(([path, count]) => (
+                  <span
+                    key={path}
+                    className="rounded-md bg-emerald-50 px-2 py-1"
+                  >
+                    {path} · {count}
+                  </span>
+                ))}
+            </div>
+          ) : null}
         </div>
       ) : null}
 

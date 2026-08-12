@@ -81,6 +81,7 @@ export async function POST(request: Request) {
     const json = (await request.json().catch(() => ({}))) as {
       create?: boolean;
       recreateFulfillment?: boolean;
+      recreateReturn?: boolean;
     };
 
     const { data: existing } = await auth.supabase
@@ -92,10 +93,13 @@ export async function POST(request: Request) {
     let created: string[] = [];
     let resolved;
 
-    if (json.create || json.recreateFulfillment) {
+    if (json.create || json.recreateFulfillment || json.recreateReturn) {
       const ensured = await ensureHiglouBusinessPolicies(accessToken, {
         marketplaceId: connection.marketplaceId || "EBAY_US",
-        forceRecreateFulfillment: Boolean(json.recreateFulfillment),
+        forceRecreateFulfillment: Boolean(
+          json.recreateFulfillment || json.create,
+        ),
+        forceRecreateReturn: Boolean(json.recreateReturn || json.create),
       });
       resolved = ensured;
       created = ensured.created;
@@ -103,7 +107,6 @@ export async function POST(request: Request) {
       resolved = await resolveSellerBusinessPolicyIds(accessToken, {
         marketplaceId: connection.marketplaceId || "EBAY_US",
         preferred: {
-          // Ignore stale IDs from a previous eBay account — only use if still valid.
           shippingPolicyId: "",
           paymentPolicyId: "",
           returnPolicyId: "",

@@ -172,7 +172,11 @@ export function EbayPoliciesForm() {
       const res = await fetch("/api/ebay/policies", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ create: true, recreateFulfillment: true }),
+        body: JSON.stringify({
+          create: true,
+          recreateFulfillment: true,
+          recreateReturn: true,
+        }),
       });
       const body = (await res.json().catch(() => null)) as {
         error?: string;
@@ -184,7 +188,7 @@ export function EbayPoliciesForm() {
       if (body?.policies) setPolicies(body.policies);
       if (body?.available) setAvailable(body.available);
       toast.success(
-        "Created Higlou shipping / payment / return policies on this eBay account",
+        "Updated Higlou policies: Ground Advantage (buyer pays full) + 14-day returns",
       );
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Create failed");
@@ -202,8 +206,9 @@ export function EbayPoliciesForm() {
       <div className="rounded-xl border border-emerald-100 bg-emerald-50/70 px-3 py-2.5 text-[12px] text-emerald-900">
         Policies belong to each eBay seller account — they cannot be copied by
         ID. Import syncs this connected account, or Create Higlou policies makes
-        calculated shipping (buyer pays USPS rate from package size), payment,
-        and 14-day returns. Required for draft and live publish.
+        calculated shipping via USPS Ground Advantage (cheapest; buyer pays
+        full rate), payment, and 14-day returns (buyer pays return ship).
+        Required for draft and live publish.
       </div>
 
       <PolicySelect

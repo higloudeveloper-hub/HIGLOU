@@ -343,24 +343,20 @@ export async function POST(request: Request) {
           paymentPolicyId: listing.paymentPolicyId,
         },
       });
-      const preferred = {
-        shippingPolicyId:
-          listing.shippingPolicyId?.trim() || defaults.shippingPolicyId,
-        returnPolicyId:
-          listing.returnPolicyId?.trim() || defaults.returnPolicyId,
-        paymentPolicyId:
-          listing.paymentPolicyId?.trim() || defaults.paymentPolicyId,
-      };
 
       try {
         const resolved = await resolveSellerBusinessPolicyIds(accessToken, {
           marketplaceId: connection.marketplaceId || "EBAY_US",
-          preferred,
+          // Ignore stale listing/settings IDs — always use corrected Higlou policies.
+          preferred: {},
           createIfMissing: true,
         });
         listing.shippingPolicyId = resolved.shippingPolicyId;
         listing.returnPolicyId = resolved.returnPolicyId;
         listing.paymentPolicyId = resolved.paymentPolicyId;
+        listing.shippingService = "USPSGroundAdvantage";
+        listing.freeShipping = false;
+        listing.shippingCost = null;
 
         await auth.supabase.from("ebay_policy_settings").upsert(
           {

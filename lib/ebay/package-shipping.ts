@@ -148,22 +148,17 @@ function pickService(totalOz: number, longestIn: number): {
   shippingService: string;
   reason: string;
 } {
-  if (longestIn > 48 || totalOz > 320) {
+  // Always cheapest: Ground Advantage. Never Priority.
+  if (longestIn > 108 || totalOz > 1120) {
     return {
       shippingService: "UPSGround",
-      reason: "Large/heavy parcel → UPS Ground (calculated, buyer pays)",
-    };
-  }
-  if (totalOz <= 192) {
-    return {
-      shippingService: "USPSGroundAdvantage",
-      reason:
-        "Tight package → USPS Ground Advantage (calculated rate, buyer pays)",
+      reason: "Freight-scale parcel → UPS Ground (buyer pays calculated rate)",
     };
   }
   return {
-    shippingService: "USPSPriority",
-    reason: "Heavier parcel → USPS Priority (calculated rate, buyer pays)",
+    shippingService: "USPSGroundAdvantage",
+    reason:
+      "Cheapest option → USPS Ground Advantage (calculated rate, buyer pays full)",
   };
 }
 

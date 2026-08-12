@@ -19,7 +19,10 @@ export type ResolvedEbayPolicyIds = {
   returnPolicyId: string;
 };
 
-const HIGLOU_FULFILLMENT_NAME = "Higlou Calculated Shipping (buyer pays)";
+/** Always the cheapest domestic option we support. Never Priority. */
+export const HIGLOU_CHEAPEST_SHIPPING_SERVICE = "USPSGroundAdvantage";
+
+const HIGLOU_FULFILLMENT_NAME = "Higlou Ground Advantage (buyer pays full)";
 const HIGLOU_PAYMENT_NAME = "Higlou Payment";
 const HIGLOU_RETURN_NAME = "Higlou Returns (14 days)";
 
@@ -81,7 +84,15 @@ function mapNamedPolicies(
     .filter((p) => p.id);
 }
 
-/** Prefer Higlou calculated (buyer pays), then any Higlou, then default-ish, then first. */
+function isHiglouCheapFulfillmentName(name: string): boolean {
+  return /higlou.*(ground advantage|buyer pays)/i.test(name);
+}
+
+function isHiglouFourteenDayReturnName(name: string): boolean {
+  return /higlou.*14\s*day/i.test(name);
+}
+
+/** Prefer Higlou Ground Advantage (buyer pays), then any Higlou, then default. */
 export function pickDefaultPolicy(
   options: EbayPolicyOption[],
   preferredId?: string,
@@ -92,10 +103,8 @@ export function pickDefaultPolicy(
     const match = options.find((p) => p.id === preferred);
     if (match) return match;
   }
-  const calculated = options.find((p) =>
-    /higlou.*calculat|buyer pays/i.test(p.name),
-  );
-  if (calculated) return calculated;
+  const cheap = options.find((p) => isHiglouCheapFulfillmentName(p.name));
+  if (cheap) return cheap;
   const higlou = options.find((p) => /higlou/i.test(p.name));
   if (higlou) return higlou;
   const namedDefault = options.find((p) =>
@@ -147,39 +156,56 @@ export async function listSellerBusinessPolicies(
   };
 }
 
+function fulfillmentPolicyBody(name: string, marketplaceId: string) {
+  // CALCULATED + freeShipping:false = buyer pays the full carrier rate.
+  // Ground Advantage only — never Priority (more expensive).
+  return {
+    name,
+    marketplaceId,
+    categoryTypes: [{ name: "ALL_EXCLUDING_MOTORS_VEHICLES", default: true }],
+    handlingTime: { value: 1, unit: "DAY" },
+    globalShipping: false,
+    shippingOptions: [
+      {
+        optionType: "DOMESTIC",
+        costType: "CALCULATED",
+        packageHandlingCost: { value: "0.00", currency: "USD" },
+        shippingServices: [
+          {
+            sortOrder: 1,
+            shippingServiceCode: HIGLOU_CHEAPEST_SHIPPING_SERVICE,
+            freeShipping: false,
+          },
+        ],
+      },
+    ],
+  };
+}
+
+function returnPolicyBody(name: string, marketplaceId: string) {
+  return {
+    name,
+    marketplaceId,
+    categoryTypes: [{ name: "ALL_EXCLUDING_MOTORS_VEHICLES", default: true }],
+    returnsAccepted: true,
+    returnPeriod: { value: 14, unit: "DAY" },
+    refundMethod: "MONEY_BACK",
+    // Buyer pays return shipping — seller does not share the cost.
+    returnShippingCostPayer: "BUYER",
+  };
+}
+
 async function createFulfillmentPolicy(
   accessToken: string,
   marketplaceId: string,
-  shippingServiceCode: string,
   name = HIGLOU_FULFILLMENT_NAME,
 ): Promise<string> {
-  // CALCULATED = buyer pays carrier rate from listing package weight/dims.
   const json = (await accountFetch(
     accessToken,
     "/sell/account/v1/fulfillment_policy",
     {
       method: "POST",
-      body: JSON.stringify({
-        name,
-        marketplaceId,
-        categoryTypes: [
-          { name: "ALL_EXCLUDING_MOTORS_VEHICLES", default: true },
-        ],
-        handlingTime: { value: 1, unit: "DAY" },
-        shippingOptions: [
-          {
-            optionType: "DOMESTIC",
-            costType: "CALCULATED",
-            shippingServices: [
-              {
-                sortOrder: 1,
-                shippingServiceCode,
-                freeShipping: false,
-              },
-            ],
-          },
-        ],
-      }),
+      body: JSON.stringify(fulfillmentPolicyBody(name, marketplaceId)),
     },
   )) as { fulfillmentPolicyId?: string };
 
@@ -188,11 +214,26 @@ async function createFulfillmentPolicy(
   return id;
 }
 
+async function updateFulfillmentPolicy(
+  accessToken: string,
+  policyId: string,
+  marketplaceId: string,
+  name: string,
+): Promise<void> {
+  await accountFetch(
+    accessToken,
+    `/sell/account/v1/fulfillment_policy/${encodeURIComponent(policyId)}`,
+    {
+      method: "PUT",
+      body: JSON.stringify(fulfillmentPolicyBody(name, marketplaceId)),
+    },
+  );
+}
+
 async function createPaymentPolicy(
   accessToken: string,
   marketplaceId: string,
 ): Promise<string> {
-  // Managed Payments sellers typically need an empty paymentMethods list.
   const json = (await accountFetch(
     accessToken,
     "/sell/account/v1/payment_policy",
@@ -218,24 +259,14 @@ async function createPaymentPolicy(
 async function createReturnPolicy(
   accessToken: string,
   marketplaceId: string,
+  name = HIGLOU_RETURN_NAME,
 ): Promise<string> {
   const json = (await accountFetch(
     accessToken,
     "/sell/account/v1/return_policy",
     {
       method: "POST",
-      body: JSON.stringify({
-        name: HIGLOU_RETURN_NAME,
-        marketplaceId,
-        categoryTypes: [
-          { name: "ALL_EXCLUDING_MOTORS_VEHICLES", default: true },
-        ],
-        returnsAccepted: true,
-        returnPeriod: { value: 14, unit: "DAY" },
-        refundMethod: "MONEY_BACK",
-        returnShippingCostPayer: "BUYER",
-        returnMethod: "REPLACEMENT",
-      }),
+      body: JSON.stringify(returnPolicyBody(name, marketplaceId)),
     },
   )) as { returnPolicyId?: string };
 
@@ -244,17 +275,90 @@ async function createReturnPolicy(
   return id;
 }
 
+async function updateReturnPolicy(
+  accessToken: string,
+  policyId: string,
+  marketplaceId: string,
+  name: string,
+): Promise<void> {
+  await accountFetch(
+    accessToken,
+    `/sell/account/v1/return_policy/${encodeURIComponent(policyId)}`,
+    {
+      method: "PUT",
+      body: JSON.stringify(returnPolicyBody(name, marketplaceId)),
+    },
+  );
+}
+
+async function fulfillmentLooksCorrect(
+  accessToken: string,
+  policyId: string,
+): Promise<boolean> {
+  try {
+    const json = (await accountFetch(
+      accessToken,
+      `/sell/account/v1/fulfillment_policy/${encodeURIComponent(policyId)}`,
+    )) as {
+      shippingOptions?: Array<{
+        costType?: string;
+        shippingServices?: Array<{
+          shippingServiceCode?: string;
+          freeShipping?: boolean;
+        }>;
+      }>;
+    };
+    const option = json.shippingOptions?.[0];
+    const service = option?.shippingServices?.[0];
+    return (
+      String(option?.costType || "").toUpperCase() === "CALCULATED" &&
+      service?.shippingServiceCode === HIGLOU_CHEAPEST_SHIPPING_SERVICE &&
+      service?.freeShipping !== true
+    );
+  } catch {
+    return false;
+  }
+}
+
+async function returnLooksCorrect(
+  accessToken: string,
+  policyId: string,
+): Promise<boolean> {
+  try {
+    const json = (await accountFetch(
+      accessToken,
+      `/sell/account/v1/return_policy/${encodeURIComponent(policyId)}`,
+    )) as {
+      returnPeriod?: { value?: number; unit?: string };
+      returnShippingCostPayer?: string;
+      returnsAccepted?: boolean;
+    };
+    return (
+      json.returnsAccepted === true &&
+      Number(json.returnPeriod?.value) === 14 &&
+      String(json.returnPeriod?.unit || "").toUpperCase() === "DAY" &&
+      String(json.returnShippingCostPayer || "").toUpperCase() === "BUYER"
+    );
+  } catch {
+    return false;
+  }
+}
+
 /**
- * Ensure the connected seller has usable Higlou business policies.
- * Creates missing payment/return/fulfillment policies (cannot copy across accounts).
+ * Ensure the connected seller has Higlou policies:
+ * - USPS Ground Advantage only (cheapest), calculated, buyer pays full
+ * - 14-day returns, buyer pays return shipping
  */
 export async function ensureHiglouBusinessPolicies(
   accessToken: string,
   options?: {
     marketplaceId?: string;
     forceRecreateFulfillment?: boolean;
+    forceRecreateReturn?: boolean;
   },
-): Promise<ResolvedEbayPolicyIds & { available: EbaySellerPolicies; created: string[] }> {
+): Promise<
+  ResolvedEbayPolicyIds & { available: EbaySellerPolicies; created: string[] }
+> {
   const marketplaceId = options?.marketplaceId || "EBAY_US";
   await ensureSellingPolicyOptIn(accessToken);
 
@@ -268,67 +372,111 @@ export async function ensureHiglouBusinessPolicies(
     payment = { id, name: HIGLOU_PAYMENT_NAME };
   }
 
+  // --- Return: always 14 days, buyer pays return ship ---
   let returns =
-    listed.return.find((p) => /higlou.*14\s*day/i.test(p.name)) || null;
-  if (!returns) {
-    const id = await createReturnPolicy(accessToken, marketplaceId);
-    created.push("return");
-    returns = { id, name: HIGLOU_RETURN_NAME };
+    listed.return.find((p) => isHiglouFourteenDayReturnName(p.name)) || null;
+
+  if (returns && (options?.forceRecreateReturn || !(await returnLooksCorrect(accessToken, returns.id)))) {
+    await updateReturnPolicy(
+      accessToken,
+      returns.id,
+      marketplaceId,
+      HIGLOU_RETURN_NAME,
+    );
+    created.push("return-updated");
+  } else if (!returns) {
+    // Prefer updating any existing Higlou return to 14 days instead of leaving a 30-day one active.
+    const legacyHiglou = listed.return.find((p) => /higlou/i.test(p.name));
+    if (legacyHiglou) {
+      await updateReturnPolicy(
+        accessToken,
+        legacyHiglou.id,
+        marketplaceId,
+        HIGLOU_RETURN_NAME,
+      );
+      returns = { id: legacyHiglou.id, name: HIGLOU_RETURN_NAME };
+      created.push("return-updated");
+    } else if (options?.forceRecreateReturn) {
+      const id = await createReturnPolicy(accessToken, marketplaceId);
+      created.push("return");
+      returns = { id, name: HIGLOU_RETURN_NAME };
+    } else {
+      const id = await createReturnPolicy(accessToken, marketplaceId);
+      created.push("return");
+      returns = { id, name: HIGLOU_RETURN_NAME };
+    }
   }
 
+  // --- Fulfillment: Ground Advantage calculated, buyer pays full ---
   let shipping =
-    listed.fulfillment.find((p) =>
-      /higlou.*calculat|buyer pays/i.test(p.name),
-    ) || null;
-  // Old flat Higlou policies (or empty accounts) need a calculated buyer-pays policy.
-  if (!shipping || options?.forceRecreateFulfillment) {
-    // Prefer Ground Advantage (matches Higlou UI), then Priority.
-    const serviceCodes = [
-      "USPSGroundAdvantage",
-      "USPSPriority",
-      "USPSFirstClass",
-    ];
-    const policyName = options?.forceRecreateFulfillment
-      ? `${HIGLOU_FULFILLMENT_NAME} ${Date.now().toString(36)}`
-      : HIGLOU_FULFILLMENT_NAME;
-    let lastError: Error | null = null;
-    let id = "";
-    for (const code of serviceCodes) {
+    listed.fulfillment.find((p) => isHiglouCheapFulfillmentName(p.name)) ||
+    null;
+
+  const needsFulfillmentFix =
+    options?.forceRecreateFulfillment ||
+    !shipping ||
+    !(await fulfillmentLooksCorrect(accessToken, shipping.id));
+
+  if (needsFulfillmentFix) {
+    if (shipping) {
       try {
-        id = await createFulfillmentPolicy(
+        await updateFulfillmentPolicy(
+          accessToken,
+          shipping.id,
+          marketplaceId,
+          HIGLOU_FULFILLMENT_NAME,
+        );
+        created.push("fulfillment-updated");
+        shipping = { id: shipping.id, name: HIGLOU_FULFILLMENT_NAME };
+      } catch {
+        const id = await createFulfillmentPolicy(
           accessToken,
           marketplaceId,
-          code,
-          policyName,
+          `${HIGLOU_FULFILLMENT_NAME} ${Date.now().toString(36)}`,
         );
-        lastError = null;
-        break;
-      } catch (error) {
-        lastError = error instanceof Error ? error : new Error(String(error));
+        created.push("fulfillment");
+        shipping = {
+          id,
+          name: HIGLOU_FULFILLMENT_NAME,
+        };
+      }
+    } else {
+      const legacy = listed.fulfillment.find((p) => /higlou/i.test(p.name));
+      if (legacy) {
+        try {
+          await updateFulfillmentPolicy(
+            accessToken,
+            legacy.id,
+            marketplaceId,
+            HIGLOU_FULFILLMENT_NAME,
+          );
+          shipping = { id: legacy.id, name: HIGLOU_FULFILLMENT_NAME };
+          created.push("fulfillment-updated");
+        } catch {
+          const id = await createFulfillmentPolicy(accessToken, marketplaceId);
+          shipping = { id, name: HIGLOU_FULFILLMENT_NAME };
+          created.push("fulfillment");
+        }
+      } else {
+        const id = await createFulfillmentPolicy(accessToken, marketplaceId);
+        shipping = { id, name: HIGLOU_FULFILLMENT_NAME };
+        created.push("fulfillment");
       }
     }
-    if (!id) {
-      throw (
-        lastError ||
-        new Error("Could not create eBay fulfillment (shipping) policy")
-      );
-    }
-    created.push("fulfillment");
-    shipping = { id, name: policyName };
   }
 
   listed = await listSellerBusinessPolicies(accessToken, marketplaceId);
 
   return {
-    shippingPolicyId: shipping.id,
+    shippingPolicyId: shipping!.id,
     paymentPolicyId: payment.id,
-    returnPolicyId: returns.id,
+    returnPolicyId: returns!.id,
     available: listed,
     created,
   };
 }
 
-/** Resolve one shipping/payment/return policy ID; create Higlou defaults if missing. */
+/** Resolve policy IDs; always prefer/create Higlou Ground Advantage + 14-day returns. */
 export async function resolveSellerBusinessPolicyIds(
   accessToken: string,
   options?: {
@@ -338,59 +486,40 @@ export async function resolveSellerBusinessPolicyIds(
   },
 ): Promise<ResolvedEbayPolicyIds> {
   const marketplaceId = options?.marketplaceId || "EBAY_US";
-  const listed = await listSellerBusinessPolicies(accessToken, marketplaceId);
-
-  // Always prefer Higlou calculated (buyer pays) over stale flat policy IDs.
-  const shipping =
-    listed.fulfillment.find((p) =>
-      /higlou.*calculat|buyer pays/i.test(p.name),
-    ) ||
-    pickDefaultPolicy(listed.fulfillment, options?.preferred?.shippingPolicyId);
-  const payment = pickDefaultPolicy(
-    listed.payment,
-    options?.preferred?.paymentPolicyId,
-  );
-  const returns =
-    listed.return.find((p) => /higlou.*14\s*day/i.test(p.name)) ||
-    pickDefaultPolicy(listed.return, options?.preferred?.returnPolicyId);
-
-  const hasCalculatedShipping = listed.fulfillment.some((p) =>
-    /higlou.*calculat|buyer pays/i.test(p.name),
-  );
-  const hasFourteenDayReturns = listed.return.some((p) =>
-    /higlou.*14\s*day/i.test(p.name),
-  );
-
-  if (
-    shipping &&
-    payment &&
-    returns &&
-    hasCalculatedShipping &&
-    hasFourteenDayReturns
-  ) {
-    return {
-      shippingPolicyId: shipping.id,
-      paymentPolicyId: payment.id,
-      returnPolicyId: returns.id,
-    };
-  }
 
   if (options?.createIfMissing === false) {
-    const missing: string[] = [];
-    if (!shipping) missing.push("shipping (fulfillment)");
-    if (!payment) missing.push("payment");
-    if (!returns) missing.push("return");
-    if (!hasCalculatedShipping) {
-      missing.push("calculated buyer-pays shipping");
+    const listed = await listSellerBusinessPolicies(accessToken, marketplaceId);
+    const shipping =
+      listed.fulfillment.find((p) => isHiglouCheapFulfillmentName(p.name)) ||
+      pickDefaultPolicy(
+        listed.fulfillment,
+        options?.preferred?.shippingPolicyId,
+      );
+    const payment = pickDefaultPolicy(
+      listed.payment,
+      options?.preferred?.paymentPolicyId,
+    );
+    const returns =
+      listed.return.find((p) => isHiglouFourteenDayReturnName(p.name)) ||
+      pickDefaultPolicy(listed.return, options?.preferred?.returnPolicyId);
+
+    if (shipping && payment && returns) {
+      return {
+        shippingPolicyId: shipping.id,
+        paymentPolicyId: payment.id,
+        returnPolicyId: returns.id,
+      };
     }
-    if (!hasFourteenDayReturns) missing.push("14-day return policy");
     throw new Error(
-      `No eBay business policies found for ${missing.join(", ")}. Create them in Seller Hub or use Create Higlou policies.`,
+      "No eBay business policies found. Use Create Higlou policies in Settings.",
     );
   }
 
+  // Always ensure correct cheapest + 14-day policies (updates Priority/30-day leftovers).
   const ensured = await ensureHiglouBusinessPolicies(accessToken, {
     marketplaceId,
+    forceRecreateFulfillment: true,
+    forceRecreateReturn: true,
   });
   return {
     shippingPolicyId: ensured.shippingPolicyId,

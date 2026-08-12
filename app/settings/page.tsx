@@ -4,6 +4,7 @@ import { StoreBrandingForm } from "@/components/settings/store-branding-form";
 import { EbayTemplateForm } from "@/components/settings/ebay-template-form";
 import { EbayPoliciesForm } from "@/components/settings/ebay-policies-form";
 import { EbayConnectForm } from "@/components/settings/ebay-connect-form";
+import { EbayStoreOrganizeForm } from "@/components/settings/ebay-store-organize-form";
 import { AiSettingsForm } from "@/components/settings/ai-settings-form";
 import { BudgetSettingsForm } from "@/components/settings/budget-settings-form";
 import { EXPECTED_SEED_TEMPLATE_SHA256 } from "@/types/ebay";
@@ -30,6 +31,11 @@ const READY_HUB = [
 ] as const;
 
 const TOOLS_HUB = [
+  {
+    href: "#organize-store",
+    title: "Organize Store",
+    body: "Auto-sort live eBay offers into Store folders.",
+  },
   {
     href: "#templates",
     title: "eBay CSV template",
@@ -132,7 +138,7 @@ export default function SettingsPage() {
           <p className="text-[11px] font-semibold tracking-[0.18em] text-muted-foreground uppercase">
             Listing tools
           </p>
-          <div className="grid gap-3 sm:grid-cols-3">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             {TOOLS_HUB.map((item) => (
               <Link
                 key={item.href}
@@ -147,6 +153,21 @@ export default function SettingsPage() {
                 </p>
               </Link>
             ))}
+          </div>
+        </section>
+
+        <section id="organize-store" className="scroll-mt-24 space-y-4">
+          <div>
+            <h2 className="text-lg font-semibold tracking-tight text-foreground">
+              Organize eBay Store
+            </h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Scan the connected account and place each offer into the right
+              Store folder. Higlou only — uses your live eBay Inventory API.
+            </p>
+          </div>
+          <div className="rounded-2xl border border-border/70 bg-surface p-5 sm:p-6">
+            <EbayStoreOrganizeForm />
           </div>
         </section>
 

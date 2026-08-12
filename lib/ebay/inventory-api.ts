@@ -34,6 +34,8 @@ export type EbayOfferInput = {
   returnPolicyId?: string;
   /** Buyer-paid domestic shipping override (flat rate policy). */
   domesticShippingCostUsd?: number;
+  /** eBay Store folder paths, e.g. ["/Plumbing/Pumps"]. */
+  storeCategoryNames?: string[];
   format?: "FIXED_PRICE";
 };
 
@@ -273,6 +275,12 @@ function buildOfferBody(input: EbayOfferInput): Record<string, unknown> {
   }
   if (input.merchantLocationKey) {
     body.merchantLocationKey = input.merchantLocationKey;
+  }
+  if (input.storeCategoryNames?.length) {
+    body.storeCategoryNames = input.storeCategoryNames
+      .map((p) => String(p || "").trim())
+      .filter(Boolean)
+      .slice(0, 2);
   }
   return body;
 }

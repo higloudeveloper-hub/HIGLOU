@@ -2,9 +2,27 @@ import { describe, expect, it } from "vitest";
 import {
   estimatePackageAndShipping,
   packageEstimateToCsvValues,
+  parseProductDimensionsInches,
 } from "@/lib/ebay/package-shipping";
 import { isCategoryProductMismatch } from "@/lib/ebay/category-guard";
 import { DEFAULT_VALUES } from "@/config/default-values";
+
+describe("parseProductDimensionsInches", () => {
+  it("parses LxWxH inches", () => {
+    const dims = parseProductDimensionsInches("Matte Black 12 x 8 x 3 in fixture");
+    expect(dims).not.toBeNull();
+    expect(dims!.lengthIn).toBe(12);
+    expect(dims!.widthIn).toBe(8);
+    expect(dims!.depthIn).toBe(3);
+  });
+
+  it("parses diameter", () => {
+    const dims = parseProductDimensionsInches('Flush Mount 14" diameter');
+    expect(dims).not.toBeNull();
+    expect(dims!.lengthIn).toBe(14);
+    expect(dims!.widthIn).toBe(14);
+  });
+});
 
 describe("estimatePackageAndShipping", () => {
   it("uses fluid ounces for bottled water weight", () => {
@@ -14,28 +32,44 @@ describe("estimatePackageAndShipping", () => {
       size: "16.9 fl oz",
       brand: "Aquafina",
     });
-    expect(estimate.totalOz).toBeGreaterThanOrEqual(18);
+    expect(estimate.totalOz).toBeGreaterThanOrEqual(17);
     expect(estimate.totalOz).toBeLessThanOrEqual(24);
     expect(estimate.shippingService).toBe("USPSGroundAdvantage");
+    expect(estimate.shippingType).toBe("Calculated");
+    expect(estimate.freeShipping).toBe(false);
+    expect(estimate.shippingCost).toBeNull();
     expect(estimate.weightLbs + estimate.weightOz / 16).toBeGreaterThan(1);
   });
 
-  it("matches Seller Hub-ish vacuum box estimates", () => {
+  it("sizes vacuum boxes tighter than oversized defaults", () => {
     const estimate = estimatePackageAndShipping({
       title: "Shark Robot Vacuum",
       productType: "Robot Vacuum",
       categoryName: "Vacuum Cleaners",
       brand: "Shark",
     });
-    expect(estimate.weightLbs).toBe(12);
-    expect(estimate.weightOz).toBe(0);
-    expect(estimate.lengthIn).toBe(21);
-    expect(estimate.widthIn).toBe(16);
-    expect(estimate.depthIn).toBe(5);
+    expect(estimate.weightLbs).toBeLessThanOrEqual(12);
+    expect(estimate.lengthIn).toBeLessThanOrEqual(20);
+    expect(estimate.widthIn).toBeLessThanOrEqual(16);
     expect(estimate.shippingService).toBe("USPSGroundAdvantage");
+    expect(estimate.freeShipping).toBe(false);
   });
 
-  it("emits File Exchange / Seller Hub aliases", () => {
+  it("builds a tight box from product LxWxH", () => {
+    const estimate = estimatePackageAndShipping({
+      title: "Ceiling Light",
+      size: "10 x 10 x 4 in",
+      productType: "Flush Mount",
+      categoryName: "Lighting",
+    });
+    // 10×10×4 + 0.75 pad → ~11×11×5
+    expect(estimate.lengthIn).toBeLessThanOrEqual(12);
+    expect(estimate.widthIn).toBeLessThanOrEqual(12);
+    expect(estimate.depthIn).toBeLessThanOrEqual(6);
+    expect(estimate.shippingType).toBe("Calculated");
+  });
+
+  it("emits File Exchange / Seller Hub aliases without flat cost", () => {
     const estimate = estimatePackageAndShipping({
       title: "Aquafina Purified Water",
       size: "16.9 fl oz",
@@ -46,6 +80,8 @@ describe("estimatePackageAndShipping", () => {
     expect(values.WeightUnit).toBe("lbs");
     expect(values["Shipping service 1 option"]).toBe("USPSGroundAdvantage");
     expect(values["Shipping service 1 priority"]).toBe("1");
+    expect(values.ShippingType).toBe("Calculated");
+    expect(values["Shipping service 1 cost"]).toBeUndefined();
     expect(values.PackageType).toBeTruthy();
   });
 });

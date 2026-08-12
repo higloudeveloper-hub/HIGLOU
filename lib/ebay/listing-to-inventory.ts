@@ -82,6 +82,10 @@ export function listingToInventoryItem(
     categoryName: listing.categoryName,
     brand: listing.brand,
     quantity: listing.quantity,
+    dimensionsText: listing.itemSpecifics
+      ?.filter((f) => /dimension|size|length|width|height|depth/i.test(f.key || f.label))
+      .map((f) => `${f.label} ${f.value}`)
+      .join(" "),
   });
   const imageUrls = listing.images
     .map((img) => img.url)

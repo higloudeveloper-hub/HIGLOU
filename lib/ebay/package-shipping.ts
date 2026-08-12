@@ -1,6 +1,7 @@
 /**
- * Estimate package weight / dimensions and pick a sensible domestic shipping service
- * so Seller Hub Create/Schedule uploads are publish-ready.
+ * Estimate package weight / dimensions from the product (tight box + light
+ * padding) and choose a domestic service. Shipping is always CALCULATED so
+ * the buyer pays USPS/UPS rates based on the package — never free shipping.
  */
 
 export type PackageEstimate = {
@@ -13,13 +14,19 @@ export type PackageEstimate = {
   widthIn: number;
   depthIn: number;
   measurementSystem: "ENGLISH";
-  shippingType: "Flat";
+  /** Calculated = buyer pays carrier rate from weight + dims. */
+  shippingType: "Calculated";
   shippingService: string;
-  shippingCost: number;
+  /** Always null for calculated — rate shown at checkout. */
+  shippingCost: number | null;
   shippingPriority: number;
   weightUnit: "lbs";
+  freeShipping: false;
   reason: string;
 };
+
+/** Soft padding (inches) so the product fits with light packing material. */
+const PACK_PAD_IN = 0.75;
 
 function parseFluidOz(text: string): number | null {
   const fl = text.match(
@@ -33,6 +40,103 @@ function parseFluidOz(text: string): number | null {
   return null;
 }
 
+/** Convert a length token + optional unit to inches. */
+function toInches(value: number, unit?: string | null): number {
+  const u = String(unit || "in").toLowerCase();
+  if (/cm|centimet/.test(u)) return value / 2.54;
+  if (/mm/.test(u)) return value / 25.4;
+  if (/m\b|meter/.test(u) && !/mm|cm/.test(u)) return value * 39.3701;
+  return value; // in / inch / "
+}
+
+/**
+ * Pull L×W×H (or diameter) from title/size text.
+ * Prefer explicit 3-number boxes; fall back to diameter / single span.
+ */
+export function parseProductDimensionsInches(text: string): {
+  lengthIn: number;
+  widthIn: number;
+  depthIn: number;
+  source: string;
+} | null {
+  const raw = String(text || "").trim();
+  if (!raw) return null;
+
+  // 12 x 8 x 4 in  |  12x8x4"  |  30 × 20 × 10 cm
+  const box = raw.match(
+    /(\d+(?:\.\d+)?)\s*(?:in(?:ch(?:es)?)?|"|'')?\s*[x×*]\s*(\d+(?:\.\d+)?)\s*(?:in(?:ch(?:es)?)?|"|'')?\s*[x×*]\s*(\d+(?:\.\d+)?)\s*(in(?:ch(?:es)?)?|"|''|cm|mm)?/i,
+  );
+  if (box) {
+    const unit = box[4] || "in";
+    const dims = [Number(box[1]), Number(box[2]), Number(box[3])]
+      .map((v) => Math.max(0.5, toInches(v, unit)))
+      .sort((x, y) => y - x) as [number, number, number];
+    return {
+      lengthIn: dims[0],
+      widthIn: dims[1],
+      depthIn: dims[2],
+      source: "LxWxH",
+    };
+  }
+
+  // Diameter: 12 in diameter / Ø12" / 12" dia
+  const dia = raw.match(
+    /(?:ø|diameter|dia\.?)\s*(\d+(?:\.\d+)?)\s*(in(?:ch(?:es)?)?|"|''|cm|mm)?|(\d+(?:\.\d+)?)\s*(in(?:ch(?:es)?)?|"|''|cm|mm)?\s*(?:ø|diameter|dia\.?)/i,
+  );
+  if (dia) {
+    const n = Number(dia[1] || dia[3]);
+    const u = dia[2] || dia[4] || "in";
+    const d = Math.max(1, toInches(n, u));
+    return {
+      lengthIn: d,
+      widthIn: d,
+      depthIn: Math.max(2, Math.round(d * 0.35 * 2) / 2),
+      source: "diameter",
+    };
+  }
+
+  // Single size often used for lights/faucets: 12 inch / 12"
+  const single = raw.match(/(\d+(?:\.\d+)?)\s*(?:in(?:ch(?:es)?)?|"|'')\b/i);
+  if (single) {
+    const d = Math.max(1, Number(single[1]));
+    if (d >= 3 && d <= 48) {
+      return {
+        lengthIn: d,
+        widthIn: Math.max(4, Math.round(d * 0.7 * 2) / 2),
+        depthIn: Math.max(3, Math.round(d * 0.35 * 2) / 2),
+        source: "single-span",
+      };
+    }
+  }
+
+  return null;
+}
+
+/** Round up to nearest 0.5" after padding; clamp to usable parcel sizes. */
+function paddedBox(
+  lengthIn: number,
+  widthIn: number,
+  depthIn: number,
+  padIn = PACK_PAD_IN,
+): { lengthIn: number; widthIn: number; depthIn: number } {
+  const roundUpHalf = (n: number) => Math.max(1, Math.ceil((n + padIn) * 2) / 2);
+  const dims = [lengthIn, widthIn, depthIn]
+    .map(roundUpHalf)
+    .sort((a, b) => b - a);
+  // Cap absurd outliers; keep USPS Ground Advantage friendly when possible.
+  return {
+    lengthIn: Math.min(108, dims[0]),
+    widthIn: Math.min(108, dims[1]),
+    depthIn: Math.min(108, dims[2]),
+  };
+}
+
+function volumeWeightOz(lengthIn: number, widthIn: number, depthIn: number): number {
+  // Domestic dim weight factor ~166 → oz = (L*W*H/166)*16
+  const dimLbs = (lengthIn * widthIn * depthIn) / 166;
+  return Math.max(1, Math.round(dimLbs * 16));
+}
+
 function toLbsOz(totalOz: number): { lbs: number; oz: number } {
   const clamped = Math.max(1, Math.round(totalOz));
   const lbs = Math.floor(clamped / 16);
@@ -40,37 +144,85 @@ function toLbsOz(totalOz: number): { lbs: number; oz: number } {
   return { lbs, oz: oz === 0 && lbs > 0 ? 0 : oz || (lbs === 0 ? 1 : 0) };
 }
 
-function pickService(totalOz: number): {
+function pickService(totalOz: number, longestIn: number): {
   shippingService: string;
-  shippingCost: number;
   reason: string;
 } {
-  if (totalOz <= 16) {
+  if (longestIn > 48 || totalOz > 320) {
     return {
-      shippingService: "USPSGroundAdvantage",
-      shippingCost: 0,
-      reason: "Light parcel ≤1 lb → USPS Ground Advantage (flat $0)",
+      shippingService: "UPSGround",
+      reason: "Large/heavy parcel → UPS Ground (calculated, buyer pays)",
     };
   }
   if (totalOz <= 192) {
     return {
       shippingService: "USPSGroundAdvantage",
-      shippingCost: 0,
-      reason: "Small/medium parcel → USPS Ground Advantage (flat $0)",
-    };
-  }
-  if (totalOz <= 320) {
-    return {
-      shippingService: "USPSPriority",
-      shippingCost: 0,
-      reason: "Heavier parcel → USPS Priority Mail (flat $0)",
+      reason:
+        "Tight package → USPS Ground Advantage (calculated rate, buyer pays)",
     };
   }
   return {
-    shippingService: "UPSGround",
-    shippingCost: 0,
-    reason: "Bulky/heavy parcel → UPS Ground (flat $0)",
+    shippingService: "USPSPriority",
+    reason: "Heavier parcel → USPS Priority (calculated rate, buyer pays)",
   };
+}
+
+type CategoryHeuristic = {
+  unitOz: number;
+  lengthIn: number;
+  widthIn: number;
+  depthIn: number;
+  packageType?: string;
+};
+
+/** Compact category defaults — sized for typical retail boxes, not oversized. */
+function categoryHeuristic(haystack: string): CategoryHeuristic | null {
+  if (
+    /\b(vacuum|robot\s*vacuum|roomba|dyson|shark)\b/.test(haystack) ||
+    /\bvacuum cleaners?\b/.test(haystack)
+  ) {
+    return { unitOz: 160, lengthIn: 18, widthIn: 14, depthIn: 5 }; // ~10 lb, tighter than 21×16
+  }
+  if (/\b(comforter|duvet|bedding|blanket|quilt)\b/.test(haystack)) {
+    return { unitOz: 80, lengthIn: 18, widthIn: 14, depthIn: 8 };
+  }
+  if (/\b(sneaker|shoe|boot)\b/.test(haystack)) {
+    return { unitOz: 32, lengthIn: 13, widthIn: 9, depthIn: 5 };
+  }
+  if (
+    /\b(phone|case|cable|charger|earbuds|small\s*electronics)\b/.test(haystack)
+  ) {
+    return { unitOz: 6, lengthIn: 8, widthIn: 5, depthIn: 2 };
+  }
+  if (/\b(laptop|monitor|tv)\b/.test(haystack)) {
+    return { unitOz: 112, lengthIn: 20, widthIn: 14, depthIn: 5 };
+  }
+  if (/\b(faucet|tap|kitchen\s*faucet|bath(room)?\s*faucet)\b/.test(haystack)) {
+    return { unitOz: 48, lengthIn: 12, widthIn: 8, depthIn: 3 };
+  }
+  if (
+    /\b(flush\s*mount|ceiling\s*light|chandelier|pendant|light\s*fixture|vanity\s*light|sconce)\b/.test(
+      haystack,
+    )
+  ) {
+    return { unitOz: 56, lengthIn: 14, widthIn: 14, depthIn: 6 };
+  }
+  if (/\b(knife|cutlery|utensil)\b/.test(haystack)) {
+    return { unitOz: 12, lengthIn: 14, widthIn: 4, depthIn: 2 };
+  }
+  if (/\b(cookware|pan|skillet|pot)\b/.test(haystack)) {
+    return { unitOz: 64, lengthIn: 14, widthIn: 14, depthIn: 5 };
+  }
+  if (/\b(atv|generator|appliance)\b/.test(haystack)) {
+    return {
+      unitOz: 480,
+      lengthIn: 36,
+      widthIn: 24,
+      depthIn: 24,
+      packageType: "USPSLargePack",
+    };
+  }
+  return null;
 }
 
 export function estimatePackageAndShipping(input: {
@@ -80,6 +232,8 @@ export function estimatePackageAndShipping(input: {
   categoryName?: string | null;
   brand?: string | null;
   quantity?: number | null;
+  /** Optional raw item-specifics text (e.g. Dimensions aspect). */
+  dimensionsText?: string | null;
 }): PackageEstimate {
   const haystack = [
     input.title,
@@ -87,69 +241,82 @@ export function estimatePackageAndShipping(input: {
     input.size,
     input.categoryName,
     input.brand,
+    input.dimensionsText,
   ]
     .filter(Boolean)
     .join(" ")
     .toLowerCase();
 
-  const qty = Math.max(1, Number(input.quantity) || 1);
-  let unitOz = 12;
-  let lengthIn = 10;
-  let widthIn = 8;
-  let depthIn = 4;
-  let packageType = "PackageThickEnvelope";
+  const dimSource = [
+    input.dimensionsText,
+    input.size,
+    input.title,
+    input.productType,
+  ]
+    .filter(Boolean)
+    .join(" ");
 
+  const qty = Math.max(1, Number(input.quantity) || 1);
+  let unitOz = 10;
+  let lengthIn = 9;
+  let widthIn = 6;
+  let depthIn = 3;
+  let packageType = "PackageThickEnvelope";
+  let dimNote = "default compact parcel";
+
+  const parsed = parseProductDimensionsInches(dimSource);
   const fluidOz = parseFluidOz(
     [input.size, input.title, input.productType].filter(Boolean).join(" "),
   );
+  const heuristic = categoryHeuristic(haystack);
 
-  if (fluidOz != null) {
-    unitOz = Math.ceil(fluidOz + 3);
-    lengthIn = 10;
-    widthIn = 5;
-    depthIn = 5;
-  } else if (
-    /\b(vacuum|robot\s*vacuum|roomba|dyson|shark)\b/.test(haystack) ||
-    /\bvacuum cleaners?\b/.test(haystack)
-  ) {
-    // Matches typical Seller Hub estimate for boxed robot vacuums.
-    unitOz = 192; // 12 lb
-    lengthIn = 21;
-    widthIn = 16;
-    depthIn = 5;
-  } else if (/\b(comforter|duvet|bedding|blanket|quilt)\b/.test(haystack)) {
-    unitOz = 96;
-    lengthIn = 20;
-    widthIn = 16;
-    depthIn = 10;
-  } else if (/\b(sneaker|shoe|boot)\b/.test(haystack)) {
-    unitOz = 40;
-    lengthIn = 14;
-    widthIn = 10;
-    depthIn = 6;
-  } else if (
-    /\b(phone|case|cable|charger|earbuds|small\s*electronics)\b/.test(haystack)
-  ) {
-    unitOz = 8;
-    lengthIn = 9;
-    widthIn = 6;
-    depthIn = 2;
-  } else if (/\b(laptop|monitor|tv)\b/.test(haystack)) {
-    unitOz = 128;
-    lengthIn = 22;
-    widthIn = 16;
-    depthIn = 6;
-  } else if (/\b(atv|generator|appliance)\b/.test(haystack)) {
-    unitOz = 480;
-    lengthIn = 36;
-    widthIn = 24;
-    depthIn = 24;
-    packageType = "USPSLargePack";
+  if (parsed) {
+    const box = paddedBox(parsed.lengthIn, parsed.widthIn, parsed.depthIn);
+    lengthIn = box.lengthIn;
+    widthIn = box.widthIn;
+    depthIn = box.depthIn;
+    // Weight: prefer category typical weight; never declare heavier than dim weight.
+    const volOz = volumeWeightOz(lengthIn, widthIn, depthIn);
+    const baseOz = heuristic?.unitOz ?? Math.max(6, Math.round(volOz * 0.35));
+    unitOz = Math.max(4, Math.min(baseOz, volOz));
+    dimNote = `product ${parsed.source} ${parsed.lengthIn}×${parsed.widthIn}×${parsed.depthIn}" + ${PACK_PAD_IN}" pad`;
+  } else if (fluidOz != null) {
+    unitOz = Math.ceil(fluidOz + 2);
+    const box = paddedBox(4.5, 4.5, Math.max(6, fluidOz / 8 + 2), 0.5);
+    lengthIn = box.lengthIn;
+    widthIn = box.widthIn;
+    depthIn = box.depthIn;
+    dimNote = `${fluidOz} fl oz bottle, tight sleeve`;
+  } else if (heuristic) {
+    const box = paddedBox(
+      heuristic.lengthIn,
+      heuristic.widthIn,
+      heuristic.depthIn,
+      0.5,
+    );
+    lengthIn = box.lengthIn;
+    widthIn = box.widthIn;
+    depthIn = box.depthIn;
+    unitOz = heuristic.unitOz;
+    if (heuristic.packageType) packageType = heuristic.packageType;
+    dimNote = "category-tight box";
+  } else {
+    // Generic small retail item — stay under oversized flat defaults (10×8×4).
+    const box = paddedBox(8, 5, 3, 0.5);
+    lengthIn = box.lengthIn;
+    widthIn = box.widthIn;
+    depthIn = box.depthIn;
+    unitOz = 10;
+  }
+
+  // Prefer Package when any edge > 0.75" (rare envelope path).
+  if (Math.min(lengthIn, widthIn, depthIn) > 0.75 && packageType === "PackageThickEnvelope") {
+    packageType = "PackageThickEnvelope";
   }
 
   const totalOz = Math.max(1, Math.round(unitOz * qty));
   const { lbs, oz } = toLbsOz(totalOz);
-  const service = pickService(totalOz);
+  const service = pickService(totalOz, lengthIn);
 
   return {
     weightLbs: lbs,
@@ -160,12 +327,13 @@ export function estimatePackageAndShipping(input: {
     widthIn,
     depthIn,
     measurementSystem: "ENGLISH",
-    shippingType: "Flat",
+    shippingType: "Calculated",
     shippingService: service.shippingService,
-    shippingCost: service.shippingCost,
+    shippingCost: null,
     shippingPriority: 1,
     weightUnit: "lbs",
-    reason: service.reason,
+    freeShipping: false,
+    reason: `${service.reason} · ${dimNote} → ${lengthIn}×${widthIn}×${depthIn} in`,
   };
 }
 
@@ -177,7 +345,6 @@ export function packageEstimateToCsvValues(
   estimate: PackageEstimate,
   options?: { includeInlineShippingService?: boolean },
 ): Record<string, string> {
-  const cost = estimate.shippingCost.toFixed(2);
   const includeService = options?.includeInlineShippingService !== false;
 
   const values: Record<string, string> = {
@@ -202,8 +369,7 @@ export function packageEstimateToCsvValues(
   if (includeService) {
     values["Shipping service 1 option"] = estimate.shippingService;
     values["ShippingService-1:Option"] = estimate.shippingService;
-    values["Shipping service 1 cost"] = cost;
-    values["ShippingService-1:Cost"] = cost;
+    // Calculated: omit fixed cost so Seller Hub computes buyer-paid rate.
     values["Shipping service 1 priority"] = String(estimate.shippingPriority);
     values["ShippingService-1:Priority"] = String(estimate.shippingPriority);
   }

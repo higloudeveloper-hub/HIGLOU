@@ -546,7 +546,7 @@ export function NewListingWorkspace({
       country: prev.country || DEFAULT_VALUES.country,
       shippingService: shipping.shippingService,
       shippingCost: shipping.shippingCost,
-      freeShipping: shipping.shippingCost === 0,
+      freeShipping: false,
       condition: analysis.condition || prev.condition,
       conditionId:
       analysis.conditionId || prev.conditionId || "NEW",

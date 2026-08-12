@@ -202,8 +202,8 @@ export function EbayPoliciesForm() {
       <div className="rounded-xl border border-emerald-100 bg-emerald-50/70 px-3 py-2.5 text-[12px] text-emerald-900">
         Policies belong to each eBay seller account — they cannot be copied by
         ID. Import syncs this connected account, or Create Higlou policies makes
-        shipping / payment / return defaults (USPS Ground Advantage, 30-day
-        returns). Required for draft and live publish.
+        calculated shipping (buyer pays USPS rate from package size), payment,
+        and 14-day returns. Required for draft and live publish.
       </div>
 
       <PolicySelect

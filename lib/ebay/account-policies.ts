@@ -19,9 +19,9 @@ export type ResolvedEbayPolicyIds = {
   returnPolicyId: string;
 };
 
-const HIGLOU_FULFILLMENT_NAME = "Higlou Domestic Shipping";
+const HIGLOU_FULFILLMENT_NAME = "Higlou Calculated Shipping (buyer pays)";
 const HIGLOU_PAYMENT_NAME = "Higlou Payment";
-const HIGLOU_RETURN_NAME = "Higlou Returns";
+const HIGLOU_RETURN_NAME = "Higlou Returns (14 days)";
 
 async function accountFetch(
   accessToken: string,
@@ -81,7 +81,7 @@ function mapNamedPolicies(
     .filter((p) => p.id);
 }
 
-/** Prefer Higlou-named policy, then default-ish name, then first. */
+/** Prefer Higlou calculated (buyer pays), then any Higlou, then default-ish, then first. */
 export function pickDefaultPolicy(
   options: EbayPolicyOption[],
   preferredId?: string,
@@ -92,6 +92,10 @@ export function pickDefaultPolicy(
     const match = options.find((p) => p.id === preferred);
     if (match) return match;
   }
+  const calculated = options.find((p) =>
+    /higlou.*calculat|buyer pays/i.test(p.name),
+  );
+  if (calculated) return calculated;
   const higlou = options.find((p) => /higlou/i.test(p.name));
   if (higlou) return higlou;
   const namedDefault = options.find((p) =>
@@ -149,6 +153,7 @@ async function createFulfillmentPolicy(
   shippingServiceCode: string,
   name = HIGLOU_FULFILLMENT_NAME,
 ): Promise<string> {
+  // CALCULATED = buyer pays carrier rate from listing package weight/dims.
   const json = (await accountFetch(
     accessToken,
     "/sell/account/v1/fulfillment_policy",
@@ -164,15 +169,12 @@ async function createFulfillmentPolicy(
         shippingOptions: [
           {
             optionType: "DOMESTIC",
-            costType: "FLAT_RATE",
+            costType: "CALCULATED",
             shippingServices: [
               {
                 sortOrder: 1,
                 shippingServiceCode,
                 freeShipping: false,
-                buyerResponsibleForShipping: false,
-                shippingCost: { value: "6.99", currency: "USD" },
-                additionalShippingCost: { value: "0.00", currency: "USD" },
               },
             ],
           },
@@ -229,7 +231,7 @@ async function createReturnPolicy(
           { name: "ALL_EXCLUDING_MOTORS_VEHICLES", default: true },
         ],
         returnsAccepted: true,
-        returnPeriod: { value: 30, unit: "DAY" },
+        returnPeriod: { value: 14, unit: "DAY" },
         refundMethod: "MONEY_BACK",
         returnShippingCostPayer: "BUYER",
         returnMethod: "REPLACEMENT",
@@ -266,17 +268,26 @@ export async function ensureHiglouBusinessPolicies(
     payment = { id, name: HIGLOU_PAYMENT_NAME };
   }
 
-  let returns = pickDefaultPolicy(listed.return);
+  let returns =
+    listed.return.find((p) => /higlou.*14\s*day/i.test(p.name)) || null;
   if (!returns) {
     const id = await createReturnPolicy(accessToken, marketplaceId);
     created.push("return");
     returns = { id, name: HIGLOU_RETURN_NAME };
   }
 
-  let shipping = pickDefaultPolicy(listed.fulfillment);
+  let shipping =
+    listed.fulfillment.find((p) =>
+      /higlou.*calculat|buyer pays/i.test(p.name),
+    ) || null;
+  // Old flat Higlou policies (or empty accounts) need a calculated buyer-pays policy.
   if (!shipping || options?.forceRecreateFulfillment) {
     // Prefer Ground Advantage (matches Higlou UI), then Priority.
-    const serviceCodes = ["USPSGroundAdvantage", "USPSPriority", "USPSFirstClass"];
+    const serviceCodes = [
+      "USPSGroundAdvantage",
+      "USPSPriority",
+      "USPSFirstClass",
+    ];
     const policyName = options?.forceRecreateFulfillment
       ? `${HIGLOU_FULFILLMENT_NAME} ${Date.now().toString(36)}`
       : HIGLOU_FULFILLMENT_NAME;
@@ -329,21 +340,34 @@ export async function resolveSellerBusinessPolicyIds(
   const marketplaceId = options?.marketplaceId || "EBAY_US";
   const listed = await listSellerBusinessPolicies(accessToken, marketplaceId);
 
-  // preferred IDs from a prior eBay account are ignored unless they exist here.
-  const shipping = pickDefaultPolicy(
-    listed.fulfillment,
-    options?.preferred?.shippingPolicyId,
-  );
+  // Always prefer Higlou calculated (buyer pays) over stale flat policy IDs.
+  const shipping =
+    listed.fulfillment.find((p) =>
+      /higlou.*calculat|buyer pays/i.test(p.name),
+    ) ||
+    pickDefaultPolicy(listed.fulfillment, options?.preferred?.shippingPolicyId);
   const payment = pickDefaultPolicy(
     listed.payment,
     options?.preferred?.paymentPolicyId,
   );
-  const returns = pickDefaultPolicy(
-    listed.return,
-    options?.preferred?.returnPolicyId,
+  const returns =
+    listed.return.find((p) => /higlou.*14\s*day/i.test(p.name)) ||
+    pickDefaultPolicy(listed.return, options?.preferred?.returnPolicyId);
+
+  const hasCalculatedShipping = listed.fulfillment.some((p) =>
+    /higlou.*calculat|buyer pays/i.test(p.name),
+  );
+  const hasFourteenDayReturns = listed.return.some((p) =>
+    /higlou.*14\s*day/i.test(p.name),
   );
 
-  if (shipping && payment && returns) {
+  if (
+    shipping &&
+    payment &&
+    returns &&
+    hasCalculatedShipping &&
+    hasFourteenDayReturns
+  ) {
     return {
       shippingPolicyId: shipping.id,
       paymentPolicyId: payment.id,
@@ -356,6 +380,10 @@ export async function resolveSellerBusinessPolicyIds(
     if (!shipping) missing.push("shipping (fulfillment)");
     if (!payment) missing.push("payment");
     if (!returns) missing.push("return");
+    if (!hasCalculatedShipping) {
+      missing.push("calculated buyer-pays shipping");
+    }
+    if (!hasFourteenDayReturns) missing.push("14-day return policy");
     throw new Error(
       `No eBay business policies found for ${missing.join(", ")}. Create them in Seller Hub or use Create Higlou policies.`,
     );

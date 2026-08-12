@@ -557,7 +557,8 @@ export function ReviewScreen({
                       selectedService}
                   </p>
                   <p className="mt-0.5 text-[12.5px] text-muted-foreground">
-                    {packageInfo.weightLbs} lb {packageInfo.weightOz} oz · Flat
+                    {packageInfo.weightLbs} lb {packageInfo.weightOz} oz · Buyer
+                    pays
                   </p>
                 </div>
               </div>
@@ -676,7 +677,7 @@ export function ReviewScreen({
                     onClick={() => {
                       onUpdate("shippingService", recommendedService);
                       onUpdate("shippingCost", packageInfo.shippingCost);
-                      onUpdate("freeShipping", packageInfo.shippingCost === 0);
+                      onUpdate("freeShipping", false);
                     }}
                     className={cn(
                       "rounded-lg px-3 py-1.5 text-[12px] font-semibold",

@@ -1,5 +1,8 @@
 import { getEbayConfig } from "@/lib/ebay/config";
-import { ensureSellingPolicyOptIn } from "@/lib/ebay/inventory-api";
+import {
+  ensureDefaultInventoryLocation,
+  ensureSellingPolicyOptIn,
+} from "@/lib/ebay/inventory-api";
 
 export type EbayPolicyOption = {
   id: string;
@@ -181,7 +184,7 @@ function fulfillmentPolicyBody(
   marketplaceId: string,
   shippingServiceCode: string,
 ) {
-  // Minimal FLAT_RATE body — extra flags (localPickup/etc.) can trigger LSAS 20403.
+  // Minimal FLAT_RATE — buyer pays. Avoid CALCULATED (LSAS) and extra flags.
   return {
     name,
     marketplaceId,
@@ -196,9 +199,14 @@ function fulfillmentPolicyBody(
             sortOrder: 1,
             shippingServiceCode,
             freeShipping: false,
+            buyerResponsibleForShipping: false,
             shippingCost: {
               value: HIGLOU_DEFAULT_FLAT_SHIPPING_USD,
               currency: "USD",
+            },
+            additionalShippingCost: { value: "0.00", currency: "USD" },
+            shipToLocations: {
+              regionIncluded: [{ regionName: "Domestic" }],
             },
           },
         ],
@@ -390,13 +398,24 @@ export async function ensureHiglouBusinessPolicies(
     forceRecreateReturn?: boolean;
   },
 ): Promise<
-  ResolvedEbayPolicyIds & { available: EbaySellerPolicies; created: string[] }
+  ResolvedEbayPolicyIds & {
+    available: EbaySellerPolicies;
+    created: string[];
+    warning?: string;
+  }
 > {
   const marketplaceId = options?.marketplaceId || "EBAY_US";
   await ensureSellingPolicyOptIn(accessToken);
+  // Inventory location is required logistics setup for many US seller accounts.
+  try {
+    await ensureDefaultInventoryLocation(accessToken);
+  } catch {
+    // Non-fatal — some accounts already have Seller Hub locations.
+  }
 
   let listed = await listSellerBusinessPolicies(accessToken, marketplaceId);
   const created: string[] = [];
+  let warning: string | undefined;
 
   let payment = pickDefaultPolicy(listed.payment);
   if (!payment) {
@@ -423,13 +442,18 @@ export async function ensureHiglouBusinessPolicies(
       );
       created.push("return-updated");
     } catch {
-      const id = await createReturnPolicy(
-        accessToken,
-        marketplaceId,
-        `${HIGLOU_RETURN_NAME} ${Date.now().toString(36)}`,
-      );
-      returns = { id, name: HIGLOU_RETURN_NAME };
-      created.push("return");
+      try {
+        const id = await createReturnPolicy(
+          accessToken,
+          marketplaceId,
+          `${HIGLOU_RETURN_NAME} ${Date.now().toString(36)}`,
+        );
+        returns = { id, name: HIGLOU_RETURN_NAME };
+        created.push("return");
+      } catch {
+        // Keep existing return if eBay blocks create/update.
+        created.push("return-kept-existing");
+      }
     }
   } else if (!returns) {
     const legacyHiglou = listed.return.find((p) => /higlou/i.test(p.name));
@@ -444,27 +468,44 @@ export async function ensureHiglouBusinessPolicies(
         returns = { id: legacyHiglou.id, name: HIGLOU_RETURN_NAME };
         created.push("return-updated");
       } catch {
+        try {
+          const id = await createReturnPolicy(accessToken, marketplaceId);
+          returns = { id, name: HIGLOU_RETURN_NAME };
+          created.push("return");
+        } catch {
+          returns = legacyHiglou;
+          created.push("return-kept-existing");
+        }
+      }
+    } else {
+      try {
         const id = await createReturnPolicy(accessToken, marketplaceId);
         returns = { id, name: HIGLOU_RETURN_NAME };
         created.push("return");
+      } catch {
+        returns = pickDefaultPolicy(listed.return);
+        if (!returns) {
+          throw new Error(
+            "Could not create a 14-day return policy. Create one in eBay Seller Hub → Account → Business policies (14 days, buyer pays return shipping), then click Import from eBay.",
+          );
+        }
+        created.push("return-kept-existing");
+        warning =
+          "Could not create Higlou 14-day returns via API. Using an existing return policy — edit it in Seller Hub to 14 days.";
       }
-    } else {
-      const id = await createReturnPolicy(accessToken, marketplaceId);
-      returns = { id, name: HIGLOU_RETURN_NAME };
-      created.push("return");
     }
   }
 
-  // --- Fulfillment: flat buyer-pays; create NEW on fix (avoid PUT on broken CALCULATED) ---
+  // --- Fulfillment: flat buyer-pays; create NEW; on LOGISTICS_INFO_IS_MISSING reuse ---
   let shipping =
     listed.fulfillment.find((p) => isHiglouCheapFulfillmentName(p.name)) ||
     null;
 
   const shippingOk =
-    shipping != null && (await fulfillmentLooksCorrect(accessToken, shipping.id));
+    shipping != null &&
+    (await fulfillmentLooksCorrect(accessToken, shipping.id));
 
   if (!shippingOk || options?.forceRecreateFulfillment) {
-    // Prefer create over update — updating CALCULATED→FLAT often hits LSAS 20403.
     const policyName = `${HIGLOU_FULFILLMENT_NAME} ${Date.now().toString(36)}`;
     try {
       const createdPolicy = await createFulfillmentPolicy(
@@ -475,34 +516,57 @@ export async function ensureHiglouBusinessPolicies(
       shipping = { id: createdPolicy.id, name: policyName };
       created.push(`fulfillment:${createdPolicy.shippingServiceCode}`);
     } catch (createError) {
-      // Fall back: keep any existing flat buyer-paid policy on the account.
-      const fallback =
-        (
-          await Promise.all(
-            listed.fulfillment.map(async (p) => ({
-              p,
-              ok: await fulfillmentLooksCorrect(accessToken, p.id),
-            })),
-          )
-        ).find((row) => row.ok)?.p || null;
+      const msg =
+        createError instanceof Error ? createError.message : String(createError);
 
-      if (fallback) {
-        shipping = fallback;
+      const scored = await Promise.all(
+        listed.fulfillment.map(async (p) => ({
+          p,
+          ok: await fulfillmentLooksCorrect(accessToken, p.id),
+        })),
+      );
+      const flatOk = scored.find((row) => row.ok)?.p || null;
+      const anyExisting =
+        flatOk ||
+        shipping ||
+        listed.fulfillment.find((p) => /higlou/i.test(p.name)) ||
+        listed.fulfillment[0] ||
+        null;
+
+      if (anyExisting) {
+        shipping = anyExisting;
         created.push("fulfillment-reused-existing");
+        if (/LOGISTICS_INFO_IS_MISSING|20403|LSAS/i.test(msg)) {
+          warning =
+            "eBay blocked creating a new shipping policy (LOGISTICS_INFO_IS_MISSING). Using your existing shipping policy. In Seller Hub → Business policies, set shipping to USPS Ground Advantage, buyer pays (not free), then Import from eBay.";
+        } else {
+          warning = `Could not create a new shipping policy (${msg}). Using an existing one from your eBay account.`;
+        }
       } else {
-        throw createError;
+        throw new Error(
+          /LOGISTICS_INFO_IS_MISSING/i.test(msg)
+            ? "eBay says logistics info is missing on this seller account. Open eBay Seller Hub → Account → Business policies, create Shipping (USPS Ground Advantage, buyer pays) + Return (14 days) + Payment, then click Import from eBay in Higlou."
+            : msg,
+        );
       }
     }
+  }
+
+  if (!shipping || !payment || !returns) {
+    throw new Error(
+      "Missing eBay business policies. Create Shipping, Return (14 days), and Payment in Seller Hub, then Import from eBay.",
+    );
   }
 
   listed = await listSellerBusinessPolicies(accessToken, marketplaceId);
 
   return {
-    shippingPolicyId: shipping!.id,
+    shippingPolicyId: shipping.id,
     paymentPolicyId: payment.id,
-    returnPolicyId: returns!.id,
+    returnPolicyId: returns.id,
     available: listed,
     created,
+    warning,
   };
 }
 

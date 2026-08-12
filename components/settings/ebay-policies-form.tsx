@@ -183,13 +183,21 @@ export function EbayPoliciesForm() {
         policies?: Policies;
         available?: Available;
         created?: string[];
+        warning?: string | null;
       } | null;
       if (!res.ok) throw new Error(body?.error || "Create failed");
       if (body?.policies) setPolicies(body.policies);
       if (body?.available) setAvailable(body.available);
-      toast.success(
-        "Updated Higlou policies: Ground Advantage (buyer pays) + 14-day returns",
-      );
+      if (body?.warning) {
+        toast.message("Policies saved with a warning", {
+          description: body.warning,
+          duration: 12000,
+        });
+      } else {
+        toast.success(
+          "Updated Higlou policies: Ground Advantage (buyer pays) + 14-day returns",
+        );
+      }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Create failed");
     } finally {
@@ -206,9 +214,10 @@ export function EbayPoliciesForm() {
       <div className="rounded-xl border border-emerald-100 bg-emerald-50/70 px-3 py-2.5 text-[12px] text-emerald-900">
         Policies belong to each eBay seller account — they cannot be copied by
         ID. Import syncs this connected account, or Create Higlou policies makes
-        Flat-rate shipping via the cheapest service your eBay account allows
-        (Ground Advantage when possible; buyer pays), payment, and 14-day
-        returns (buyer pays return ship). Required for draft and live publish.
+        Flat-rate shipping (buyer pays; Ground Advantage when eBay allows),
+        payment, and 14-day returns. If eBay blocks API create
+        (LOGISTICS_INFO_IS_MISSING), create/edit policies in Seller Hub then
+        Import from eBay.
       </div>
 
       <PolicySelect

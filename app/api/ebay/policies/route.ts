@@ -91,7 +91,12 @@ export async function POST(request: Request) {
       .maybeSingle();
 
     let created: string[] = [];
-    let resolved;
+    let resolved: {
+      shippingPolicyId: string;
+      paymentPolicyId: string;
+      returnPolicyId: string;
+    };
+    let policyWarning: string | undefined;
 
     if (json.create || json.recreateFulfillment || json.recreateReturn) {
       const ensured = await ensureHiglouBusinessPolicies(accessToken, {
@@ -103,6 +108,7 @@ export async function POST(request: Request) {
       });
       resolved = ensured;
       created = ensured.created;
+      policyWarning = ensured.warning;
     } else {
       resolved = await resolveSellerBusinessPolicyIds(accessToken, {
         marketplaceId: connection.marketplaceId || "EBAY_US",
@@ -150,6 +156,7 @@ export async function POST(request: Request) {
     return NextResponse.json({
       ok: true,
       created,
+      warning: policyWarning || null,
       available: listed,
       policies: {
         paymentPolicyId: String(saved.payment_policy_id ?? ""),

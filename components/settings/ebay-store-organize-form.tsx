@@ -117,9 +117,10 @@ export function EbayStoreOrganizeForm() {
   return (
     <div className="space-y-4">
       <div className="rounded-xl border border-emerald-100 bg-emerald-50/70 px-3 py-2.5 text-[12px] text-emerald-900">
-        Organize Store uses eBay Trading only (active listings by item ID). It
-        never reads or writes Inventory SKUs, so error 25707 cannot happen here.
-        Your account needs an eBay Store. Scan → review → Apply selected.
+        Organize Store uses eBay Trading only. It assigns leaf Store folders
+        (parents with subfolders are rejected by eBay), verifies each change,
+        then re-scans. If a row stays selected after Apply, expand the red
+        toast — the folder did not stick.
       </div>
 
       <div className="flex flex-wrap gap-2">

@@ -22,6 +22,8 @@ export type EbayStoreOfferRow = {
   listingId: string | null;
   price: number | null;
   currentStorePaths: string[];
+  /** Numeric StoreCategoryID from Trading (best unchanged signal). */
+  currentStoreCategoryId?: string | null;
 };
 
 export type StoreOrganizeSuggestion = EbayStoreOfferRow & {
@@ -166,7 +168,8 @@ async function tradingApiCall(
     body: xmlBody,
   });
   const xml = await res.text();
-  if (!res.ok || /<Ack>Failure<\/Ack>/i.test(xml)) {
+  const ack = xml.match(/<Ack>([^<]+)<\/Ack>/i)?.[1]?.trim() || "";
+  if (!res.ok || /Failure/i.test(ack)) {
     const msg =
       xml.match(/<LongMessage>([^<]+)<\/LongMessage>/)?.[1] ||
       xml.match(/<ShortMessage>([^<]+)<\/ShortMessage>/)?.[1] ||
@@ -174,6 +177,18 @@ async function tradingApiCall(
     throw new Error(msg);
   }
   return xml;
+}
+
+function isLeafStoreCategory(
+  path: string,
+  categories: EbayStoreCategory[],
+): boolean {
+  const needle = normalizeStorePath(path);
+  const prefix = `${needle}/`;
+  return !categories.some((c) => {
+    const p = normalizeStorePath(c.path);
+    return p !== needle && p.startsWith(prefix);
+  });
 }
 
 function resolveStoreCategoryId(
@@ -187,10 +202,45 @@ function resolveStoreCategoryId(
   if (exact?.categoryId) return exact.categoryId;
   const leaf = needle.split("/").filter(Boolean).pop()?.toLowerCase();
   if (!leaf) return null;
+  // Prefer an exact leaf name match that is actually a leaf folder.
   const byName = categories.find(
+    (c) =>
+      c.categoryId &&
+      c.name.trim().toLowerCase() === leaf &&
+      isLeafStoreCategory(c.path, categories),
+  );
+  if (byName?.categoryId) return byName.categoryId;
+  const anyName = categories.find(
     (c) => c.categoryId && c.name.trim().toLowerCase() === leaf,
   );
-  return byName?.categoryId || null;
+  return anyName?.categoryId || null;
+}
+
+/**
+ * eBay only allows items in leaf Store folders (no children).
+ * If path is a parent, pick/create a leaf under it.
+ */
+function pickLeafStorePath(
+  path: string,
+  categories: EbayStoreCategory[],
+): string {
+  const needle = normalizeStorePath(path);
+  if (!needle) return "/Other";
+  if (isLeafStoreCategory(needle, categories)) return needle;
+
+  const prefix = `${needle}/`;
+  const childLeaves = categories
+    .map((c) => normalizeStorePath(c.path))
+    .filter(
+      (p) =>
+        p.startsWith(prefix) && isLeafStoreCategory(p, categories),
+    )
+    .sort((a, b) => a.length - b.length);
+  if (childLeaves[0]) return childLeaves[0];
+
+  // Force a leaf under the parent (ensureStoreCategoryId will create it).
+  const forced = normalizeStorePath(`${needle}/General`);
+  return forced;
 }
 
 function sleep(ms: number) {
@@ -304,7 +354,10 @@ async function assignStoreCategoryViaTrading(
   listingId: string,
   storeCategoryId: string,
 ): Promise<void> {
-  const xml = `<?xml version="1.0" encoding="utf-8"?>
+  const xml = await tradingApiCall(
+    accessToken,
+    "ReviseFixedPriceItem",
+    `<?xml version="1.0" encoding="utf-8"?>
 <ReviseFixedPriceItemRequest xmlns="urn:ebay:apis:eBLBaseComponents">
   <ErrorLanguage>en_US</ErrorLanguage>
   <WarningLevel>High</WarningLevel>
@@ -312,10 +365,49 @@ async function assignStoreCategoryViaTrading(
     <ItemID>${escapeXml(listingId)}</ItemID>
     <Storefront>
       <StoreCategoryID>${escapeXml(storeCategoryId)}</StoreCategoryID>
+      <StoreCategory2ID>0</StoreCategory2ID>
     </Storefront>
   </Item>
-</ReviseFixedPriceItemRequest>`;
-  await tradingApiCall(accessToken, "ReviseFixedPriceItem", xml);
+</ReviseFixedPriceItemRequest>`,
+  );
+
+  const warningText = Array.from(
+    xml.matchAll(/<LongMessage>([^<]+)<\/LongMessage>/gi),
+  )
+    .map((m) => m[1])
+    .join(" | ");
+  if (/other store category|not a leaf|has subcategor|invalid store/i.test(warningText)) {
+    throw new Error(
+      warningText ||
+        "eBay rejected the Store folder (must be a leaf category with no subfolders).",
+    );
+  }
+
+  // Confirm Storefront stuck — ActiveList sometimes omits it until GetItem.
+  const verify = await tradingApiCall(
+    accessToken,
+    "GetItem",
+    `<?xml version="1.0" encoding="utf-8"?>
+<GetItemRequest xmlns="urn:ebay:apis:eBLBaseComponents">
+  <ErrorLanguage>en_US</ErrorLanguage>
+  <ItemID>${escapeXml(listingId)}</ItemID>
+  <OutputSelector>ItemID</OutputSelector>
+  <OutputSelector>Storefront</OutputSelector>
+</GetItemRequest>`,
+  );
+  const got =
+    verify.match(/<StoreCategoryID>([^<]+)<\/StoreCategoryID>/i)?.[1]?.trim() ||
+    "";
+  if (got && got !== "0" && got !== storeCategoryId) {
+    throw new Error(
+      `Store folder did not stick (wanted ${storeCategoryId}, eBay has ${got}). Use a leaf Store category with no subfolders.`,
+    );
+  }
+  if (!got || got === "0") {
+    throw new Error(
+      "eBay did not keep the Store folder (often means the folder is a parent with subfolders, or the account has no eBay Store).",
+    );
+  }
 }
 
 /**
@@ -416,6 +508,7 @@ async function listSellerOffersViaTrading(
 <GetMyeBaySellingRequest xmlns="urn:ebay:apis:eBLBaseComponents">
   <ErrorLanguage>en_US</ErrorLanguage>
   <WarningLevel>High</WarningLevel>
+  <DetailLevel>ReturnAll</DetailLevel>
   <ActiveList>
     <Include>true</Include>
     <IncludeNotes>false</IncludeNotes>
@@ -446,8 +539,10 @@ async function listSellerOffersViaTrading(
         block.match(/<StoreCategoryID>([^<]+)<\/StoreCategoryID>/i)?.[1]
           ?.trim() || "";
       const currentPath =
-        (storeCatId && categoriesById.get(storeCatId)) ||
-        (storeCatId ? `/${storeCatId}` : "");
+        (storeCatId &&
+          storeCatId !== "0" &&
+          categoriesById.get(storeCatId)) ||
+        "";
       const priceRaw =
         block.match(
           /<SellingStatus>[\s\S]*?<CurrentPrice[^>]*>([^<]+)<\/CurrentPrice>/i,
@@ -464,6 +559,8 @@ async function listSellerOffersViaTrading(
         listingId,
         price: Number(priceRaw) || null,
         currentStorePaths: currentPath ? [normalizeStorePath(currentPath)] : [],
+        currentStoreCategoryId:
+          storeCatId && storeCatId !== "0" ? storeCatId : null,
       });
     }
 
@@ -475,7 +572,52 @@ async function listSellerOffersViaTrading(
     if (page >= totalPages || itemBlocks.length === 0) break;
   }
 
+  // ActiveList often omits Storefront — fill via GetItem so re-scan sees Apply.
+  await enrichStorefrontFromGetItem(accessToken, rows, categoriesById);
   return rows;
+}
+
+async function enrichStorefrontFromGetItem(
+  accessToken: string,
+  rows: EbayStoreOfferRow[],
+  categoriesById: Map<string, string>,
+): Promise<void> {
+  const need = rows.filter(
+    (r) =>
+      r.listingId &&
+      (!r.currentStoreCategoryId || r.currentStoreCategoryId === "0"),
+  );
+  const chunkSize = 6;
+  for (let i = 0; i < need.length; i += chunkSize) {
+    const chunk = need.slice(i, i + chunkSize);
+    await Promise.all(
+      chunk.map(async (row) => {
+        try {
+          const xml = await tradingApiCall(
+            accessToken,
+            "GetItem",
+            `<?xml version="1.0" encoding="utf-8"?>
+<GetItemRequest xmlns="urn:ebay:apis:eBLBaseComponents">
+  <ErrorLanguage>en_US</ErrorLanguage>
+  <ItemID>${escapeXml(String(row.listingId))}</ItemID>
+  <OutputSelector>ItemID</OutputSelector>
+  <OutputSelector>Storefront</OutputSelector>
+</GetItemRequest>`,
+          );
+          const storeCatId =
+            xml
+              .match(/<StoreCategoryID>([^<]+)<\/StoreCategoryID>/i)?.[1]
+              ?.trim() || "";
+          if (!storeCatId || storeCatId === "0") return;
+          row.currentStoreCategoryId = storeCatId;
+          const path = categoriesById.get(storeCatId);
+          row.currentStorePaths = path ? [normalizeStorePath(path)] : [];
+        } catch {
+          // leave empty — classify will still suggest a folder
+        }
+      }),
+    );
+  }
 }
 
 export async function listSellerOffers(
@@ -730,14 +872,26 @@ export function classifyOffersForStore(
   return offers.map((offer) => {
     const haystack = `${offer.title} ${offer.categoryId} ${offer.sku}`;
     const picked = pickBestPath(haystack, available);
+    const leafPath = pickLeafStorePath(picked.path, categories);
+    const suggestedId = resolveStoreCategoryId(leafPath, categories);
     const current = offer.currentStorePaths[0] || "";
-    const unchanged =
-      normalizeStorePath(current) === normalizeStorePath(picked.path);
+    const unchangedById = Boolean(
+      suggestedId &&
+        offer.currentStoreCategoryId &&
+        suggestedId === offer.currentStoreCategoryId,
+    );
+    const unchangedByPath =
+      Boolean(current) &&
+      normalizeStorePath(current) === normalizeStorePath(leafPath);
+    const unchanged = unchangedById || unchangedByPath;
     return {
       ...offer,
-      suggestedPath: picked.path,
+      suggestedPath: leafPath,
       confidence: picked.confidence,
-      reason: picked.reason,
+      reason:
+        leafPath !== picked.path
+          ? `${picked.reason} (leaf ${leafPath})`
+          : picked.reason,
       needsReview: picked.confidence < reviewBelow,
       unchanged,
     };
@@ -787,16 +941,37 @@ export async function assignStoreCategoriesToOffer(
 
   const ensured = await ensureStoreCategoryId(
     accessToken,
-    paths[0],
+    pickLeafStorePath(paths[0], categories),
     categories,
   );
-  options?.setCategories?.(ensured.categories);
+  // Re-resolve leaf in case ensure added parents+children.
+  const leafPath = pickLeafStorePath(paths[0], ensured.categories);
+  const leafEnsured =
+    leafPath === paths[0]
+      ? ensured
+      : await ensureStoreCategoryId(
+          accessToken,
+          leafPath,
+          ensured.categories,
+        );
+  options?.setCategories?.(leafEnsured.categories);
 
-  await assignStoreCategoryViaTrading(
-    accessToken,
-    listingId,
-    ensured.categoryId,
+  // Final guard: never send a parent folder id.
+  let categoryId = leafEnsured.categoryId;
+  const catMeta = leafEnsured.categories.find(
+    (c) => c.categoryId === categoryId,
   );
+  if (catMeta && !isLeafStoreCategory(catMeta.path, leafEnsured.categories)) {
+    const forced = await ensureStoreCategoryId(
+      accessToken,
+      pickLeafStorePath(catMeta.path, leafEnsured.categories),
+      leafEnsured.categories,
+    );
+    categoryId = forced.categoryId;
+    options?.setCategories?.(forced.categories);
+  }
+
+  await assignStoreCategoryViaTrading(accessToken, listingId, categoryId);
 }
 
 export async function applyStoreOrganizeSuggestions(

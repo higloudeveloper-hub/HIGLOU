@@ -304,8 +304,66 @@ describe("classifyOffersForStore", () => {
       ],
       live,
     );
-    expect(row.suggestedPath.toLowerCase()).not.toContain("bath");
-    expect(row.suggestedPath.toLowerCase()).toMatch(/tool/);
+    expect(row.suggestedPath).toBe("/Tools");
+  });
+
+  it("files tool brands into seller Tools even when Higlou Power Tools exists", () => {
+    const live = [
+      {
+        path: "/Tools",
+        name: "Tools",
+        categoryId: "9002",
+      },
+      {
+        path: "/Tools/Power Tools",
+        name: "Power Tools",
+        categoryId: "9010",
+      },
+      {
+        path: "/Bath and Plumbing",
+        name: "Bath and Plumbing",
+        categoryId: "9001",
+      },
+    ];
+    const rows = classifyOffersForStore(
+      [
+        {
+          offerId: "t1",
+          sku: "T1",
+          status: "PUBLISHED",
+          title: "Ryobi 18V ONE+ Rotary Tool P241",
+          categoryId: "20779",
+          brand: "Ryobi",
+          listingId: "1",
+          price: 59,
+          currentStorePaths: [],
+        },
+        {
+          offerId: "t2",
+          sku: "T2",
+          status: "PUBLISHED",
+          title: "DeWalt 20V MAX Cordless Drill",
+          categoryId: "29518",
+          brand: "DeWalt",
+          listingId: "2",
+          price: 99,
+          currentStorePaths: [],
+        },
+        {
+          offerId: "t3",
+          sku: "T3",
+          status: "PUBLISHED",
+          title: "Milwaukee M18 Impact Driver",
+          categoryId: "42259",
+          brand: "Milwaukee",
+          listingId: "3",
+          price: 129,
+          currentStorePaths: ["/Other"],
+        },
+      ],
+      live,
+    );
+    expect(rows.every((r) => r.suggestedPath === "/Tools")).toBe(true);
   });
 
   it("still prefers Bath and Plumbing when that folder has a child", () => {

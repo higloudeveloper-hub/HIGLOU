@@ -1539,7 +1539,7 @@ const STORE_THEME_HINTS: Array<{
   {
     folder: /tool|power|drill/,
     product:
-      /\b(tool|drill|saw|grinder|impact|dewalt|makita|milwaukee|ryobi|ridgid|battery|level)\b/i,
+      /\b(tool|drill|saw|grinder|impact|dewalt|makita|milwaukee|ryobi|ridgid|bosch|metabo|craftsman|hercules|hart|kobalt|battery|level|sander|nailer|dremel)\b/i,
     boost: 10,
   },
   {
@@ -1574,12 +1574,22 @@ const STORE_THEME_HINTS: Array<{
   },
 ];
 
-/** Higlou taxonomy paths that must yield to the seller's Bath and Plumbing folder. */
+/** Higlou taxonomy paths that must yield to the seller's real Store folders. */
 const HIGLOU_PLUMBING_PATH_RE = /^\/plumbing(\/|$)/i;
+const HIGLOU_TOOLS_PATH_RE = /^\/tools(\/|$)/i;
+const HIGLOU_LIGHTING_PATH_RE = /^\/lighting(\/|$)/i;
 
 /** Product text that belongs in a bath/plumbing Store folder. */
 export const PLUMBING_PRODUCT_RE =
   /\b(bath|plumb|faucet|pump|toilet|sink|shower|tub|valve|pipe|sump|disposal|vanity|thermostat|spout|drain|cartridge|moen|delta|kohler|grohe|pfister|everbilt|glacier\s*bay|hansgrohe|supply\s*line|angle\s*stop|water\s*heater|bidet|pex|fill\s*valve|flapper|aerator|diverter)\b/i;
+
+/** Product text that belongs in a Tools Store folder. */
+export const TOOLS_PRODUCT_RE =
+  /\b(tool|drill|saw|grinder|impact|driver|sander|nailer|stapler|wrench|pliers|screwdriver|multimeter|rotary|oscillating|dewalt|makita|milwaukee|ryobi|ridgid|bosch|metabo|craftsman|hercules|hart|kobalt|porter[\s-]?cable|hilti|wen|skil|dremel)\b/i;
+
+/** Product text that belongs in Lighting. */
+export const LIGHTING_PRODUCT_RE =
+  /\b(light|lamp|led|bulb|chandelier|pendant|sconce|hue|flush\s*mount|fixture)\b/i;
 
 /** Known eBay leaf Category IDs for bath / plumbing (enrich haystack). */
 const PLUMBING_EBAY_CATEGORY_IDS = new Set([
@@ -1602,10 +1612,31 @@ const PLUMBING_EBAY_CATEGORY_IDS = new Set([
   "63898",
 ]);
 
+/** Known eBay leaf Category IDs for tools. */
+const TOOLS_EBAY_CATEGORY_IDS = new Set([
+  "20779",
+  "46578",
+  "631",
+  "11868",
+  "29518",
+  "3246",
+  "42259",
+  "50388",
+  "71273",
+  "57357",
+  "179421",
+  "42226",
+  "6030",
+  "6000",
+]);
+
 function offerClassifyHaystack(offer: EbayStoreOfferRow): string {
   const catId = String(offer.categoryId || "").replace(/\D/g, "");
   const plumbingCatHint = PLUMBING_EBAY_CATEGORY_IDS.has(catId)
     ? " plumbing bath faucet pump shower"
+    : "";
+  const toolsCatHint = TOOLS_EBAY_CATEGORY_IDS.has(catId)
+    ? " tools power tool drill saw"
     : "";
   return [
     offer.title,
@@ -1615,6 +1646,7 @@ function offerClassifyHaystack(offer: EbayStoreOfferRow): string {
     offer.sku,
     catId,
     plumbingCatHint,
+    toolsCatHint,
   ]
     .filter(Boolean)
     .join(" ");
@@ -1631,6 +1663,33 @@ function usableStoreCategories(
   );
 }
 
+function sortSellerThemeFolders(
+  matches: EbayStoreCategory[],
+  usable: EbayStoreCategory[],
+  preferShallow = false,
+): EbayStoreCategory[] {
+  return [...matches].sort((a, b) => {
+    if (preferShallow) {
+      const aDepth = normalizeStorePath(a.path).split("/").filter(Boolean).length;
+      const bDepth = normalizeStorePath(b.path).split("/").filter(Boolean).length;
+      if (aDepth !== bDepth) return aDepth - bDepth;
+    }
+    const aWords = normalizeMatchText(a.name)
+      .split(" ")
+      .filter((w) => w.length >= 3 && w !== "and").length;
+    const bWords = normalizeMatchText(b.name)
+      .split(" ")
+      .filter((w) => w.length >= 3 && w !== "and").length;
+    if (bWords !== aWords) return bWords - aWords;
+    const aLeaf = isLeafStoreCategory(a.path, usable) ? 1 : 0;
+    const bLeaf = isLeafStoreCategory(b.path, usable) ? 1 : 0;
+    if (bLeaf !== aLeaf) return bLeaf - aLeaf;
+    return (
+      normalizeMatchText(b.name).length - normalizeMatchText(a.name).length
+    );
+  });
+}
+
 /** Seller's real bath/plumbing folder (e.g. Bath and Plumbing), preferring broad names. */
 export function findSellerBathPlumbingFolder(
   categories: EbayStoreCategory[],
@@ -1640,28 +1699,54 @@ export function findSellerBathPlumbingFolder(
     /bath|plumb/i.test(normalizeMatchText(`${c.name} ${c.path}`)),
   );
   if (!matches.length) return null;
-  matches.sort((a, b) => {
-    const aWords = normalizeMatchText(a.name)
-      .split(" ")
-      .filter((w) => w.length >= 3 && w !== "and").length;
-    const bWords = normalizeMatchText(b.name)
-      .split(" ")
-      .filter((w) => w.length >= 3 && w !== "and").length;
-    if (bWords !== aWords) return bWords - aWords;
-    // Prefer leaf when scores tie (assignable directly).
-    const aLeaf = isLeafStoreCategory(a.path, usable) ? 1 : 0;
-    const bLeaf = isLeafStoreCategory(b.path, usable) ? 1 : 0;
-    if (bLeaf !== aLeaf) return bLeaf - aLeaf;
-    return (
-      normalizeMatchText(b.name).length - normalizeMatchText(a.name).length
-    );
+  return sortSellerThemeFolders(matches, usable)[0] || null;
+}
+
+/** Seller's real Tools folder (Tools / Tool), preferring the top-level folder. */
+export function findSellerToolsFolder(
+  categories: EbayStoreCategory[],
+): EbayStoreCategory | null {
+  const usable = usableStoreCategories(categories);
+  const matches = usable.filter((c) => {
+    const name = normalizeMatchText(c.name);
+    const path = normalizeStorePath(c.path);
+    if (/batter/i.test(name)) return false;
+    if (/^(tools?)$/i.test(name)) return true;
+    if (/^\/tools?$/i.test(path)) return true;
+    // "Power Tools" only if there is no top-level Tools
+    return /tool/i.test(name) && !/bath|plumb|light|lamp/i.test(name);
   });
-  return matches[0];
+  if (!matches.length) return null;
+  const exact = matches.filter(
+    (c) =>
+      /^(tools?)$/i.test(normalizeMatchText(c.name)) ||
+      /^\/tools?$/i.test(normalizeStorePath(c.path)),
+  );
+  const pool = exact.length ? exact : matches;
+  return sortSellerThemeFolders(pool, usable, true)[0] || null;
+}
+
+/** Seller's real Lighting folder. */
+export function findSellerLightingFolder(
+  categories: EbayStoreCategory[],
+): EbayStoreCategory | null {
+  const usable = usableStoreCategories(categories);
+  const matches = usable.filter((c) => {
+    const name = normalizeMatchText(c.name);
+    if (/^(lighting|lights?|lamps?)$/i.test(name)) return true;
+    return /light|lamp|led/i.test(name) && !/tool|bath|plumb/i.test(name);
+  });
+  if (!matches.length) return null;
+  const exact = matches.filter((c) =>
+    /^(lighting|lights?|lamps?)$/i.test(normalizeMatchText(c.name)),
+  );
+  const pool = exact.length ? exact : matches;
+  return sortSellerThemeFolders(pool, usable, true)[0] || null;
 }
 
 /**
- * Never dump plumbing items into Higlou /Plumbing/* when the seller already
- * has Bath and Plumbing (or similar). Same idea for other themes later.
+ * Prefer the seller's real Store folders over Higlou taxonomy leaves
+ * (/Plumbing/Pumps, /Tools/Power Tools, …).
  */
 export function preferSellerStorePath(
   suggestedPath: string,
@@ -1669,15 +1754,51 @@ export function preferSellerStorePath(
   categories: EbayStoreCategory[],
 ): string {
   const suggested = normalizeStorePath(suggestedPath);
+
   const bath = findSellerBathPlumbingFolder(categories);
   if (
     bath &&
     (HIGLOU_PLUMBING_PATH_RE.test(suggested) ||
-      PLUMBING_PRODUCT_RE.test(haystack))
+      PLUMBING_PRODUCT_RE.test(haystack)) &&
+    !TOOLS_PRODUCT_RE.test(haystack)
   ) {
     return normalizeStorePath(bath.path);
   }
+
+  const tools = findSellerToolsFolder(categories);
+  if (
+    tools &&
+    (HIGLOU_TOOLS_PATH_RE.test(suggested) || TOOLS_PRODUCT_RE.test(haystack)) &&
+    !PLUMBING_PRODUCT_RE.test(haystack)
+  ) {
+    return normalizeStorePath(tools.path);
+  }
+
+  const lighting = findSellerLightingFolder(categories);
+  if (
+    lighting &&
+    (HIGLOU_LIGHTING_PATH_RE.test(suggested) ||
+      LIGHTING_PRODUCT_RE.test(haystack)) &&
+    !TOOLS_PRODUCT_RE.test(haystack) &&
+    !PLUMBING_PRODUCT_RE.test(haystack)
+  ) {
+    return normalizeStorePath(lighting.path);
+  }
+
   return suggested;
+}
+
+/** Match folder name words to title with simple plural/singular tolerance. */
+function folderWordInHaystack(word: string, hay: string): boolean {
+  const w = word.toLowerCase();
+  if (new RegExp(`\\b${w}\\b`, "i").test(hay)) return true;
+  if (w.endsWith("s") && w.length > 3) {
+    const stem = w.slice(0, -1);
+    if (new RegExp(`\\b${stem}\\b`, "i").test(hay)) return true;
+  } else if (w.length >= 3) {
+    if (new RegExp(`\\b${w}s\\b`, "i").test(hay)) return true;
+  }
+  return false;
 }
 
 function scoreExistingStoreCategory(
@@ -1696,7 +1817,15 @@ function scoreExistingStoreCategory(
     .filter((w) => w.length >= 3 && !/^(and|the|for|with)$/i.test(w));
 
   for (const word of significantWords) {
-    if (new RegExp(`\\b${word}\\b`, "i").test(hay)) score += 4;
+    if (folderWordInHaystack(word, hay)) score += 4;
+  }
+
+  // Exact top-level Tools / Tool folder vs tool products — strong boost.
+  if (
+    (/^(tools?)$/i.test(name) || /^tools?$/i.test(path.replace(/\s/g, ""))) &&
+    TOOLS_PRODUCT_RE.test(haystack)
+  ) {
+    score += 14;
   }
 
   for (const hint of STORE_THEME_HINTS) {
@@ -2062,10 +2191,17 @@ export async function assignStoreCategoriesToOffer(
   const haystack = String(options?.haystack || "");
   let targetPath = preferSellerStorePath(paths[0], haystack, live);
 
-  // Never create competing Higlou /Plumbing/* when Bath and Plumbing exists.
+  // Never create competing Higlou taxonomy leaves when the seller already has
+  // the real folder (Bath and Plumbing / Tools / Lighting).
   const bath = findSellerBathPlumbingFolder(live);
+  const tools = findSellerToolsFolder(live);
+  const lighting = findSellerLightingFolder(live);
   if (bath && HIGLOU_PLUMBING_PATH_RE.test(targetPath)) {
     targetPath = normalizeStorePath(bath.path);
+  } else if (tools && HIGLOU_TOOLS_PATH_RE.test(targetPath)) {
+    targetPath = normalizeStorePath(tools.path);
+  } else if (lighting && HIGLOU_LIGHTING_PATH_RE.test(targetPath)) {
+    targetPath = normalizeStorePath(lighting.path);
   }
 
   const exact = live.find(
@@ -2081,14 +2217,33 @@ export async function assignStoreCategoriesToOffer(
       targetPath = normalizeStorePath(`${normalizeStorePath(exact.path)}/General`);
     }
   } else if (!exact) {
-    // Missing path: create only the suggested path. Use live cats for leaf check —
-    // do NOT merge Higlou taxonomy (that forced /Plumbing → /Plumbing/Pumps).
-    if (bath && (HIGLOU_PLUMBING_PATH_RE.test(targetPath) || PLUMBING_PRODUCT_RE.test(haystack))) {
-      targetPath = normalizeStorePath(bath.path);
+    // Missing path: remap to seller theme folder when possible instead of
+    // creating Higlou /Tools/Power Tools or /Plumbing/Pumps.
+    const themeFolder =
+      bath &&
+      (HIGLOU_PLUMBING_PATH_RE.test(targetPath) ||
+        PLUMBING_PRODUCT_RE.test(haystack)) &&
+      !TOOLS_PRODUCT_RE.test(haystack)
+        ? bath
+        : tools &&
+            (HIGLOU_TOOLS_PATH_RE.test(targetPath) ||
+              TOOLS_PRODUCT_RE.test(haystack)) &&
+            !PLUMBING_PRODUCT_RE.test(haystack)
+          ? tools
+          : lighting &&
+              (HIGLOU_LIGHTING_PATH_RE.test(targetPath) ||
+                LIGHTING_PRODUCT_RE.test(haystack))
+            ? lighting
+            : null;
+
+    if (themeFolder) {
+      targetPath = normalizeStorePath(themeFolder.path);
       if (!isLeafStoreCategory(targetPath, live)) {
-        targetPath = pickAssignableStorePath(bath, live);
+        targetPath = pickAssignableStorePath(themeFolder, live);
         if (!isLeafStoreCategory(targetPath, live)) {
-          targetPath = normalizeStorePath(`${normalizeStorePath(bath.path)}/General`);
+          targetPath = normalizeStorePath(
+            `${normalizeStorePath(themeFolder.path)}/General`,
+          );
         }
       }
     } else if (!isLeafStoreCategory(targetPath, live)) {

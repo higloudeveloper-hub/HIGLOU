@@ -182,6 +182,7 @@ function fulfillmentPolicyBody(
   shippingServiceCode: string,
 ) {
   // Domestic-only FLAT_RATE — buyer pays. No international option.
+  // Do NOT use regionName "Domestic" (eBay 20400 Invalid Location(s)=Domestic).
   return {
     name,
     marketplaceId,
@@ -206,9 +207,6 @@ function fulfillmentPolicyBody(
               currency: "USD",
             },
             additionalShippingCost: { value: "0.00", currency: "USD" },
-            shipToLocations: {
-              regionIncluded: [{ regionName: "Domestic" }],
-            },
           },
         ],
       },

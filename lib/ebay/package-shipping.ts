@@ -14,11 +14,11 @@ export type PackageEstimate = {
   widthIn: number;
   depthIn: number;
   measurementSystem: "ENGLISH";
-  /** Calculated = buyer pays carrier rate from weight + dims. */
-  shippingType: "Calculated";
+  /** Flat = buyer pays the listed Ground Advantage cost (account-safe). */
+  shippingType: "Flat";
   shippingService: string;
-  /** Always null for calculated — rate shown at checkout. */
-  shippingCost: number | null;
+  /** Buyer-paid Ground Advantage estimate (never free). */
+  shippingCost: number;
   shippingPriority: number;
   weightUnit: "lbs";
   freeShipping: false;
@@ -152,14 +152,27 @@ function pickService(totalOz: number, longestIn: number): {
   if (longestIn > 108 || totalOz > 1120) {
     return {
       shippingService: "UPSGround",
-      reason: "Freight-scale parcel → UPS Ground (buyer pays calculated rate)",
+      reason: "Freight-scale parcel → UPS Ground (buyer pays flat rate)",
     };
   }
   return {
     shippingService: "USPSGroundAdvantage",
     reason:
-      "Cheapest option → USPS Ground Advantage (calculated rate, buyer pays full)",
+      "Cheapest option → USPS Ground Advantage (flat rate, buyer pays full)",
   };
+}
+
+/** Approximate USPS Ground Advantage label cost — buyer pays this (never $0). */
+export function estimateBuyerPaidShippingCostUsd(totalOz: number): number {
+  const oz = Math.max(1, totalOz);
+  if (oz <= 8) return 4.99;
+  if (oz <= 16) return 5.99;
+  if (oz <= 32) return 7.49;
+  if (oz <= 48) return 8.99;
+  if (oz <= 80) return 10.99;
+  if (oz <= 160) return 14.99;
+  if (oz <= 320) return 19.99;
+  return 29.99;
 }
 
 type CategoryHeuristic = {
@@ -312,6 +325,7 @@ export function estimatePackageAndShipping(input: {
   const totalOz = Math.max(1, Math.round(unitOz * qty));
   const { lbs, oz } = toLbsOz(totalOz);
   const service = pickService(totalOz, lengthIn);
+  const shippingCost = estimateBuyerPaidShippingCostUsd(totalOz);
 
   return {
     weightLbs: lbs,
@@ -322,13 +336,13 @@ export function estimatePackageAndShipping(input: {
     widthIn,
     depthIn,
     measurementSystem: "ENGLISH",
-    shippingType: "Calculated",
+    shippingType: "Flat",
     shippingService: service.shippingService,
-    shippingCost: null,
+    shippingCost,
     shippingPriority: 1,
     weightUnit: "lbs",
     freeShipping: false,
-    reason: `${service.reason} · ${dimNote} → ${lengthIn}×${widthIn}×${depthIn} in`,
+    reason: `${service.reason} · buyer pays $${shippingCost.toFixed(2)} · ${dimNote} → ${lengthIn}×${widthIn}×${depthIn} in`,
   };
 }
 
@@ -364,7 +378,8 @@ export function packageEstimateToCsvValues(
   if (includeService) {
     values["Shipping service 1 option"] = estimate.shippingService;
     values["ShippingService-1:Option"] = estimate.shippingService;
-    // Calculated: omit fixed cost so Seller Hub computes buyer-paid rate.
+    values["Shipping service 1 cost"] = estimate.shippingCost.toFixed(2);
+    values["ShippingService-1:Cost"] = estimate.shippingCost.toFixed(2);
     values["Shipping service 1 priority"] = String(estimate.shippingPriority);
     values["ShippingService-1:Priority"] = String(estimate.shippingPriority);
   }

@@ -25,6 +25,8 @@ export const HIGLOU_CHEAPEST_SHIPPING_SERVICE = "USPSGroundAdvantage";
 const HIGLOU_FULFILLMENT_NAME = "Higlou Ground Advantage (buyer pays full)";
 const HIGLOU_PAYMENT_NAME = "Higlou Payment";
 const HIGLOU_RETURN_NAME = "Higlou Returns (14 days)";
+/** Default flat rate on the business policy (buyer pays). Offers override per package. */
+const HIGLOU_DEFAULT_FLAT_SHIPPING_USD = "5.99";
 
 async function accountFetch(
   accessToken: string,
@@ -67,7 +69,12 @@ async function accountFetch(
       err?.message ||
       `eBay Account API ${res.status} on ${path}`;
     const id = first?.errorId ? ` [eBay ${first.errorId}]` : "";
-    throw new Error(`${message}${id}`);
+    const params = (first as { parameters?: Array<{ name?: string; value?: string }> })
+      ?.parameters;
+    const paramHint = params?.length
+      ? ` (${params.map((p) => `${p.name}=${p.value}`).join(", ")})`
+      : "";
+    throw new Error(`${message}${id}${paramHint}`);
   }
   return json;
 }
@@ -157,24 +164,31 @@ export async function listSellerBusinessPolicies(
 }
 
 function fulfillmentPolicyBody(name: string, marketplaceId: string) {
-  // CALCULATED + freeShipping:false = buyer pays the full carrier rate.
-  // Ground Advantage only — never Priority (more expensive).
+  // FLAT_RATE + freeShipping:false = buyer pays the listed shipping cost.
+  // Many seller accounts reject CALCULATED (LSAS 20403). Ground Advantage only.
   return {
     name,
     marketplaceId,
     categoryTypes: [{ name: "ALL_EXCLUDING_MOTORS_VEHICLES", default: true }],
     handlingTime: { value: 1, unit: "DAY" },
     globalShipping: false,
+    localPickup: false,
+    freightShipping: false,
+    pickupDropOff: false,
     shippingOptions: [
       {
         optionType: "DOMESTIC",
-        costType: "CALCULATED",
-        packageHandlingCost: { value: "0.00", currency: "USD" },
+        costType: "FLAT_RATE",
         shippingServices: [
           {
             sortOrder: 1,
             shippingServiceCode: HIGLOU_CHEAPEST_SHIPPING_SERVICE,
             freeShipping: false,
+            shippingCost: {
+              value: HIGLOU_DEFAULT_FLAT_SHIPPING_USD,
+              currency: "USD",
+            },
+            additionalShippingCost: { value: "0.00", currency: "USD" },
           },
         ],
       },
@@ -305,15 +319,18 @@ async function fulfillmentLooksCorrect(
         shippingServices?: Array<{
           shippingServiceCode?: string;
           freeShipping?: boolean;
+          shippingCost?: { value?: string };
         }>;
       }>;
     };
     const option = json.shippingOptions?.[0];
     const service = option?.shippingServices?.[0];
+    const cost = Number(service?.shippingCost?.value || 0);
     return (
-      String(option?.costType || "").toUpperCase() === "CALCULATED" &&
+      String(option?.costType || "").toUpperCase() === "FLAT_RATE" &&
       service?.shippingServiceCode === HIGLOU_CHEAPEST_SHIPPING_SERVICE &&
-      service?.freeShipping !== true
+      service?.freeShipping !== true &&
+      cost > 0
     );
   } catch {
     return false;

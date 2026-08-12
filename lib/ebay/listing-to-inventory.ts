@@ -143,6 +143,26 @@ export function listingToOfferInput(
     throw new Error("Numeric eBay category ID is required");
   }
 
+  const pkg = estimatePackageAndShipping({
+    title: listing.title,
+    productType: listing.productType || listing.type,
+    size: listing.size,
+    categoryName: listing.categoryName,
+    brand: listing.brand,
+    quantity: listing.quantity,
+    dimensionsText: listing.itemSpecifics
+      ?.filter((f) =>
+        /dimension|size|length|width|height|depth/i.test(f.key || f.label),
+      )
+      .map((f) => `${f.label} ${f.value}`)
+      .join(" "),
+  });
+
+  const buyerShipping =
+    typeof listing.shippingCost === "number" && listing.shippingCost > 0
+      ? listing.shippingCost
+      : pkg.shippingCost;
+
   return {
     sku: listing.sku,
     marketplaceId: "EBAY_US",
@@ -153,5 +173,6 @@ export function listingToOfferInput(
     fulfillmentPolicyId: policies.fulfillmentPolicyId || undefined,
     paymentPolicyId: policies.paymentPolicyId || undefined,
     returnPolicyId: policies.returnPolicyId || undefined,
+    domesticShippingCostUsd: buyerShipping,
   };
 }

@@ -31,6 +31,7 @@ import type { ProductListing } from "@/types/product";
 import { createEmptyListing } from "@/lib/demo/sample-listing";
 import { DEFAULT_VALUES } from "@/config/default-values";
 import { isListableEbayCategoryId } from "@/config/ebay-categories";
+import { estimatePackageAndShipping } from "@/lib/ebay/package-shipping";
 
 const bodySchema = z.object({
   productId: z.string().uuid().optional(),
@@ -356,7 +357,17 @@ export async function POST(request: Request) {
         listing.paymentPolicyId = resolved.paymentPolicyId;
         listing.shippingService = "USPSGroundAdvantage";
         listing.freeShipping = false;
-        listing.shippingCost = null;
+        if (!(typeof listing.shippingCost === "number" && listing.shippingCost > 0)) {
+          const pkg = estimatePackageAndShipping({
+            title: listing.title,
+            productType: listing.productType || listing.type,
+            size: listing.size,
+            categoryName: listing.categoryName,
+            brand: listing.brand,
+            quantity: listing.quantity,
+          });
+          listing.shippingCost = pkg.shippingCost;
+        }
 
         await auth.supabase.from("ebay_policy_settings").upsert(
           {

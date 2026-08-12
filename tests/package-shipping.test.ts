@@ -35,9 +35,9 @@ describe("estimatePackageAndShipping", () => {
     expect(estimate.totalOz).toBeGreaterThanOrEqual(17);
     expect(estimate.totalOz).toBeLessThanOrEqual(24);
     expect(estimate.shippingService).toBe("USPSGroundAdvantage");
-    expect(estimate.shippingType).toBe("Calculated");
+    expect(estimate.shippingType).toBe("Flat");
     expect(estimate.freeShipping).toBe(false);
-    expect(estimate.shippingCost).toBeNull();
+    expect(estimate.shippingCost).toBeGreaterThan(0);
     expect(estimate.weightLbs + estimate.weightOz / 16).toBeGreaterThan(1);
   });
 
@@ -53,6 +53,7 @@ describe("estimatePackageAndShipping", () => {
     expect(estimate.widthIn).toBeLessThanOrEqual(16);
     expect(estimate.shippingService).toBe("USPSGroundAdvantage");
     expect(estimate.freeShipping).toBe(false);
+    expect(estimate.shippingCost).toBeGreaterThan(0);
   });
 
   it("builds a tight box from product LxWxH", () => {
@@ -62,14 +63,24 @@ describe("estimatePackageAndShipping", () => {
       productType: "Flush Mount",
       categoryName: "Lighting",
     });
-    // 10×10×4 + 0.75 pad → ~11×11×5
     expect(estimate.lengthIn).toBeLessThanOrEqual(12);
     expect(estimate.widthIn).toBeLessThanOrEqual(12);
     expect(estimate.depthIn).toBeLessThanOrEqual(6);
-    expect(estimate.shippingType).toBe("Calculated");
+    expect(estimate.shippingType).toBe("Flat");
   });
 
-  it("emits File Exchange / Seller Hub aliases without flat cost", () => {
+  it("never recommends Priority and always charges buyer", () => {
+    const estimate = estimatePackageAndShipping({
+      title: "Heavy cookware set",
+      productType: "Cookware",
+      quantity: 3,
+    });
+    expect(estimate.shippingService).not.toBe("USPSPriority");
+    expect(estimate.shippingCost).toBeGreaterThan(0);
+    expect(estimate.freeShipping).toBe(false);
+  });
+
+  it("emits File Exchange / Seller Hub aliases with buyer-paid cost", () => {
     const estimate = estimatePackageAndShipping({
       title: "Aquafina Purified Water",
       size: "16.9 fl oz",
@@ -80,8 +91,10 @@ describe("estimatePackageAndShipping", () => {
     expect(values.WeightUnit).toBe("lbs");
     expect(values["Shipping service 1 option"]).toBe("USPSGroundAdvantage");
     expect(values["Shipping service 1 priority"]).toBe("1");
-    expect(values.ShippingType).toBe("Calculated");
-    expect(values["Shipping service 1 cost"]).toBeUndefined();
+    expect(values.ShippingType).toBe("Flat");
+    expect(values["Shipping service 1 cost"]).toBe(
+      estimate.shippingCost.toFixed(2),
+    );
     expect(values.PackageType).toBeTruthy();
   });
 });

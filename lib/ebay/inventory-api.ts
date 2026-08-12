@@ -31,6 +31,8 @@ export type EbayOfferInput = {
   fulfillmentPolicyId?: string;
   paymentPolicyId?: string;
   returnPolicyId?: string;
+  /** Buyer-paid domestic shipping override (flat rate policy). */
+  domesticShippingCostUsd?: number;
   format?: "FIXED_PRICE";
 };
 
@@ -251,6 +253,22 @@ function buildOfferBody(input: EbayOfferInput): Record<string, unknown> {
 
   if (Object.keys(listingPolicies).length) {
     body.listingPolicies = listingPolicies;
+  }
+  if (
+    typeof input.domesticShippingCostUsd === "number" &&
+    input.domesticShippingCostUsd > 0
+  ) {
+    body.shippingCostOverrides = [
+      {
+        priority: 1,
+        shippingServiceType: "DOMESTIC",
+        shippingCost: {
+          value: input.domesticShippingCostUsd.toFixed(2),
+          currency: "USD",
+        },
+        additionalShippingCost: { value: "0.00", currency: "USD" },
+      },
+    ];
   }
   if (input.merchantLocationKey) {
     body.merchantLocationKey = input.merchantLocationKey;

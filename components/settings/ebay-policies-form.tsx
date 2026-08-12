@@ -188,7 +188,7 @@ export function EbayPoliciesForm() {
       if (body?.policies) setPolicies(body.policies);
       if (body?.available) setAvailable(body.available);
       toast.success(
-        "Updated Higlou policies: Ground Advantage (buyer pays full) + 14-day returns",
+        "Updated Higlou policies: Ground Advantage (buyer pays) + 14-day returns",
       );
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Create failed");
@@ -207,7 +207,7 @@ export function EbayPoliciesForm() {
         Policies belong to each eBay seller account — they cannot be copied by
         ID. Import syncs this connected account, or Create Higlou policies makes
         calculated shipping via USPS Ground Advantage (cheapest; buyer pays
-        full rate), payment, and 14-day returns (buyer pays return ship).
+        full flat rate), payment, and 14-day returns (buyer pays return ship).
         Required for draft and live publish.
       </div>
 

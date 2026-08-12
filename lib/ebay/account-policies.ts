@@ -163,18 +163,30 @@ export async function listSellerBusinessPolicies(
   };
 }
 
-function fulfillmentPolicyBody(name: string, marketplaceId: string) {
-  // FLAT_RATE + freeShipping:false = buyer pays the listed shipping cost.
-  // Many seller accounts reject CALCULATED (LSAS 20403). Ground Advantage only.
+/** Prefer cheapest services first — never create Priority unless nothing else works. */
+const CHEAP_SHIPPING_SERVICE_CODES = [
+  "USPSGroundAdvantage",
+  "USPSFirstClass",
+  "USPSParcel",
+  "EconomyShipping",
+  "ShippingMethodStandard",
+  "Other",
+  // Last resorts (more expensive) — only if LSAS rejects cheaper codes.
+  "USPSPriority",
+  "UPSGround",
+] as const;
+
+function fulfillmentPolicyBody(
+  name: string,
+  marketplaceId: string,
+  shippingServiceCode: string,
+) {
+  // Minimal FLAT_RATE body — extra flags (localPickup/etc.) can trigger LSAS 20403.
   return {
     name,
     marketplaceId,
     categoryTypes: [{ name: "ALL_EXCLUDING_MOTORS_VEHICLES", default: true }],
     handlingTime: { value: 1, unit: "DAY" },
-    globalShipping: false,
-    localPickup: false,
-    freightShipping: false,
-    pickupDropOff: false,
     shippingOptions: [
       {
         optionType: "DOMESTIC",
@@ -182,13 +194,12 @@ function fulfillmentPolicyBody(name: string, marketplaceId: string) {
         shippingServices: [
           {
             sortOrder: 1,
-            shippingServiceCode: HIGLOU_CHEAPEST_SHIPPING_SERVICE,
+            shippingServiceCode,
             freeShipping: false,
             shippingCost: {
               value: HIGLOU_DEFAULT_FLAT_SHIPPING_USD,
               currency: "USD",
             },
-            additionalShippingCost: { value: "0.00", currency: "USD" },
           },
         ],
       },
@@ -213,34 +224,37 @@ async function createFulfillmentPolicy(
   accessToken: string,
   marketplaceId: string,
   name = HIGLOU_FULFILLMENT_NAME,
-): Promise<string> {
-  const json = (await accountFetch(
-    accessToken,
-    "/sell/account/v1/fulfillment_policy",
-    {
-      method: "POST",
-      body: JSON.stringify(fulfillmentPolicyBody(name, marketplaceId)),
-    },
-  )) as { fulfillmentPolicyId?: string };
+): Promise<{ id: string; shippingServiceCode: string }> {
+  let lastError: Error | null = null;
+  for (const code of CHEAP_SHIPPING_SERVICE_CODES) {
+    try {
+      const json = (await accountFetch(
+        accessToken,
+        "/sell/account/v1/fulfillment_policy",
+        {
+          method: "POST",
+          body: JSON.stringify(
+            fulfillmentPolicyBody(name, marketplaceId, code),
+          ),
+        },
+      )) as { fulfillmentPolicyId?: string };
 
-  const id = String(json.fulfillmentPolicyId || "").trim();
-  if (!id) throw new Error("eBay did not return fulfillmentPolicyId");
-  return id;
-}
-
-async function updateFulfillmentPolicy(
-  accessToken: string,
-  policyId: string,
-  marketplaceId: string,
-  name: string,
-): Promise<void> {
-  await accountFetch(
-    accessToken,
-    `/sell/account/v1/fulfillment_policy/${encodeURIComponent(policyId)}`,
-    {
-      method: "PUT",
-      body: JSON.stringify(fulfillmentPolicyBody(name, marketplaceId)),
-    },
+      const id = String(json.fulfillmentPolicyId || "").trim();
+      if (!id) throw new Error("eBay did not return fulfillmentPolicyId");
+      return { id, shippingServiceCode: code };
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+      // Try next cheaper/fallback service on LSAS / invalid service errors.
+      if (!/20403|LSAS|valid.*service|Invalid/i.test(lastError.message)) {
+        throw lastError;
+      }
+    }
+  }
+  throw (
+    lastError ||
+    new Error(
+      "Could not create eBay fulfillment policy with any shipping service",
+    )
   );
 }
 
@@ -326,9 +340,11 @@ async function fulfillmentLooksCorrect(
     const option = json.shippingOptions?.[0];
     const service = option?.shippingServices?.[0];
     const cost = Number(service?.shippingCost?.value || 0);
+    const costType = String(option?.costType || "").toUpperCase();
+    // Accept flat buyer-paid. Reject calculated (LSAS) and free shipping.
     return (
-      String(option?.costType || "").toUpperCase() === "FLAT_RATE" &&
-      service?.shippingServiceCode === HIGLOU_CHEAPEST_SHIPPING_SERVICE &&
+      costType === "FLAT_RATE" &&
+      Boolean(service?.shippingServiceCode) &&
       service?.freeShipping !== true &&
       cost > 0
     );
@@ -363,7 +379,7 @@ async function returnLooksCorrect(
 
 /**
  * Ensure the connected seller has Higlou policies:
- * - USPS Ground Advantage only (cheapest), calculated, buyer pays full
+ * - Flat-rate cheapest available USPS service, buyer pays (never free)
  * - 14-day returns, buyer pays return shipping
  */
 export async function ensureHiglouBusinessPolicies(
@@ -393,91 +409,88 @@ export async function ensureHiglouBusinessPolicies(
   let returns =
     listed.return.find((p) => isHiglouFourteenDayReturnName(p.name)) || null;
 
-  if (returns && (options?.forceRecreateReturn || !(await returnLooksCorrect(accessToken, returns.id)))) {
-    await updateReturnPolicy(
-      accessToken,
-      returns.id,
-      marketplaceId,
-      HIGLOU_RETURN_NAME,
-    );
-    created.push("return-updated");
-  } else if (!returns) {
-    // Prefer updating any existing Higlou return to 14 days instead of leaving a 30-day one active.
-    const legacyHiglou = listed.return.find((p) => /higlou/i.test(p.name));
-    if (legacyHiglou) {
+  if (
+    returns &&
+    (options?.forceRecreateReturn ||
+      !(await returnLooksCorrect(accessToken, returns.id)))
+  ) {
+    try {
       await updateReturnPolicy(
         accessToken,
-        legacyHiglou.id,
+        returns.id,
         marketplaceId,
         HIGLOU_RETURN_NAME,
       );
-      returns = { id: legacyHiglou.id, name: HIGLOU_RETURN_NAME };
       created.push("return-updated");
-    } else if (options?.forceRecreateReturn) {
-      const id = await createReturnPolicy(accessToken, marketplaceId);
-      created.push("return");
+    } catch {
+      const id = await createReturnPolicy(
+        accessToken,
+        marketplaceId,
+        `${HIGLOU_RETURN_NAME} ${Date.now().toString(36)}`,
+      );
       returns = { id, name: HIGLOU_RETURN_NAME };
+      created.push("return");
+    }
+  } else if (!returns) {
+    const legacyHiglou = listed.return.find((p) => /higlou/i.test(p.name));
+    if (legacyHiglou) {
+      try {
+        await updateReturnPolicy(
+          accessToken,
+          legacyHiglou.id,
+          marketplaceId,
+          HIGLOU_RETURN_NAME,
+        );
+        returns = { id: legacyHiglou.id, name: HIGLOU_RETURN_NAME };
+        created.push("return-updated");
+      } catch {
+        const id = await createReturnPolicy(accessToken, marketplaceId);
+        returns = { id, name: HIGLOU_RETURN_NAME };
+        created.push("return");
+      }
     } else {
       const id = await createReturnPolicy(accessToken, marketplaceId);
-      created.push("return");
       returns = { id, name: HIGLOU_RETURN_NAME };
+      created.push("return");
     }
   }
 
-  // --- Fulfillment: Ground Advantage calculated, buyer pays full ---
+  // --- Fulfillment: flat buyer-pays; create NEW on fix (avoid PUT on broken CALCULATED) ---
   let shipping =
     listed.fulfillment.find((p) => isHiglouCheapFulfillmentName(p.name)) ||
     null;
 
-  const needsFulfillmentFix =
-    options?.forceRecreateFulfillment ||
-    !shipping ||
-    !(await fulfillmentLooksCorrect(accessToken, shipping.id));
+  const shippingOk =
+    shipping != null && (await fulfillmentLooksCorrect(accessToken, shipping.id));
 
-  if (needsFulfillmentFix) {
-    if (shipping) {
-      try {
-        await updateFulfillmentPolicy(
-          accessToken,
-          shipping.id,
-          marketplaceId,
-          HIGLOU_FULFILLMENT_NAME,
-        );
-        created.push("fulfillment-updated");
-        shipping = { id: shipping.id, name: HIGLOU_FULFILLMENT_NAME };
-      } catch {
-        const id = await createFulfillmentPolicy(
-          accessToken,
-          marketplaceId,
-          `${HIGLOU_FULFILLMENT_NAME} ${Date.now().toString(36)}`,
-        );
-        created.push("fulfillment");
-        shipping = {
-          id,
-          name: HIGLOU_FULFILLMENT_NAME,
-        };
-      }
-    } else {
-      const legacy = listed.fulfillment.find((p) => /higlou/i.test(p.name));
-      if (legacy) {
-        try {
-          await updateFulfillmentPolicy(
-            accessToken,
-            legacy.id,
-            marketplaceId,
-            HIGLOU_FULFILLMENT_NAME,
-          );
-          shipping = { id: legacy.id, name: HIGLOU_FULFILLMENT_NAME };
-          created.push("fulfillment-updated");
-        } catch {
-          const id = await createFulfillmentPolicy(accessToken, marketplaceId);
-          shipping = { id, name: HIGLOU_FULFILLMENT_NAME };
-          created.push("fulfillment");
-        }
+  if (!shippingOk || options?.forceRecreateFulfillment) {
+    // Prefer create over update — updating CALCULATED→FLAT often hits LSAS 20403.
+    const policyName = `${HIGLOU_FULFILLMENT_NAME} ${Date.now().toString(36)}`;
+    try {
+      const createdPolicy = await createFulfillmentPolicy(
+        accessToken,
+        marketplaceId,
+        policyName,
+      );
+      shipping = { id: createdPolicy.id, name: policyName };
+      created.push(`fulfillment:${createdPolicy.shippingServiceCode}`);
+    } catch (createError) {
+      // Fall back: keep any existing flat buyer-paid policy on the account.
+      const fallback =
+        (
+          await Promise.all(
+            listed.fulfillment.map(async (p) => ({
+              p,
+              ok: await fulfillmentLooksCorrect(accessToken, p.id),
+            })),
+          )
+        ).find((row) => row.ok)?.p || null;
+
+      if (fallback) {
+        shipping = fallback;
+        created.push("fulfillment-reused-existing");
       } else {
-        const id = await createFulfillmentPolicy(accessToken, marketplaceId);
-        shipping = { id, name: HIGLOU_FULFILLMENT_NAME };
-        created.push("fulfillment");
+        throw createError;
       }
     }
   }
@@ -493,7 +506,7 @@ export async function ensureHiglouBusinessPolicies(
   };
 }
 
-/** Resolve policy IDs; always prefer/create Higlou Ground Advantage + 14-day returns. */
+/** Resolve policy IDs; create/fix Higlou flat buyer-pays + 14-day returns when needed. */
 export async function resolveSellerBusinessPolicyIds(
   accessToken: string,
   options?: {
@@ -532,11 +545,11 @@ export async function resolveSellerBusinessPolicyIds(
     );
   }
 
-  // Always ensure correct cheapest + 14-day policies (updates Priority/30-day leftovers).
+  // Do NOT force-recreate on every publish — that retriggers LSAS 20403.
   const ensured = await ensureHiglouBusinessPolicies(accessToken, {
     marketplaceId,
-    forceRecreateFulfillment: true,
-    forceRecreateReturn: true,
+    forceRecreateFulfillment: false,
+    forceRecreateReturn: false,
   });
   return {
     shippingPolicyId: ensured.shippingPolicyId,

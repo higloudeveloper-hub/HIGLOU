@@ -11,6 +11,7 @@ import type {
   EbayOfferInput,
 } from "@/lib/ebay/inventory-api";
 import { sanitizeEbayAspects } from "@/lib/ebay/sanitize-aspects";
+import { ensureInferredElectricalAspects } from "@/lib/ebay/infer-voltage";
 
 /** eBay Inventory API product.description must be 1–4000 chars. */
 const EBAY_INVENTORY_DESCRIPTION_MAX = 4000;
@@ -127,6 +128,23 @@ export function listingToInventoryItem(
     if (!/^upc$/i.test(key)) continue;
     delete aspects[key];
   }
+
+  // Fill required electrical aspects (Voltage) from title/OCR before Inventory PUT.
+  ensureInferredElectricalAspects(
+    aspects,
+    [
+      listing.title,
+      listing.productType,
+      listing.type,
+      listing.categoryName,
+      listing.brand,
+      listing.model,
+      ...(listing.features || []),
+      ...(listing.itemSpecifics || []).map((s) => `${s.label} ${s.value}`),
+    ]
+      .filter(Boolean)
+      .join(" "),
+  );
 
   return {
     sku: listing.sku,

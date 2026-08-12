@@ -1,4 +1,5 @@
 import { resolveCategorySpecifics } from "@/config/category-specifics";
+import { inferVoltageFromText } from "@/lib/ebay/infer-voltage";
 
 function normalizeCKey(key: string): string {
   const raw = String(key || "").trim();
@@ -261,6 +262,22 @@ export function enrichItemSpecificsForExport(input: {
   // Force MPN whenever Brand is present (overwrite empty / whitespace).
   if (columns["C:Brand"]?.trim() && !columns["C:MPN"]?.trim()) {
     columns["C:MPN"] = derived.mpn;
+  }
+
+  // Voltage required in many electrical / EV categories (eBay 25002).
+  if (!columns["C:Voltage"]?.trim()) {
+    const voltage = inferVoltageFromText(
+      [
+        input.title,
+        input.productType,
+        input.categoryName,
+        derived.features,
+        ...Object.values(columns),
+      ]
+        .filter(Boolean)
+        .join(" "),
+    );
+    if (voltage) columns["C:Voltage"] = voltage;
   }
 
 

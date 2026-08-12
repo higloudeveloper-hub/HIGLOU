@@ -28,6 +28,12 @@ import {
 import { loadSellerDraftDefaults } from "@/lib/ebay/draft-defaults";
 import { ensureListableEbayCategory } from "@/lib/ebay/taxonomy-categories";
 import { fetchAspectCardinalityMap } from "@/lib/ebay/sanitize-aspects";
+import {
+  ensureInferredElectricalAspects,
+  formatEbayVoltage,
+  inferVoltageFromText,
+  parseMissingAspectFromEbayError,
+} from "@/lib/ebay/infer-voltage";
 import { mapProductRow } from "@/lib/products/persistence";
 import type { ProductListing } from "@/types/product";
 import { createEmptyListing } from "@/lib/demo/sample-listing";
@@ -502,8 +508,72 @@ export async function POST(request: Request) {
         inventoryError instanceof Error
           ? inventoryError.message
           : String(inventoryError);
-      // Catalog-unknown or still-invalid UPC: retry without product.upc.
-      if (/25002|invalid value.*upc|upc has an invalid/i.test(invMsg)) {
+
+      // Required item specific missing (often Voltage) → infer + retry once.
+      const missingAspect = parseMissingAspectFromEbayError(invMsg);
+      if (/25002/i.test(invMsg) && missingAspect) {
+        const hay = [
+          listing.title,
+          listing.productType,
+          listing.type,
+          listing.categoryName,
+          listing.brand,
+          listing.model,
+          ...(listing.features || []),
+          ...(listing.itemSpecifics || []).map((s) => `${s.label} ${s.value}`),
+        ]
+          .filter(Boolean)
+          .join(" ");
+
+        let filled = "";
+        if (/^voltage$/i.test(missingAspect)) {
+          filled =
+            inferVoltageFromText(hay) ||
+            formatEbayVoltage(
+              /\b(nacs|ccs|ev\s*charger|ev\s*adapter)\b/i.test(hay) ? 1000 : 0,
+            );
+        }
+
+        if (filled) {
+          inventory.aspects = {
+            ...(inventory.aspects || {}),
+            [missingAspect]: [filled],
+          };
+          ensureInferredElectricalAspects(inventory.aspects, hay);
+          const key = `C:${missingAspect}`;
+          const already = (listing.itemSpecifics || []).some(
+            (s) =>
+              s.key.replace(/^C:/i, "").toLowerCase() ===
+                missingAspect.toLowerCase() && s.value?.trim(),
+          );
+          if (!already) {
+            listing.itemSpecifics = [
+              ...(listing.itemSpecifics || []),
+              {
+                key,
+                label: missingAspect,
+                value: filled,
+                confidence: 0.55,
+              },
+            ];
+          }
+          await createOrReplaceInventoryItem(accessToken, inventory, {
+            aspectCardinality,
+          });
+        } else if (/25002|invalid value.*upc|upc has an invalid/i.test(invMsg)) {
+          inventory.upc = undefined;
+          listing.upc = "";
+          for (const key of Object.keys(inventory.aspects || {})) {
+            if (/^upc$/i.test(key)) delete inventory.aspects[key];
+          }
+          await createOrReplaceInventoryItem(accessToken, inventory, {
+            aspectCardinality,
+          });
+        } else {
+          throw inventoryError;
+        }
+      } else if (/25002|invalid value.*upc|upc has an invalid/i.test(invMsg)) {
+        // Catalog-unknown or still-invalid UPC: retry without product.upc.
         inventory.upc = undefined;
         listing.upc = "";
         for (const key of Object.keys(inventory.aspects || {})) {

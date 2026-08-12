@@ -3,6 +3,7 @@ import {
   classifyOffersForStore,
   HIGLOU_DEFAULT_STORE_PATHS,
   parseStoreCategoriesFromXml,
+  preferSellerStorePath,
 } from "@/lib/ebay/store-organize";
 
 describe("parseStoreCategoriesFromXml", () => {
@@ -364,6 +365,32 @@ describe("classifyOffersForStore", () => {
       live,
     );
     expect(rows.every((r) => r.suggestedPath === "/Tools")).toBe(true);
+  });
+
+  it("does not remap Smart Home → Lighting when Lighting folder exists", () => {
+    const live = [
+      { path: "/Lighting", name: "Lighting", categoryId: "9100" },
+      {
+        path: "/Lighting/Ceiling Lights",
+        name: "Ceiling Lights",
+        categoryId: "9101",
+      },
+      { path: "/Smart Home", name: "Smart Home", categoryId: "9200" },
+      { path: "/Tools", name: "Tools", categoryId: "9002" },
+    ];
+    const haystack = "Philips Hue White LED Smart Bulb A19 lighting lamp";
+    // Classify already chose Smart Home — assign must keep it (the bug that
+    // made Organize report success while Lighting stayed at ~18 listings).
+    expect(
+      preferSellerStorePath("/Smart Home", haystack, live),
+    ).toBe("/Smart Home");
+    // Competing Higlou Lighting paths must move to Smart Home.
+    expect(
+      preferSellerStorePath("/Lighting/Ceiling Lights", haystack, live),
+    ).toBe("/Smart Home");
+    expect(preferSellerStorePath("/Lighting", haystack, live)).toBe(
+      "/Smart Home",
+    );
   });
 
   it("assigns LED lamps to Lighting + Smart Home (2nd Store folder)", () => {

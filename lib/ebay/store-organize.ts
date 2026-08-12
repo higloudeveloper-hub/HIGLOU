@@ -2008,9 +2008,21 @@ export function findSellerOutdoorLivingFolder(
   return sortSellerThemeFolders(matches, usable, true)[0] || null;
 }
 
+function isFeaturedStorePath(
+  path: string,
+  categories: EbayStoreCategory[],
+): boolean {
+  const needle = normalizeStorePath(path);
+  return HIGLOU_FEATURED_STORE_FOLDERS.some((label) => {
+    const cat = findFeaturedStoreFolder(categories, label);
+    return cat && normalizeStorePath(cat.path) === needle;
+  });
+}
+
 /**
  * Prefer the seller's featured Store folders
  * (Tools, Smart Home, Outdoor Living, Bath and Plumbing).
+ * Never steal lighting items into competing Higlou "Lighting" when Smart Home exists.
  */
 export function preferSellerStorePath(
   suggestedPath: string,
@@ -2018,6 +2030,15 @@ export function preferSellerStorePath(
   categories: EbayStoreCategory[],
 ): string {
   const suggested = normalizeStorePath(suggestedPath);
+
+  // Lock: if caller already chose a featured folder, never remap it away
+  // (this was sending Smart Home → Lighting for LED titles).
+  if (isFeaturedStorePath(suggested, categories)) {
+    return suggested;
+  }
+
+  const featured = pickFeaturedStoreAssignment(haystack, categories);
+  if (featured) return featured.primary;
 
   const tools = findSellerToolsFolder(categories);
   if (
@@ -2049,9 +2070,24 @@ export function preferSellerStorePath(
     return normalizeStorePath(outdoor.path);
   }
 
-  const lighting = findSellerLightingFolder(categories);
   const smartHome = findSellerSmartHomeFolder(categories);
+  // When Smart Home exists, Lighting (Higlou competitor) is NOT the destination.
   if (
+    smartHome &&
+    (HIGLOU_LIGHTING_PATH_RE.test(suggested) ||
+      LIGHTING_PRODUCT_RE.test(haystack) ||
+      SMART_HOME_PRODUCT_RE.test(haystack) ||
+      /^\/lighting(\/|$)/i.test(suggested)) &&
+    !TOOLS_PRODUCT_RE.test(haystack) &&
+    !PLUMBING_PRODUCT_RE.test(haystack) &&
+    !OUTDOOR_PRODUCT_RE.test(haystack)
+  ) {
+    return normalizeStorePath(smartHome.path);
+  }
+
+  const lighting = findSellerLightingFolder(categories);
+  if (
+    !smartHome &&
     lighting &&
     (HIGLOU_LIGHTING_PATH_RE.test(suggested) ||
       LIGHTING_PRODUCT_RE.test(haystack)) &&
@@ -2060,19 +2096,6 @@ export function preferSellerStorePath(
     !OUTDOOR_PRODUCT_RE.test(haystack)
   ) {
     return normalizeStorePath(lighting.path);
-  }
-
-  // No Lighting folder on this store — LED / smart lights go to Smart Home.
-  if (
-    smartHome &&
-    (HIGLOU_LIGHTING_PATH_RE.test(suggested) ||
-      LIGHTING_PRODUCT_RE.test(haystack) ||
-      SMART_HOME_PRODUCT_RE.test(haystack)) &&
-    !TOOLS_PRODUCT_RE.test(haystack) &&
-    !PLUMBING_PRODUCT_RE.test(haystack) &&
-    !OUTDOOR_PRODUCT_RE.test(haystack)
-  ) {
-    return normalizeStorePath(smartHome.path);
   }
 
   return suggested;
@@ -2555,42 +2578,76 @@ export async function assignStoreCategoriesToOffer(
     cats: EbayStoreCategory[],
   ): Promise<{ categoryId: string; categories: EbayStoreCategory[] }> => {
     let live = usableStoreCategories(cats);
-    let targetPath = preferSellerStorePath(rawPath, haystack, live);
+    const named = namedStoreCategories(cats);
+    const inputPath = normalizeStorePath(rawPath);
 
-    const bath = findSellerBathPlumbingFolder(live);
-    const tools = findSellerToolsFolder(live);
-    const lighting = findSellerLightingFolder(live);
-    const smartHome = findSellerSmartHomeFolder(live);
-    const outdoor = findSellerOutdoorLivingFolder(live);
+    // Featured destinations are locked — do not remap Smart Home → Lighting.
+    let targetPath = isFeaturedStorePath(inputPath, named)
+      ? inputPath
+      : preferSellerStorePath(inputPath, haystack, named);
 
-    if (bath && HIGLOU_PLUMBING_PATH_RE.test(targetPath)) {
+    const bath = findSellerBathPlumbingFolder(named);
+    const tools = findSellerToolsFolder(named);
+    const lighting = findSellerLightingFolder(named);
+    const smartHome = findSellerSmartHomeFolder(named);
+    const outdoor = findSellerOutdoorLivingFolder(named);
+
+    // Competing Higlou folders → featured folders
+    if (bath && (HIGLOU_PLUMBING_PATH_RE.test(targetPath) || /^\/plumbing(\/|$)/i.test(targetPath))) {
       targetPath = normalizeStorePath(bath.path);
-    } else if (tools && HIGLOU_TOOLS_PATH_RE.test(targetPath)) {
-      targetPath = normalizeStorePath(tools.path);
+    } else if (tools && HIGLOU_TOOLS_PATH_RE.test(targetPath) && !isFeaturedStorePath(targetPath, named)) {
+      // Only remap Higlou /Tools/Power Tools style paths; keep featured /Tools.
+      if (/^\/tools\//i.test(targetPath)) {
+        targetPath = normalizeStorePath(tools.path);
+      }
     } else if (outdoor && HIGLOU_OUTDOOR_PATH_RE.test(targetPath)) {
       targetPath = normalizeStorePath(outdoor.path);
-    } else if (lighting && HIGLOU_LIGHTING_PATH_RE.test(targetPath)) {
-      targetPath = normalizeStorePath(lighting.path);
     } else if (
       smartHome &&
-      (/smart\s*home|smarthome/i.test(targetPath.replace(/\//g, " ")) ||
-        HIGLOU_LIGHTING_PATH_RE.test(targetPath))
+      (HIGLOU_LIGHTING_PATH_RE.test(targetPath) ||
+        /^\/lighting(\/|$)/i.test(targetPath) ||
+        (lighting &&
+          normalizeStorePath(targetPath) === normalizeStorePath(lighting.path)))
+    ) {
+      // Lighting (18 items stuck here) must move to Smart Home.
+      targetPath = normalizeStorePath(smartHome.path);
+    }
+
+    // Re-lock after remaps
+    if (
+      !isFeaturedStorePath(targetPath, named) &&
+      smartHome &&
+      LIGHTING_PRODUCT_RE.test(haystack) &&
+      !TOOLS_PRODUCT_RE.test(haystack) &&
+      !PLUMBING_PRODUCT_RE.test(haystack) &&
+      !OUTDOOR_PRODUCT_RE.test(haystack)
     ) {
       targetPath = normalizeStorePath(smartHome.path);
     }
 
-    const exact = live.find(
-      (c) => normalizeStorePath(c.path) === normalizeStorePath(targetPath),
-    );
+    const exact =
+      live.find(
+        (c) => normalizeStorePath(c.path) === normalizeStorePath(targetPath),
+      ) ||
+      named.find(
+        (c) => normalizeStorePath(c.path) === normalizeStorePath(targetPath),
+      );
 
-    if (exact && isLeafStoreCategory(exact.path, live)) {
+    if (exact && isLeafStoreCategory(exact.path, live.length ? live : named)) {
       targetPath = normalizeStorePath(exact.path);
-    } else if (exact && !isLeafStoreCategory(exact.path, live)) {
-      targetPath = pickAssignableStorePath(exact, live);
-      if (!isLeafStoreCategory(targetPath, live)) {
-        targetPath = normalizeStorePath(
-          `${normalizeStorePath(exact.path)}/General`,
-        );
+    } else if (exact && !isLeafStoreCategory(exact.path, live.length ? live : named)) {
+      // Parent folder (e.g. Tools with 5 children): prefer a General leaf under
+      // it rather than a random sibling like Power Tools that may not match.
+      const pool = live.length ? live : named;
+      const general = pool.find(
+        (c) =>
+          normalizeStorePath(c.path) ===
+            normalizeStorePath(`${exact.path}/General`) && c.categoryId,
+      );
+      if (general) {
+        targetPath = normalizeStorePath(general.path);
+      } else {
+        targetPath = normalizeStorePath(`${normalizeStorePath(exact.path)}/General`);
       }
     } else if (!exact) {
       const themeFolder =
@@ -2609,28 +2666,28 @@ export async function assignStoreCategoriesToOffer(
                 (HIGLOU_OUTDOOR_PATH_RE.test(targetPath) ||
                   OUTDOOR_PRODUCT_RE.test(haystack))
               ? outdoor
-              : lighting &&
-                  (HIGLOU_LIGHTING_PATH_RE.test(targetPath) ||
-                    LIGHTING_PRODUCT_RE.test(haystack))
-                ? lighting
-                : smartHome &&
-                    (SMART_HOME_PRODUCT_RE.test(haystack) ||
+              : smartHome &&
+                  (SMART_HOME_PRODUCT_RE.test(haystack) ||
+                    LIGHTING_PRODUCT_RE.test(haystack) ||
+                    HIGLOU_LIGHTING_PATH_RE.test(targetPath))
+                ? smartHome
+                : !smartHome &&
+                    lighting &&
+                    (HIGLOU_LIGHTING_PATH_RE.test(targetPath) ||
                       LIGHTING_PRODUCT_RE.test(haystack))
-                  ? smartHome
+                  ? lighting
                   : null;
 
       if (themeFolder) {
         targetPath = normalizeStorePath(themeFolder.path);
-        if (!isLeafStoreCategory(targetPath, live)) {
-          targetPath = pickAssignableStorePath(themeFolder, live);
-          if (!isLeafStoreCategory(targetPath, live)) {
-            targetPath = normalizeStorePath(
-              `${normalizeStorePath(themeFolder.path)}/General`,
-            );
-          }
+        const pool = live.length ? live : named;
+        if (!isLeafStoreCategory(targetPath, pool)) {
+          targetPath = normalizeStorePath(
+            `${normalizeStorePath(themeFolder.path)}/General`,
+          );
         }
-      } else if (!isLeafStoreCategory(targetPath, live)) {
-        targetPath = pickLeafStorePath(targetPath, live);
+      } else if (!isLeafStoreCategory(targetPath, live.length ? live : named)) {
+        targetPath = pickLeafStorePath(targetPath, live.length ? live : named);
       }
     }
 
@@ -2639,10 +2696,10 @@ export async function assignStoreCategoriesToOffer(
     let categoryId = ensured.categoryId;
     const catMeta = ensured.categories.find((c) => c.categoryId === categoryId);
     if (catMeta && !isLeafStoreCategory(catMeta.path, live)) {
-      const forcedPath = pickAssignableStorePath(catMeta, live);
-      const leafPath = isLeafStoreCategory(forcedPath, live)
-        ? forcedPath
-        : normalizeStorePath(`${normalizeStorePath(catMeta.path)}/General`);
+      // Never bounce featured Smart Home/Bath into Lighting children.
+      const leafPath = normalizeStorePath(
+        `${normalizeStorePath(catMeta.path)}/General`,
+      );
       ensured = await ensureStoreCategoryId(
         accessToken,
         leafPath,

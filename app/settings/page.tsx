@@ -162,8 +162,8 @@ export default function SettingsPage() {
               Organize eBay Store
             </h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              Scan live eBay listings and place each one into the right Store
-              folder (Trading API — no Inventory SKUs).
+              Recognizes the right Store folder, creates it via eBay API if
+              missing, then sorts live listings automatically.
             </p>
           </div>
           <div className="rounded-2xl border border-border/70 bg-surface p-5 sm:p-6">

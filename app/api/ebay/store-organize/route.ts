@@ -8,14 +8,16 @@ import {
 import { isEbayOAuthConfigured, ebayOAuthMissingReason } from "@/lib/ebay/config";
 import {
   applyStoreOrganizeSuggestions,
+  autoOrganizeStore,
   classifyOffersForStore,
+  ensureStorePaths,
   listSellerOffers,
   listSellerStoreCategories,
 } from "@/lib/ebay/store-organize";
 
 /**
  * GET — load Store categories + offers + dry-run classification (Higlou only).
- * POST — apply suggested storeCategoryNames to selected offers.
+ * POST — apply selected items, or { mode: "auto" } for full auto organize.
  */
 export async function GET() {
   const auth = await requireUser();
@@ -64,6 +66,9 @@ export async function GET() {
         unchanged: suggestions.filter((s) => s.unchanged).length,
         ready: suggestions.filter((s) => !s.needsReview && !s.unchanged)
           .length,
+        willCreate: suggestions.filter(
+          (s) => !s.unchanged && /will create folder/i.test(s.reason),
+        ).length,
       },
       suggestions,
     });
@@ -80,20 +85,26 @@ export async function GET() {
   }
 }
 
-const applySchema = z.object({
-  items: z
-    .array(
-      z.object({
-        offerId: z.string().min(1),
-        suggestedPath: z.string().min(1),
-        listingId: z.string().nullable().optional(),
-        skip: z.boolean().optional(),
-      }),
-    )
-    .min(1)
-    .max(200),
-  includeNeedsReview: z.boolean().optional().default(false),
-});
+const applySchema = z.union([
+  z.object({
+    mode: z.literal("auto"),
+    minConfidence: z.number().min(0).max(1).optional(),
+  }),
+  z.object({
+    items: z
+      .array(
+        z.object({
+          offerId: z.string().min(1),
+          suggestedPath: z.string().min(1),
+          listingId: z.string().nullable().optional(),
+          skip: z.boolean().optional(),
+        }),
+      )
+      .min(1)
+      .max(200),
+    includeNeedsReview: z.boolean().optional().default(false),
+  }),
+]);
 
 export async function POST(request: Request) {
   const auth = await requireUser();
@@ -138,16 +149,46 @@ export async function POST(request: Request) {
       auth.supabase,
       auth.user.id,
     );
+
+    if ("mode" in body && body.mode === "auto") {
+      const result = await autoOrganizeStore(accessToken, {
+        minConfidence: body.minConfidence,
+      });
+      return NextResponse.json({
+        ok: true,
+        mode: "auto",
+        applied: result.applied,
+        failed: result.failed,
+        createdFolders: result.createdFolders,
+        scanned: result.scanned,
+        skipped: result.skipped,
+      });
+    }
+
+    if (!("items" in body)) {
+      return NextResponse.json(
+        { error: "Invalid apply payload" },
+        { status: 400 },
+      );
+    }
+
     const store = await listSellerStoreCategories(accessToken);
+    const paths = body.items.map((item) => item.suggestedPath);
+    const ensured = await ensureStorePaths(
+      accessToken,
+      paths,
+      store.categories,
+    );
     const result = await applyStoreOrganizeSuggestions(
       accessToken,
       body.items,
-      store.categories,
+      ensured.categories,
     );
     return NextResponse.json({
       ok: true,
       applied: result.applied,
       failed: result.failed,
+      createdFolders: ensured.created,
       storeSource: store.source,
       storeWarning: store.warning || null,
     });

@@ -2,7 +2,7 @@
 
 import { useCallback, useState } from "react";
 import { toast } from "sonner";
-import { FolderTree, Loader2, RefreshCw, Check } from "lucide-react";
+import { FolderTree, Loader2, RefreshCw, Check, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 type Suggestion = {
@@ -33,6 +33,7 @@ type ScanResponse = {
     needsReview: number;
     unchanged: number;
     ready: number;
+    willCreate?: number;
   };
   suggestions?: Suggestion[];
 };
@@ -40,6 +41,7 @@ type ScanResponse = {
 export function EbayStoreOrganizeForm() {
   const [loading, setLoading] = useState(false);
   const [applying, setApplying] = useState(false);
+  const [autoRunning, setAutoRunning] = useState(false);
   const [scan, setScan] = useState<ScanResponse | null>(null);
   const [selected, setSelected] = useState<Record<string, boolean>>({});
 
@@ -52,12 +54,11 @@ export function EbayStoreOrganizeForm() {
       setScan(body);
       const next: Record<string, boolean> = {};
       for (const row of body.suggestions || []) {
-        // Pre-select high-confidence changes only
         next[row.offerId] = !row.unchanged && !row.needsReview;
       }
       setSelected(next);
       toast.success("Store scan complete", {
-        description: `${body.summary?.offerCount ?? 0} offers analyzed`,
+        description: `${body.summary?.offerCount ?? 0} offers · ${body.summary?.willCreate ?? 0} folders to create`,
       });
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Scan failed");
@@ -89,6 +90,7 @@ export function EbayStoreOrganizeForm() {
       const body = (await res.json()) as {
         error?: string;
         applied?: number;
+        createdFolders?: string[];
         failed?: Array<{ offerId: string; error: string }>;
       };
       if (!res.ok) throw new Error(body.error || "Apply failed");
@@ -99,10 +101,14 @@ export function EbayStoreOrganizeForm() {
             "Could not update Store folders. Publish listings first, then Apply again.",
         );
       }
+      const created = body.createdFolders?.length || 0;
       toast.success(`Updated ${body.applied ?? 0} listings`, {
-        description: failCount
-          ? `${failCount} failed: ${body.failed?.[0]?.error || "see Seller Hub folders"}`
-          : "Store categories assigned",
+        description: [
+          created ? `Created ${created} folders` : null,
+          failCount ? `${failCount} failed: ${body.failed?.[0]?.error}` : null,
+        ]
+          .filter(Boolean)
+          .join(" · ") || "Store categories assigned",
       });
       await runScan();
     } catch (error) {
@@ -112,22 +118,80 @@ export function EbayStoreOrganizeForm() {
     }
   };
 
+  const organizeEverything = async () => {
+    setAutoRunning(true);
+    try {
+      const res = await fetch("/api/ebay/store-organize", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mode: "auto", minConfidence: 0.4 }),
+      });
+      const body = (await res.json()) as {
+        error?: string;
+        applied?: number;
+        scanned?: number;
+        skipped?: number;
+        createdFolders?: string[];
+        failed?: Array<{ offerId: string; error: string }>;
+      };
+      if (!res.ok) throw new Error(body.error || "Auto organize failed");
+      const failCount = body.failed?.length || 0;
+      if (failCount && (body.applied ?? 0) === 0) {
+        throw new Error(
+          body.failed?.[0]?.error ||
+            "Could not organize Store. Confirm the account has an eBay Store subscription.",
+        );
+      }
+      toast.success(`Organized ${body.applied ?? 0} listings`, {
+        description: [
+          `Scanned ${body.scanned ?? 0}`,
+          body.createdFolders?.length
+            ? `created ${body.createdFolders.length} folders`
+            : null,
+          failCount ? `${failCount} failed` : null,
+        ]
+          .filter(Boolean)
+          .join(" · "),
+      });
+      await runScan();
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Auto organize failed",
+      );
+    } finally {
+      setAutoRunning(false);
+    }
+  };
+
   const suggestions = scan?.suggestions || [];
+  const busy = loading || applying || autoRunning;
 
   return (
     <div className="space-y-4">
       <div className="rounded-xl border border-emerald-100 bg-emerald-50/70 px-3 py-2.5 text-[12px] text-emerald-900">
-        Organize Store uses eBay Trading only. It assigns leaf Store folders
-        (parents with subfolders are rejected by eBay), verifies each change,
-        then re-scans. If a row stays selected after Apply, expand the red
-        toast — the folder did not stick.
+        Higlou recognizes the right Store folder from each title. If that folder
+        does not exist yet, it creates it with the eBay API, then moves the
+        listing. Use <strong>Organize everything</strong> for one-click
+        auto-sort.
       </div>
 
       <div className="flex flex-wrap gap-2">
         <Button
           type="button"
+          disabled={busy}
+          onClick={() => void organizeEverything()}
+        >
+          {autoRunning ? (
+            <Loader2 className="size-4 animate-spin" />
+          ) : (
+            <Sparkles className="size-4" />
+          )}
+          {autoRunning ? "Organizing…" : "Organize everything"}
+        </Button>
+        <Button
+          type="button"
           variant="outline"
-          disabled={loading || applying}
+          disabled={busy}
           onClick={() => void runScan()}
         >
           {loading ? (
@@ -135,11 +199,12 @@ export function EbayStoreOrganizeForm() {
           ) : (
             <RefreshCw className="size-4" />
           )}
-          {loading ? "Scanning…" : "Scan store inventory"}
+          {loading ? "Scanning…" : "Scan only"}
         </Button>
         <Button
           type="button"
-          disabled={loading || applying || !suggestions.length}
+          variant="outline"
+          disabled={busy || !suggestions.length}
           onClick={() => void applySelected()}
         >
           {applying ? (
@@ -164,9 +229,7 @@ export function EbayStoreOrganizeForm() {
           <span>{scan.summary.ready} ready</span>
           <span>{scan.summary.needsReview} review</span>
           <span>{scan.summary.unchanged} already OK</span>
-          <span>
-            Categories: {scan.store?.source === "ebay" ? "from eBay" : "defaults"}
-          </span>
+          <span>{scan.summary.willCreate ?? 0} folders to create</span>
         </div>
       ) : null}
 
@@ -232,7 +295,8 @@ export function EbayStoreOrganizeForm() {
         </div>
       ) : (
         <p className="text-sm text-muted-foreground">
-          Connect eBay, then scan to classify live offers into Store folders.
+          Connect eBay, then click Organize everything — Higlou creates missing
+          folders and sorts live listings.
         </p>
       )}
     </div>

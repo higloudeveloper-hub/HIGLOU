@@ -224,23 +224,21 @@ function pickLeafStorePath(
   path: string,
   categories: EbayStoreCategory[],
 ): string {
+  const taxonomy = mergeTaxonomyCategories(categories);
   const needle = normalizeStorePath(path);
   if (!needle) return "/Other";
-  if (isLeafStoreCategory(needle, categories)) return needle;
+  if (isLeafStoreCategory(needle, taxonomy)) return needle;
 
   const prefix = `${needle}/`;
-  const childLeaves = categories
+  const childLeaves = taxonomy
     .map((c) => normalizeStorePath(c.path))
     .filter(
-      (p) =>
-        p.startsWith(prefix) && isLeafStoreCategory(p, categories),
+      (p) => p.startsWith(prefix) && isLeafStoreCategory(p, taxonomy),
     )
     .sort((a, b) => a.length - b.length);
   if (childLeaves[0]) return childLeaves[0];
 
-  // Force a leaf under the parent (ensureStoreCategoryId will create it).
-  const forced = normalizeStorePath(`${needle}/General`);
-  return forced;
+  return normalizeStorePath(`${needle}/General`);
 }
 
 function sleep(ms: number) {
@@ -864,15 +862,16 @@ export function classifyOffersForStore(
   options?: { reviewBelow?: number },
 ): StoreOrganizeSuggestion[] {
   const reviewBelow = options?.reviewBelow ?? 0.55;
-  const paths = categories.map((c) => normalizeStorePath(c.path)).filter(Boolean);
-  const available = paths.length
-    ? paths
-    : HIGLOU_DEFAULT_STORE_PATHS.map(normalizeStorePath);
+  // Always classify against Higlou taxonomy so missing folders can be created.
+  const taxonomy = mergeTaxonomyCategories(categories);
+  const available = Array.from(
+    new Set(taxonomy.map((c) => normalizeStorePath(c.path)).filter(Boolean)),
+  );
 
   return offers.map((offer) => {
     const haystack = `${offer.title} ${offer.categoryId} ${offer.sku}`;
     const picked = pickBestPath(haystack, available);
-    const leafPath = pickLeafStorePath(picked.path, categories);
+    const leafPath = pickLeafStorePath(picked.path, taxonomy);
     const suggestedId = resolveStoreCategoryId(leafPath, categories);
     const current = offer.currentStorePaths[0] || "";
     const unchangedById = Boolean(
@@ -891,11 +890,135 @@ export function classifyOffersForStore(
       reason:
         leafPath !== picked.path
           ? `${picked.reason} (leaf ${leafPath})`
-          : picked.reason,
+          : suggestedId
+            ? picked.reason
+            : `${picked.reason} · will create folder`,
       needsReview: picked.confidence < reviewBelow,
       unchanged,
     };
   });
+}
+
+function mergeTaxonomyCategories(
+  categories: EbayStoreCategory[],
+): EbayStoreCategory[] {
+  const byPath = new Map<string, EbayStoreCategory>();
+  for (const path of HIGLOU_DEFAULT_STORE_PATHS) {
+    const normalized = normalizeStorePath(path);
+    byPath.set(normalized, {
+      path: normalized,
+      name: normalized.split("/").filter(Boolean).pop() || normalized,
+    });
+  }
+  for (const cat of categories) {
+    const normalized = normalizeStorePath(cat.path);
+    const prev = byPath.get(normalized);
+    byPath.set(normalized, {
+      path: normalized,
+      name: cat.name || prev?.name || normalized,
+      categoryId: cat.categoryId || prev?.categoryId,
+    });
+  }
+  return Array.from(byPath.values());
+}
+
+/**
+ * Create any missing Store folders for the given paths (parents then leaves).
+ */
+export async function ensureStorePaths(
+  accessToken: string,
+  paths: string[],
+  categories: EbayStoreCategory[] = [],
+): Promise<{ categories: EbayStoreCategory[]; created: string[] }> {
+  let cats =
+    categories.length > 0
+      ? categories
+      : (await listSellerStoreCategories(accessToken)).categories;
+  const created: string[] = [];
+  const uniquePaths = Array.from(
+    new Set(paths.map(normalizeStorePath).filter(Boolean)),
+  );
+
+  for (const path of uniquePaths) {
+    const before = resolveStoreCategoryId(path, cats);
+    const ensured = await ensureStoreCategoryId(accessToken, path, cats);
+    cats = ensured.categories;
+    if (!before && resolveStoreCategoryId(path, cats)) {
+      created.push(path);
+    }
+  }
+
+  return { categories: cats, created };
+}
+
+/** Make sure Higlou default leaf folders exist on the eBay Store. */
+export async function ensureHiglouStoreTree(
+  accessToken: string,
+  categories: EbayStoreCategory[] = [],
+): Promise<{ categories: EbayStoreCategory[]; created: string[] }> {
+  const leafDefaults = HIGLOU_DEFAULT_STORE_PATHS.filter((path) => {
+    const taxonomy = mergeTaxonomyCategories([]);
+    return isLeafStoreCategory(path, taxonomy);
+  });
+  return ensureStorePaths(accessToken, leafDefaults, categories);
+}
+
+/**
+ * One-shot: ensure folders → classify → assign all listings that need a move.
+ */
+export async function autoOrganizeStore(
+  accessToken: string,
+  options?: { minConfidence?: number; maxItems?: number },
+): Promise<{
+  applied: number;
+  failed: Array<{ offerId: string; error: string }>;
+  createdFolders: string[];
+  scanned: number;
+  skipped: number;
+}> {
+  const minConfidence = options?.minConfidence ?? 0.4;
+  const maxItems = Math.min(200, Math.max(1, options?.maxItems || 100));
+
+  let store = await listSellerStoreCategories(accessToken);
+  const tree = await ensureHiglouStoreTree(accessToken, store.categories);
+  let categories = tree.categories;
+
+  const offers = await listSellerOffers(accessToken, {
+    limit: 50,
+    maxPages: 10,
+  });
+  const suggestions = classifyOffersForStore(offers, categories);
+  const toApply = suggestions
+    .filter((s) => !s.unchanged && s.confidence >= minConfidence)
+    .slice(0, maxItems);
+
+  const neededPaths = toApply.map((s) => s.suggestedPath);
+  const ensured = await ensureStorePaths(
+    accessToken,
+    neededPaths,
+    categories,
+  );
+  categories = ensured.categories;
+
+  const result = await applyStoreOrganizeSuggestions(
+    accessToken,
+    toApply.map((s) => ({
+      offerId: s.offerId,
+      suggestedPath: s.suggestedPath,
+      listingId: s.listingId,
+    })),
+    categories,
+  );
+
+  return {
+    applied: result.applied,
+    failed: result.failed,
+    createdFolders: Array.from(
+      new Set([...tree.created, ...ensured.created]),
+    ),
+    scanned: offers.length,
+    skipped: suggestions.length - toApply.length,
+  };
 }
 
 /**
@@ -939,33 +1062,28 @@ export async function assignStoreCategoriesToOffer(
     );
   }
 
+  // Final leaf path using Higlou taxonomy + live store folders.
+  const taxonomy = mergeTaxonomyCategories(categories);
+  const targetPath = pickLeafStorePath(paths[0], taxonomy);
+
   const ensured = await ensureStoreCategoryId(
     accessToken,
-    pickLeafStorePath(paths[0], categories),
+    targetPath,
     categories,
   );
-  // Re-resolve leaf in case ensure added parents+children.
-  const leafPath = pickLeafStorePath(paths[0], ensured.categories);
-  const leafEnsured =
-    leafPath === paths[0]
-      ? ensured
-      : await ensureStoreCategoryId(
-          accessToken,
-          leafPath,
-          ensured.categories,
-        );
-  options?.setCategories?.(leafEnsured.categories);
+  options?.setCategories?.(ensured.categories);
 
-  // Final guard: never send a parent folder id.
-  let categoryId = leafEnsured.categoryId;
-  const catMeta = leafEnsured.categories.find(
-    (c) => c.categoryId === categoryId,
-  );
-  if (catMeta && !isLeafStoreCategory(catMeta.path, leafEnsured.categories)) {
+  let categoryId = ensured.categoryId;
+  const catMeta = ensured.categories.find((c) => c.categoryId === categoryId);
+  if (catMeta && !isLeafStoreCategory(catMeta.path, ensured.categories)) {
+    const forcedPath = pickLeafStorePath(
+      catMeta.path,
+      mergeTaxonomyCategories(ensured.categories),
+    );
     const forced = await ensureStoreCategoryId(
       accessToken,
-      pickLeafStorePath(catMeta.path, leafEnsured.categories),
-      leafEnsured.categories,
+      forcedPath,
+      ensured.categories,
     );
     categoryId = forced.categoryId;
     options?.setCategories?.(forced.categories);

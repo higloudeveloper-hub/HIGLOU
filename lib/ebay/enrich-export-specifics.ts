@@ -1,5 +1,5 @@
 import { resolveCategorySpecifics } from "@/config/category-specifics";
-import { inferVoltageFromText } from "@/lib/ebay/infer-voltage";
+import { inferVoltageFromText, inferBatteryTechnologyFromText } from "@/lib/ebay/infer-voltage";
 
 function normalizeCKey(key: string): string {
   const raw = String(key || "").trim();
@@ -278,6 +278,21 @@ export function enrichItemSpecificsForExport(input: {
         .join(" "),
     );
     if (voltage) columns["C:Voltage"] = voltage;
+  }
+
+  // Battery Technology required for Power Tool Batteries & Chargers (eBay 25002).
+  const batteryHay = [
+    input.title,
+    input.productType,
+    input.categoryName,
+    derived.features,
+    ...Object.values(columns),
+  ]
+    .filter(Boolean)
+    .join(" ");
+  if (!columns["C:Battery Technology"]?.trim()) {
+    const tech = inferBatteryTechnologyFromText(batteryHay);
+    if (tech) columns["C:Battery Technology"] = tech;
   }
 
 

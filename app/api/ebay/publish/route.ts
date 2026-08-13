@@ -31,6 +31,7 @@ import { fetchAspectCardinalityMap } from "@/lib/ebay/sanitize-aspects";
 import {
   ensureInferredElectricalAspects,
   formatEbayVoltage,
+  inferAspectValueFromText,
   inferVoltageFromText,
   parseMissingAspectFromEbayError,
 } from "@/lib/ebay/infer-voltage";
@@ -532,6 +533,8 @@ export async function POST(request: Request) {
             formatEbayVoltage(
               /\b(nacs|ccs|ev\s*charger|ev\s*adapter)\b/i.test(hay) ? 1000 : 0,
             );
+        } else {
+          filled = inferAspectValueFromText(missingAspect, hay) || "";
         }
 
         if (filled) {

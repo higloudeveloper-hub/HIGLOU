@@ -1,5 +1,6 @@
 /**
- * Infer / ensure required electrical item specifics (esp. Voltage → eBay 25002).
+ * Infer / ensure required electrical item specifics
+ * (Voltage, Battery Technology → eBay 25002).
  */
 
 export function formatEbayVoltage(value: string | number): string {
@@ -38,12 +39,93 @@ export function inferVoltageFromText(text: string): string | null {
     return null;
   }
 
-  const preferred = ["1000", "480", "277", "240", "230", "208", "120", "48", "24", "12"];
+  const preferred = [
+    "1000",
+    "480",
+    "277",
+    "240",
+    "230",
+    "208",
+    "120",
+    "48",
+    "24",
+    "18",
+    "12",
+  ];
   for (const p of preferred) {
     const hit = matches.find((m) => String(Number(m)) === p);
     if (hit) return formatEbayVoltage(hit);
   }
   return formatEbayVoltage(matches[0]!);
+}
+
+/**
+ * Infer eBay "Battery Technology" for power-tool battery / charger categories.
+ * Values match common Taxonomy allowed strings.
+ */
+export function inferBatteryTechnologyFromText(text: string): string | null {
+  const raw = String(text || "");
+  if (!raw.trim()) return null;
+  const hay = raw.toLowerCase();
+
+  const batteryContext =
+    /\b(battery|batteries|bater[ií]a|charger|cargador|power\s*tool\s*batter|li[- ]?ion|lithium|nicd|nimh|lipo)\b/i.test(
+      hay,
+    );
+  if (!batteryContext) return null;
+
+  if (/\bli[- ]?po\b|lithium\s*polymer|polymer\s*battery/.test(hay)) {
+    return "Lithium Polymer (LiPo)";
+  }
+  if (
+    /\bli[- ]?ion\b|lithium[- ]?ion|\blithium\b|liion|lith\.?\s*ion/.test(hay)
+  ) {
+    return "Lithium-Ion (Li-Ion)";
+  }
+  if (/\bni[- ]?mh\b|nickel[- ]metal|nimh/.test(hay)) {
+    return "Nickel-Metal Hydride (NiMH)";
+  }
+  if (/\bni[- ]?cd\b|nickel[- ]cadmium|nicd/.test(hay)) {
+    return "Nickel-Cadmium (NiCd)";
+  }
+  if (/\blead[- ]?acid\b|\bagm\b/.test(hay)) {
+    return "Lead Acid";
+  }
+  if (/\balkaline\b/.test(hay)) {
+    return "Alkaline";
+  }
+
+  // Cordless tool packs (Ryobi/DeWalt 18V battery+charger) are almost always Li-Ion
+  // when chemistry is omitted from the title.
+  if (
+    /\b(ryobi|dewalt|milwaukee|makita|bosch|craftsman|kobalt|ridgid|hart|porter[- ]?cable|black\s*&\s*decker|b&d)\b/i.test(
+      hay,
+    ) &&
+    /\b(battery|batteries|charger)\b/i.test(hay) &&
+    /\b\d{1,2}\s*v(?:olts?)?\b/i.test(hay)
+  ) {
+    return "Lithium-Ion (Li-Ion)";
+  }
+
+  return null;
+}
+
+/** Infer a value for a missing required aspect name (eBay 25002 retry). */
+export function inferAspectValueFromText(
+  aspectName: string,
+  text: string,
+): string | null {
+  const name = String(aspectName || "").trim().toLowerCase();
+  if (!name) return null;
+  if (name === "voltage") return inferVoltageFromText(text);
+  if (
+    name === "battery technology" ||
+    name === "battery type" ||
+    name === "battery chemistry"
+  ) {
+    return inferBatteryTechnologyFromText(text);
+  }
+  return null;
 }
 
 export function listingHasAspect(
@@ -59,7 +141,7 @@ export function listingHasAspect(
 }
 
 /**
- * Ensure Voltage (and similar) exist on Inventory aspects when we can infer them.
+ * Ensure Voltage / Battery Technology exist on Inventory aspects when inferable.
  * Mutates aspects in place; returns which keys were added.
  */
 export function ensureInferredElectricalAspects(
@@ -72,6 +154,13 @@ export function ensureInferredElectricalAspects(
     if (voltage) {
       aspects.Voltage = [voltage];
       added.push("Voltage");
+    }
+  }
+  if (!listingHasAspect(aspects, "Battery Technology")) {
+    const tech = inferBatteryTechnologyFromText(haystack);
+    if (tech) {
+      aspects["Battery Technology"] = [tech];
+      added.push("Battery Technology");
     }
   }
   return added;

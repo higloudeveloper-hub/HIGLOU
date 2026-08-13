@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   formatEbayVoltage,
   inferVoltageFromText,
+  inferBatteryTechnologyFromText,
   parseMissingAspectFromEbayError,
   ensureInferredElectricalAspects,
 } from "@/lib/ebay/infer-voltage";
@@ -32,6 +33,43 @@ describe("inferVoltageFromText", () => {
         "The item specific Voltage is missing. Add Voltage to this listing (eBay 25002)",
       ),
     ).toBe("Voltage");
+    expect(
+      parseMissingAspectFromEbayError(
+        "A user error has occurred. The item specific Battery Technology is missing. Add Battery Technology to this listing [eBay 25002]",
+      ),
+    ).toBe("Battery Technology");
+  });
+
+  it("infers Battery Technology for Ryobi lithium packs", () => {
+    expect(
+      inferBatteryTechnologyFromText(
+        "Ryobi 18V Lithium Battery and Charger Kit Power Tool Batteries & Chargers",
+      ),
+    ).toBe("Lithium-Ion (Li-Ion)");
+  });
+
+  it("adds Battery Technology onto inventory aspects for tool batteries", () => {
+    const listing = createEmptyListing();
+    listing.title = "Ryobi 18V Lithium Battery and Charger Kit";
+    listing.brand = "Ryobi";
+    listing.categoryId = "42284";
+    listing.categoryName = "Power Tool Batteries & Chargers";
+    listing.price = 66;
+    listing.sku = "TESTBAT1";
+    listing.images = [
+      {
+        id: "1",
+        url: "https://example.com/a.jpg",
+        fileName: "a.jpg",
+        isPrimary: true,
+        mimeType: "image/jpeg",
+        sizeBytes: 1,
+        sortOrder: 0,
+      },
+    ];
+    const inv = listingToInventoryItem(listing);
+    expect(inv.aspects["Battery Technology"]?.[0]).toBe("Lithium-Ion (Li-Ion)");
+    expect(inv.aspects.Voltage?.[0]).toBe("18 V");
   });
 
   it("adds Voltage onto inventory aspects for EV adapters", () => {

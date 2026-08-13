@@ -1528,7 +1528,8 @@ export function classifyOffersForStore(
         (!currentIsFeatured ||
           normalizeStorePath(current) !== normalizeStorePath(preferred) ||
           (Boolean(preferred2) &&
-            normalizeStorePath(current2) !== normalizeStorePath(preferred2)));
+            normalizeStorePath(current2) !==
+              normalizeStorePath(preferred2 || ""));
 
       const secondaryBit = preferred2
         ? ` + "${preferred2.split("/").filter(Boolean).pop()}"`
@@ -2543,9 +2544,9 @@ export function folderDistribution(
 }
 
 /**
- * Set Store folder(s) on a published listing via Trading API only.
- * Supports primary StoreCategoryID + optional StoreCategory2ID (max 2).
- * Never calls Inventory APIs (hyphenated Higlou SKUs trigger eBay 25707).
+ * Set Store folder(s) on a published listing.
+ * Tries Trading ReviseFixedPriceItem first; Inventory-managed listings fall back
+ * to Inventory updateOffer (storeCategoryNames).
  */
 export async function assignStoreCategoriesToOffer(
   accessToken: string,
@@ -2558,6 +2559,8 @@ export async function assignStoreCategoriesToOffer(
     setCategories?: (categories: EbayStoreCategory[]) => void;
     /** Extra text so plumbing/tools/lighting remap to seller folders. */
     haystack?: string;
+    /** Inventory offerId when known (publish path). */
+    inventoryOfferId?: string | null;
   },
 ): Promise<void> {
   const inputPaths = storeCategoryNames
@@ -2590,7 +2593,11 @@ export async function assignStoreCategoriesToOffer(
   const resolveOne = async (
     rawPath: string,
     cats: EbayStoreCategory[],
-  ): Promise<{ categoryId: string; categories: EbayStoreCategory[] }> => {
+  ): Promise<{
+    categoryId: string;
+    path: string;
+    categories: EbayStoreCategory[];
+  }> => {
     let live = usableStoreCategories(cats);
     const named = namedStoreCategories(cats);
     const inputPath = normalizeStorePath(rawPath);
@@ -2721,7 +2728,14 @@ export async function assignStoreCategoriesToOffer(
       );
       categoryId = ensured.categoryId;
     }
-    return { categoryId, categories: ensured.categories };
+    return {
+      categoryId,
+      path: normalizeStorePath(
+        ensured.categories.find((c) => c.categoryId === categoryId)?.path ||
+          targetPath,
+      ),
+      categories: ensured.categories,
+    };
   };
 
   // Primary
@@ -2731,6 +2745,7 @@ export async function assignStoreCategoriesToOffer(
 
   // Optional secondary (Smart Home, etc.)
   let secondaryId = "0";
+  let secondaryPath: string | null = null;
   let path2 =
     inputPaths[1] ||
     pickSecondaryStorePath(haystack, inputPaths[0], usableStoreCategories(categories));
@@ -2741,19 +2756,55 @@ export async function assignStoreCategoriesToOffer(
       options?.setCategories?.(categories);
       if (secondary.categoryId !== primary.categoryId) {
         secondaryId = secondary.categoryId;
+        secondaryPath = secondary.path;
       }
     } catch {
       // Secondary is best-effort — primary still applies.
       secondaryId = "0";
+      secondaryPath = null;
     }
   }
 
-  await assignStoreCategoryViaTrading(
-    accessToken,
-    listingId,
-    primary.categoryId,
-    secondaryId,
+  const resolvedPaths = [primary.path, secondaryPath].filter(
+    (p): p is string => Boolean(p),
   );
+
+  try {
+    await assignStoreCategoryViaTrading(
+      accessToken,
+      listingId,
+      primary.categoryId,
+      secondaryId,
+    );
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (
+      !/Inventory-based listing management|not currently supported by this tool/i.test(
+        message,
+      )
+    ) {
+      throw error;
+    }
+
+    // Higlou live publish uses Inventory API — Trading revise cannot touch Storefront.
+    const {
+      findOfferIdByListingId,
+      updateOfferStoreCategories,
+    } = await import("@/lib/ebay/inventory-api");
+    const inventoryOfferId =
+      String(options?.inventoryOfferId || "").trim() ||
+      (await findOfferIdByListingId(accessToken, listingId));
+    if (!inventoryOfferId) {
+      throw new Error(
+        "Store folder needs Inventory offer update, but no offer was found for this listing.",
+      );
+    }
+    await updateOfferStoreCategories(
+      accessToken,
+      inventoryOfferId,
+      resolvedPaths,
+    );
+  }
 }
 
 export async function applyStoreOrganizeSuggestions(
@@ -2818,6 +2869,155 @@ export async function applyStoreOrganizeSuggestions(
 }
 
 /**
+ * Classify + ensure Store folders for a listing title (no assign yet).
+ * Used so Inventory createOffer can include storeCategoryNames before publish.
+ */
+export async function prepareStoreCategoriesForPublish(
+  accessToken: string,
+  input: {
+    title: string;
+    sku?: string;
+    categoryId?: string;
+    categoryName?: string;
+    brand?: string;
+    productType?: string;
+  },
+): Promise<{
+  storePath: string;
+  storePath2: string | null;
+  storeCategoryNames: string[];
+  confidence: number;
+  reason: string;
+  createdFolder: boolean;
+}> {
+  const title = String(input.title || "").trim() || "listing";
+  const haystack = offerClassifyHaystack({
+    offerId: "publish",
+    sku: String(input.sku || "publish"),
+    status: "PUBLISHED",
+    title,
+    categoryId: String(input.categoryId || ""),
+    listingId: null,
+    price: null,
+    currentStorePaths: [],
+    categoryName: input.categoryName,
+    brand: input.brand,
+    productType: input.productType,
+  });
+
+  const store = await listSellerStoreCategories(accessToken);
+  let categories = store.categories;
+  const [suggestion] = classifyOffersForStore(
+    [
+      {
+        offerId: "publish",
+        sku: String(input.sku || "publish"),
+        status: "PUBLISHED",
+        title,
+        categoryId: String(input.categoryId || ""),
+        listingId: null,
+        price: null,
+        currentStorePaths: [],
+        categoryName: input.categoryName,
+        brand: input.brand,
+        productType: input.productType,
+      },
+    ],
+    categories,
+  );
+
+  let storePath = preferSellerStorePath(
+    suggestion?.suggestedPath || "/Home/General Merchandise",
+    haystack,
+    categories,
+  );
+  let storePath2 =
+    suggestion?.suggestedPath2 ||
+    pickSecondaryStorePath(haystack, storePath, categories);
+
+  const beforeIds = new Set(
+    categories.filter((c) => c.categoryId).map((c) => c.categoryId as string),
+  );
+
+  // Resolve to leaf paths that exist (create General under parents if needed).
+  const primary = await ensureStoreCategoryId(accessToken, storePath, categories);
+  categories = primary.categories;
+  const primaryMeta = categories.find((c) => c.categoryId === primary.categoryId);
+  storePath = normalizeStorePath(primaryMeta?.path || storePath);
+  if (primaryMeta && !isLeafStoreCategory(storePath, usableStoreCategories(categories))) {
+    const leaf = await ensureStoreCategoryId(
+      accessToken,
+      normalizeStorePath(`${storePath}/General`),
+      categories,
+    );
+    categories = leaf.categories;
+    storePath = normalizeStorePath(
+      categories.find((c) => c.categoryId === leaf.categoryId)?.path ||
+        `${storePath}/General`,
+    );
+  }
+
+  if (
+    storePath2 &&
+    normalizeStorePath(storePath2) !== normalizeStorePath(storePath)
+  ) {
+    try {
+      const secondary = await ensureStoreCategoryId(
+        accessToken,
+        storePath2,
+        categories,
+      );
+      categories = secondary.categories;
+      let path = normalizeStorePath(
+        categories.find((c) => c.categoryId === secondary.categoryId)?.path ||
+          storePath2,
+      );
+      if (!isLeafStoreCategory(path, usableStoreCategories(categories))) {
+        const leaf = await ensureStoreCategoryId(
+          accessToken,
+          normalizeStorePath(`${path}/General`),
+          categories,
+        );
+        categories = leaf.categories;
+        path = normalizeStorePath(
+          categories.find((c) => c.categoryId === leaf.categoryId)?.path ||
+            `${path}/General`,
+        );
+      }
+      storePath2 = path;
+    } catch {
+      storePath2 = null;
+    }
+  } else {
+    storePath2 = null;
+  }
+
+  const afterIds = new Set(
+    categories.filter((c) => c.categoryId).map((c) => c.categoryId as string),
+  );
+  let createdFolder = false;
+  for (const id of afterIds) {
+    if (!beforeIds.has(id)) {
+      createdFolder = true;
+      break;
+    }
+  }
+
+  const storeCategoryNames = [storePath, storePath2].filter(
+    (p): p is string => Boolean(p),
+  );
+
+  return {
+    storePath,
+    storePath2,
+    storeCategoryNames,
+    confidence: suggestion?.confidence ?? 0.5,
+    reason: suggestion?.reason || "Prepared for publish",
+    createdFolder,
+  };
+}
+
+/**
  * After live publish: classify title → prefer seller folders (Bath and Plumbing)
  * → create only if missing → assign with retries (eBay lags right after publish).
  */
@@ -2831,6 +3031,10 @@ export async function organizeListingOnPublish(
     categoryName?: string;
     brand?: string;
     productType?: string;
+    /** Inventory offerId — enables Inventory storeCategoryNames fallback. */
+    inventoryOfferId?: string | null;
+    /** Paths already applied on createOffer (skip if assign already stuck). */
+    preparedPaths?: string[] | null;
   },
 ): Promise<{
   storePath: string;
@@ -2900,6 +3104,14 @@ export async function organizeListingOnPublish(
       confidence = suggestion?.confidence ?? confidence;
       reason = suggestion?.reason || reason;
 
+      const prepared = (input.preparedPaths || [])
+        .map(normalizeStorePath)
+        .filter(Boolean);
+      if (prepared[0]) {
+        storePath = prepared[0];
+        storePath2 = prepared[1] || storePath2;
+      }
+
       const beforeId = resolveStoreCategoryId(storePath, store.categories);
       const paths = [storePath, storePath2].filter(
         (p): p is string => Boolean(p && String(p).trim()),
@@ -2908,6 +3120,7 @@ export async function organizeListingOnPublish(
         listingId,
         categories: store.categories,
         haystack,
+        inventoryOfferId: input.inventoryOfferId,
       });
       createdFolder = !beforeId;
 

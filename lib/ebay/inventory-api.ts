@@ -516,6 +516,92 @@ export async function publishOffer(accessToken: string, offerId: string) {
   return { listingId: String(json.listingId || "") };
 }
 
+/** Find Inventory offerId for a published listing (ItemID). */
+export async function findOfferIdByListingId(
+  accessToken: string,
+  listingId: string,
+): Promise<string | null> {
+  const id = String(listingId || "").trim();
+  if (!id || !/^\d+$/.test(id)) return null;
+  try {
+    const json = (await ebayFetch(
+      accessToken,
+      `/sell/inventory/v1/offer?listing_ids=${encodeURIComponent(id)}`,
+      { method: "GET" },
+    )) as { offers?: Array<{ offerId?: string }> };
+    const offerId = String(json.offers?.[0]?.offerId || "").trim();
+    return offerId || null;
+  } catch {
+    return null;
+  }
+}
+
+export async function getOffer(
+  accessToken: string,
+  offerId: string,
+): Promise<Record<string, unknown>> {
+  return (await ebayFetch(
+    accessToken,
+    `/sell/inventory/v1/offer/${encodeURIComponent(offerId)}`,
+    { method: "GET" },
+  )) as Record<string, unknown>;
+}
+
+/**
+ * Set Store folders on an Inventory-managed listing (Trading revise fails with
+ * "Inventory-based listing management is not currently supported").
+ */
+export async function updateOfferStoreCategories(
+  accessToken: string,
+  offerId: string,
+  storeCategoryNames: string[],
+): Promise<void> {
+  const paths = storeCategoryNames
+    .map((p) => String(p || "").trim())
+    .filter(Boolean)
+    .slice(0, 2);
+  if (!paths.length) {
+    throw new Error("At least one store category path is required");
+  }
+
+  const current = await getOffer(accessToken, offerId);
+  const pricing = (current.pricingSummary || {}) as {
+    price?: { value?: string; currency?: string };
+  };
+  const priceValue = Number(pricing.price?.value || 0);
+  const policies = (current.listingPolicies || {}) as Record<string, string>;
+  const sku = String(current.sku || "").trim();
+  const categoryId = String(current.categoryId || "").trim();
+  if (!sku || !categoryId || !(priceValue > 0)) {
+    throw new Error(
+      "Cannot update Store folders: offer is missing sku/category/price",
+    );
+  }
+
+  const input: EbayOfferInput = {
+    sku,
+    marketplaceId: String(current.marketplaceId || "EBAY_US"),
+    format: "FIXED_PRICE",
+    categoryId,
+    price: priceValue,
+    quantity: Math.max(1, Number(current.availableQuantity) || 1),
+    listingDescription:
+      typeof current.listingDescription === "string"
+        ? current.listingDescription
+        : undefined,
+    fulfillmentPolicyId: policies.fulfillmentPolicyId,
+    paymentPolicyId: policies.paymentPolicyId,
+    returnPolicyId: policies.returnPolicyId,
+    merchantLocationKey:
+      typeof current.merchantLocationKey === "string"
+        ? current.merchantLocationKey
+        : undefined,
+    storeCategoryNames: paths,
+  };
+
+  await updateOffer(accessToken, offerId, input);
+}
+
 export async function getOffersForSku(accessToken: string, sku: string) {
   try {
     const json = (await ebayFetch(

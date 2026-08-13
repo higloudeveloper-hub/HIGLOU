@@ -15,7 +15,7 @@ import {
   sanitizeEbayUpc,
   upsertOfferForSku,
 } from "@/lib/ebay/inventory-api";
-import { organizeListingOnPublish } from "@/lib/ebay/store-organize";
+import { organizeListingOnPublish, prepareStoreCategoriesForPublish } from "@/lib/ebay/store-organize";
 import {
   listingToInventoryItem,
   listingToOfferInput,
@@ -593,6 +593,30 @@ export async function POST(request: Request) {
       returnPolicyId: listing.returnPolicyId,
     });
 
+    // Inventory listings cannot get Store folders via Trading revise — set
+    // storeCategoryNames on the offer before publishOffer.
+    let preparedStore: Awaited<
+      ReturnType<typeof prepareStoreCategoriesForPublish>
+    > | null = null;
+    try {
+      preparedStore = await prepareStoreCategoriesForPublish(accessToken, {
+        title: listing.title,
+        sku: listing.sku,
+        categoryId: listing.categoryId,
+        categoryName: listing.categoryName,
+        brand: listing.brand,
+        productType: listing.productType || listing.type,
+      });
+      if (preparedStore.storeCategoryNames.length) {
+        offerInput.storeCategoryNames = preparedStore.storeCategoryNames;
+      }
+    } catch (prepareError) {
+      console.warn(
+        "[ebay/publish] prepare store folders",
+        prepareError instanceof Error ? prepareError.message : prepareError,
+      );
+    }
+
     let offerId = "";
     try {
       ({ offerId } = await upsertOfferForSku(accessToken, offerInput));
@@ -702,6 +726,7 @@ export async function POST(request: Request) {
       status = "PUBLISHED";
 
       // Same pattern as Settings → Organize Store: classify → create folder → assign.
+      // Inventory listings fall back to updateOffer storeCategoryNames.
       if (listingId) {
         try {
           storeOrganize = await organizeListingOnPublish(accessToken, {
@@ -712,12 +737,25 @@ export async function POST(request: Request) {
             categoryName: listing.categoryName,
             brand: listing.brand,
             productType: listing.productType || listing.type,
+            inventoryOfferId: offerId,
+            preparedPaths: preparedStore?.storeCategoryNames || null,
           });
         } catch (organizeError) {
-          storeOrganizeWarning =
-            organizeError instanceof Error
-              ? organizeError.message
-              : String(organizeError);
+          // If we already stamped folders on createOffer, treat as soft success.
+          if (preparedStore?.storeCategoryNames?.length) {
+            storeOrganize = {
+              storePath: preparedStore.storePath,
+              storePath2: preparedStore.storePath2,
+              createdFolder: preparedStore.createdFolder,
+              confidence: preparedStore.confidence,
+              reason: `${preparedStore.reason} (set on offer; post-publish sync lagged)`,
+            };
+          } else {
+            storeOrganizeWarning =
+              organizeError instanceof Error
+                ? organizeError.message
+                : String(organizeError);
+          }
         }
       }
     }

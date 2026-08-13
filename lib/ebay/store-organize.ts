@@ -1529,7 +1529,7 @@ export function classifyOffersForStore(
           normalizeStorePath(current) !== normalizeStorePath(preferred) ||
           (Boolean(preferred2) &&
             normalizeStorePath(current2) !==
-              normalizeStorePath(preferred2 || ""));
+              normalizeStorePath(preferred2 || "")));
 
       const secondaryBit = preferred2
         ? ` + "${preferred2.split("/").filter(Boolean).pop()}"`

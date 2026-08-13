@@ -351,6 +351,25 @@ async function updateReturnPolicy(
   );
 }
 
+async function updateFulfillmentPolicy(
+  accessToken: string,
+  policyId: string,
+  marketplaceId: string,
+  name: string,
+  shippingServiceCode = HIGLOU_CHEAPEST_SHIPPING_SERVICE,
+): Promise<void> {
+  await accountFetch(
+    accessToken,
+    `/sell/account/v1/fulfillment_policy/${encodeURIComponent(policyId)}`,
+    {
+      method: "PUT",
+      body: JSON.stringify(
+        fulfillmentPolicyBody(name, marketplaceId, shippingServiceCode),
+      ),
+    },
+  );
+}
+
 async function fulfillmentLooksCorrect(
   accessToken: string,
   policyId: string,
@@ -511,8 +530,7 @@ async function returnLooksCorrect(
 /**
  * Ensure the connected seller has business policies.
  * Rule: use existing policies on the account; create a type ONLY if that type is missing.
- * forceRecreate* is for Settings "Create Higlou" and still will not replace a manual
- * shipping policy when one already exists.
+ * forceRecreate* updates an existing Higlou policy in place — never mints duplicates.
  */
 export async function ensureHiglouBusinessPolicies(
   accessToken: string,
@@ -545,11 +563,27 @@ export async function ensureHiglouBusinessPolicies(
   // --- Payment: use existing; create only if account has none ---
   let payment =
     listed.payment.find((p) => p.id === preferred?.paymentPolicyId?.trim()) ||
+    listed.payment.find((p) => /^higlou\s*payment$/i.test(p.name)) ||
     pickDefaultPolicy(listed.payment, preferred?.paymentPolicyId);
   if (!payment && listed.payment.length === 0) {
-    const id = await createPaymentPolicy(accessToken, marketplaceId);
-    created.push("payment");
-    payment = { id, name: HIGLOU_PAYMENT_NAME };
+    try {
+      const id = await createPaymentPolicy(accessToken, marketplaceId);
+      created.push("payment");
+      payment = { id, name: HIGLOU_PAYMENT_NAME };
+    } catch (createError) {
+      // Name conflict / race — re-list and reuse whatever exists.
+      listed = await listSellerBusinessPolicies(accessToken, marketplaceId);
+      payment =
+        pickDefaultPolicy(listed.payment, preferred?.paymentPolicyId) ||
+        listed.payment[0] ||
+        null;
+      if (!payment) {
+        throw createError instanceof Error
+          ? createError
+          : new Error(String(createError));
+      }
+      created.push("payment-reused-existing");
+    }
   } else if (!payment) {
     payment = listed.payment[0] || null;
   }
@@ -582,10 +616,19 @@ export async function ensureHiglouBusinessPolicies(
       const id = await createReturnPolicy(accessToken, marketplaceId);
       returns = { id, name: HIGLOU_RETURN_NAME };
       created.push("return");
-    } catch {
-      throw new Error(
-        "Could not create a return policy. Create one in eBay Seller Hub → Business policies, then Import from eBay.",
-      );
+    } catch (createError) {
+      listed = await listSellerBusinessPolicies(accessToken, marketplaceId);
+      returns =
+        pickDefaultPolicy(listed.return, preferred?.returnPolicyId) ||
+        listed.return[0] ||
+        null;
+      if (!returns) {
+        throw new Error(
+          "Could not create a return policy. Create one in eBay Seller Hub → Business policies, then Import from eBay.",
+        );
+      }
+      created.push("return-reused-existing");
+      void createError;
     }
   } else if (!returns) {
     returns = listed.return[0] || null;
@@ -597,25 +640,19 @@ export async function ensureHiglouBusinessPolicies(
     preferred?.shippingPolicyId,
   );
 
-  const noShippingOnAccount = listed.fulfillment.length === 0;
-  const forceOnlyHiglouShipping =
-    options?.forceRecreateFulfillment === true &&
-    listed.fulfillment.length > 0 &&
-    listed.fulfillment.every((p) => isHiglouPolicyName(p.name));
-
-  if (noShippingOnAccount || forceOnlyHiglouShipping) {
-    const policyName = `${HIGLOU_FULFILLMENT_NAME} ${Date.now().toString(36)}`;
+  if (listed.fulfillment.length === 0) {
     try {
       const createdPolicy = await createFulfillmentPolicy(
         accessToken,
         marketplaceId,
-        policyName,
+        HIGLOU_FULFILLMENT_NAME,
       );
-      shipping = { id: createdPolicy.id, name: policyName };
+      shipping = { id: createdPolicy.id, name: HIGLOU_FULFILLMENT_NAME };
       created.push(`fulfillment:${createdPolicy.shippingServiceCode}`);
     } catch (createError) {
       const msg =
         createError instanceof Error ? createError.message : String(createError);
+      listed = await listSellerBusinessPolicies(accessToken, marketplaceId);
       shipping = pickShippingPolicy(
         listed.fulfillment,
         preferred?.shippingPolicyId,
@@ -631,6 +668,44 @@ export async function ensureHiglouBusinessPolicies(
             : msg,
         );
       }
+    }
+  } else if (options?.forceRecreateFulfillment === true) {
+    // Never mint timestamped duplicates. Update one Higlou policy in place when
+    // the account only has Higlou-named shipping (Settings / offer retry).
+    const target =
+      listed.fulfillment.find(
+        (p) => p.id === preferred?.shippingPolicyId?.trim(),
+      ) ||
+      listed.fulfillment.find((p) => isHiglouCheapFulfillmentName(p.name)) ||
+      listed.fulfillment.find((p) => isHiglouPolicyName(p.name)) ||
+      shipping;
+
+    const onlyHiglou = listed.fulfillment.every((p) =>
+      isHiglouPolicyName(p.name),
+    );
+
+    if (target && onlyHiglou) {
+      try {
+        await updateFulfillmentPolicy(
+          accessToken,
+          target.id,
+          marketplaceId,
+          HIGLOU_FULFILLMENT_NAME,
+        );
+        shipping = { id: target.id, name: HIGLOU_FULFILLMENT_NAME };
+        created.push("fulfillment-updated");
+      } catch {
+        shipping = target;
+        created.push("fulfillment-kept-existing");
+        warning =
+          "Could not refresh the Higlou shipping policy via API. Reusing the existing one.";
+      }
+    } else if (shipping) {
+      created.push("fulfillment-kept-manual");
+      warning =
+        "Using your existing Seller Hub shipping policy (not replaced by Higlou).";
+    } else {
+      shipping = listed.fulfillment[0] || null;
     }
   } else if (!shipping) {
     shipping = listed.fulfillment[0] || null;

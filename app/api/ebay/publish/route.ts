@@ -675,7 +675,7 @@ export async function POST(request: Request) {
           "eBay rejected the shipping policy: package weight is over the service limit (often eBay Standard Envelope = 3 oz max). In Seller Hub → Business policies, edit your shipping policy to USPS Ground Advantage (buyer pays), then in Higlou Settings click Import from eBay, select that policy, Save, and publish again.",
         );
       } else if (/25087|216118|shipping service option|Fulfillment policy/i.test(message)) {
-        // Fulfillment policy exists but has no valid shipping services (or belongs to another seller).
+        // Refresh the existing Higlou fulfillment policy in place (never create duplicates).
         const fixed = await ensureHiglouBusinessPolicies(accessToken, {
           marketplaceId: connection.marketplaceId || "EBAY_US",
           forceRecreateFulfillment: true,

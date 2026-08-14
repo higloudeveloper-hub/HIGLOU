@@ -165,29 +165,28 @@ export function SettingsStudio() {
           ) : null}
 
           {tab === "tools" ? (
-            <div className="space-y-8">
-              <section id="organize-store" className="scroll-mt-24 space-y-3">
-                <h2 className="text-lg font-semibold tracking-tight">
-                  Store folders
-                </h2>
-                <p className="text-sm text-muted-foreground">
-                  File live eBay listings into the right folder.
-                </p>
-                <div className="rounded-2xl border border-border/80 bg-surface p-5 sm:p-6">
-                  <EbayStoreOrganizeForm />
-                </div>
-              </section>
-
-              <section id="ai" className="scroll-mt-24 space-y-3">
-                <h2 className="text-lg font-semibold tracking-tight">Higlou AI</h2>
-                <p className="text-sm text-muted-foreground">
-                  How photos become titles and specifics.
-                </p>
+            <div className="space-y-5">
+              <section id="ai" className="scroll-mt-24">
                 <AiSettingsForm />
               </section>
 
-              <details className="rounded-2xl border border-border/80 bg-surface p-5">
-                <summary className="cursor-pointer text-sm font-semibold [&::-webkit-details-marker]:hidden">
+              <details
+                id="organize-store"
+                className="scroll-mt-24 rounded-[24px] border border-border/80 bg-surface px-5 py-4"
+              >
+                <summary className="cursor-pointer list-none text-sm font-semibold [&::-webkit-details-marker]:hidden">
+                  Store folders
+                  <span className="ml-2 font-normal text-muted-foreground">
+                    file live listings
+                  </span>
+                </summary>
+                <div className="mt-4 border-t border-border/60 pt-4">
+                  <EbayStoreOrganizeForm />
+                </div>
+              </details>
+
+              <details className="rounded-[24px] border border-border/80 bg-surface px-5 py-4">
+                <summary className="cursor-pointer list-none text-sm font-semibold [&::-webkit-details-marker]:hidden">
                   CSV template
                   <span className="ml-2 font-normal text-muted-foreground">
                     rarely needed
@@ -201,8 +200,8 @@ export function SettingsStudio() {
                 </div>
               </details>
 
-              <details className="rounded-2xl border border-border/80 bg-surface p-5">
-                <summary className="cursor-pointer text-sm font-semibold [&::-webkit-details-marker]:hidden">
+              <details className="rounded-[24px] border border-border/80 bg-surface px-5 py-4">
+                <summary className="cursor-pointer list-none text-sm font-semibold [&::-webkit-details-marker]:hidden">
                   Budget
                   <span className="ml-2 font-normal text-muted-foreground">
                     operators
@@ -213,7 +212,7 @@ export function SettingsStudio() {
                 </div>
               </details>
 
-              <p className="text-[13px] text-muted-foreground">
+              <p className="px-1 text-[13px] text-muted-foreground">
                 See spend on{" "}
                 <Link href="/usage" className="font-medium text-foreground underline">
                   Usage

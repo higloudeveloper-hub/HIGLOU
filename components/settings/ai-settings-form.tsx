@@ -2,9 +2,9 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
+import { motion } from "motion/react";
 import {
   Barcode,
-  Check,
   ChevronDown,
   Eye,
   FileSpreadsheet,
@@ -16,6 +16,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { ListingPipeline } from "@/components/studio/listing-pipeline";
+import { LiveDot } from "@/components/ui/studio";
 import { cn } from "@/lib/utils";
 
 export type AiProviderSettings = {
@@ -143,6 +145,19 @@ export function AiSettingsForm() {
       })
       .catch(() => undefined);
 
+    void (async () => {
+      setHealthLoading(true);
+      try {
+        const res = await fetch("/api/system/health");
+        if (!res.ok || cancelled) return;
+        setHealth((await res.json()) as HealthResponse);
+      } catch {
+        /* silent boot check */
+      } finally {
+        if (!cancelled) setHealthLoading(false);
+      }
+    })();
+
     return () => {
       cancelled = true;
     };
@@ -258,293 +273,222 @@ export function AiSettingsForm() {
   const timeSavedHours = Number((products * 0.25).toFixed(1));
 
   return (
-    <div className="space-y-8">
-      {/* Hero summary */}
-      <div className="relative overflow-hidden rounded-3xl border border-zinc-200/80 bg-gradient-to-br from-zinc-50 via-white to-[#fff9e6] p-6 sm:p-8">
-        <div className="absolute -right-10 -top-10 size-40 rounded-full bg-[#f4c928]/20 blur-3xl" />
-        <div className="relative space-y-5">
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div>
-              <p className="text-xs font-semibold tracking-[0.18em] text-zinc-500">
-                AI ANALYSIS
-              </p>
-              <h2 className="mt-2 text-2xl font-semibold tracking-tight text-zinc-950">
-                Automatic by default
-              </h2>
-              <p className="mt-2 max-w-xl text-sm leading-relaxed text-zinc-600">
-                The platform chooses the best service for every image — vision,
-                text recognition, and barcode reading — so you can focus on
-                selling.
-              </p>
-            </div>
-            <div
+    <div className="space-y-6">
+      <ListingPipeline compact />
+
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <p className="inline-flex items-center gap-2 text-[11px] font-semibold tracking-[0.16em] text-muted-foreground uppercase">
+            <LiveDot tone={overallReady ? "success" : "brand"} />
+            Engine
+          </p>
+          <h2 className="mt-1 text-lg font-semibold tracking-tight">
+            {overallReady ? "Ready to write listings" : "Something needs a look"}
+          </h2>
+          <p className="text-[13px] text-muted-foreground">
+            Photos in → draft → eBay. Automatic unless you open operators.
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="rounded-full border border-border bg-surface p-0.5">
+            <button
+              type="button"
+              onClick={setAutomatic}
               className={cn(
-                "inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-sm font-medium",
-                overallReady
-                  ? "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200"
-                  : "bg-amber-50 text-amber-800 ring-1 ring-amber-200",
+                "rounded-full px-3 py-1.5 text-[12px] font-semibold",
+                settings.analysisMode === "automatic"
+                  ? "bg-foreground text-background"
+                  : "text-muted-foreground",
               )}
             >
-              <span
-                className={cn(
-                  "size-2 rounded-full",
-                  overallReady ? "bg-emerald-500" : "bg-amber-500",
-                )}
-              />
-              {overallReady ? "Ready" : "Needs attention"}
-            </div>
-          </div>
-
-          <div className="grid gap-3 sm:grid-cols-3">
-            {(
-              [
-                {
-                  title: "OpenAI Vision",
-                  on: settings.openaiEnabled,
-                },
-                {
-                  title: "Text Recognition",
-                  on: settings.googleVisionEnabled,
-                },
-                {
-                  title: "Barcode Scanner",
-                  on: settings.barcodeEnabled,
-                },
-              ] as const
-            ).map((item) => (
-              <div
-                key={item.title}
-                className="flex items-center gap-2 rounded-2xl bg-white/80 px-4 py-3 text-sm shadow-sm ring-1 ring-zinc-200/70"
-              >
-                <span
-                  className={cn(
-                    "flex size-5 items-center justify-center rounded-full",
-                    item.on
-                      ? "bg-emerald-500 text-white"
-                      : "bg-zinc-200 text-zinc-500",
-                  )}
-                >
-                  <Check className="size-3.5" strokeWidth={3} />
-                </span>
-                <span className="font-medium text-zinc-900">{item.title}</span>
-              </div>
-            ))}
-          </div>
-
-          <div className="rounded-2xl bg-white/70 p-4 ring-1 ring-zinc-200/70">
-            <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
-              Mode
-            </p>
-            <div className="mt-3 flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={setAutomatic}
-                className={cn(
-                  "rounded-full px-4 py-2 text-sm font-medium transition",
-                  settings.analysisMode === "automatic"
-                    ? "bg-zinc-950 text-white"
-                    : "bg-zinc-100 text-zinc-700 hover:bg-zinc-200",
-                )}
-              >
-                Automatic
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  const next = { ...settings, analysisMode: "custom" as const };
-                  save(next);
-                  setAdvancedOpen(true);
-                }}
-                className={cn(
-                  "rounded-full px-4 py-2 text-sm font-medium transition",
-                  settings.analysisMode === "custom"
-                    ? "bg-zinc-950 text-white"
-                    : "bg-zinc-100 text-zinc-700 hover:bg-zinc-200",
-                )}
-              >
-                Custom
-              </button>
-            </div>
-            <p className="mt-3 text-sm text-zinc-600">
-              {settings.analysisMode === "automatic"
-                ? "Everything else stays hidden. The AI decides what each photo needs."
-                : "Custom mode unlocks advanced controls below."}
-            </p>
-          </div>
-        </div>
-      </div>
-
-      {/* Service cards */}
-      <div>
-        <h3 className="text-sm font-semibold text-zinc-900">AI Services</h3>
-        <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-          {serviceCards.map((card) => {
-            const Icon = card.icon;
-            return (
-              <div
-                key={card.id}
-                className="group rounded-3xl border border-zinc-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex size-11 items-center justify-center rounded-2xl bg-zinc-950 text-[#f4c928]">
-                    <Icon className="size-5" />
-                  </div>
-                  <StatusPill status={card.status} />
-                </div>
-                <p className="mt-4 text-base font-semibold text-zinc-950">
-                  {card.title}
-                </p>
-                <p className="mt-1 text-sm text-zinc-500">{card.subtitle}</p>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* AI Status checklist */}
-      <div className="rounded-3xl border border-zinc-200 bg-white p-5 shadow-sm">
-        <h3 className="text-sm font-semibold text-zinc-900">AI Status</h3>
-        <ul className="mt-4 space-y-3">
-          {(
-            [
-              ["openai", "OpenAI Connected"],
-              ["google_vision", "Text Recognition Connected"],
-              ["barcode", "Barcode Scanner Ready"],
-              ["template", "Template Loaded"],
-              ["branding", "Store Branding Ready"],
-              ["env", "CSV Generator Ready"],
-            ] as const
-          ).map(([id, label]) => {
-            const check = health?.checks.find((c) => c.id === id);
-            const ok =
-              !health || check?.status === "ok" || check?.status === "warn";
-            return (
-              <li key={id} className="flex items-center gap-3 text-sm">
-                <span
-                  className={cn(
-                    "size-2.5 rounded-full",
-                    ok ? "bg-emerald-500" : "bg-rose-500",
-                  )}
-                />
-                <span className="text-zinc-800">{label}</span>
-              </li>
-            );
-          })}
-        </ul>
-      </div>
-
-      {/* Usage */}
-      <div className="rounded-3xl border border-zinc-200 bg-white p-5 shadow-sm">
-        <div className="flex items-center justify-between gap-3">
-          <h3 className="text-sm font-semibold text-zinc-900">This month</h3>
-          <a
-            href="/usage"
-            className="text-xs font-medium text-zinc-500 hover:text-zinc-900"
-          >
-            View details
-          </a>
-        </div>
-        <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-          <UsageTile
-            label="Products analyzed"
-            value={`${products} / ${target}`}
-          />
-          <UsageTile label="Estimated AI Cost" value={money(aiCost)} />
-          <UsageTile label="Text Recognition" value={`${ocrUnits} Images`} />
-          <UsageTile label="CSV Generated" value={String(csvCount)} />
-          <UsageTile label="Time Saved" value={`${timeSavedHours} hours`} />
-        </div>
-        <p className="mt-3 text-xs text-zinc-500">
-          Estimates for platform operating costs only — not an invoice.
-        </p>
-      </div>
-
-      {/* Health check */}
-      <div className="rounded-3xl border border-zinc-200 bg-white p-5 shadow-sm">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h3 className="text-sm font-semibold text-zinc-900">System Check</h3>
-            <p className="mt-1 text-sm text-zinc-500">
-              Verify that everything needed to create listings is online.
-            </p>
+              Automatic
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                save({ ...settings, analysisMode: "custom" });
+                setAdvancedOpen(true);
+              }}
+              className={cn(
+                "rounded-full px-3 py-1.5 text-[12px] font-semibold",
+                settings.analysisMode === "custom"
+                  ? "bg-foreground text-background"
+                  : "text-muted-foreground",
+              )}
+            >
+              Custom
+            </button>
           </div>
           <Button
             type="button"
             onClick={() => void runHealthCheck()}
             disabled={healthLoading}
-            className="rounded-full"
+            className="rounded-xl"
           >
             {healthLoading ? (
               <>
-                <Loader2 className="size-4 animate-spin" />
-                Checking…
+                <Loader2 className="size-4 animate-spin" /> Checking
               </>
             ) : (
-              "Run System Check"
+              "Run check"
             )}
           </Button>
         </div>
-        {health ? (
-          <div className="mt-4 space-y-3">
-            <p
-              className={cn(
-                "text-sm font-medium",
-                health.ok ? "text-emerald-700" : "text-amber-700",
-              )}
-            >
-              {health.summary}
-            </p>
-            <div className="grid gap-2 sm:grid-cols-2">
-              {health.checks.map((check) => (
-                <div
-                  key={check.id}
-                  className="flex items-start gap-3 rounded-2xl bg-zinc-50 px-3 py-2.5 text-sm"
-                >
-                  <span
-                    className={cn(
-                      "mt-1 size-2 shrink-0 rounded-full",
-                      check.status === "ok"
-                        ? "bg-emerald-500"
-                        : check.status === "warn"
-                          ? "bg-amber-400"
-                          : "bg-rose-500",
-                    )}
-                  />
-                  <div>
-                    <p className="font-medium text-zinc-900">{check.label}</p>
-                    <p className="text-xs text-zinc-500">{check.detail}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        ) : null}
       </div>
 
-      {/* Advanced */}
-      <div className="rounded-3xl border border-zinc-200 bg-white shadow-sm">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        {serviceCards.map((card, i) => {
+          const Icon = card.icon;
+          const banner = i === 0;
+          return (
+            <motion.div
+              key={card.id}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: i * 0.06 }}
+              className={cn(
+                "relative overflow-hidden rounded-[24px] border border-border/70 bg-surface p-4 shadow-[0_16px_40px_-32px_rgba(20,16,8,0.45)]",
+                banner && "col-span-2 min-h-[148px] bg-foreground text-background",
+              )}
+            >
+              {healthLoading || banner ? (
+                <span
+                  aria-hidden
+                  className={cn(
+                    "pointer-events-none absolute inset-x-0 top-0 h-12 bg-gradient-to-b to-transparent [animation:higlou-scan_2s_ease-in-out_infinite]",
+                    banner ? "from-brand/40" : "from-brand/25",
+                  )}
+                />
+              ) : null}
+              <div className="flex items-start justify-between gap-2">
+                <span
+                  className={cn(
+                    "grid size-10 place-items-center rounded-2xl",
+                    banner
+                      ? "bg-brand text-foreground"
+                      : "bg-foreground text-brand",
+                  )}
+                >
+                  <Icon className="size-4" />
+                </span>
+                <StatusPill status={card.status} invert={banner} />
+              </div>
+              <p className="mt-4 text-[15px] font-semibold tracking-tight">
+                {card.title}
+              </p>
+              <p
+                className={cn(
+                  "mt-1 text-[12.5px]",
+                  banner ? "text-background/65" : "text-muted-foreground",
+                )}
+              >
+                {card.subtitle}
+              </p>
+            </motion.div>
+          );
+        })}
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <div className="col-span-2 overflow-hidden rounded-[24px] bg-foreground p-5 text-background">
+          <p className="text-[11px] font-semibold tracking-[0.16em] text-background/50 uppercase">
+            This month
+          </p>
+          <p className="mt-2 font-display text-4xl tracking-tight">
+            {products}
+            <span className="text-lg text-background/45"> / {target}</span>
+          </p>
+          <p className="mt-1 text-[13px] text-background/60">Products analyzed</p>
+          <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-background/15">
+            <motion.div
+              className="h-full bg-brand"
+              initial={{ width: 0 }}
+              animate={{
+                width: `${Math.min(100, (products / Math.max(target, 1)) * 100)}%`,
+              }}
+              transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
+            />
+          </div>
+        </div>
+        <UsageTile label="AI cost" value={money(aiCost)} />
+        <UsageTile label="Labels read" value={`${ocrUnits}`} />
+        <UsageTile label="CSVs" value={String(csvCount)} />
+        <UsageTile label="Hours saved" value={`${timeSavedHours}`} />
+      </div>
+
+      {healthLoading ? (
+        <div className="rounded-[24px] border border-border/70 bg-surface px-5 py-4">
+          <p className="inline-flex items-center gap-2 text-[13px] font-medium">
+            <Loader2 className="size-4 animate-spin" />
+            Checking photos → AI → eBay…
+          </p>
+          <div className="mt-3 h-1 overflow-hidden rounded-full bg-muted">
+            <motion.div
+              className="h-full w-1/3 bg-brand-gradient"
+              animate={{ x: ["-20%", "280%"] }}
+              transition={{ duration: 1.2, repeat: Infinity, ease: "linear" }}
+            />
+          </div>
+        </div>
+      ) : health && !health.ok ? (
+        <div className="rounded-[24px] border border-amber-200 bg-amber-50/70 p-4">
+          <p className="text-[13px] font-semibold text-amber-900">
+            {health.summary}
+          </p>
+          <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            {health.checks.map((check) => (
+              <div
+                key={check.id}
+                className="flex items-start gap-2 rounded-xl bg-white/70 px-3 py-2"
+              >
+                <span
+                  className={cn(
+                    "mt-1 size-2 shrink-0 rounded-full",
+                    check.status === "ok"
+                      ? "bg-success"
+                      : check.status === "warn"
+                        ? "bg-amber-400"
+                        : "bg-destructive",
+                  )}
+                />
+                <div className="min-w-0">
+                  <p className="text-[12.5px] font-medium">{check.label}</p>
+                  <p className="truncate text-[11px] text-muted-foreground">
+                    {check.detail}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : health?.ok ? (
+        <p className="inline-flex items-center gap-2 px-1 text-[13px] text-muted-foreground">
+          <LiveDot tone="success" />
+          {health.summary}
+        </p>
+      ) : null}
+
+      <div className="rounded-[24px] border border-border/80 bg-surface">
         <button
           type="button"
           className="flex w-full items-center justify-between px-5 py-4 text-left"
           onClick={() => setAdvancedOpen((o) => !o)}
         >
           <div>
-            <p className="text-sm font-semibold text-zinc-900">
-              Advanced AI Settings
-            </p>
-            <p className="text-xs text-zinc-500">
-              Optional. Most sellers never need this.
+            <p className="text-sm font-semibold">Operators</p>
+            <p className="text-[12px] text-muted-foreground">
+              Advanced AI, CSV template, budget — most sellers skip this.
             </p>
           </div>
           <ChevronDown
             className={cn(
-              "size-4 text-zinc-500 transition",
+              "size-4 text-muted-foreground transition",
               advancedOpen && "rotate-180",
             )}
           />
         </button>
         {advancedOpen ? (
-          <div className="space-y-5 border-t border-zinc-100 px-5 py-5">
+          <div className="space-y-5 border-t border-border/60 px-5 py-5">
             <div className="space-y-3">
               <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
                 Providers
@@ -725,8 +669,10 @@ export function AiSettingsForm() {
 
 function StatusPill({
   status,
+  invert = false,
 }: {
   status: "connected" | "ready" | "missing" | "checking";
+  invert?: boolean;
 }) {
   const label =
     status === "connected"
@@ -739,12 +685,14 @@ function StatusPill({
   return (
     <span
       className={cn(
-        "rounded-full px-2.5 py-1 text-xs font-medium",
-        status === "missing"
-          ? "bg-rose-50 text-rose-700"
-          : status === "checking"
-            ? "bg-zinc-100 text-zinc-600"
-            : "bg-emerald-50 text-emerald-700",
+        "rounded-full px-2.5 py-1 text-[11px] font-medium",
+        invert && status !== "missing"
+          ? "bg-background/15 text-background"
+          : status === "missing"
+            ? "bg-rose-50 text-rose-700"
+            : status === "checking"
+              ? "bg-zinc-100 text-zinc-600"
+              : "bg-emerald-50 text-emerald-700",
       )}
     >
       {label}
@@ -754,11 +702,13 @@ function StatusPill({
 
 function UsageTile({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-2xl bg-zinc-50 px-4 py-3">
-      <p className="text-[11px] font-medium uppercase tracking-wide text-zinc-500">
+    <div className="rounded-[24px] border border-border/70 bg-surface p-4 shadow-[0_16px_40px_-32px_rgba(20,16,8,0.45)]">
+      <p className="text-[11px] font-semibold tracking-[0.14em] text-muted-foreground uppercase">
         {label}
       </p>
-      <p className="mt-1 text-lg font-semibold text-zinc-950">{value}</p>
+      <p className="mt-2 text-xl font-semibold tracking-tight tabular-nums">
+        {value}
+      </p>
     </div>
   );
 }

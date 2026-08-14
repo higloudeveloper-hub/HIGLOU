@@ -20,23 +20,24 @@ import {
 import { buildHiglouDescriptionHtml } from "@/lib/ebay/description-html";
 import { sanitizeEbayHtml } from "@/lib/ebay/sanitize-html";
 import { displayNameFromEbayUsername } from "@/lib/ebay/store-display-name";
+import { LookLiveDemo } from "@/components/settings/look-live-demo";
 import { cn } from "@/lib/utils";
 
 const PREVIEW_CONTENT = {
-  productTitle: "Sample Product Title — Queen Comforter Set",
+  productTitle: "Milwaukee M18 FUEL 1/2 in. Hammer Drill",
   productIntroduction:
-    "A clean sample description so you can preview how your store branding and HTML template will look on eBay.",
+    "Brushless hammer drill. Label, box, and tool match the photos — this is how your store branding lands on eBay.",
   features: [
-    "Professional store-branded layout",
-    "Inline styles safe for Seller Hub",
-    "Highlights your shop name automatically",
+    "M18 FUEL brushless motor",
+    "1/2 in. chuck · hammer drill",
+    "New in box with original label",
   ],
   itemCondition: "New — unused, in original packaging",
-  packageContents: ["Main item", "Accessories as shown"],
+  packageContents: ["Hammer drill", "Original box"],
   specs: [
-    { label: "Brand", value: "Sample Brand" },
-    { label: "Size", value: "Queen" },
-    { label: "Color", value: "Yellow" },
+    { label: "Brand", value: "Milwaukee" },
+    { label: "MPN", value: "2804-20" },
+    { label: "Voltage", value: "18 V" },
   ],
 };
 
@@ -122,8 +123,19 @@ export function StoreBrandingForm() {
     setBranding((prev) =>
       cloneStoreBranding({
         ...prev,
-        ...preset.branding,
+        templateId: preset.branding.templateId,
         colors: { ...preset.branding.colors },
+        slogan: preset.branding.slogan,
+        thankYouMessage: preset.branding.thankYouMessage.replace(
+          preset.branding.storeName,
+          prev.storeName.trim() || preset.branding.storeName,
+        ),
+        thankYouSubtext: preset.branding.thankYouSubtext,
+        shippingInformation: preset.branding.shippingInformation,
+        footerText: preset.branding.footerText.replace(
+          preset.branding.storeName,
+          prev.storeName.trim() || preset.branding.storeName,
+        ),
         returnPolicyText: prev.returnPolicyText,
         warrantyInformation: prev.warrantyInformation,
         logoUrl: prev.logoUrl,
@@ -200,15 +212,24 @@ export function StoreBrandingForm() {
   );
 
   return (
-    <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_300px]">
+    <div className="space-y-6">
+      <LookLiveDemo
+        storeName={branding.storeNameDisplay || branding.storeName}
+        slogan={branding.slogan}
+        headerBg={branding.colors.headerBackground}
+        headerText={branding.colors.headerText}
+        accent={branding.colors.accent}
+      />
+
+      <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(280px,340px)]">
       <div className="min-w-0 space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
             <h2 className="text-lg font-semibold tracking-tight">
-              How listings look
+              Adjust the look
             </h2>
             <p className="text-[13px] text-muted-foreground">
-              Name, template, colors. Preview stays on the right.
+              Colors and template paint the eBay listing on the right.
             </p>
           </div>
           <Button
@@ -220,7 +241,7 @@ export function StoreBrandingForm() {
           </Button>
         </div>
 
-        <div className="rounded-3xl border border-border/80 bg-surface p-4 sm:p-5">
+        <div className="rounded-[24px] border border-border/80 bg-surface p-4 sm:p-5">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
               <p className="text-[11px] font-semibold tracking-[0.14em] text-muted-foreground uppercase">
@@ -245,23 +266,15 @@ export function StoreBrandingForm() {
               </button>
             ) : null}
           </div>
-          <div className="mt-4 grid gap-3 sm:grid-cols-2">
-            <Field label="Name in description">
+          <div className="mt-4">
+            <Field label="Name buyers see">
               <Input
                 value={branding.storeName}
                 onChange={(e) =>
-                  setBranding((prev) => ({ ...prev, storeName: e.target.value }))
-                }
-                className="h-10 rounded-xl"
-              />
-            </Field>
-            <Field label="Header">
-              <Input
-                value={branding.storeNameDisplay}
-                onChange={(e) =>
                   setBranding((prev) => ({
                     ...prev,
-                    storeNameDisplay: e.target.value,
+                    storeName: e.target.value,
+                    storeNameDisplay: e.target.value.toUpperCase(),
                   }))
                 }
                 className="h-10 rounded-xl"
@@ -299,11 +312,11 @@ export function StoreBrandingForm() {
         </div>
 
         {room === "look" ? (
-          <div className="space-y-4 rounded-3xl border border-border/80 bg-surface p-4 sm:p-5">
-            <Field label="Quick look">
+          <div className="space-y-4 rounded-[24px] border border-border/80 bg-surface p-4 sm:p-5">
+            <Field label="Style">
               <div className="flex flex-wrap gap-1.5">
                 {STORE_PRESETS.map((preset) => {
-                  const active = branding.storeName === preset.branding.storeName;
+                  const active = branding.templateId === preset.branding.templateId;
                   return (
                     <button
                       key={preset.id}
@@ -324,7 +337,7 @@ export function StoreBrandingForm() {
             </Field>
 
             <Field label="HTML template">
-              <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                 {DESCRIPTION_TEMPLATES.map((template) => {
                   const active = branding.templateId === template.id;
                   return (
@@ -333,30 +346,41 @@ export function StoreBrandingForm() {
                       type="button"
                       onClick={() => selectTemplate(template.id)}
                       className={cn(
-                        "rounded-2xl border p-2.5 text-left transition",
+                        "overflow-hidden rounded-2xl border text-left transition",
                         active
-                          ? "border-foreground bg-foreground text-background"
+                          ? "border-foreground ring-2 ring-foreground/15"
                           : "border-border hover:border-foreground/40",
                       )}
                     >
-                      <span className="flex items-center justify-between gap-1">
-                        <span className="text-[12px] font-semibold leading-tight">
+                      <span
+                        className="block px-3 py-4 text-center font-display text-[15px] tracking-tight"
+                        style={{
+                          background: template.suggestedColors.headerBackground,
+                          color: template.suggestedColors.headerText,
+                        }}
+                      >
+                        {branding.storeNameDisplay || "YOUR STORE"}
+                      </span>
+                      <span className="flex items-center justify-between px-3 py-2">
+                        <span className="text-[12px] font-semibold">
                           {template.name.replace(" Commerce", "")}
                         </span>
-                        {active ? <Check className="size-3.5" strokeWidth={3} /> : null}
-                      </span>
-                      <span className="mt-2 flex gap-1">
-                        {[
-                          template.suggestedColors.headerBackground,
-                          template.suggestedColors.accent,
-                          template.suggestedColors.panelBackground,
-                        ].map((color) => (
-                          <span
-                            key={`${template.id}-${color}`}
-                            className="size-2.5 rounded-full border border-black/10"
-                            style={{ background: color }}
-                          />
-                        ))}
+                        {active ? (
+                          <Check className="size-3.5" strokeWidth={3} />
+                        ) : (
+                          <span className="flex gap-1">
+                            {[
+                              template.suggestedColors.accent,
+                              template.suggestedColors.headerBackground,
+                            ].map((color) => (
+                              <span
+                                key={`${template.id}-${color}`}
+                                className="size-2.5 rounded-full border border-black/10"
+                                style={{ background: color }}
+                              />
+                            ))}
+                          </span>
+                        )}
                       </span>
                     </button>
                   );
@@ -395,7 +419,7 @@ export function StoreBrandingForm() {
             </Field>
           </div>
         ) : (
-          <div className="space-y-3 rounded-3xl border border-border/80 bg-surface p-4 sm:p-5">
+          <div className="space-y-3 rounded-[24px] border border-border/80 bg-surface p-4 sm:p-5">
             <Field label="Slogan">
               <Input
                 value={branding.slogan}
@@ -455,11 +479,11 @@ export function StoreBrandingForm() {
       </div>
 
       <aside className="lg:sticky lg:top-20">
-        <div className="overflow-hidden rounded-[28px] border border-border/80 bg-muted/40 shadow-[0_20px_50px_-40px_rgba(20,16,8,0.5)]">
+        <div className="overflow-hidden rounded-[24px] border border-border/80 bg-muted/40 shadow-[0_20px_50px_-40px_rgba(20,16,8,0.5)]">
           <div className="flex items-center justify-between border-b border-border/60 bg-surface px-4 py-3">
             <div>
               <p className="text-[10px] font-semibold tracking-[0.16em] text-muted-foreground uppercase">
-                eBay preview
+                Description HTML
               </p>
               <p className="text-[13px] font-medium">
                 {branding.storeNameDisplay || branding.storeName || "Your store"}
@@ -471,11 +495,12 @@ export function StoreBrandingForm() {
             />
           </div>
           <div
-            className="max-h-[min(68vh,560px)] overflow-auto bg-white p-3"
+            className="max-h-[min(58vh,520px)] overflow-auto bg-white p-3"
             dangerouslySetInnerHTML={{ __html: previewHtml }}
           />
         </div>
       </aside>
+      </div>
     </div>
   );
 }

@@ -1,10 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { ArrowRight, ShieldCheck, Sparkles } from "lucide-react";
+import { ArrowRight, ShieldCheck } from "lucide-react";
 import { ImageUploader } from "@/components/uploader/image-uploader";
 import { StickyActionBar } from "@/components/listing/wizard/sticky-action-bar";
-import { ListingPipeline } from "@/components/studio/listing-pipeline";
+import { PhotosWowStrip } from "@/components/listing/wizard/photos-wow-strip";
 import { CONDITION_OPTIONS } from "@/config/condition-map";
 import type { ProductImage } from "@/types/product";
 import { cn } from "@/lib/utils";
@@ -17,6 +16,7 @@ export function PhotosScreen({
   uploadingPending,
   canContinue,
   analysisError,
+  storeName,
   onImagesChange,
   onPriceChange,
   onConditionChange,
@@ -30,56 +30,16 @@ export function PhotosScreen({
   uploadingPending: boolean;
   canContinue: boolean;
   analysisError?: string | null;
+  storeName?: string | null;
   onImagesChange: (images: ProductImage[]) => void;
   onPriceChange: (price: number | null) => void;
   onConditionChange: (condition: string) => void;
   onContinue: () => void;
   onPhotoIntakeSessionChange?: (session: unknown) => void;
 }) {
-  const [coach, setCoach] = useState(false);
-
-  useEffect(() => {
-    try {
-      if (window.localStorage.getItem("higlou-photos-coach") === "1") return;
-    } catch {
-      /* ignore */
-    }
-    setCoach(true);
-  }, []);
-
   return (
     <div className="pb-28">
-      <div className="mx-auto max-w-[760px] animate-in fade-in slide-in-from-bottom-2 px-4 py-6 duration-500 sm:px-0">
-        {coach && images.length === 0 ? (
-          <div className="mb-4">
-            <ListingPipeline compact />
-          </div>
-        ) : coach ? (
-          <div className="mb-4 flex items-start gap-3 rounded-2xl border border-brand/40 bg-brand-soft/70 px-4 py-3">
-            <Sparkles className="mt-0.5 size-4 shrink-0 text-brand-foreground" />
-            <div className="min-w-0 flex-1">
-              <p className="text-[13px] font-semibold">Part 1 — just photos</p>
-              <p className="mt-0.5 text-[12.5px] text-muted-foreground">
-                Drop them in. Higlou writes the listing. You don’t need a
-                perfect title yet.
-              </p>
-            </div>
-            <button
-              type="button"
-              className="text-[12px] font-medium text-muted-foreground hover:text-foreground"
-              onClick={() => {
-                setCoach(false);
-                try {
-                  window.localStorage.setItem("higlou-photos-coach", "1");
-                } catch {
-                  /* ignore */
-                }
-              }}
-            >
-              Got it
-            </button>
-          </div>
-        ) : null}
+      <div className="mx-auto max-w-[1040px] animate-in fade-in slide-in-from-bottom-2 px-4 py-6 duration-500 sm:px-6">
         <section className="rounded-3xl border border-border/80 bg-surface p-5 shadow-[0_24px_60px_-48px_rgba(20,16,8,0.45)] sm:p-7">
           <ImageUploader
             images={images}
@@ -153,6 +113,12 @@ export function PhotosScreen({
             </span>
           </label>
         </div>
+
+        <PhotosWowStrip
+          images={images}
+          storeName={storeName}
+          price={price}
+        />
 
         {images.length > 0 && uploadingPending ? (
           <p className="mt-3 text-sm text-brand-foreground">

@@ -1677,6 +1677,7 @@ export function NewListingWorkspace({
           productId={listing.id}
           price={listing.price}
           condition={listing.condition}
+          storeName={storeBranding.storeName}
           uploadingPending={listing.images.length > 0 && !httpsImageUrls.length}
           canContinue={httpsImageUrls.length > 0 && !analyzing}
           analysisError={analysisError}

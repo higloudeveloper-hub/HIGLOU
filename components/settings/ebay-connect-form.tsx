@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { Link2, Loader2, RefreshCw, Unlink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { displayNameFromEbayUsername } from "@/lib/ebay/store-display-name";
+import { StoreLinkLive } from "@/components/settings/store-link-live";
 import { cn } from "@/lib/utils";
 
 type Connection = {
@@ -32,8 +33,10 @@ export function EbayConnectForm({
   const [storeName, setStoreName] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [pingMs, setPingMs] = useState<number | null>(null);
+  const [pinging, setPinging] = useState(false);
 
-  const load = async () => {
+  const load = async (opts?: { silent?: boolean }) => {
     try {
       const res = await fetch("/api/ebay/connection");
       const body = (await res.json()) as {
@@ -48,8 +51,13 @@ export function EbayConnectForm({
         ? displayNameFromEbayUsername(next.ebayUsername)
         : null;
       if (next?.connected) {
+        setPinging(true);
+        const started = performance.now();
         try {
-          const storeRes = await fetch("/api/ebay/store-name");
+          const storeRes = await fetch("/api/ebay/store-name", {
+            cache: "no-store",
+          });
+          setPingMs(Math.max(1, Math.round(performance.now() - started)));
           if (storeRes.ok) {
             const storeBody = (await storeRes.json()) as {
               storeName?: string | null;
@@ -57,8 +65,13 @@ export function EbayConnectForm({
             if (storeBody.storeName) resolved = storeBody.storeName;
           }
         } catch {
-          /* username fallback */
+          setPingMs(null);
+        } finally {
+          setPinging(false);
         }
+      } else {
+        setPingMs(null);
+        setPinging(false);
       }
       setStoreName(resolved);
       onStoreChange?.({
@@ -67,9 +80,11 @@ export function EbayConnectForm({
         storeName: resolved,
       });
     } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : "Failed to load eBay status",
-      );
+      if (!opts?.silent) {
+        toast.error(
+          error instanceof Error ? error.message : "Failed to load eBay status",
+        );
+      }
     } finally {
       setLoading(false);
     }
@@ -91,7 +106,9 @@ export function EbayConnectForm({
       const next = `${window.location.pathname}${params.toString() ? `?${params}` : ""}${window.location.hash || "#ebay-store"}`;
       window.history.replaceState({}, "", next);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- load on mount
+    const pulse = window.setInterval(() => void load({ silent: true }), 12_000);
+    return () => window.clearInterval(pulse);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- load on mount + live pulse
   }, []);
 
   const disconnect = async () => {
@@ -131,71 +148,53 @@ export function EbayConnectForm({
 
   return (
     <div className="space-y-4">
-      <div
-        className={cn(
-          "relative overflow-hidden rounded-3xl border p-5",
-          connected
-            ? "border-brand/40 bg-gradient-to-br from-brand-soft/70 to-surface"
-            : "border-border bg-muted/30",
-        )}
-      >
-        <div
-          aria-hidden
-          className="pointer-events-none absolute -top-10 -right-6 size-28 rounded-full bg-[radial-gradient(circle,rgba(255,199,44,0.35),transparent_70%)]"
-        />
-        <p className="text-[11px] font-semibold tracking-[0.16em] text-muted-foreground uppercase">
-          {connected ? "Connected store" : "No store yet"}
-        </p>
-        <h3 className="mt-1 font-display text-2xl tracking-tight">
-          {connected ? display : "Connect your eBay store"}
-        </h3>
-        <p className="mt-1 text-sm text-muted-foreground">
-          {connected
-            ? `${isProduction ? "Production" : "Sandbox"}${connection?.ebayUsername ? ` · @${connection.ebayUsername}` : ""}`
-            : configured
-              ? "Higlou can draft without this. Live publish needs the seller account."
-              : connection?.missingReason ||
-                "Add eBay Developer credentials to enable Connect."}
-        </p>
-        {connection?.lastError ? (
-          <p className="mt-2 text-xs text-red-600">{connection.lastError}</p>
-        ) : null}
+      <StoreLinkLive
+        live={Boolean(connected)}
+        storeName={connected ? display : "Connect your eBay store"}
+        username={connection?.ebayUsername}
+        envLabel={isProduction ? "Production" : "Sandbox"}
+        pingMs={pingMs}
+        pinging={pinging}
+      />
 
-        <div className="mt-4 flex flex-wrap gap-2">
-          {connected ? (
-            <Button
-              type="button"
-              variant="outline"
-              disabled={busy}
-              onClick={() => void disconnect()}
-            >
-              {busy ? (
-                <Loader2 className="size-4 animate-spin" />
-              ) : (
-                <Unlink className="size-4" />
-              )}
-              Disconnect
-            </Button>
-          ) : (
-            <Button
-              type="button"
-              disabled={!configured || busy}
-              className="higlou-cta-pulse"
-              onClick={() => {
-                window.location.href = "/api/ebay/oauth/start";
-              }}
-            >
-              <Link2 className="size-4" />
-              {isProduction
-                ? "Connect real eBay account"
-                : "Connect eBay Sandbox"}
-            </Button>
-          )}
-          <Button type="button" variant="ghost" onClick={() => void load()}>
-            <RefreshCw className="size-4" />
-            Refresh
+      {connection?.lastError ? (
+        <p className="text-xs text-red-600">{connection.lastError}</p>
+      ) : null}
+
+      <div className="flex flex-wrap gap-2">
+        {connected ? (
+          <Button
+            type="button"
+            variant="outline"
+            disabled={busy}
+            onClick={() => void disconnect()}
+          >
+            {busy ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : (
+              <Unlink className="size-4" />
+            )}
+            Disconnect
           </Button>
-        </div>
+        ) : (
+          <Button
+            type="button"
+            disabled={!configured || busy}
+            className="higlou-cta-pulse"
+            onClick={() => {
+              window.location.href = "/api/ebay/oauth/start";
+            }}
+          >
+            <Link2 className="size-4" />
+            {isProduction
+              ? "Connect real eBay account"
+              : "Connect eBay Sandbox"}
+          </Button>
+        )}
+        <Button type="button" variant="ghost" onClick={() => void load()}>
+          <RefreshCw className={cn("size-4", pinging && "animate-spin")} />
+          Refresh
+        </Button>
       </div>
 
       {isProduction ? (

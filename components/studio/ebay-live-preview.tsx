@@ -61,6 +61,7 @@ export function EbayLivePreview({
   storeName,
   live,
   compact = false,
+  className,
 }: {
   photoSrc: string;
   title: string;
@@ -68,13 +69,20 @@ export function EbayLivePreview({
   storeName: string;
   live: boolean;
   compact?: boolean;
+  className?: string;
 }) {
   const shop = useConnectedEbayStoreName(storeName);
   const price = live ? priceLabel.replace(/^US\s*/i, "") : "—";
 
   return (
-    <div className="overflow-hidden rounded-xl bg-white font-sans text-[#191919] shadow-[0_12px_32px_-18px_rgba(0,0,0,0.5)] ring-1 ring-black/10">
-      <div className="flex items-center gap-2 border-b border-[#e5e5e5] bg-white px-2.5 py-2">
+    <div
+      className={cn(
+        "flex min-h-0 flex-col overflow-hidden rounded-xl bg-white font-sans text-[#191919] shadow-[0_12px_32px_-18px_rgba(0,0,0,0.5)] ring-1 ring-black/10",
+        compact && "h-full",
+        className,
+      )}
+    >
+      <div className="flex shrink-0 items-center gap-2 border-b border-[#e5e5e5] bg-white px-2.5 py-2">
         <EbayWordmark className={compact ? "text-[15px]" : "text-[18px]"} />
         {!compact ? (
           <div className="flex min-w-0 flex-1 items-center gap-1 rounded-full border border-[#ccc] bg-[#f7f7f7] px-2.5 py-1 text-[11px] text-[#707070]">
@@ -92,7 +100,7 @@ export function EbayLivePreview({
       <div
         className={cn(
           "relative bg-white",
-          compact ? "aspect-[4/3]" : "aspect-square",
+          compact ? "min-h-[132px] flex-1" : "aspect-square",
         )}
       >
         <AnimatePresence mode="wait">
@@ -102,10 +110,10 @@ export function EbayLivePreview({
               key={photoSrc}
               src={photoSrc}
               alt=""
-              initial={{ y: -56, opacity: 0, scale: 0.92 }}
-              animate={{ y: 0, opacity: 1, scale: 1 }}
+              initial={{ y: -40, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
               exit={{ opacity: 0 }}
-              transition={{ type: "spring", stiffness: 280, damping: 22 }}
+              transition={{ type: "spring", stiffness: 320, damping: 26 }}
               className="absolute inset-0 size-full object-contain p-3"
             />
           ) : (
@@ -134,7 +142,7 @@ export function EbayLivePreview({
         ) : null}
       </div>
 
-      <div className={cn(compact ? "p-2.5" : "p-3")}>
+      <div className={cn("shrink-0", compact ? "p-2.5" : "p-3")}>
         {!compact ? (
           <p className="mb-1 text-[10px] text-[#707070]">
             Home › Business & Industrial › Power Tools
@@ -143,7 +151,7 @@ export function EbayLivePreview({
         <p
           className={cn(
             "font-semibold leading-snug",
-            compact ? "line-clamp-2 text-[12px]" : "line-clamp-2 text-[14px]",
+            compact ? "line-clamp-2 min-h-[32px] text-[12px]" : "line-clamp-2 text-[14px]",
             live ? "text-[#191919]" : "text-[#9b9b9b]",
           )}
         >
@@ -167,11 +175,11 @@ export function EbayLivePreview({
             "—"
           )}
         </p>
-        <p className="text-[11px] text-[#707070]">
+        <p className="min-h-[16px] text-[11px] text-[#707070]">
           {live ? "Free shipping · Arrives in 3–5 days" : "Waiting for publish"}
         </p>
 
-        <div className={cn("mt-2.5 grid gap-1.5", !compact && "grid-cols-1")}>
+        <div className="mt-2.5 grid gap-1.5">
           <div
             className={cn(
               "rounded-lg py-2 text-center text-[12px] font-bold",

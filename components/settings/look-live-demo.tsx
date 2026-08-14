@@ -101,8 +101,8 @@ export function LookLiveDemo({
         </div>
       </div>
 
-      <div className="grid min-h-[320px] gap-0 sm:grid-cols-[minmax(0,1.05fr)_minmax(260px,0.95fr)]">
-        <div className="relative p-4 sm:p-5">
+      <div className="grid h-[380px] sm:grid-cols-[minmax(0,1.05fr)_minmax(260px,0.95fr)]">
+        <div className="relative min-h-0 overflow-hidden p-4 sm:p-5">
           <AnimatePresence mode="wait">
             {beat === 0 ? (
               <motion.div
@@ -131,7 +131,7 @@ export function LookLiveDemo({
                       <img
                         src={shot.src}
                         alt=""
-                        className="absolute inset-0 h-full w-full object-cover"
+                        className="absolute inset-0 h-full w-full object-contain p-1"
                       />
                       <span className="absolute bottom-1 left-1 rounded-md bg-black/45 px-1.5 py-0.5 text-[10px] font-medium text-white/90">
                         {shot.label}
@@ -258,23 +258,15 @@ export function LookLiveDemo({
           </div>
         </div>
 
-        <div className="border-t border-white/10 bg-zinc-950/40 p-4 sm:border-t-0 sm:border-l sm:p-5">
+        <div className="min-h-0 border-t border-white/10 bg-zinc-950/40 p-3 sm:border-t-0 sm:border-l">
           <EbayLivePreview
+            compact
             photoSrc={PHOTOS[0].src}
             title={TITLE}
             priceLabel="$189.00"
             storeName={shop}
             live={live}
           />
-          <p className="mt-3 text-center text-[11px] text-background/45">
-            {live
-              ? `Published to ${shop}`
-              : beat === 0
-                ? "Waiting on photos…"
-                : beat === 1
-                  ? "Applying store branding…"
-                  : "Uploading to eBay…"}
-          </p>
         </div>
       </div>
     </section>

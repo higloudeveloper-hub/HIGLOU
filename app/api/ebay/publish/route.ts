@@ -35,6 +35,7 @@ import {
   inferVoltageFromText,
   parseMissingAspectFromEbayError,
 } from "@/lib/ebay/infer-voltage";
+import { ensureInferredDimensionAspects } from "@/lib/ebay/infer-item-dimensions";
 import { mapProductRow } from "@/lib/products/persistence";
 import type { ProductListing } from "@/types/product";
 import { createEmptyListing } from "@/lib/demo/sample-listing";
@@ -520,6 +521,7 @@ export async function POST(request: Request) {
           listing.categoryName,
           listing.brand,
           listing.model,
+          listing.size,
           ...(listing.features || []),
           ...(listing.itemSpecifics || []).map((s) => `${s.label} ${s.value}`),
         ]
@@ -543,6 +545,11 @@ export async function POST(request: Request) {
             [missingAspect]: [filled],
           };
           ensureInferredElectricalAspects(inventory.aspects, hay);
+          ensureInferredDimensionAspects(inventory.aspects, hay, {
+            lengthIn: listing.packageLengthIn,
+            widthIn: listing.packageWidthIn,
+            depthIn: listing.packageDepthIn,
+          });
           const key = `C:${missingAspect}`;
           const already = (listing.itemSpecifics || []).some(
             (s) =>

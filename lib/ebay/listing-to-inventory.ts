@@ -12,6 +12,7 @@ import type {
 } from "@/lib/ebay/inventory-api";
 import { sanitizeEbayAspects } from "@/lib/ebay/sanitize-aspects";
 import { ensureInferredElectricalAspects } from "@/lib/ebay/infer-voltage";
+import { ensureInferredDimensionAspects } from "@/lib/ebay/infer-item-dimensions";
 
 /** eBay Inventory API product.description must be 1–4000 chars. */
 const EBAY_INVENTORY_DESCRIPTION_MAX = 4000;
@@ -129,22 +130,28 @@ export function listingToInventoryItem(
     delete aspects[key];
   }
 
+  const aspectHay = [
+    listing.title,
+    listing.productType,
+    listing.type,
+    listing.categoryName,
+    listing.brand,
+    listing.model,
+    listing.size,
+    ...(listing.features || []),
+    ...(listing.itemSpecifics || []).map((s) => `${s.label} ${s.value}`),
+  ]
+    .filter(Boolean)
+    .join(" ");
+
   // Fill required electrical aspects (Voltage) from title/OCR before Inventory PUT.
-  ensureInferredElectricalAspects(
-    aspects,
-    [
-      listing.title,
-      listing.productType,
-      listing.type,
-      listing.categoryName,
-      listing.brand,
-      listing.model,
-      ...(listing.features || []),
-      ...(listing.itemSpecifics || []).map((s) => `${s.label} ${s.value}`),
-    ]
-      .filter(Boolean)
-      .join(" "),
-  );
+  ensureInferredElectricalAspects(aspects, aspectHay);
+  // Furniture 25002 (Item Length/Width/Height). Never copies FORCE_MINI 1×1×1.
+  ensureInferredDimensionAspects(aspects, aspectHay, {
+    lengthIn: listing.packageLengthIn,
+    widthIn: listing.packageWidthIn,
+    depthIn: listing.packageDepthIn,
+  });
 
   return {
     sku: listing.sku,

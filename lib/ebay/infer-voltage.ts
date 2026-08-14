@@ -3,6 +3,8 @@
  * (Voltage, Battery Technology → eBay 25002).
  */
 
+import { inferItemDimensionAspect } from "@/lib/ebay/infer-item-dimensions";
+
 export function formatEbayVoltage(value: string | number): string {
   const n = Number(String(value).replace(/[^\d.]/g, ""));
   if (!Number.isFinite(n) || n <= 0) return "";
@@ -160,7 +162,7 @@ export function inferAspectValueFromText(
   ) {
     return inferBatteryTechnologyFromText(text);
   }
-  return null;
+  return inferItemDimensionAspect(aspectName, text);
 }
 
 export function listingHasAspect(

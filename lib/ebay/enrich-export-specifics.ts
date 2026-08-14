@@ -1,5 +1,9 @@
 import { resolveCategorySpecifics } from "@/config/category-specifics";
 import { inferVoltageFromText, inferBatteryTechnologyFromText } from "@/lib/ebay/infer-voltage";
+import {
+  formatEbayInches,
+  inferItemDimsFromText,
+} from "@/lib/ebay/infer-item-dimensions";
 
 function normalizeCKey(key: string): string {
   const raw = String(key || "").trim();
@@ -295,6 +299,19 @@ export function enrichItemSpecificsForExport(input: {
     if (tech) columns["C:Battery Technology"] = tech;
   }
 
+  // Furniture 25002: Item Length / Width / Height (never 1" mini-package).
+  const dims = inferItemDimsFromText(batteryHay);
+  if (dims) {
+    if (!columns["C:Item Length"]?.trim() && dims.lengthIn) {
+      columns["C:Item Length"] = formatEbayInches(dims.lengthIn);
+    }
+    if (!columns["C:Item Width"]?.trim() && dims.widthIn) {
+      columns["C:Item Width"] = formatEbayInches(dims.widthIn);
+    }
+    if (!columns["C:Item Height"]?.trim() && dims.heightIn) {
+      columns["C:Item Height"] = formatEbayInches(dims.heightIn);
+    }
+  }
 
   if (isFaucetLike(input)) {
     const mount = firstNonEmpty(

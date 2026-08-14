@@ -1,36 +1,12 @@
 "use client";
 
-import {
-  ArrowRight,
-  Info,
-  Lightbulb,
-  ShieldCheck,
-  Sparkles,
-  Timer,
-} from "lucide-react";
+import { useEffect, useState } from "react";
+import { ArrowRight, ShieldCheck, Sparkles } from "lucide-react";
 import { ImageUploader } from "@/components/uploader/image-uploader";
 import { StickyActionBar } from "@/components/listing/wizard/sticky-action-bar";
 import { CONDITION_OPTIONS } from "@/config/condition-map";
 import type { ProductImage } from "@/types/product";
 import { cn } from "@/lib/utils";
-
-const VALUES = [
-  {
-    icon: Sparkles,
-    title: "AI-Powered",
-    body: "We analyze your photos and generate everything automatically.",
-  },
-  {
-    icon: Timer,
-    title: "Saves Time",
-    body: "From photos to an eBay + marketplace-ready CSV in minutes.",
-  },
-  {
-    icon: ShieldCheck,
-    title: "Expert Quality",
-    body: "Accurate titles, item specifics, and sell-ready descriptions.",
-  },
-] as const;
 
 export function PhotosScreen({
   images,
@@ -59,151 +35,137 @@ export function PhotosScreen({
   onContinue: () => void;
   onPhotoIntakeSessionChange?: (session: unknown) => void;
 }) {
+  const [coach, setCoach] = useState(false);
+
+  useEffect(() => {
+    try {
+      if (window.localStorage.getItem("higlou-photos-coach") === "1") return;
+    } catch {
+      /* ignore */
+    }
+    setCoach(true);
+  }, []);
+
   return (
     <div className="pb-28">
-      <div className="mx-auto grid max-w-[1600px] gap-8 px-6 py-10 lg:grid-cols-[340px_1fr]">
-        <aside className="space-y-6">
-          <span className="inline-flex items-center gap-2 rounded-full bg-brand-soft px-3 py-1 text-[11px] font-semibold tracking-wider text-brand-foreground uppercase">
-            Step 1 of 4
-          </span>
-          <div>
-            <h1 className="font-display text-[42px] leading-[1.05] tracking-tight">
-              Let&apos;s create
-              <br />
-              your listing<span className="text-brand">.</span>
-            </h1>
-            <p className="mt-4 max-w-sm text-[15px] leading-relaxed text-muted-foreground">
-              Add your product photos. Higlou will handle the rest.
-            </p>
-          </div>
-
-          <ul className="space-y-3">
-            {VALUES.map((v) => (
-              <li
-                key={v.title}
-                className="flex items-start gap-3 rounded-2xl border border-border bg-surface p-4 shadow-xs"
-              >
-                <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-brand-soft text-brand-foreground">
-                  <v.icon className="h-5 w-5" />
-                </span>
-                <div>
-                  <div className="text-[14px] font-semibold">{v.title}</div>
-                  <p className="mt-0.5 text-[13px] leading-relaxed text-muted-foreground">
-                    {v.body}
-                  </p>
-                </div>
-              </li>
-            ))}
-          </ul>
-
-          <div className="rounded-2xl border border-brand/40 bg-brand-soft/70 p-5">
-            <div className="flex items-center gap-2 text-[14px] font-semibold">
-              <Lightbulb className="h-4 w-4 text-brand-foreground" />
-              Tips for best results
+      <div className="mx-auto max-w-[760px] animate-in fade-in slide-in-from-bottom-2 px-4 py-6 duration-500 sm:px-0">
+        {coach ? (
+          <div className="mb-4 flex items-start gap-3 rounded-2xl border border-brand/40 bg-brand-soft/70 px-4 py-3">
+            <Sparkles className="mt-0.5 size-4 shrink-0 text-brand-foreground" />
+            <div className="min-w-0 flex-1">
+              <p className="text-[13px] font-semibold">Part 1 — just photos</p>
+              <p className="mt-0.5 text-[12.5px] text-muted-foreground">
+                Drop them in. Higlou writes the listing. You don’t need a
+                perfect title yet.
+              </p>
             </div>
-            <ul className="mt-3 space-y-1.5 text-[13px] text-foreground/80">
-              <li>• Add clear photos from multiple angles</li>
-              <li>• Include packaging, labels and details</li>
-              <li>
-                • More photos = better results{" "}
-                <span className="text-brand-foreground">✦</span>
-              </li>
-            </ul>
+            <button
+              type="button"
+              className="text-[12px] font-medium text-muted-foreground hover:text-foreground"
+              onClick={() => {
+                setCoach(false);
+                try {
+                  window.localStorage.setItem("higlou-photos-coach", "1");
+                } catch {
+                  /* ignore */
+                }
+              }}
+            >
+              Got it
+            </button>
           </div>
-        </aside>
-
-        <section className="rounded-3xl border border-border bg-surface p-6 shadow-sm md:p-8">
+        ) : null}
+        <section className="rounded-3xl border border-border/80 bg-surface p-5 shadow-[0_24px_60px_-48px_rgba(20,16,8,0.45)] sm:p-7">
           <ImageUploader
             images={images}
             onChange={onImagesChange}
             productId={productId}
             variant="wizard"
           />
-
-          <div className="mt-6 grid gap-4 rounded-2xl border border-border bg-background/50 p-5 md:grid-cols-2">
-            <div>
-              <label
-                htmlFor="wizard-price"
-                className="flex items-center gap-1.5 text-[13px] font-semibold"
-              >
-                Selling price{" "}
-                <Info className="h-3.5 w-3.5 text-muted-foreground" />
-              </label>
-              <div className="mt-2 flex overflow-hidden rounded-xl border border-border bg-surface focus-within:ring-2 focus-within:ring-brand/50">
-                <span className="border-r border-border bg-muted/60 px-3 py-2.5 text-[14px] font-medium">
-                  USD
-                </span>
-                <input
-                  id="wizard-price"
-                  type="number"
-                  inputMode="decimal"
-                  min={0}
-                  step="0.01"
-                  placeholder="0.00"
-                  value={price ?? ""}
-                  onChange={(e) => {
-                    const raw = e.target.value;
-                    if (raw === "") {
-                      onPriceChange(null);
-                      return;
-                    }
-                    const next = Number(raw);
-                    onPriceChange(Number.isFinite(next) ? next : null);
-                  }}
-                  className="w-full bg-transparent px-3 py-2.5 text-[15px] font-medium outline-none"
-                />
-              </div>
-              <p className="mt-1.5 text-[12px] text-muted-foreground">
-                Set the price you want to sell for
-              </p>
-            </div>
-            <div>
-              <label
-                htmlFor="wizard-condition"
-                className="flex items-center gap-1.5 text-[13px] font-semibold"
-              >
-                Condition{" "}
-                <Info className="h-3.5 w-3.5 text-muted-foreground" />
-              </label>
-              <select
-                id="wizard-condition"
-                value={condition || "New"}
-                onChange={(e) => onConditionChange(e.target.value)}
-                className={cn(
-                  "mt-2 w-full rounded-xl border border-border bg-surface px-3 py-2.5 text-[15px] font-medium outline-none",
-                  "focus:ring-2 focus:ring-brand/50",
-                )}
-              >
-                {CONDITION_OPTIONS.map((option) => (
-                  <option
-                    key={`${option.label}-${option.conditionId}`}
-                    value={option.label}
-                  >
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-              <p className="mt-1.5 text-[12px] text-muted-foreground">
-                Select the condition of your item
-              </p>
-            </div>
-          </div>
-
-          {images.length > 0 && uploadingPending ? (
-            <p className="mt-3 text-sm text-brand-foreground">
-              Waiting for uploads to finish…
-            </p>
-          ) : null}
-          {analysisError ? (
-            <p className="mt-3 text-sm text-destructive">{analysisError}</p>
-          ) : null}
+          <p className="mt-3 text-[13px] text-muted-foreground">
+            Clear shots from a few angles work best. Labels and packaging help.
+          </p>
         </section>
+
+        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+          <label className="rounded-2xl border border-border/80 bg-surface p-4">
+            <span className="text-[11px] font-semibold tracking-[0.12em] text-muted-foreground uppercase">
+              Selling price
+            </span>
+            <div className="mt-2 flex overflow-hidden rounded-xl border border-border bg-background focus-within:ring-2 focus-within:ring-brand/50">
+              <span className="border-r border-border px-3 py-2.5 text-[13px] font-medium text-muted-foreground">
+                USD
+              </span>
+              <input
+                id="wizard-price"
+                type="number"
+                inputMode="decimal"
+                min={0}
+                step="0.01"
+                placeholder="0.00"
+                value={price ?? ""}
+                onChange={(e) => {
+                  const raw = e.target.value;
+                  if (raw === "") {
+                    onPriceChange(null);
+                    return;
+                  }
+                  const next = Number(raw);
+                  onPriceChange(Number.isFinite(next) ? next : null);
+                }}
+                className="w-full bg-transparent px-3 py-2.5 text-[15px] font-medium outline-none"
+              />
+            </div>
+            <span className="mt-1.5 block text-[12px] text-muted-foreground">
+              Optional now. You can change it later.
+            </span>
+          </label>
+
+          <label className="rounded-2xl border border-border/80 bg-surface p-4">
+            <span className="text-[11px] font-semibold tracking-[0.12em] text-muted-foreground uppercase">
+              Condition
+            </span>
+            <select
+              id="wizard-condition"
+              value={condition || "New"}
+              onChange={(e) => onConditionChange(e.target.value)}
+              className={cn(
+                "mt-2 w-full rounded-xl border border-border bg-background px-3 py-2.5 text-[15px] font-medium outline-none",
+                "focus:ring-2 focus:ring-brand/50",
+              )}
+            >
+              {CONDITION_OPTIONS.map((option) => (
+                <option
+                  key={`${option.label}-${option.conditionId}`}
+                  value={option.label}
+                >
+                  {option.label}
+                </option>
+              ))}
+            </select>
+            <span className="mt-1.5 block text-[12px] text-muted-foreground">
+              Defaults to New. Change if it isn’t.
+            </span>
+          </label>
+        </div>
+
+        {images.length > 0 && uploadingPending ? (
+          <p className="mt-3 text-sm text-brand-foreground">
+            Waiting for uploads to finish…
+          </p>
+        ) : null}
+        {analysisError ? (
+          <p className="mt-3 text-sm text-destructive">{analysisError}</p>
+        ) : null}
       </div>
 
       <StickyActionBar
         left={
           <span className="hidden items-center gap-1.5 text-[12px] text-muted-foreground sm:inline-flex">
-            <ShieldCheck className="h-3.5 w-3.5" /> Your data is safe and secure
+            <ShieldCheck className="h-3.5 w-3.5" />
+              {images.length
+              ? `${images.length} photo${images.length === 1 ? "" : "s"} ready · next: AI writes`
+              : "Add at least one photo to continue"}
           </span>
         }
         right={
@@ -211,9 +173,10 @@ export function PhotosScreen({
             type="button"
             disabled={!canContinue}
             onClick={onContinue}
-            className="inline-flex items-center gap-2 rounded-xl bg-brand px-5 py-3 text-[14px] font-semibold text-brand-foreground shadow-sm transition-transform hover:-translate-y-px hover:shadow-md disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0 disabled:hover:shadow-sm"
+            className="inline-flex items-center gap-2 rounded-xl bg-foreground px-5 py-3 text-[14px] font-semibold text-background shadow-sm transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
           >
-            Create my listing <ArrowRight className="h-4 w-4" />
+            Continue
+            <ArrowRight className="h-4 w-4" />
           </button>
         }
       />

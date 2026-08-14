@@ -7,7 +7,6 @@ import {
   ArrowRight,
   Check,
   CircleUser,
-  Clock,
   Images,
   Layers,
   Loader2,
@@ -15,7 +14,6 @@ import {
   PackageCheck,
   Palette,
   Ruler,
-  ShieldCheck,
   Sparkles,
   Tag,
   AlertTriangle,
@@ -276,116 +274,59 @@ export function UnderstandScreen({
 
   return (
     <div className="pb-28">
-      <div className="mx-auto grid max-w-[1600px] gap-6 px-6 py-10 lg:grid-cols-[300px_1fr_420px]">
-        <aside className="space-y-6">
-          <div>
-            <h1 className="font-display text-[36px] leading-[1.08] tracking-tight">
-              Higlou is
-              <br />
-              understanding
-              <br />
-              your product<span className="text-brand">.</span>
-            </h1>
-            <p className="mt-4 flex items-center gap-2 text-[14px] text-muted-foreground">
-              {!complete && !hasError ? <LiveDot /> : null}
-              {complete
-                ? "Draft is ready to edit."
-                : hasError
-                  ? "We paused so you can fix this step."
-                  : "Watching every photo — nothing sits blank."}
-            </p>
-          </div>
-          <ol className="relative space-y-1">
-            {STAGES.map((s, i) => {
-              const pipe = pipeStatus(stages, s.pipe);
-              let state: "done" | "active" | "todo" | "failed" | "soft" =
-                i < stage ? "done" : i === stage ? "active" : "todo";
-              if (hasError && i === 0) state = "failed";
-              if (hasError && i > 0) state = "todo";
-              if (!hasError && complete) state = "done";
-              if (
-                !hasError &&
-                stages &&
-                (pipe === "partial" || pipe === "missing") &&
-                i <= stage
-              ) {
-                state = "soft";
-              }
-              return (
-                <li
-                  key={s.key}
-                  className={cn(
-                    "flex items-center gap-3 rounded-xl px-3 py-2.5 transition-colors",
-                    state === "active" &&
-                      "border-l-2 border-brand bg-brand-soft/60",
-                    state === "failed" &&
-                      "border-l-2 border-destructive bg-destructive/5",
-                  )}
-                >
-                  <span
-                    className={cn(
-                      "grid h-8 w-8 place-items-center rounded-full border transition-colors",
-                      state === "done" &&
-                        "border-success bg-success-soft text-success",
-                      state === "soft" &&
-                        "border-amber-500/50 bg-amber-500/10 text-amber-700",
-                      state === "active" &&
-                        "border-brand bg-brand/20 text-brand-foreground",
-                      state === "failed" &&
-                        "border-destructive bg-destructive/10 text-destructive",
-                      state === "todo" && "border-border text-muted-foreground",
-                    )}
-                  >
-                    {state === "done" ? (
-                      <Check className="h-4 w-4" strokeWidth={3} />
-                    ) : state === "failed" ? (
-                      <AlertTriangle className="h-4 w-4" />
-                    ) : state === "active" ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <Clock className="h-4 w-4" />
-                    )}
-                  </span>
-                  <div>
-                    <div
-                      className={cn(
-                        "text-[14px] font-medium",
-                        state === "todo" && "text-muted-foreground",
-                      )}
-                    >
-                      {s.label}
-                    </div>
-                    <div className="text-[11px] text-muted-foreground">
-                      {statusLabel(state)}
-                    </div>
-                  </div>
-                </li>
-              );
-            })}
-          </ol>
+      <div className="mx-auto max-w-[720px] animate-in fade-in slide-in-from-bottom-2 px-4 py-6 duration-500 sm:px-0">
+        <ol className="mb-5 flex gap-1.5 overflow-x-auto pb-1">
+          {STAGES.map((s, i) => {
+            const pipe = pipeStatus(stages, s.pipe);
+            let state: "done" | "active" | "todo" | "failed" | "soft" =
+              i < stage ? "done" : i === stage ? "active" : "todo";
+            if (hasError && i === 0) state = "failed";
+            if (hasError && i > 0) state = "todo";
+            if (!hasError && complete) state = "done";
+            if (
+              !hasError &&
+              stages &&
+              (pipe === "partial" || pipe === "missing") &&
+              i <= stage
+            ) {
+              state = "soft";
+            }
+            return (
+              <li
+                key={s.key}
+                className={cn(
+                  "flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold",
+                  state === "active" &&
+                    "border-brand bg-brand-soft text-foreground",
+                  state === "done" &&
+                    "border-transparent bg-foreground text-background",
+                  state === "failed" &&
+                    "border-destructive/40 bg-destructive/10 text-destructive",
+                  state === "soft" &&
+                    "border-amber-300 bg-amber-50 text-amber-900",
+                  state === "todo" &&
+                    "border-border bg-surface text-muted-foreground",
+                )}
+              >
+                {state === "active" ? (
+                  <Loader2 className="size-3 animate-spin" />
+                ) : state === "done" ? (
+                  <Check className="size-3" strokeWidth={3} />
+                ) : null}
+                {s.label}
+                <span className="sr-only">{statusLabel(state)}</span>
+              </li>
+            );
+          })}
+        </ol>
 
-          <div className="rounded-2xl border border-border bg-surface p-4">
-            <div className="flex items-start gap-3">
-              <ShieldCheck className="mt-0.5 h-5 w-5 text-foreground" />
-              <div>
-                <div className="text-[13px] font-semibold">
-                  Your images are safe and private
-                </div>
-                <p className="mt-1 text-[12px] text-muted-foreground">
-                  We use industry-leading security to protect your data.
-                </p>
-              </div>
-            </div>
-          </div>
-        </aside>
-
-        <section className="rounded-3xl border border-border bg-surface p-6 shadow-sm">
-          <div className="relative overflow-hidden rounded-2xl bg-muted/40">
+        <section className="overflow-hidden rounded-3xl border border-border/80 bg-surface shadow-[0_24px_60px_-48px_rgba(20,16,8,0.45)]">
+          <div className="relative bg-muted/40">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={heroSrc}
               alt="Product"
-              className="h-[320px] w-full object-cover sm:h-[420px] lg:h-[520px]"
+              className="h-[280px] w-full object-contain sm:h-[360px]"
             />
             {!complete && !hasError ? (
               <span
@@ -393,22 +334,14 @@ export function UnderstandScreen({
                 className="pointer-events-none absolute inset-x-0 top-0 h-24 bg-gradient-to-b from-brand/25 to-transparent [animation:higlou-scan_2.4s_ease-in-out_infinite]"
               />
             ) : null}
-            {[
-              "top-3 left-3 border-t-2 border-l-2",
-              "top-3 right-3 border-t-2 border-r-2",
-              "bottom-3 left-3 border-b-2 border-l-2",
-              "bottom-3 right-3 border-b-2 border-r-2",
-            ].map((cls) => (
-              <span key={cls} className={cn("absolute h-8 w-8 border-brand", cls)} />
-            ))}
-            <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between rounded-xl bg-background/85 px-3 py-2 text-[12px] font-medium backdrop-blur-md">
+            <div className="absolute right-3 bottom-3 left-3 flex items-center justify-between rounded-xl bg-background/90 px-3 py-2 text-[12px] font-medium backdrop-blur-md">
               <span className="inline-flex items-center gap-2">
                 {!complete && !hasError ? <LiveDot /> : null}
                 {hasError
                   ? "Paused"
                   : complete
-                    ? "Scan complete"
-                    : "Live scan"}
+                    ? "Draft ready"
+                    : STAGES[stage]?.label || "Reading photos"}
               </span>
               <span className="tabular-nums text-muted-foreground">
                 {complete || hasError
@@ -418,11 +351,11 @@ export function UnderstandScreen({
             </div>
           </div>
           {images.length > 1 ? (
-            <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
+            <div className="flex gap-2 overflow-x-auto border-t border-border/60 px-4 py-3">
               {images.slice(0, 8).map((img, i) => (
                 <div
                   key={img.id || i}
-                  className="size-14 shrink-0 overflow-hidden rounded-lg border border-border bg-muted"
+                  className="size-12 shrink-0 overflow-hidden rounded-lg border border-border bg-muted"
                 >
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
@@ -434,18 +367,8 @@ export function UnderstandScreen({
               ))}
             </div>
           ) : null}
-          <div className="mt-5">
-            <div className="flex items-center gap-2 text-[14px] font-medium">
-              <Sparkles className="h-4 w-4 text-brand-foreground" />
-              {hasError
-                ? isPhotoQualityError
-                  ? "Photo check needs attention"
-                  : "Analysis interrupted"
-                : complete
-                  ? "Analysis complete"
-                  : "Looking closely at your product…"}
-            </div>
-            <div className="mt-3 h-2 overflow-hidden rounded-full bg-muted">
+          <div className="px-5 pt-4 pb-2">
+            <div className="h-1.5 overflow-hidden rounded-full bg-muted">
               <motion.div
                 className={cn(
                   "h-full",
@@ -458,29 +381,33 @@ export function UnderstandScreen({
             </div>
             <p className="mt-2 text-[12px] text-muted-foreground">
               {hasError
-                ? "Recognition, extraction, category, and listing are separate steps — only the failed step is blocked."
+                ? "Only this step is blocked. Fix it, then continue."
                 : complete
-                  ? "Ready to build the listing."
+                  ? "Ready to edit the draft."
                   : secondaryLines[0] ||
-                    "Analyzing shape, materials, color, text and more…"}
+                    "Looking at shape, labels, color, and category…"}
             </p>
           </div>
         </section>
 
-        <section className="rounded-3xl border border-border bg-surface p-6 shadow-sm">
+        <section className="mt-4 rounded-3xl border border-border/80 bg-surface p-5 shadow-sm">
           <div className="flex items-start gap-3">
             <span
               className={cn(
                 "grid h-9 w-9 place-items-center rounded-full",
                 hasError
                   ? "bg-destructive/10 text-destructive"
-                  : "bg-success-soft text-success",
+                  : complete
+                    ? "bg-success-soft text-success"
+                    : "bg-brand-soft text-brand-foreground",
               )}
             >
               {hasError ? (
                 <AlertTriangle className="h-5 w-5" />
-              ) : (
+              ) : complete ? (
                 <Check className="h-5 w-5" strokeWidth={3} />
+              ) : (
+                <Loader2 className="h-5 w-5 animate-spin" />
               )}
             </span>
             <div>
@@ -652,7 +579,7 @@ export function UnderstandScreen({
                 have everything we need.
               </div>
               <p className="mt-1 text-[12.5px] text-muted-foreground">
-                Next, we&apos;ll build your listing automatically.
+                Next: check title, price, and specifics.
               </p>
             </motion.div>
           ) : null}
@@ -673,7 +600,7 @@ export function UnderstandScreen({
                 {images.length} photos uploaded
               </span>
               <span className="inline-flex items-center gap-1 text-[11.5px] text-muted-foreground">
-                <Images className="h-3 w-3" /> Your source photos
+                <Images className="h-3 w-3" /> Part 2 — Higlou is writing
               </span>
             </div>
           </>
@@ -691,12 +618,9 @@ export function UnderstandScreen({
               type="button"
               disabled={!complete || Boolean(analysisError)}
               onClick={onContinue}
-              className="inline-flex items-center gap-2 rounded-xl bg-brand px-5 py-2.5 text-[14px] font-semibold text-brand-foreground shadow-sm transition-transform hover:-translate-y-px hover:shadow-md disabled:cursor-not-allowed disabled:opacity-50"
+              className="inline-flex items-center gap-2 rounded-xl bg-foreground px-5 py-2.5 text-[14px] font-semibold text-background shadow-sm transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
             >
               Continue
-              <span className="ml-1 text-[10px] font-normal opacity-80">
-                Building your listing
-              </span>
               <ArrowRight className="h-4 w-4" />
             </button>
           </>

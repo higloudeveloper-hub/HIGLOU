@@ -331,19 +331,19 @@ export function ExportScreen({
           </div>
 
           {storeBranding && onStoreBrandingChange ? (
-            <div className="mb-6 rounded-2xl border-2 border-amber-400 bg-amber-50 p-1 shadow-sm">
+            <div className="mb-6">
               <StoreTemplatePicker
                 branding={storeBranding}
                 onChange={onStoreBrandingChange}
               />
             </div>
           ) : (
-            <div className="mb-6 rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950">
-              No se cargó el selector de tienda. Abre{" "}
-              <a className="font-semibold underline" href="/settings#branding">
+            <div className="mb-6 rounded-xl border border-border bg-surface px-4 py-3 text-sm text-muted-foreground">
+              Pick a store look in{" "}
+              <a className="font-semibold text-foreground underline" href="/settings#branding">
                 Settings → Store branding
-              </a>{" "}
-              o recarga la página (Ctrl+Shift+R).
+              </a>
+              .
             </div>
           )}
 
@@ -507,21 +507,13 @@ export function ExportScreen({
               Official Create Drafts CSV — the <strong>same file</strong> also
               imports into Don Baraton Admin when needed.
             </p>
-            {storeBranding && onStoreBrandingChange ? (
-              <div className="mt-3 rounded-2xl border-2 border-amber-400 bg-amber-50 p-1">
-                <StoreTemplatePicker
-                  branding={storeBranding}
-                  onChange={onStoreBrandingChange}
-                  compact
-                />
-              </div>
-            ) : (
-              <div className="mt-3 rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-[12px] text-amber-950">
+            {storeBranding && onStoreBrandingChange ? null : (
+              <div className="mt-3 rounded-xl border border-border px-3 py-2 text-[12px] text-muted-foreground">
                 Open{" "}
-                <a className="font-semibold underline" href="/settings#branding">
+                <a className="font-semibold text-foreground underline" href="/settings#branding">
                   Settings → Store branding
                 </a>{" "}
-                to pick store and HTML template.
+                to pick the HTML template.
               </div>
             )}
             <div className="mt-3 rounded-xl border border-amber-300/70 bg-amber-50/80 px-3 py-2.5 text-[12px] text-amber-950">

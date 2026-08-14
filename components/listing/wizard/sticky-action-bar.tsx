@@ -15,7 +15,7 @@ export function StickyActionBar({
   return (
     <div
       className={cn(
-        "fixed inset-x-0 bottom-0 z-30 border-t border-border bg-surface/90 backdrop-blur-lg",
+        "fixed inset-x-0 bottom-0 z-30 border-t border-border bg-surface/90 backdrop-blur-lg animate-in slide-in-from-bottom-2 duration-500",
         className,
       )}
     >

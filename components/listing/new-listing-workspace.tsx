@@ -48,7 +48,10 @@ import {
 } from "@/components/listing/review-helpers";
 import { readAiProviderSettings } from "@/components/settings/ai-settings-form";
 import type { ConfidenceStatus } from "@/lib/ai/confidence-engine";
-import type { WizardStep } from "@/components/listing/wizard/types";
+import {
+  wizardStepToProgressIndex,
+  type WizardStep,
+} from "@/components/listing/wizard/types";
 import { WizardShell } from "@/components/listing/wizard/wizard-shell";
 import { PhotosScreen } from "@/components/listing/wizard/photos-screen";
 import { UnderstandScreen } from "@/components/listing/wizard/understand-screen";
@@ -1560,6 +1563,13 @@ export function NewListingWorkspace({
       step={step}
       exported={exported}
       flush
+      onSelectStep={(index) => {
+        const current = wizardStepToProgressIndex(step);
+        if (index >= current) return;
+        if (index === 0) setStep("photos");
+        if (index === 1) setStep("reveal");
+        if (index === 2) setStep("review");
+      }}
       headerActions={
         showChrome ? (
           <button
@@ -1574,18 +1584,12 @@ export function NewListingWorkspace({
       }
     >
       {loadingProduct ? (
-        <div className="mx-auto grid max-w-[1600px] gap-6 px-6 py-10 lg:grid-cols-[300px_1fr_420px]">
-          <div className="space-y-4">
-            <SkeletonBlock className="h-10 w-48" />
-            <SkeletonBlock className="h-24 w-full" />
-            <SkeletonBlock className="h-40 w-full" />
-          </div>
-          <SkeletonBlock className="min-h-[420px] rounded-3xl" />
-          <div className="space-y-3">
-            <SkeletonBlock className="h-16 w-full rounded-2xl" />
-            <SkeletonBlock className="h-14 w-full rounded-2xl" />
-            <SkeletonBlock className="h-14 w-full rounded-2xl" />
-            <SkeletonBlock className="h-14 w-full rounded-2xl" />
+        <div className="mx-auto max-w-[720px] space-y-4 px-4 py-6 sm:px-0">
+          <SkeletonBlock className="h-8 w-48" />
+          <SkeletonBlock className="min-h-[320px] rounded-3xl" />
+          <div className="grid gap-3 sm:grid-cols-2">
+            <SkeletonBlock className="h-24 rounded-2xl" />
+            <SkeletonBlock className="h-24 rounded-2xl" />
           </div>
         </div>
       ) : null}

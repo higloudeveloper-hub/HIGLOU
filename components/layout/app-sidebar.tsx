@@ -81,7 +81,7 @@ export function AppSidebar({
               </div>
               <div className="mt-1.5 flex items-center gap-1.5 text-[11px] text-muted-foreground">
                 <LiveDot tone="success" />
-                Listing studio
+                Listing engine
               </div>
             </div>
           </div>
@@ -103,7 +103,7 @@ export function AppSidebar({
           New listing
         </Link>
         <p className="mt-2.5 px-1 text-[11px] leading-relaxed text-muted-foreground">
-          Photos → AI draft → edit → publish
+          1 Photos · 2 AI draft · 3 Edit · 4 Publish
         </p>
       </div>
 

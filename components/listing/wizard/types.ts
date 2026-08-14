@@ -18,20 +18,20 @@ export const WIZARD_STEP_COPY: Record<
   { title: string; subtitle: string }
 > = {
   photos: {
-    title: "Add product photos",
-    subtitle: "Clear shots help Higlou draft a better listing",
+    title: "Add your photos",
+    subtitle: "That’s the only hard part. Higlou drafts the rest.",
   },
   analyzing: {
-    title: "Higlou is reading your product",
-    subtitle: "Title, category, and specifics coming up",
+    title: "Reading your product",
+    subtitle: "Title, category, and specifics are being drafted now.",
   },
   review: {
-    title: "Edit your listing",
-    subtitle: "Fix title, price, and item specifics",
+    title: "Check the draft",
+    subtitle: "Fix anything that looks off, then go to publish.",
   },
   export: {
-    title: "Publish or export",
-    subtitle: "Send a draft to eBay, or download CSV",
+    title: "Publish",
+    subtitle: "Send a draft to eBay, or download a CSV.",
   },
 };
 
@@ -62,7 +62,7 @@ export function wizardStepOfLabel(step: WizardStep, exported = false): string {
 export function wizardProgressMeta(
   step: WizardStep,
   exported = false,
-): { title: string; subtitle: string; stepOf: string } {
+): { title: string; subtitle: string; stepOf: string; index: number } {
   const index = exported
     ? WIZARD_PROGRESS_STEPS.length - 1
     : wizardStepToProgressIndex(step);
@@ -72,5 +72,6 @@ export function wizardProgressMeta(
     title: copy.title,
     subtitle: copy.subtitle,
     stepOf: wizardStepOfLabel(step, exported),
+    index,
   };
 }

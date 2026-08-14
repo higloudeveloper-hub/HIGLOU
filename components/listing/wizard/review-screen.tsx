@@ -212,7 +212,7 @@ export function ReviewScreen({
         className="mx-auto max-w-[1120px] px-4 pt-5 sm:px-6"
       >
         {storeBranding && onStoreBrandingChange ? (
-          <div className="mb-4 rounded-2xl border-2 border-amber-400 bg-amber-50 p-1 shadow-sm">
+          <div className="mb-4">
             <StoreTemplatePicker
               branding={storeBranding}
               onChange={onStoreBrandingChange}
@@ -220,22 +220,18 @@ export function ReviewScreen({
             />
           </div>
         ) : (
-          <div className="mb-4 rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950">
-            No se cargó el selector de tienda. Abre{" "}
-            <a className="font-semibold underline" href="/settings#branding">
+          <div className="mb-4 rounded-xl border border-border bg-surface px-4 py-3 text-sm text-muted-foreground">
+            Pick a store look in{" "}
+            <a className="font-semibold text-foreground underline" href="/settings#branding">
               Settings → Store branding
             </a>
             .
           </div>
         )}
 
-        {/* Compact workspace header */}
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <h1 className="text-[22px] font-semibold tracking-tight sm:text-[24px]">
-                eBay draft
-              </h1>
               <span
                 className={cn(
                   "inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-[12px] font-medium",

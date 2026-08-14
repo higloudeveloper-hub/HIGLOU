@@ -17,6 +17,9 @@ import { AppShell } from "@/components/layout/app-shell";
 import { createClient } from "@/lib/supabase/client";
 import { formatRelativeTime } from "@/lib/format-relative-time";
 import { EmptyPanel, LiveDot, SkeletonBlock } from "@/components/ui/studio";
+import { FirstRunHome } from "@/components/studio/first-run-home";
+import { MoneyEngine } from "@/components/studio/money-engine";
+import { WelcomeGate } from "@/components/studio/welcome-gate";
 import { cn } from "@/lib/utils";
 
 type ProductRow = {
@@ -204,23 +207,44 @@ export default function HomeWorkspacePage() {
   const setupDoneCount = setupItems.filter((i) => i.done).length;
   const setupComplete = setupDoneCount === setupItems.length;
 
+  const isFirstRun = ready && products.length === 0;
+
   return (
+    <WelcomeGate>
     <AppShell hideHeader>
+      {!ready ? (
+        <div className="mx-auto max-w-3xl space-y-4 pt-6">
+          <SkeletonBlock className="h-8 w-40" />
+          <SkeletonBlock className="h-16 w-3/4" />
+          <SkeletonBlock className="h-48 rounded-3xl" />
+          <div className="grid gap-3 sm:grid-cols-2">
+            <SkeletonBlock className="h-28 rounded-2xl" />
+            <SkeletonBlock className="h-28 rounded-2xl" />
+          </div>
+        </div>
+      ) : isFirstRun ? (
+        <FirstRunHome
+          name={name}
+          setupDoneCount={setupDoneCount}
+          setupItems={setupItems.map(({ done, title, body, href }) => ({
+            done,
+            title,
+            body,
+            href,
+          }))}
+        />
+      ) : (
       <div className="mx-auto max-w-3xl">
-        <section className="relative overflow-hidden pb-10 pt-2">
-          <div
-            aria-hidden
-            className="pointer-events-none absolute -left-24 -top-16 size-72 rounded-full bg-[radial-gradient(circle_at_center,rgba(244,201,40,0.16),transparent_70%)]"
-          />
+        <section className="relative overflow-hidden pb-8 pt-2">
           <p className="flex items-center gap-2 text-[11px] font-semibold tracking-[0.22em] text-muted-foreground">
             <LiveDot />
-            HIGLOU STUDIO
+            Listing engine
           </p>
           <h1 className="mt-3 font-display text-4xl tracking-tight text-foreground sm:text-5xl">
             {greeting}
           </h1>
           <p className="mt-3 max-w-lg text-base text-muted-foreground">
-            Photos in. eBay draft out — four clear steps, every time.
+            Photos in. Higlou writes. You publish. Same four parts, every listing.
           </p>
           <div className="mt-8 flex flex-wrap items-center gap-3">
             <Link
@@ -228,7 +252,7 @@ export default function HomeWorkspacePage() {
               className="inline-flex h-12 items-center gap-2 rounded-xl bg-foreground px-6 text-sm font-semibold text-background transition hover:opacity-90"
             >
               <Sparkles className="size-4" />
-              New Listing
+              New listing
             </Link>
             {!setupComplete ? (
               <Link
@@ -241,6 +265,10 @@ export default function HomeWorkspacePage() {
             ) : null}
           </div>
         </section>
+
+        <div className="mb-8">
+          <MoneyEngine compact />
+        </div>
 
         <section className="grid gap-3 sm:grid-cols-3">
           {[
@@ -447,6 +475,8 @@ export default function HomeWorkspacePage() {
           )}
         </section>
       </div>
+      )}
     </AppShell>
+    </WelcomeGate>
   );
 }

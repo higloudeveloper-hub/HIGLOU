@@ -1,7 +1,6 @@
 "use client";
 
-import { HelpCircle } from "lucide-react";
-import { toast } from "sonner";
+import Link from "next/link";
 import { HiglouMark } from "@/components/listing/wizard/higlou-mark";
 import { WizardProgress } from "@/components/listing/wizard/wizard-progress";
 import {
@@ -17,62 +16,82 @@ export function WizardShell({
   headerActions,
   className,
   flush = false,
+  onSelectStep,
 }: {
   step: WizardStep;
   exported?: boolean;
   children: React.ReactNode;
-  /** Optional actions (e.g. Save Draft) shown near help on later steps */
   headerActions?: React.ReactNode;
   className?: string;
-  /** When true, main has no max-width padding (screens that manage their own layout). */
   flush?: boolean;
+  onSelectStep?: (index: number) => void;
 }) {
   const meta = wizardProgressMeta(step, exported);
 
   return (
-    <div className="flex min-h-dvh flex-col bg-background text-foreground">
-      <header className="sticky top-0 z-40 border-b border-border bg-surface/90 backdrop-blur-lg">
-        <div className="mx-auto flex max-w-[1600px] flex-col gap-3 px-4 py-3 sm:px-6 sm:py-0">
-          <div className="flex h-12 items-center gap-3 sm:h-[72px] sm:gap-6">
+    <div className="relative flex min-h-dvh flex-col bg-background text-foreground">
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-x-0 top-0 h-64 bg-[radial-gradient(900px_280px_at_50%_-40px,rgba(255,199,44,0.16),transparent_70%)]"
+      />
+
+      <header className="sticky top-0 z-40 border-b border-border/70 bg-background/85 backdrop-blur-xl">
+        <div className="mx-auto flex max-w-[1100px] flex-col gap-3 px-4 py-3 sm:px-6">
+          <div className="flex items-center gap-4">
             <HiglouMark className="shrink-0" />
             <div className="hidden min-w-0 flex-1 md:block">
-              <WizardProgress step={step} exported={exported} />
+              <WizardProgress
+                step={step}
+                exported={exported}
+                onSelect={onSelectStep}
+              />
             </div>
             <div className="ml-auto flex items-center gap-2">
               {headerActions}
-              <button
-                type="button"
-                className="inline-flex items-center gap-2 rounded-full border border-border bg-surface px-3 py-2 text-sm font-medium text-foreground shadow-xs transition-colors hover:bg-muted sm:px-4"
-                onClick={() =>
-                  toast.message("Need help?", {
-                    description:
-                      "Questions while listing? Open Home from the Higlou logo anytime.",
-                  })
-                }
+              <Link
+                href="/home"
+                className="hidden text-sm font-medium text-muted-foreground transition hover:text-foreground sm:inline"
               >
-                <HelpCircle className="h-4 w-4" />
-                <span className="hidden sm:inline">Need help?</span>
-              </button>
+                Exit
+              </Link>
             </div>
           </div>
-          <div className="flex items-end justify-between gap-3 border-t border-border/60 pb-1 pt-2 md:hidden">
+
+          <div className="flex items-end justify-between gap-3 border-t border-border/50 pt-3 md:hidden">
             <div className="min-w-0">
-              <p className="text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">
+              <p className="text-[11px] font-semibold tracking-[0.16em] text-muted-foreground uppercase">
                 Step {meta.stepOf}
               </p>
-              <p className="truncate text-[14px] font-semibold">{meta.title}</p>
+              <p className="truncate text-[15px] font-semibold">{meta.title}</p>
             </div>
-            <WizardProgress step={step} exported={exported} />
+            <WizardProgress
+              step={step}
+              exported={exported}
+              onSelect={onSelectStep}
+              className="max-w-[180px]"
+            />
           </div>
         </div>
       </header>
 
+      <div className="relative mx-auto w-full max-w-[1100px] px-4 pt-6 sm:px-6 sm:pt-8">
+        <div className="hidden animate-in fade-in slide-in-from-bottom-1 duration-500 md:block">
+          <p className="text-[11px] font-semibold tracking-[0.18em] text-muted-foreground uppercase">
+            Step {meta.stepOf}
+          </p>
+          <h1 className="mt-1.5 font-display text-3xl tracking-tight text-foreground sm:text-4xl">
+            {meta.title}
+          </h1>
+          <p className="mt-2 max-w-xl text-sm text-muted-foreground sm:text-[15px]">
+            {meta.subtitle}
+          </p>
+        </div>
+      </div>
+
       <main
         className={cn(
-          "flex-1",
-          flush
-            ? "w-full"
-            : "mx-auto w-full max-w-[1600px] px-4 py-6 sm:px-6 sm:py-8",
+          "relative flex-1",
+          flush ? "w-full" : "mx-auto w-full max-w-[1100px] px-4 py-6 sm:px-6",
           className,
         )}
       >

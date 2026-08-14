@@ -58,7 +58,7 @@ export function SettingsStudio() {
   }
 
   return (
-    <div className="mx-auto max-w-[920px] pb-20">
+    <div className="mx-auto max-w-[1100px] pb-20">
       <header className="pt-1 pb-6">
         <p className="text-[11px] font-semibold tracking-[0.18em] text-muted-foreground uppercase">
           Store
@@ -159,21 +159,8 @@ export function SettingsStudio() {
           ) : null}
 
           {tab === "brand" ? (
-            <section id="branding" className="scroll-mt-24 space-y-3">
-              <div>
-                <p className="text-[11px] font-semibold tracking-[0.14em] text-muted-foreground uppercase">
-                  Part 3
-                </p>
-                <h2 className="mt-1 text-lg font-semibold tracking-tight">
-                  How every listing looks
-                </h2>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  Store name, colors, and the HTML buyers see.
-                </p>
-              </div>
-              <div className="rounded-2xl border border-border/80 bg-surface p-5 sm:p-6">
-                <StoreBrandingForm />
-              </div>
+            <section id="branding" className="scroll-mt-24">
+              <StoreBrandingForm />
             </section>
           ) : null}
 

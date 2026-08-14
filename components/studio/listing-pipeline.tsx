@@ -31,7 +31,12 @@ const STAGES = [
 ] as const;
 
 const SAMPLE_TITLE = "Milwaukee M18 FUEL 1/2 in. Hammer Drill";
-const PHOTO_TONES = ["#d7c4a3", "#c9b08a", "#b08968", "#8f6a4a"];
+const SAMPLE_PHOTOS = [
+  "/demo/m18-front.webp",
+  "/demo/m18-label.webp",
+  "/demo/m18-box.webp",
+  "/demo/m18-angle.webp",
+] as const;
 
 function useTyped(text: string, on: boolean, reduce: boolean) {
   const [out, setOut] = useState(reduce || !on ? text : "");
@@ -109,18 +114,24 @@ export function ListingPipeline({
             1 · Photos
           </p>
           <div className="relative mt-2 grid grid-cols-2 gap-1.5">
-            {PHOTO_TONES.map((tone, i) => (
+            {SAMPLE_PHOTOS.map((src, i) => (
               <motion.div
-                key={tone}
+                key={src}
                 initial={false}
                 animate={{
-                  opacity: photosOn ? 1 : 0.25,
+                  opacity: photosOn ? 1 : 0.35,
                   y: photosOn ? 0 : 6,
                 }}
                 transition={{ delay: i * 0.12, duration: 0.35 }}
-                className="aspect-square rounded-lg"
-                style={{ background: tone }}
-              />
+                className="relative aspect-square overflow-hidden rounded-lg bg-muted"
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={src}
+                  alt=""
+                  className="absolute inset-0 h-full w-full object-cover"
+                />
+              </motion.div>
             ))}
             {stage === 0 && !reduce ? (
               <span

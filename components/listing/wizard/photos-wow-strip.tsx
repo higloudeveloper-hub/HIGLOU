@@ -10,10 +10,10 @@ import { cn } from "@/lib/utils";
 
 const SAMPLE_TITLE = "Milwaukee M18 FUEL 1/2 in. Hammer Drill";
 const PHOTO_SLOTS = [
-  { tone: "#d7c4a3", label: "Front" },
-  { tone: "#c9b08a", label: "Label" },
-  { tone: "#b08968", label: "Box" },
-  { tone: "#8f6a4a", label: "Angle" },
+  { src: "/demo/m18-front.webp", label: "Front" },
+  { src: "/demo/m18-label.webp", label: "Label" },
+  { src: "/demo/m18-box.webp", label: "Box" },
+  { src: "/demo/m18-angle.webp", label: "Angle" },
 ] as const;
 
 const BEATS = [
@@ -64,7 +64,6 @@ export function PhotosWowStrip({
   const priceLabel =
     price != null ? `$${price.toFixed(2)}` : writing ? "$189.00" : "—";
   const shots = images.slice(0, 4);
-  const filled = Math.max(shots.length, live || writing ? 4 : beat + 1);
 
   useEffect(() => {
     if (reduce) return;
@@ -83,24 +82,21 @@ export function PhotosWowStrip({
             <div className="grid grid-cols-2 gap-1.5">
               {PHOTO_SLOTS.map((slot, i) => {
                 const shot = shots[i];
-                const on = i < filled;
+                const src = shot?.previewUrl || shot?.url || slot.src;
                 return (
                   <motion.div
                     key={slot.label}
-                    initial={false}
-                    animate={{ opacity: on ? 1 : 0.28, scale: on ? 1 : 0.96 }}
+                    initial={{ opacity: 0, scale: 0.96 }}
+                    animate={{ opacity: 1, scale: 1 }}
                     transition={{ delay: i * 0.08, duration: 0.35 }}
-                    className="relative aspect-[4/3] overflow-hidden rounded-xl"
-                    style={{ background: slot.tone }}
+                    className="relative aspect-[4/3] overflow-hidden rounded-xl bg-zinc-800"
                   >
-                    {shot ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={shot.previewUrl || shot.url}
-                        alt=""
-                        className="absolute inset-0 h-full w-full object-cover"
-                      />
-                    ) : null}
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={src}
+                      alt=""
+                      className="absolute inset-0 h-full w-full object-cover"
+                    />
                     <span className="absolute bottom-1 left-1 rounded-md bg-black/45 px-1.5 py-0.5 text-[10px] font-medium text-white/90">
                       {slot.label}
                     </span>

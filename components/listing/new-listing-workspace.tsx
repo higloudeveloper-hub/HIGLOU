@@ -244,6 +244,18 @@ export function NewListingWorkspace({
   const [moreOpen, setMoreOpen] = useState(false);
   const [publishingDonBaraton, setPublishingDonBaraton] = useState(false);
   const [publishingEbay, setPublishingEbay] = useState(false);
+  const [ebayPublishMode, setEbayPublishMode] = useState<"draft" | "live" | null>(
+    null,
+  );
+  const [ebayPublishError, setEbayPublishError] = useState<string | null>(null);
+  const [ebayPublishResult, setEbayPublishResult] = useState<{
+    mode: "draft" | "live";
+    offerId?: string;
+    listingId?: string | null;
+    sellerHubHint?: string;
+    imageCount?: number;
+    storePath?: string;
+  } | null>(null);
   const [ebayConnection, setEbayConnection] = useState<{
     connected: boolean;
     configured: boolean;
@@ -1463,10 +1475,12 @@ export function NewListingWorkspace({
       setListing((prev) => ({ ...prev, ...withPackage }));
     }
 
-    await persistDraft({ quiet: true, draft: withPackage });
-
+    setEbayPublishError(null);
+    setEbayPublishResult(null);
+    setEbayPublishMode(mode);
     setPublishingEbay(true);
     try {
+      await persistDraft({ quiet: true, draft: withPackage });
       const productId =
         /^[0-9a-f-]{36}$/i.test(withPackage.id) ? withPackage.id : undefined;
       const response = await fetch("/api/ebay/publish", {
@@ -1532,6 +1546,7 @@ export function NewListingWorkspace({
       } | null;
       if (!response.ok) {
         if (body?.code === "EBAY_NOT_CONNECTED") {
+          setEbayPublishError("Connect your eBay store first");
           toast.error("Connect your eBay store first", {
             description: "Settings → eBay store connection",
             action: {
@@ -1564,15 +1579,24 @@ export function NewListingWorkspace({
             folderBit,
         },
       );
+      setEbayPublishResult({
+        mode,
+        offerId: body?.offerId,
+        listingId: body?.listingId || null,
+        sellerHubHint: body?.sellerHubHint,
+        imageCount: body?.imageCount,
+        storePath: body?.storeOrganize?.storePath,
+      });
       if (body?.storeOrganizeWarning) {
         toast.warning("Published, but Store folder failed", {
           description: body.storeOrganizeWarning,
         });
       }
     } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : "eBay publish failed",
-      );
+      const message =
+        error instanceof Error ? error.message : "eBay publish failed";
+      setEbayPublishError(message);
+      toast.error(message);
     } finally {
       setPublishingEbay(false);
     }
@@ -1585,6 +1609,10 @@ export function NewListingWorkspace({
     setCostEstimate(null);
     setFieldConfidence({});
     setMoreOpen(false);
+    setPublishingEbay(false);
+    setEbayPublishMode(null);
+    setEbayPublishError(null);
+    setEbayPublishResult(null);
     toast.success("Ready for a new product");
   };
 
@@ -1757,6 +1785,17 @@ export function NewListingWorkspace({
           ebayConfigured={ebayConnection.configured}
           onPublishToEbay={(mode) => void publishToEbay(mode)}
           publishingEbay={publishingEbay}
+          ebayPublishMode={ebayPublishMode}
+          ebayPublishResult={ebayPublishResult}
+          ebayPublishError={ebayPublishError}
+          onRetryEbayPublish={() => {
+            if (ebayPublishMode) void publishToEbay(ebayPublishMode);
+          }}
+          onDismissEbayPublish={() => {
+            setEbayPublishError(null);
+            setEbayPublishResult(null);
+            setEbayPublishMode(null);
+          }}
         />
       ) : null}
 

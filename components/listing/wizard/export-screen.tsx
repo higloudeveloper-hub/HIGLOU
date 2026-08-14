@@ -1,11 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import {
   ArrowLeft,
   Check,
   Download,
+  ExternalLink,
   Loader2,
   Pencil,
   Save,
@@ -14,11 +15,294 @@ import {
 } from "lucide-react";
 import { StickyActionBar } from "@/components/listing/wizard/sticky-action-bar";
 import { StoreTemplatePicker } from "@/components/listing/store-template-picker";
+import { LiveDot } from "@/components/ui/studio";
 import { resolveListingPackage } from "@/lib/ebay/package-shipping";
 import { displayNameFromEbayUsername } from "@/lib/ebay/store-display-name";
 import type { ProductListing } from "@/types/product";
 import type { StoreBranding } from "@/config/store-branding";
 import { cn } from "@/lib/utils";
+
+const LIVE_STAGES = [
+  "Saving your listing",
+  "Hosting photos on eBay",
+  "Building the offer",
+  "Publishing live",
+  "Filing in your store",
+] as const;
+
+const DRAFT_STAGES = [
+  "Saving your listing",
+  "Hosting photos on eBay",
+  "Creating unpublished draft",
+] as const;
+
+type EbayPublishResult = {
+  mode: "draft" | "live";
+  offerId?: string;
+  listingId?: string | null;
+  sellerHubHint?: string;
+  imageCount?: number;
+  storePath?: string;
+};
+
+function PublishProgressOverlay({
+  mode,
+  running,
+  error,
+  result,
+  storeLabel,
+  title,
+  photoSrc,
+  onRetry,
+  onDismiss,
+  onListAnother,
+}: {
+  mode: "draft" | "live";
+  running: boolean;
+  error: string | null;
+  result: EbayPublishResult | null;
+  storeLabel: string;
+  title: string;
+  photoSrc: string;
+  onRetry: () => void;
+  onDismiss: () => void;
+  onListAnother?: () => void;
+}) {
+  const stages = mode === "live" ? LIVE_STAGES : DRAFT_STAGES;
+  const done = Boolean(result) && !running && !error;
+  const failed = Boolean(error) && !running;
+  const [stage, setStage] = useState(0);
+  const [progress, setProgress] = useState(8);
+
+  useEffect(() => {
+    if (done) {
+      setStage(stages.length);
+      setProgress(100);
+      return;
+    }
+    if (failed) {
+      setProgress(100);
+      return;
+    }
+    if (!running) return;
+    setStage(0);
+    setProgress(8);
+    const stageTick = window.setInterval(() => {
+      setStage((s) => Math.min(s + 1, stages.length - 1));
+    }, 1400);
+    const barTick = window.setInterval(() => {
+      setProgress((p) => (p >= 90 ? 90 : p + 3));
+    }, 180);
+    return () => {
+      window.clearInterval(stageTick);
+      window.clearInterval(barTick);
+    };
+  }, [running, done, failed, stages.length]);
+
+  const listingUrl = result?.listingId
+    ? `https://www.ebay.com/itm/${result.listingId}`
+    : null;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-50 grid place-items-center bg-background/80 p-4 backdrop-blur-md"
+    >
+      <motion.section
+        initial={{ opacity: 0, y: 16, scale: 0.98 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={{ opacity: 0, y: 8 }}
+        transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
+        className="w-full max-w-[440px] overflow-hidden rounded-3xl border border-border bg-surface shadow-[0_30px_80px_-40px_rgba(20,16,8,0.55)]"
+      >
+        <div className="relative bg-muted/40">
+          {photoSrc ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={photoSrc}
+              alt=""
+              className="h-[160px] w-full object-contain"
+            />
+          ) : (
+            <div className="grid h-[160px] place-items-center text-sm text-muted-foreground">
+              eBay
+            </div>
+          )}
+          {running ? (
+            <span
+              aria-hidden
+              className="pointer-events-none absolute inset-x-0 top-0 h-16 bg-gradient-to-b from-brand/30 to-transparent [animation:higlou-scan_2.2s_ease-in-out_infinite]"
+            />
+          ) : null}
+          <div className="absolute right-3 bottom-3 left-3 flex items-center justify-between rounded-xl bg-background/92 px-3 py-2 text-[12px] font-medium backdrop-blur-md">
+            <span className="inline-flex items-center gap-2">
+              {running ? <LiveDot /> : null}
+              {failed
+                ? "Paused"
+                : done
+                  ? mode === "live"
+                    ? "Live on eBay"
+                    : "Draft on eBay"
+                  : mode === "live"
+                    ? "Going live…"
+                    : "Sending draft…"}
+            </span>
+            <span className="tabular-nums text-muted-foreground">
+              {progress}%
+            </span>
+          </div>
+        </div>
+
+        <div className="p-5">
+          <h2 className="text-[17px] font-semibold tracking-tight">
+            {failed
+              ? "Couldn’t finish publish"
+              : done
+                ? mode === "live"
+                  ? `Live in ${storeLabel}`
+                  : `Draft in ${storeLabel}`
+                : mode === "live"
+                  ? `Publishing live to ${storeLabel}`
+                  : `Creating a draft in ${storeLabel}`}
+          </h2>
+          <p className="mt-1 line-clamp-2 text-[13px] text-muted-foreground">
+            {title || "Your listing"}
+          </p>
+
+          <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-muted">
+            <motion.div
+              className={cn(
+                "h-full",
+                failed ? "bg-destructive/70" : "bg-brand-gradient",
+              )}
+              initial={{ width: 0 }}
+              animate={{ width: `${progress}%` }}
+              transition={{ ease: "easeOut" }}
+            />
+          </div>
+
+          <ol className="mt-4 space-y-1.5">
+            {stages.map((label, i) => {
+              const state = failed
+                ? i < stage
+                  ? "done"
+                  : i === stage
+                    ? "failed"
+                    : "todo"
+                : done || i < stage
+                  ? "done"
+                  : i === stage
+                    ? "active"
+                    : "todo";
+              return (
+                <li
+                  key={label}
+                  className="flex items-center gap-2.5 text-[13px]"
+                >
+                  <span
+                    className={cn(
+                      "grid size-6 place-items-center rounded-full",
+                      state === "done" && "bg-success-soft text-success",
+                      state === "active" && "bg-brand-soft text-foreground",
+                      state === "failed" && "bg-destructive/10 text-destructive",
+                      state === "todo" && "bg-muted text-muted-foreground",
+                    )}
+                  >
+                    {state === "active" ? (
+                      <Loader2 className="size-3.5 animate-spin" />
+                    ) : state === "done" ? (
+                      <Check className="size-3.5" strokeWidth={3} />
+                    ) : (
+                      <span className="size-1.5 rounded-full bg-current" />
+                    )}
+                  </span>
+                  <span
+                    className={cn(
+                      state === "todo" && "text-muted-foreground",
+                      state === "failed" && "text-destructive",
+                      state === "active" && "font-medium",
+                    )}
+                  >
+                    {label}
+                  </span>
+                </li>
+              );
+            })}
+          </ol>
+
+          {failed ? (
+            <div className="mt-4 space-y-3">
+              <p className="text-[13px] text-destructive">{error}</p>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={onRetry}
+                  className="inline-flex flex-1 items-center justify-center rounded-xl bg-foreground px-4 py-2.5 text-[13px] font-semibold text-background"
+                >
+                  Try again
+                </button>
+                <button
+                  type="button"
+                  onClick={onDismiss}
+                  className="rounded-xl border border-border px-4 py-2.5 text-[13px] font-medium"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          ) : null}
+
+          {done ? (
+            <div className="mt-4 space-y-3">
+              <p className="text-[13px] text-muted-foreground">
+                {result?.sellerHubHint ||
+                  (mode === "live"
+                    ? "Your listing is live on eBay."
+                    : "Unpublished draft is waiting in Seller Hub.")}
+              </p>
+              {result?.listingId ? (
+                <p className="text-[12px] text-muted-foreground">
+                  Listing {result.listingId}
+                  {result.storePath ? ` · ${result.storePath}` : ""}
+                </p>
+              ) : null}
+              <div className="flex flex-col gap-2">
+                {listingUrl ? (
+                  <a
+                    href={listingUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center justify-center gap-2 rounded-xl bg-brand px-4 py-2.5 text-[14px] font-semibold text-brand-foreground"
+                  >
+                    Open on eBay <ExternalLink className="h-4 w-4" />
+                  </a>
+                ) : null}
+                {onListAnother ? (
+                  <button
+                    type="button"
+                    onClick={onListAnother}
+                    className="rounded-xl border border-border py-2.5 text-[13px] font-medium hover:bg-muted"
+                  >
+                    List another
+                  </button>
+                ) : null}
+                <button
+                  type="button"
+                  onClick={onDismiss}
+                  className="text-[12.5px] font-medium text-muted-foreground hover:text-foreground"
+                >
+                  Back to Publish
+                </button>
+              </div>
+            </div>
+          ) : null}
+        </div>
+      </motion.section>
+    </motion.div>
+  );
+}
 
 function PublishEbayButton({
   connected,
@@ -68,7 +352,11 @@ function PublishEbayButton({
       ) : (
         <Store className={hero ? "h-5 w-5" : "h-4 w-4"} />
       )}
-      {publishing ? "Sending to eBay…" : `Publish to eBay · ${storeLabel}`}
+      {publishing
+        ? "Publishing…"
+        : hero
+          ? `Publish to eBay · ${storeLabel}`
+          : `Publish live · ${storeLabel}`}
     </button>
   );
 }
@@ -96,6 +384,11 @@ export function ExportScreen({
   ebayConfigured = false,
   onPublishToEbay,
   publishingEbay = false,
+  ebayPublishMode = null,
+  ebayPublishResult = null,
+  ebayPublishError = null,
+  onRetryEbayPublish,
+  onDismissEbayPublish,
 }: {
   listing: ProductListing;
   productName?: string;
@@ -119,6 +412,11 @@ export function ExportScreen({
   ebayConfigured?: boolean;
   onPublishToEbay?: (mode: "draft" | "live") => void;
   publishingEbay?: boolean;
+  ebayPublishMode?: "draft" | "live" | null;
+  ebayPublishResult?: EbayPublishResult | null;
+  ebayPublishError?: string | null;
+  onRetryEbayPublish?: () => void;
+  onDismissEbayPublish?: () => void;
 }) {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [exporting, setExporting] = useState(false);
@@ -276,23 +574,39 @@ export function ExportScreen({
                 {facts.join(" · ") || "Confirm details, then publish"}
               </p>
 
-              <div className="mt-5">
-                <PublishEbayButton
-                  connected={ebayConnected}
-                  configured={ebayConfigured}
-                  publishing={publishingEbay}
-                  disabled={exportDisabled}
-                  storeLabel={connectedStoreName}
-                  onPublishDraft={() => onPublishToEbay?.("draft")}
-                />
+              <div className="mt-5 space-y-2">
                 {ebayConnected ? (
                   <button
                     type="button"
                     disabled={exportDisabled || publishingEbay || !onPublishToEbay}
                     onClick={() => onPublishToEbay?.("live")}
-                    className="mt-2 w-full text-center text-[12.5px] font-medium text-muted-foreground underline-offset-2 hover:text-foreground hover:underline disabled:opacity-50"
+                    className="higlou-cta-pulse inline-flex h-14 w-full items-center justify-center gap-2 rounded-2xl bg-brand text-[16px] font-semibold text-brand-foreground transition hover:-translate-y-px disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0"
                   >
-                    Or publish live now
+                    {publishingEbay && ebayPublishMode === "live" ? (
+                      <Loader2 className="h-5 w-5 animate-spin" />
+                    ) : (
+                      <Store className="h-5 w-5" />
+                    )}
+                    Publish live · {connectedStoreName}
+                  </button>
+                ) : (
+                  <PublishEbayButton
+                    connected={ebayConnected}
+                    configured={ebayConfigured}
+                    publishing={publishingEbay}
+                    disabled={exportDisabled}
+                    storeLabel={connectedStoreName}
+                    onPublishDraft={() => onPublishToEbay?.("draft")}
+                  />
+                )}
+                {ebayConnected ? (
+                  <button
+                    type="button"
+                    disabled={exportDisabled || publishingEbay || !onPublishToEbay}
+                    onClick={() => onPublishToEbay?.("draft")}
+                    className="inline-flex h-11 w-full items-center justify-center rounded-xl border border-border text-[13px] font-medium hover:bg-muted disabled:opacity-50"
+                  >
+                    Create unpublished draft instead
                   </button>
                 ) : null}
                 {exportDisabledReason ? (
@@ -301,8 +615,8 @@ export function ExportScreen({
                   </p>
                 ) : (
                   <p className="mt-2 text-[12px] text-muted-foreground">
-                    Creates an unpublished eBay draft in {connectedStoreName}.
-                    You can go live from Seller Hub after a last look.
+                    Live sends the listing to {connectedStoreName} now. Draft
+                    stays unpublished in Seller Hub until you go live.
                   </p>
                 )}
               </div>
@@ -419,7 +733,9 @@ export function ExportScreen({
               publishing={publishingEbay}
               disabled={exportDisabled}
               storeLabel={connectedStoreName}
-              onPublishDraft={() => onPublishToEbay?.("draft")}
+              onPublishDraft={() =>
+                onPublishToEbay?.(ebayConnected ? "live" : "draft")
+              }
               size="bar"
             />
           </>
@@ -475,6 +791,32 @@ export function ExportScreen({
               </div>
             </motion.div>
           </motion.div>
+        ) : null}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {ebayPublishMode &&
+        (publishingEbay || ebayPublishResult || ebayPublishError) ? (
+          <PublishProgressOverlay
+            key="ebay-publish-progress"
+            mode={ebayPublishMode}
+            running={publishingEbay}
+            error={ebayPublishError}
+            result={ebayPublishResult}
+            storeLabel={connectedStoreName}
+            title={listing.title}
+            photoSrc={heroSrc}
+            onRetry={() => onRetryEbayPublish?.()}
+            onDismiss={() => onDismissEbayPublish?.()}
+            onListAnother={
+              onStartNew
+                ? () => {
+                    onDismissEbayPublish?.();
+                    onStartNew();
+                  }
+                : undefined
+            }
+          />
         ) : null}
       </AnimatePresence>
     </div>

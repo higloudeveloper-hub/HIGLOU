@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { DescriptionEditor } from "@/components/description/description-editor";
 import { StoreTemplatePicker } from "@/components/listing/store-template-picker";
+import { EditPromoStrip } from "@/components/listing/wizard/edit-promo-strip";
 import { StickyActionBar } from "@/components/listing/wizard/sticky-action-bar";
 import { usePrefersReducedMotion } from "@/components/listing/wizard/use-prefers-reduced-motion";
 import { Input } from "@/components/ui/input";
@@ -869,6 +870,23 @@ export function ReviewScreen({
             </TabsContent>
           </Tabs>
         </div>
+
+        <EditPromoStrip
+          photoSrc={hero?.previewUrl || hero?.url}
+          title={listing.title}
+          priceLabel={
+            listing.price != null ? `$${listing.price.toFixed(2)}` : "Set price"
+          }
+          storeName={storeBranding?.storeName || ""}
+          categoryLabel={categoryLabel}
+          categoryMatch={perfectCategory}
+          photoCount={photos.length}
+          shipsFrom={listing.itemLocation || "Logansport, IN"}
+          shippingLabel={
+            findShippingServiceOption(selectedService)?.label || selectedService
+          }
+          onGoLive={onContinue}
+        />
       </motion.div>
 
       <StickyActionBar

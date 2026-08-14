@@ -6,6 +6,7 @@ type DonBaratonImportResponse = {
   batchId?: string;
   summary?: Record<string, number>;
   message?: string;
+  facebookQueued?: Array<{ productId?: string; productSlug?: string }>;
 };
 
 export type DonBaratonImportResult =
@@ -86,6 +87,19 @@ export async function pushEbayCsvToDonBaraton(
         "Don Baratón imported 0 products (check Category ID / taxonomy seed)";
       console.error("[don-baraton import]", message, summary);
       return { status: "error", message, httpStatus: 422 };
+    }
+
+    const productId = body?.facebookQueued?.[0]?.productId?.trim();
+    if (productId) {
+      void fetch(`${config.apiUrl}/api/facebook/process-higlou`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${config.importToken}`,
+          Accept: "application/json",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ productId }),
+      }).catch(() => undefined);
     }
 
     return {

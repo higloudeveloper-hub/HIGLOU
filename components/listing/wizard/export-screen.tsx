@@ -9,6 +9,7 @@ import {
   Loader2,
   Pencil,
   Save,
+  ShoppingBag,
   Store,
   X,
 } from "lucide-react";
@@ -596,6 +597,38 @@ export function ExportScreen({
                     stays unpublished in Seller Hub until you go live.
                   </p>
                 )}
+
+                {onPublishToDonBaraton ? (
+                  <div className="mt-4 rounded-2xl border border-border/80 bg-muted/30 p-3">
+                    <p className="text-[11px] font-semibold tracking-[0.14em] text-muted-foreground uppercase">
+                      Also publish
+                    </p>
+                    <button
+                      type="button"
+                      disabled={
+                        exportDisabled ||
+                        publishingDonBaraton ||
+                        !onPublishToDonBaraton
+                      }
+                      onClick={onPublishToDonBaraton}
+                      className="mt-2 inline-flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-foreground text-[15px] font-semibold text-background transition hover:-translate-y-px disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0"
+                    >
+                      {publishingDonBaraton ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <ShoppingBag className="h-4 w-4" />
+                      )}
+                      {publishingDonBaraton
+                        ? "Publishing to Don Baratón…"
+                        : donBaratonPublished
+                          ? "Update on Don Baratón"
+                          : "Publish to Don Baratón"}
+                    </button>
+                    <p className="mt-1.5 text-[12px] text-muted-foreground">
+                      Sends this listing to donbaraton.shop. Separate from eBay.
+                    </p>
+                  </div>
+                ) : null}
               </div>
             </div>
           </div>
@@ -606,7 +639,7 @@ export function ExportScreen({
           onClick={() => setMoreOpen((v) => !v)}
           className="mt-4 text-[13px] font-medium text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
         >
-          {moreOpen ? "Hide CSV & other channels" : "CSV, shipping notes & Don Baratón"}
+          {moreOpen ? "Hide CSV & shipping" : "CSV & shipping notes"}
         </button>
 
         <AnimatePresence>
@@ -617,7 +650,7 @@ export function ExportScreen({
               exit={{ opacity: 0, height: 0 }}
               className="overflow-hidden"
             >
-              <div className="mt-3 grid gap-3 sm:grid-cols-2">
+              <div className="mt-3 grid gap-3">
                 <div className="rounded-2xl border border-border bg-surface p-4">
                   <p className="text-[12px] font-semibold">CSV for Seller Hub</p>
                   <p className="mt-1 text-[12px] text-muted-foreground">
@@ -635,30 +668,6 @@ export function ExportScreen({
                     {exporting ? "Generating…" : "Export CSV"}
                   </button>
                 </div>
-                {onPublishToDonBaraton ? (
-                  <div className="rounded-2xl border border-border bg-surface p-4">
-                    <p className="text-[12px] font-semibold">Don Baratón</p>
-                    <p className="mt-1 text-[12px] text-muted-foreground">
-                      Optional second storefront — not eBay.
-                    </p>
-                    <button
-                      type="button"
-                      disabled={
-                        exportDisabled ||
-                        publishingDonBaraton ||
-                        !onPublishToDonBaraton
-                      }
-                      onClick={onPublishToDonBaraton}
-                      className="mt-3 inline-flex items-center gap-2 rounded-xl border border-border px-3 py-2 text-[13px] font-medium hover:bg-muted disabled:opacity-50"
-                    >
-                      {publishingDonBaraton
-                        ? "Publishing…"
-                        : donBaratonPublished
-                          ? "Update on Don Baratón"
-                          : "Publish to Don Baratón"}
-                    </button>
-                  </div>
-                ) : null}
               </div>
             </motion.div>
           ) : null}

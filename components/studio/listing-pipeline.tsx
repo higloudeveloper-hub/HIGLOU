@@ -5,6 +5,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { Check, Loader2 } from "lucide-react";
 import { usePrefersReducedMotion } from "@/components/listing/wizard/use-prefers-reduced-motion";
 import { LiveDot } from "@/components/ui/studio";
+import { EbayLivePreview } from "@/components/studio/ebay-live-preview";
 import { cn } from "@/lib/utils";
 
 const STAGES = [
@@ -208,69 +209,15 @@ export function ListingPipeline({
           <p className="text-[10px] font-semibold tracking-[0.14em] text-muted-foreground uppercase">
             3 · eBay
           </p>
-          <div className="mt-2 overflow-hidden rounded-xl bg-white shadow-[0_8px_24px_-16px_rgba(0,0,0,0.45)] ring-1 ring-black/8">
-            <div className="flex items-center justify-between bg-[#191919] px-2.5 py-1">
-              <span className="text-[11px] font-bold tracking-tight text-white">
-                e<span className="text-[#e53238]">Bay</span>
-              </span>
-              <span
-                className={cn(
-                  "rounded-full px-1.5 py-0.5 text-[9px] font-semibold tracking-[0.12em] uppercase",
-                  liveOn
-                    ? "bg-success text-white"
-                    : draftOn
-                      ? "bg-amber-400 text-amber-950"
-                      : "bg-white/15 text-white/70",
-                )}
-              >
-                {liveOn ? "Published" : draftOn ? "Draft" : "Waiting"}
-              </span>
-            </div>
-            <div className="relative aspect-[16/10] bg-[#f2f2f2]">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={SAMPLE_PHOTOS[0]}
-                alt=""
-                className={cn(
-                  "absolute inset-0 h-full w-full object-cover transition duration-500",
-                  liveOn || draftOn ? "opacity-100" : "opacity-25 grayscale",
-                )}
-              />
-              {liveOn ? (
-                <motion.span
-                  initial={{ scale: 0.7, opacity: 0 }}
-                  animate={{ scale: 1, opacity: 1 }}
-                  className="absolute top-2 left-2 rounded-full bg-brand px-2 py-0.5 text-[10px] font-semibold text-brand-foreground shadow-sm"
-                >
-                  Happy sell
-                </motion.span>
-              ) : null}
-            </div>
-            <div className="p-2.5">
-              <p className="line-clamp-2 text-[11.5px] font-semibold leading-snug text-zinc-950">
-                {liveOn || draftOn ? SAMPLE_TITLE : "Listing appears here"}
-              </p>
-              <p className="mt-1 text-[16px] font-bold tabular-nums text-zinc-950">
-                {liveOn || draftOn ? "$189.00" : "—"}
-              </p>
-              <p className="text-[10px] text-zinc-500">
-                {liveOn ? "Buy It Now · New" : draftOn ? "Unpublished offer" : "Not on eBay yet"}
-              </p>
-              <div
-                className={cn(
-                  "mt-2 rounded-full py-1.5 text-center text-[11px] font-semibold",
-                  liveOn
-                    ? "bg-[#0064d2] text-white"
-                    : "bg-zinc-200 text-zinc-500",
-                )}
-              >
-                {liveOn ? "Buy It Now" : "Goes live next"}
-              </div>
-              <p className="mt-1.5 truncate text-[10px] text-zinc-500">
-                Sold by {shop}
-                {liveOn ? " · itm 135928401" : ""}
-              </p>
-            </div>
+          <div className="mt-2">
+            <EbayLivePreview
+              compact
+              photoSrc={SAMPLE_PHOTOS[0]}
+              title={SAMPLE_TITLE}
+              priceLabel="$189.00"
+              storeName={shop}
+              live={liveOn}
+            />
           </div>
         </div>
       </div>

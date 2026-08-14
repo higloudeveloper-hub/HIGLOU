@@ -49,7 +49,7 @@ function CoverPhoto({
 }) {
   if (!src) {
     return (
-      <div className="absolute inset-0 bg-gradient-to-br from-zinc-800 to-zinc-950" />
+      <div className="absolute inset-0 bg-[#f7f7f7]" />
     );
   }
   return (
@@ -60,8 +60,16 @@ function CoverPhoto({
       decoding="async"
       loading={priority ? "eager" : "lazy"}
       fetchPriority={priority ? "high" : "auto"}
-      className="absolute inset-0 size-full object-contain p-3 sm:p-4"
+      className="absolute inset-0 size-full object-contain p-4 sm:p-5"
     />
+  );
+}
+
+function StatusPill({ status }: { status: string }) {
+  return (
+    <span className="inline-flex w-fit rounded-md bg-[#f0f2f2] px-2 py-0.5 text-[11px] font-medium text-[#565959]">
+      {statusTone(status)}
+    </span>
   );
 }
 
@@ -92,61 +100,48 @@ function QueueCard({
       <Link
         href={`/listings/${draft.id}`}
         className={cn(
-          "group overflow-hidden rounded-[28px] bg-zinc-950 shadow-[0_12px_32px_-24px_rgba(20,16,8,0.55)] ring-1 ring-black/5 transition duration-300",
-          "hover:-translate-y-0.5 hover:shadow-[0_20px_40px_-24px_rgba(20,16,8,0.55)]",
-          kind === "hero"
-            ? "grid lg:grid-cols-[minmax(0,1.25fr)_minmax(260px,0.75fr)]"
-            : "relative block",
-          kind === "banner" && "aspect-[4/3] sm:aspect-[16/10]",
-          kind === "square" && "aspect-square",
+          "group overflow-hidden rounded-xl border border-[#d5d9d9] bg-white shadow-[0_1px_2px_rgba(15,17,17,0.08)] transition",
+          "hover:border-[#bbb] hover:shadow-[0_4px_12px_rgba(15,17,17,0.12)]",
+          kind === "hero" &&
+            "grid lg:grid-cols-[minmax(0,1.15fr)_minmax(240px,0.85fr)]",
         )}
       >
         {kind === "hero" ? (
           <>
-            <div className="relative aspect-[4/3] bg-zinc-950 lg:aspect-auto lg:min-h-[300px]">
+            <div className="relative aspect-[4/3] bg-white lg:aspect-auto lg:min-h-[260px]">
               <CoverPhoto src={draft.coverUrl} priority />
             </div>
-            <div className="flex flex-col justify-end gap-2 bg-zinc-900 px-5 py-5 text-white sm:px-6 sm:py-6">
-              <span className="inline-flex w-fit rounded-full bg-white/18 px-2 py-0.5 text-[10px] font-semibold tracking-wide">
-                {statusTone(draft.status)}
-              </span>
-              <p className="font-semibold tracking-tight line-clamp-2 text-[18px] sm:text-[22px]">
+            <div className="flex flex-col justify-center gap-2 border-t border-[#eee] px-5 py-5 lg:border-t-0 lg:border-l">
+              <StatusPill status={draft.status} />
+              <p className="line-clamp-2 text-[18px] font-medium leading-snug tracking-tight text-[#0f1111] sm:text-[20px]">
                 {title}
               </p>
-              <p className="text-[12.5px] text-white/70">{meta}</p>
+              <p className="text-[13px] text-[#565959]">{meta}</p>
             </div>
           </>
         ) : (
           <>
-            <CoverPhoto src={draft.coverUrl} />
-            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/15 to-transparent" />
             <div
               className={cn(
-                "absolute inset-x-0 bottom-0 text-white",
-                wide ? "p-4 sm:p-5" : "p-3 sm:p-3.5",
+                "relative bg-white",
+                wide ? "aspect-[4/3]" : "aspect-square",
               )}
             >
-              <span className="inline-flex rounded-full bg-white/18 px-2 py-0.5 text-[10px] font-semibold tracking-wide backdrop-blur-md">
-                {statusTone(draft.status)}
-              </span>
+              <CoverPhoto src={draft.coverUrl} />
+            </div>
+            <div className={cn("px-3 pb-3.5 pt-2.5", wide && "px-4 pb-4")}>
+              <StatusPill status={draft.status} />
               <p
                 className={cn(
-                  "mt-1.5 font-semibold tracking-tight",
+                  "mt-1.5 font-medium leading-snug text-[#0f1111]",
                   wide
-                    ? "line-clamp-1 text-[17px] sm:text-[20px]"
-                    : "line-clamp-2 text-[13.5px] leading-snug sm:text-[15px]",
+                    ? "line-clamp-2 text-[15px] sm:text-[16px]"
+                    : "line-clamp-2 text-[13.5px]",
                 )}
               >
                 {title}
               </p>
-              <p
-                className={cn(
-                  "mt-0.5 text-white/75",
-                  wide ? "text-[12.5px]" : "text-[11px]",
-                )}
-              >
-                {meta}
-              </p>
+              <p className="mt-1 text-[12px] text-[#565959]">{meta}</p>
             </div>
           </>
         )}

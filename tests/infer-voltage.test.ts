@@ -19,6 +19,40 @@ describe("inferVoltageFromText", () => {
     expect(inferVoltageFromText("Input Voltage: 240V AC")).toBe("240 V");
   });
 
+  it("reads Milwaukee M18 / M12 platform names as voltage", () => {
+    expect(
+      inferVoltageFromText(
+        "Milwaukee M18 Compact Brushless Drill and Impact Driver Kit Power Tool Sets",
+      ),
+    ).toBe("18 V");
+    expect(
+      inferVoltageFromText("Milwaukee M12 Fuel Installation Drill Driver"),
+    ).toBe("12 V");
+  });
+
+  it("adds Voltage onto inventory aspects for Milwaukee M18 kits", () => {
+    const listing = createEmptyListing();
+    listing.title = "Milwaukee M18 Compact Brushless Drill and Impact Driver Kit";
+    listing.brand = "Milwaukee";
+    listing.categoryId = "63176";
+    listing.categoryName = "Power Tool Sets";
+    listing.price = 210;
+    listing.sku = "TESTM18KIT";
+    listing.images = [
+      {
+        id: "1",
+        url: "https://example.com/a.jpg",
+        fileName: "a.jpg",
+        isPrimary: true,
+        mimeType: "image/jpeg",
+        sizeBytes: 1,
+        sortOrder: 0,
+      },
+    ];
+    const inv = listingToInventoryItem(listing);
+    expect(inv.aspects.Voltage?.[0]).toBe("18 V");
+  });
+
   it("prefers common EV adapter rating for NACS/CCS titles", () => {
     expect(
       inferVoltageFromText(

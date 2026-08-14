@@ -11,6 +11,38 @@ export function formatEbayVoltage(value: string | number): string {
 }
 
 /**
+ * Cordless platform names that omit "18V" (Milwaukee M18, Ryobi ONE+, etc.).
+ */
+export function inferPlatformVoltageFromText(text: string): string | null {
+  const raw = String(text || "");
+  if (!raw.trim()) return null;
+  const hay = raw.toLowerCase();
+
+  if (/\bm18\b/i.test(raw) && (/\bmilwaukee\b/i.test(raw) || /\bfuel\b/i.test(raw))) {
+    return formatEbayVoltage(18);
+  }
+  if (/\bm12\b/i.test(raw) && /\bmilwaukee\b/i.test(raw)) {
+    return formatEbayVoltage(12);
+  }
+  if (/\bryobi\b/.test(hay) && /\bone\s*\+/.test(hay)) {
+    return formatEbayVoltage(18);
+  }
+  if (/\bcraftsman\b/.test(hay) && /\bv20\b/.test(hay)) {
+    return formatEbayVoltage(20);
+  }
+  if (/\bmakita\b/.test(hay) && /\blxt\b/.test(hay)) {
+    return formatEbayVoltage(18);
+  }
+  if (/\bmakita\b/.test(hay) && /\bcxt\b/.test(hay)) {
+    return formatEbayVoltage(12);
+  }
+  if (/\bmakita\b/.test(hay) && /\bxgt\b/.test(hay)) {
+    return formatEbayVoltage(40);
+  }
+  return null;
+}
+
+/**
  * Pull a Voltage aspect value from title, features, OCR, or item specifics text.
  */
 export function inferVoltageFromText(text: string): string | null {
@@ -27,6 +59,9 @@ export function inferVoltageFromText(text: string): string | null {
   ).map((m) => m[1]);
 
   if (!matches.length) {
+    const platform = inferPlatformVoltageFromText(raw);
+    if (platform) return platform;
+
     // NACS/CCS EV charge adapters are typically rated to 1000V DC max when
     // packaging does not spell a lower mains voltage. Prefer this over failing publish.
     if (

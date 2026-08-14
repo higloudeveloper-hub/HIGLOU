@@ -1,9 +1,11 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { motion } from "motion/react";
 import { ArrowRight, Sparkles } from "lucide-react";
 import { formatRelativeTime } from "@/lib/format-relative-time";
+import { ListingPipeline } from "@/components/studio/listing-pipeline";
 import { cn } from "@/lib/utils";
 
 type ProductRow = {
@@ -134,6 +136,20 @@ export function ReturningHome({
   ebayConnected: boolean;
 }) {
   const hello = name ? `Hi, ${name}` : "Higlou";
+  const [ebayStoreName, setEbayStoreName] = useState<string | null>(null);
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        const res = await fetch("/api/ebay/store-name");
+        if (!res.ok) return;
+        const body = (await res.json()) as { storeName?: string | null };
+        if (body.storeName) setEbayStoreName(body.storeName);
+      } catch {
+        /* optional */
+      }
+    })();
+  }, []);
 
   return (
     <div className="mx-auto max-w-[1080px] pb-16">
@@ -161,6 +177,10 @@ export function ReturningHome({
           New listing
         </Link>
       </motion.header>
+
+      <div className="mb-8">
+        <ListingPipeline compact storeName={ebayStoreName} />
+      </div>
 
       {!ebayConnected ? (
         <motion.div

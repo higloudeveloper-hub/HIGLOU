@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { ArrowRight, ShieldCheck, Sparkles } from "lucide-react";
 import { ImageUploader } from "@/components/uploader/image-uploader";
 import { StickyActionBar } from "@/components/listing/wizard/sticky-action-bar";
+import { ListingPipeline } from "@/components/studio/listing-pipeline";
 import { CONDITION_OPTIONS } from "@/config/condition-map";
 import type { ProductImage } from "@/types/product";
 import { cn } from "@/lib/utils";
@@ -49,7 +50,11 @@ export function PhotosScreen({
   return (
     <div className="pb-28">
       <div className="mx-auto max-w-[760px] animate-in fade-in slide-in-from-bottom-2 px-4 py-6 duration-500 sm:px-0">
-        {coach ? (
+        {coach && images.length === 0 ? (
+          <div className="mb-4">
+            <ListingPipeline compact />
+          </div>
+        ) : coach ? (
           <div className="mb-4 flex items-start gap-3 rounded-2xl border border-brand/40 bg-brand-soft/70 px-4 py-3">
             <Sparkles className="mt-0.5 size-4 shrink-0 text-brand-foreground" />
             <div className="min-w-0 flex-1">

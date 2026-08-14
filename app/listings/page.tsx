@@ -6,6 +6,7 @@ import { Plus, Search } from "lucide-react";
 import { AppShell } from "@/components/layout/app-shell";
 import { formatRelativeTime } from "@/lib/format-relative-time";
 import { EmptyPanel, SkeletonBlock } from "@/components/ui/studio";
+import { ListingPipeline } from "@/components/studio/listing-pipeline";
 import { cn } from "@/lib/utils";
 
 type ProductRow = {
@@ -139,7 +140,9 @@ export default function ListingsPage() {
           }
         />
       ) : filtered.length === 0 ? (
-        <EmptyPanel
+        <div className="space-y-6">
+          {products.length === 0 ? <ListingPipeline compact /> : null}
+          <EmptyPanel
           title={products.length === 0 ? "No listings yet" : "No matches"}
           body={
             products.length === 0
@@ -157,6 +160,7 @@ export default function ListingsPage() {
             ) : undefined
           }
         />
+        </div>
       ) : (
         <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
           {filtered.map((product) => {

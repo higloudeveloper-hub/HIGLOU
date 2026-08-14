@@ -76,9 +76,9 @@ export function PhotosWowStrip({
   }, [reduce]);
 
   return (
-    <div className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
-      <section className="relative col-span-2 min-h-[200px] overflow-hidden rounded-[28px] bg-foreground text-background shadow-[0_24px_60px_-36px_rgba(20,16,8,0.6)] ring-1 ring-black/10 lg:col-span-4">
-        <div className="grid min-h-[200px] lg:grid-cols-[minmax(220px,0.42fr)_minmax(0,1fr)]">
+    <div className="grid min-h-full flex-1 grid-cols-2 content-start gap-3 lg:grid-cols-4">
+      <section className="relative col-span-2 min-h-[280px] overflow-hidden rounded-[28px] bg-foreground text-background shadow-[0_24px_60px_-36px_rgba(20,16,8,0.6)] ring-1 ring-black/10 lg:col-span-4 lg:min-h-[min(42vh,380px)]">
+        <div className="grid h-full min-h-[280px] lg:min-h-[min(42vh,380px)] lg:grid-cols-[minmax(240px,0.4fr)_minmax(0,1fr)]">
           <div className="relative bg-zinc-900 p-4">
             <div className="grid grid-cols-2 gap-1.5">
               {PHOTO_SLOTS.map((slot, i) => {
@@ -202,7 +202,7 @@ function WowTile({
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       className={cn(
-        "min-h-[120px] rounded-[24px] border border-border/70 bg-surface p-4 shadow-[0_16px_40px_-32px_rgba(20,16,8,0.45)]",
+        "min-h-[140px] rounded-[24px] border border-border/70 bg-surface p-4 shadow-[0_16px_40px_-32px_rgba(20,16,8,0.45)]",
         wide && "col-span-2",
       )}
     >

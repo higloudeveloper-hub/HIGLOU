@@ -38,9 +38,9 @@ export function PhotosScreen({
   onPhotoIntakeSessionChange?: (session: unknown) => void;
 }) {
   return (
-    <div className="pb-28">
-      <div className="mx-auto max-w-[1040px] animate-in fade-in slide-in-from-bottom-2 px-4 py-6 duration-500 sm:px-6">
-        <section className="rounded-3xl border border-border/80 bg-surface p-5 shadow-[0_24px_60px_-48px_rgba(20,16,8,0.45)] sm:p-7">
+    <div className="flex min-h-0 flex-1 flex-col pb-28">
+      <div className="mx-auto flex w-full max-w-[1040px] flex-1 flex-col px-4 py-4 sm:px-6">
+        <section className="rounded-3xl border border-border/80 bg-surface p-5 shadow-[0_24px_60px_-48px_rgba(20,16,8,0.45)] sm:p-6">
           <ImageUploader
             images={images}
             onChange={onImagesChange}
@@ -114,11 +114,13 @@ export function PhotosScreen({
           </label>
         </div>
 
-        <PhotosWowStrip
-          images={images}
-          storeName={storeName}
-          price={price}
-        />
+        <div className="mt-4 flex min-h-[min(52vh,560px)] flex-1 flex-col">
+          <PhotosWowStrip
+            images={images}
+            storeName={storeName}
+            price={price}
+          />
+        </div>
 
         {images.length > 0 && uploadingPending ? (
           <p className="mt-3 text-sm text-brand-foreground">

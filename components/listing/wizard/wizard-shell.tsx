@@ -92,7 +92,7 @@ export function WizardShell({
 
       <main
         className={cn(
-          "relative flex-1",
+          "relative flex flex-1 flex-col",
           flush ? "w-full" : "mx-auto w-full max-w-[1100px] px-4 py-6 sm:px-6",
           className,
         )}

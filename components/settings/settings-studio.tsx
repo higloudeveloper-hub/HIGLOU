@@ -1,0 +1,222 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import Link from "next/link";
+import { AnimatePresence, motion } from "motion/react";
+import { StoreBrandingForm } from "@/components/settings/store-branding-form";
+import { EbayTemplateForm } from "@/components/settings/ebay-template-form";
+import { EbayPoliciesForm } from "@/components/settings/ebay-policies-form";
+import { EbayConnectForm } from "@/components/settings/ebay-connect-form";
+import { EbayStoreOrganizeForm } from "@/components/settings/ebay-store-organize-form";
+import { AiSettingsForm } from "@/components/settings/ai-settings-form";
+import { BudgetSettingsForm } from "@/components/settings/budget-settings-form";
+import { EXPECTED_SEED_TEMPLATE_SHA256 } from "@/types/ebay";
+import { cn } from "@/lib/utils";
+
+type Tab = "ebay" | "brand" | "tools";
+
+const TABS: { id: Tab; label: string; hint: string }[] = [
+  { id: "ebay", label: "eBay", hint: "Connect & policies" },
+  { id: "brand", label: "Look", hint: "Store branding" },
+  { id: "tools", label: "Tools", hint: "AI, folders, CSV" },
+];
+
+function tabFromHash(hash: string): Tab {
+  if (hash === "#branding") return "brand";
+  if (
+    hash === "#organize-store" ||
+    hash === "#ai" ||
+    hash === "#templates"
+  ) {
+    return "tools";
+  }
+  return "ebay";
+}
+
+export function SettingsStudio() {
+  const [tab, setTab] = useState<Tab>("ebay");
+
+  useEffect(() => {
+    const apply = () => setTab(tabFromHash(window.location.hash));
+    apply();
+    window.addEventListener("hashchange", apply);
+    return () => window.removeEventListener("hashchange", apply);
+  }, []);
+
+  function go(next: Tab) {
+    setTab(next);
+    const hash =
+      next === "brand" ? "#branding" : next === "tools" ? "#ai" : "#ebay-store";
+    window.history.replaceState({}, "", `/settings${hash}`);
+  }
+
+  return (
+    <div className="mx-auto max-w-[720px] pb-20">
+      <header className="pt-1 pb-6">
+        <p className="text-[11px] font-semibold tracking-[0.18em] text-muted-foreground uppercase">
+          Store
+        </p>
+        <h1 className="mt-1 font-display text-3xl tracking-tight">Settings</h1>
+        <p className="mt-2 max-w-md text-sm text-muted-foreground">
+          Three rooms. eBay first, then how listings look, then extra tools.
+        </p>
+      </header>
+
+      <div
+        role="tablist"
+        className="mb-8 grid grid-cols-3 rounded-2xl border border-border bg-surface p-1"
+      >
+        {TABS.map((item) => (
+          <button
+            key={item.id}
+            type="button"
+            role="tab"
+            aria-selected={tab === item.id}
+            onClick={() => go(item.id)}
+            className={cn(
+              "rounded-xl px-2 py-2.5 text-center transition",
+              tab === item.id
+                ? "bg-foreground text-background shadow-sm"
+                : "text-muted-foreground hover:text-foreground",
+            )}
+          >
+            <span className="block text-[13px] font-semibold">{item.label}</span>
+            <span
+              className={cn(
+                "mt-0.5 hidden text-[11px] sm:block",
+                tab === item.id ? "text-background/70" : "text-muted-foreground",
+              )}
+            >
+              {item.hint}
+            </span>
+          </button>
+        ))}
+      </div>
+
+      <AnimatePresence mode="wait">
+        <motion.div
+          key={tab}
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -6 }}
+          transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
+        >
+          {tab === "ebay" ? (
+            <div className="space-y-10">
+              <section id="ebay-store" className="scroll-mt-24 space-y-3">
+                <div>
+                  <p className="text-[11px] font-semibold tracking-[0.14em] text-muted-foreground uppercase">
+                    Part 1
+                  </p>
+                  <h2 className="mt-1 text-lg font-semibold tracking-tight">
+                    Connect the seller account
+                  </h2>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Without this, Higlou can draft. It cannot publish live.
+                  </p>
+                </div>
+                <div className="rounded-2xl border border-border/80 bg-surface p-5 sm:p-6">
+                  <EbayConnectForm />
+                </div>
+              </section>
+              <section id="policies" className="scroll-mt-24 space-y-3">
+                <div>
+                  <p className="text-[11px] font-semibold tracking-[0.14em] text-muted-foreground uppercase">
+                    Part 2
+                  </p>
+                  <h2 className="mt-1 text-lg font-semibold tracking-tight">
+                    Shipping, payment, returns
+                  </h2>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    The three eBay policies every live listing needs.
+                  </p>
+                </div>
+                <div className="rounded-2xl border border-border/80 bg-surface p-5 sm:p-6">
+                  <EbayPoliciesForm />
+                </div>
+              </section>
+            </div>
+          ) : null}
+
+          {tab === "brand" ? (
+            <section id="branding" className="scroll-mt-24 space-y-3">
+              <div>
+                <p className="text-[11px] font-semibold tracking-[0.14em] text-muted-foreground uppercase">
+                  Part 3
+                </p>
+                <h2 className="mt-1 text-lg font-semibold tracking-tight">
+                  How every listing looks
+                </h2>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Store name, colors, and the HTML buyers see.
+                </p>
+              </div>
+              <div className="rounded-2xl border border-border/80 bg-surface p-5 sm:p-6">
+                <StoreBrandingForm />
+              </div>
+            </section>
+          ) : null}
+
+          {tab === "tools" ? (
+            <div className="space-y-8">
+              <section id="organize-store" className="scroll-mt-24 space-y-3">
+                <h2 className="text-lg font-semibold tracking-tight">
+                  Store folders
+                </h2>
+                <p className="text-sm text-muted-foreground">
+                  File live eBay listings into the right folder.
+                </p>
+                <div className="rounded-2xl border border-border/80 bg-surface p-5 sm:p-6">
+                  <EbayStoreOrganizeForm />
+                </div>
+              </section>
+
+              <section id="ai" className="scroll-mt-24 space-y-3">
+                <h2 className="text-lg font-semibold tracking-tight">Higlou AI</h2>
+                <p className="text-sm text-muted-foreground">
+                  How photos become titles and specifics.
+                </p>
+                <AiSettingsForm />
+              </section>
+
+              <details className="rounded-2xl border border-border/80 bg-surface p-5">
+                <summary className="cursor-pointer text-sm font-semibold [&::-webkit-details-marker]:hidden">
+                  CSV template
+                  <span className="ml-2 font-normal text-muted-foreground">
+                    rarely needed
+                  </span>
+                </summary>
+                <div id="templates" className="mt-4 space-y-4 border-t border-border/60 pt-4">
+                  <EbayTemplateForm />
+                  <p className="break-all text-[11px] text-muted-foreground">
+                    Seed SHA256 {EXPECTED_SEED_TEMPLATE_SHA256}
+                  </p>
+                </div>
+              </details>
+
+              <details className="rounded-2xl border border-border/80 bg-surface p-5">
+                <summary className="cursor-pointer text-sm font-semibold [&::-webkit-details-marker]:hidden">
+                  Budget
+                  <span className="ml-2 font-normal text-muted-foreground">
+                    operators
+                  </span>
+                </summary>
+                <div className="mt-4 border-t border-border/60 pt-4">
+                  <BudgetSettingsForm />
+                </div>
+              </details>
+
+              <p className="text-[13px] text-muted-foreground">
+                See spend on{" "}
+                <Link href="/usage" className="font-medium text-foreground underline">
+                  Usage
+                </Link>
+                .
+              </p>
+            </div>
+          ) : null}
+        </motion.div>
+      </AnimatePresence>
+    </div>
+  );
+}

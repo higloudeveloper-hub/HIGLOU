@@ -6,7 +6,6 @@ import {
   ArrowLeft,
   Check,
   Download,
-  ExternalLink,
   Loader2,
   Pencil,
   Save,
@@ -14,6 +13,7 @@ import {
   X,
 } from "lucide-react";
 import { StickyActionBar } from "@/components/listing/wizard/sticky-action-bar";
+import { PublishCelebrate } from "@/components/listing/wizard/publish-celebrate";
 import { StoreTemplatePicker } from "@/components/listing/store-template-picker";
 import { LiveDot } from "@/components/ui/studio";
 import { resolveListingPackage } from "@/lib/ebay/package-shipping";
@@ -102,6 +102,28 @@ function PublishProgressOverlay({
   const listingUrl = result?.listingId
     ? `https://www.ebay.com/itm/${result.listingId}`
     : null;
+
+  if (done) {
+    return (
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        className="fixed inset-0 z-50 grid place-items-center bg-background/80 p-4 backdrop-blur-md"
+      >
+        <PublishCelebrate
+          mode={mode}
+          storeLabel={storeLabel}
+          title={title}
+          photoSrc={photoSrc}
+          listingUrl={listingUrl}
+          listingId={result?.listingId}
+          storePath={result?.storePath}
+          onListAnother={onListAnother}
+        />
+      </motion.div>
+    );
+  }
 
   return (
     <motion.div
@@ -249,51 +271,6 @@ function PublishProgressOverlay({
                   className="rounded-xl border border-border px-4 py-2.5 text-[13px] font-medium"
                 >
                   Close
-                </button>
-              </div>
-            </div>
-          ) : null}
-
-          {done ? (
-            <div className="mt-4 space-y-3">
-              <p className="text-[13px] text-muted-foreground">
-                {result?.sellerHubHint ||
-                  (mode === "live"
-                    ? "Your listing is live on eBay."
-                    : "Unpublished draft is waiting in Seller Hub.")}
-              </p>
-              {result?.listingId ? (
-                <p className="text-[12px] text-muted-foreground">
-                  Listing {result.listingId}
-                  {result.storePath ? ` · ${result.storePath}` : ""}
-                </p>
-              ) : null}
-              <div className="flex flex-col gap-2">
-                {listingUrl ? (
-                  <a
-                    href={listingUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex items-center justify-center gap-2 rounded-xl bg-brand px-4 py-2.5 text-[14px] font-semibold text-brand-foreground"
-                  >
-                    Open on eBay <ExternalLink className="h-4 w-4" />
-                  </a>
-                ) : null}
-                {onListAnother ? (
-                  <button
-                    type="button"
-                    onClick={onListAnother}
-                    className="rounded-xl border border-border py-2.5 text-[13px] font-medium hover:bg-muted"
-                  >
-                    List another
-                  </button>
-                ) : null}
-                <button
-                  type="button"
-                  onClick={onDismiss}
-                  className="text-[12.5px] font-medium text-muted-foreground hover:text-foreground"
-                >
-                  Back to Publish
                 </button>
               </div>
             </div>

@@ -57,13 +57,11 @@ export function AdvancedDrawer({
         )}
       >
         {storeBranding && onStoreBrandingChange ? (
-          <div className="rounded-2xl border-2 border-amber-400 bg-amber-50 p-1 shadow-sm">
-            <StoreTemplatePicker
-              branding={storeBranding}
-              onChange={onStoreBrandingChange}
-              compact
-            />
-          </div>
+          <StoreTemplatePicker
+            branding={storeBranding}
+            onChange={onStoreBrandingChange}
+            compact
+          />
         ) : null}
 
         <section className="space-y-4">

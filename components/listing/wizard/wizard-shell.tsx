@@ -74,19 +74,21 @@ export function WizardShell({
         </div>
       </header>
 
-      <div className="relative mx-auto w-full max-w-[1100px] px-4 pt-6 sm:px-6 sm:pt-8">
-        <div className="hidden animate-in fade-in slide-in-from-bottom-1 duration-500 md:block">
-          <p className="text-[11px] font-semibold tracking-[0.18em] text-muted-foreground uppercase">
-            Step {meta.stepOf}
-          </p>
-          <h1 className="mt-1.5 font-display text-3xl tracking-tight text-foreground sm:text-4xl">
-            {meta.title}
-          </h1>
-          <p className="mt-2 max-w-xl text-sm text-muted-foreground sm:text-[15px]">
-            {meta.subtitle}
-          </p>
+      {step === "photos" ? (
+        <div className="relative mx-auto w-full max-w-[1100px] px-4 pt-6 sm:px-6 sm:pt-8">
+          <div className="hidden animate-in fade-in slide-in-from-bottom-1 duration-500 md:block">
+            <p className="text-[11px] font-semibold tracking-[0.18em] text-muted-foreground uppercase">
+              Step {meta.stepOf}
+            </p>
+            <h1 className="mt-1.5 font-display text-3xl tracking-tight text-foreground sm:text-4xl">
+              {meta.title}
+            </h1>
+            <p className="mt-2 max-w-xl text-sm text-muted-foreground sm:text-[15px]">
+              {meta.subtitle}
+            </p>
+          </div>
         </div>
-      </div>
+      ) : null}
 
       <main
         className={cn(

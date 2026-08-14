@@ -30,7 +30,7 @@ export function DescriptionEditor({
   brandingControls,
 }: DescriptionEditorProps) {
   const sanitized = useMemo(() => sanitizeEbayHtml(html), [html]);
-  const previewMin = compact ? "min-h-[360px]" : "min-h-[560px]";
+  const previewMin = compact ? "min-h-[280px]" : "min-h-[560px]";
   const displayStore = storeName || STORE_BRANDING_DEFAULTS.storeName;
 
   return (

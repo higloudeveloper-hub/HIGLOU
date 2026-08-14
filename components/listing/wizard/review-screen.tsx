@@ -209,32 +209,15 @@ export function ReviewScreen({
         initial={reduceMotion ? false : { opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
         transition={fade}
-        className="mx-auto max-w-[1120px] px-4 pt-5 sm:px-6"
+        className="mx-auto max-w-[1120px] px-4 pt-3 sm:px-6"
       >
-        {storeBranding && onStoreBrandingChange ? (
-          <div className="mb-4">
-            <StoreTemplatePicker
-              branding={storeBranding}
-              onChange={onStoreBrandingChange}
-              compact
-            />
-          </div>
-        ) : (
-          <div className="mb-4 rounded-xl border border-border bg-surface px-4 py-3 text-sm text-muted-foreground">
-            Pick a store look in{" "}
-            <a className="font-semibold text-foreground underline" href="/settings#branding">
-              Settings → Store branding
-            </a>
-            .
-          </div>
-        )}
-
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-          <div className="min-w-0">
-            <div className="flex items-center gap-2">
+        {/* One workspace: listing first, store look as a slim bar */}
+        <div className="overflow-hidden rounded-2xl border border-border/70 bg-surface shadow-[0_20px_50px_-40px_rgba(0,0,0,0.45)]">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/60 px-4 py-2.5 sm:px-5">
+            <div className="flex min-w-0 items-center gap-2">
               <span
                 className={cn(
-                  "inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-[12px] font-medium",
+                  "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium",
                   attentionCount > 0
                     ? "border-amber-300/70 bg-amber-50 text-amber-900"
                     : "border-success/30 bg-success-soft text-success",
@@ -252,26 +235,43 @@ export function ReviewScreen({
                   </>
                 )}
               </span>
+              <p className="truncate text-[13px] text-muted-foreground">
+                {[listing.brand, listing.productType || listing.type, listing.sku]
+                  .filter(Boolean)
+                  .join(" · ") || "Confirm fields, then export"}
+              </p>
             </div>
-            <p className="mt-0.5 truncate text-[13px] text-muted-foreground">
-              {[listing.brand, listing.productType || listing.type, listing.sku]
-                .filter(Boolean)
-                .join(" · ") || "Confirm fields, then export"}
-            </p>
+            <button
+              type="button"
+              onClick={onOpenMore}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-background px-2.5 py-1 text-[12px] font-medium hover:bg-muted"
+            >
+              <PencilLine className="size-3.5" />
+              More
+            </button>
           </div>
-          <button
-            type="button"
-            onClick={onOpenMore}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-1.5 text-[13px] font-medium hover:bg-muted"
-          >
-            <PencilLine className="size-3.5" />
-            More details
-          </button>
-        </div>
 
-        {/* One workspace shell — no tower of cards */}
-        <div className="overflow-hidden rounded-2xl border border-border/70 bg-surface shadow-[0_20px_50px_-40px_rgba(0,0,0,0.45)]">
-          {/* Photo strip + title row */}
+          <div className="border-b border-border/60 px-4 py-2.5 sm:px-5">
+            {storeBranding && onStoreBrandingChange ? (
+              <StoreTemplatePicker
+                branding={storeBranding}
+                onChange={onStoreBrandingChange}
+                compact
+              />
+            ) : (
+              <p className="text-[12.5px] text-muted-foreground">
+                Store look lives in{" "}
+                <a
+                  className="font-semibold text-foreground underline"
+                  href="/settings#branding"
+                >
+                  Settings
+                </a>
+                .
+              </p>
+            )}
+          </div>
+
           <div className="border-b border-border/60 bg-[linear-gradient(180deg,oklch(0.99_0.01_90),transparent)] px-4 py-4 sm:px-5">
             <div className="flex gap-4">
               <div className="w-[112px] shrink-0 sm:w-[132px]">
@@ -532,67 +532,35 @@ export function ReviewScreen({
             </div>
 
             <TabsContent value="listing" className="p-4 sm:p-5">
-              <div className="grid gap-3 sm:grid-cols-3">
-                <div className="rounded-xl border border-border/60 bg-muted/20 px-3.5 py-3">
-                  <div className="flex items-center gap-2 text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">
-                    <Package className="size-3.5" />
-                    Product
-                  </div>
-                  <p className="mt-1.5 text-[14px] font-medium">
-                    {listing.brand || "—"}
-                  </p>
-                  <p className="mt-0.5 text-[12.5px] text-muted-foreground">
-                    {[listing.productType || listing.type, listing.size]
+              <dl className="grid gap-x-6 gap-y-2 text-[13px] sm:grid-cols-3">
+                <div className="flex items-baseline justify-between gap-3">
+                  <dt className="inline-flex items-center gap-1.5 text-muted-foreground">
+                    <Package className="size-3.5" /> Product
+                  </dt>
+                  <dd className="truncate font-medium">
+                    {[listing.brand, listing.productType || listing.type]
                       .filter(Boolean)
-                      .join(" · ") || "From photo analysis"}
-                  </p>
+                      .join(" · ") || "—"}
+                  </dd>
                 </div>
-                <div className="rounded-xl border border-border/60 bg-muted/20 px-3.5 py-3">
-                  <div className="flex items-center gap-2 text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">
-                    <MapPin className="size-3.5" />
-                    Location
-                  </div>
-                  <p className="mt-1.5 text-[14px] font-medium">
+                <div className="flex items-baseline justify-between gap-3">
+                  <dt className="inline-flex items-center gap-1.5 text-muted-foreground">
+                    <MapPin className="size-3.5" /> Ships from
+                  </dt>
+                  <dd className="truncate font-medium">
                     {listing.itemLocation || "Logansport, IN"}
-                  </p>
-                  <p className="mt-0.5 text-[12.5px] text-muted-foreground">
-                    {listing.postalCode || "46947"} · US
-                  </p>
+                  </dd>
                 </div>
-                <div className="rounded-xl border border-border/60 bg-muted/20 px-3.5 py-3">
-                  <div className="flex items-center gap-2 text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">
-                    <Truck className="size-3.5" />
-                    Ship
-                  </div>
-                  <p className="mt-1.5 truncate text-[14px] font-medium">
+                <div className="flex items-baseline justify-between gap-3">
+                  <dt className="inline-flex items-center gap-1.5 text-muted-foreground">
+                    <Truck className="size-3.5" /> Service
+                  </dt>
+                  <dd className="truncate font-medium">
                     {findShippingServiceOption(selectedService)?.label ||
                       selectedService}
-                  </p>
-                  <p className="mt-0.5 text-[12.5px] text-muted-foreground">
-                    {packageInfo.weightLbs} lb {packageInfo.weightOz} oz · Buyer
-                    pays
-                  </p>
+                  </dd>
                 </div>
-              </div>
-              <p className="mt-4 text-[13px] text-muted-foreground">
-                Core listing fields are above. Use{" "}
-                <button
-                  type="button"
-                  className="font-medium text-foreground underline-offset-2 hover:underline"
-                  onClick={() => setPanel("description")}
-                >
-                  Description
-                </button>{" "}
-                and{" "}
-                <button
-                  type="button"
-                  className="font-medium text-foreground underline-offset-2 hover:underline"
-                  onClick={() => setPanel("specifics")}
-                >
-                  Specifics
-                </button>{" "}
-                to finish the draft — no long scroll of empty cards.
-              </p>
+              </dl>
             </TabsContent>
 
             <TabsContent value="specifics" className="p-4 sm:p-5">
@@ -656,17 +624,6 @@ export function ReviewScreen({
                 title={listing.title}
                 storeName={storeBranding?.storeName}
                 compact
-                brandingControls={
-                  storeBranding && onStoreBrandingChange ? (
-                    <div className="rounded-2xl border-2 border-amber-400 bg-amber-50 p-1">
-                      <StoreTemplatePicker
-                        branding={storeBranding}
-                        onChange={onStoreBrandingChange}
-                        compact
-                      />
-                    </div>
-                  ) : null
-                }
               />
             </TabsContent>
 

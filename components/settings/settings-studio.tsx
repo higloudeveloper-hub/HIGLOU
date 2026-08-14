@@ -3,11 +3,13 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { AnimatePresence, motion } from "motion/react";
+import { CreditCard, RotateCcw, Truck } from "lucide-react";
 import { StoreBrandingForm } from "@/components/settings/store-branding-form";
 import { EbayTemplateForm } from "@/components/settings/ebay-template-form";
 import { EbayPoliciesForm } from "@/components/settings/ebay-policies-form";
 import { EbayConnectForm } from "@/components/settings/ebay-connect-form";
 import { EbayStoreOrganizeForm } from "@/components/settings/ebay-store-organize-form";
+import { EbaySetupStory } from "@/components/settings/ebay-setup-story";
 import { AiSettingsForm } from "@/components/settings/ai-settings-form";
 import { BudgetSettingsForm } from "@/components/settings/budget-settings-form";
 import { EXPECTED_SEED_TEMPLATE_SHA256 } from "@/types/ebay";
@@ -35,6 +37,11 @@ function tabFromHash(hash: string): Tab {
 
 export function SettingsStudio() {
   const [tab, setTab] = useState<Tab>("ebay");
+  const [store, setStore] = useState<{
+    connected: boolean;
+    username: string | null;
+    storeName: string | null;
+  }>({ connected: false, username: null, storeName: null });
 
   useEffect(() => {
     const apply = () => setTab(tabFromHash(window.location.hash));
@@ -51,14 +58,14 @@ export function SettingsStudio() {
   }
 
   return (
-    <div className="mx-auto max-w-[720px] pb-20">
+    <div className="mx-auto max-w-[920px] pb-20">
       <header className="pt-1 pb-6">
         <p className="text-[11px] font-semibold tracking-[0.18em] text-muted-foreground uppercase">
           Store
         </p>
         <h1 className="mt-1 font-display text-3xl tracking-tight">Settings</h1>
-        <p className="mt-2 max-w-md text-sm text-muted-foreground">
-          Three rooms. eBay first, then how listings look, then extra tools.
+        <p className="mt-2 max-w-lg text-sm text-muted-foreground">
+          Connect eBay, lock policies, then Higlou can publish for you.
         </p>
       </header>
 
@@ -102,36 +109,49 @@ export function SettingsStudio() {
           transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
         >
           {tab === "ebay" ? (
-            <div className="space-y-10">
-              <section id="ebay-store" className="scroll-mt-24 space-y-3">
-                <div>
-                  <p className="text-[11px] font-semibold tracking-[0.14em] text-muted-foreground uppercase">
-                    Part 1
-                  </p>
-                  <h2 className="mt-1 text-lg font-semibold tracking-tight">
-                    Connect the seller account
-                  </h2>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    Without this, Higlou can draft. It cannot publish live.
-                  </p>
-                </div>
-                <div className="rounded-2xl border border-border/80 bg-surface p-5 sm:p-6">
-                  <EbayConnectForm />
-                </div>
+            <div className="space-y-8">
+              <EbaySetupStory
+                connected={store.connected}
+                username={store.username}
+                storeName={store.storeName}
+              />
+
+              <section id="ebay-store" className="scroll-mt-24">
+                <EbayConnectForm onStoreChange={setStore} />
               </section>
-              <section id="policies" className="scroll-mt-24 space-y-3">
+
+              <section id="policies" className="scroll-mt-24 space-y-4">
                 <div>
-                  <p className="text-[11px] font-semibold tracking-[0.14em] text-muted-foreground uppercase">
-                    Part 2
-                  </p>
-                  <h2 className="mt-1 text-lg font-semibold tracking-tight">
+                  <h2 className="text-lg font-semibold tracking-tight">
                     Shipping, payment, returns
                   </h2>
                   <p className="mt-1 text-sm text-muted-foreground">
                     The three eBay policies every live listing needs.
                   </p>
                 </div>
-                <div className="rounded-2xl border border-border/80 bg-surface p-5 sm:p-6">
+                <div className="grid gap-2 sm:grid-cols-3">
+                  {[
+                    { Icon: Truck, label: "Shipping", hint: "How it leaves" },
+                    { Icon: RotateCcw, label: "Returns", hint: "14 days" },
+                    { Icon: CreditCard, label: "Payment", hint: "How you get paid" },
+                  ].map((item) => (
+                    <div
+                      key={item.label}
+                      className="flex items-center gap-3 rounded-2xl border border-border/70 bg-surface px-3.5 py-3"
+                    >
+                      <span className="grid size-10 place-items-center rounded-xl bg-brand-soft text-brand-foreground">
+                        <item.Icon className="size-4" />
+                      </span>
+                      <div>
+                        <p className="text-[13px] font-semibold">{item.label}</p>
+                        <p className="text-[11px] text-muted-foreground">
+                          {item.hint}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div className="rounded-3xl border border-border/80 bg-surface p-5 sm:p-6">
                   <EbayPoliciesForm />
                 </div>
               </section>

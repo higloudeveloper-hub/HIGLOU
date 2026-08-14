@@ -2,8 +2,10 @@
 
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { Store, Link2, Unlink, Loader2 } from "lucide-react";
+import { Link2, Loader2, RefreshCw, Unlink } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { displayNameFromEbayUsername } from "@/lib/ebay/store-display-name";
+import { cn } from "@/lib/utils";
 
 type Connection = {
   connected: boolean;
@@ -17,8 +19,17 @@ type Connection = {
   missingReason?: string;
 };
 
-export function EbayConnectForm() {
+export function EbayConnectForm({
+  onStoreChange,
+}: {
+  onStoreChange?: (info: {
+    connected: boolean;
+    username: string | null;
+    storeName: string | null;
+  }) => void;
+} = {}) {
   const [connection, setConnection] = useState<Connection | null>(null);
+  const [storeName, setStoreName] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
 
@@ -30,7 +41,31 @@ export function EbayConnectForm() {
         error?: string;
       };
       if (!res.ok) throw new Error(body.error || "Failed to load connection");
-      setConnection(body.connection || null);
+      const next = body.connection || null;
+      setConnection(next);
+
+      let resolved: string | null = next?.ebayUsername
+        ? displayNameFromEbayUsername(next.ebayUsername)
+        : null;
+      if (next?.connected) {
+        try {
+          const storeRes = await fetch("/api/ebay/store-name");
+          if (storeRes.ok) {
+            const storeBody = (await storeRes.json()) as {
+              storeName?: string | null;
+            };
+            if (storeBody.storeName) resolved = storeBody.storeName;
+          }
+        } catch {
+          /* username fallback */
+        }
+      }
+      setStoreName(resolved);
+      onStoreChange?.({
+        connected: Boolean(next?.connected),
+        username: next?.ebayUsername || null,
+        storeName: resolved,
+      });
     } catch (error) {
       toast.error(
         error instanceof Error ? error.message : "Failed to load eBay status",
@@ -56,6 +91,7 @@ export function EbayConnectForm() {
       const next = `${window.location.pathname}${params.toString() ? `?${params}` : ""}${window.location.hash || "#ebay-store"}`;
       window.history.replaceState({}, "", next);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- load on mount
   }, []);
 
   const disconnect = async () => {
@@ -76,87 +112,102 @@ export function EbayConnectForm() {
   };
 
   if (loading) {
-    return <p className="text-sm text-zinc-500">Checking eBay connection…</p>;
+    return (
+      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+        <Loader2 className="size-4 animate-spin" /> Checking eBay…
+      </div>
+    );
   }
 
   const configured = connection?.configured;
   const connected = connection?.connected;
   const isProduction = connection?.env === "production";
-  const envLabel = isProduction
-    ? "Production (live seller account)"
-    : "Sandbox (test only)";
+  const display =
+    storeName ||
+    (connection?.ebayUsername
+      ? displayNameFromEbayUsername(connection.ebayUsername)
+      : "") ||
+    "eBay seller";
 
   return (
     <div className="space-y-4">
-      <div className="flex items-start gap-3">
-        <div className="grid h-10 w-10 place-items-center rounded-xl bg-zinc-100 text-zinc-800">
-          <Store className="size-5" />
-        </div>
-        <div className="min-w-0 flex-1">
-          <p className="text-sm font-semibold text-zinc-950">
-            {connected
-              ? `Connected as ${connection?.ebayUsername || "eBay seller"}`
-              : "No eBay store connected"}
-          </p>
-          <p className="mt-1 text-sm text-zinc-500">
-            {configured
-              ? `${envLabel}. Connect once — then create drafts or publish live from Export.`
+      <div
+        className={cn(
+          "relative overflow-hidden rounded-3xl border p-5",
+          connected
+            ? "border-brand/40 bg-gradient-to-br from-brand-soft/70 to-surface"
+            : "border-border bg-muted/30",
+        )}
+      >
+        <div
+          aria-hidden
+          className="pointer-events-none absolute -top-10 -right-6 size-28 rounded-full bg-[radial-gradient(circle,rgba(255,199,44,0.35),transparent_70%)]"
+        />
+        <p className="text-[11px] font-semibold tracking-[0.16em] text-muted-foreground uppercase">
+          {connected ? "Connected store" : "No store yet"}
+        </p>
+        <h3 className="mt-1 font-display text-2xl tracking-tight">
+          {connected ? display : "Connect your eBay store"}
+        </h3>
+        <p className="mt-1 text-sm text-muted-foreground">
+          {connected
+            ? `${isProduction ? "Production" : "Sandbox"}${connection?.ebayUsername ? ` · @${connection.ebayUsername}` : ""}`
+            : configured
+              ? "Higlou can draft without this. Live publish needs the seller account."
               : connection?.missingReason ||
                 "Add eBay Developer credentials to enable Connect."}
-          </p>
-          {connection?.lastError ? (
-            <p className="mt-2 text-xs text-red-600">{connection.lastError}</p>
-          ) : null}
-        </div>
-      </div>
+        </p>
+        {connection?.lastError ? (
+          <p className="mt-2 text-xs text-red-600">{connection.lastError}</p>
+        ) : null}
 
-      <div className="flex flex-wrap gap-2">
-        {connected ? (
-          <Button
-            type="button"
-            variant="outline"
-            disabled={busy}
-            onClick={() => void disconnect()}
-          >
-            {busy ? (
-              <Loader2 className="size-4 animate-spin" />
-            ) : (
-              <Unlink className="size-4" />
-            )}
-            Disconnect
+        <div className="mt-4 flex flex-wrap gap-2">
+          {connected ? (
+            <Button
+              type="button"
+              variant="outline"
+              disabled={busy}
+              onClick={() => void disconnect()}
+            >
+              {busy ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <Unlink className="size-4" />
+              )}
+              Disconnect
+            </Button>
+          ) : (
+            <Button
+              type="button"
+              disabled={!configured || busy}
+              className="higlou-cta-pulse"
+              onClick={() => {
+                window.location.href = "/api/ebay/oauth/start";
+              }}
+            >
+              <Link2 className="size-4" />
+              {isProduction
+                ? "Connect real eBay account"
+                : "Connect eBay Sandbox"}
+            </Button>
+          )}
+          <Button type="button" variant="ghost" onClick={() => void load()}>
+            <RefreshCw className="size-4" />
+            Refresh
           </Button>
-        ) : (
-          <Button
-            type="button"
-            disabled={!configured || busy}
-            onClick={() => {
-              window.location.href = "/api/ebay/oauth/start";
-            }}
-          >
-            <Link2 className="size-4" />
-            {isProduction
-              ? "Connect real eBay account"
-              : "Connect eBay Sandbox"}
-          </Button>
-        )}
-        <Button type="button" variant="ghost" onClick={() => void load()}>
-          Refresh
-        </Button>
+        </div>
       </div>
 
       {isProduction ? (
-        <div className="rounded-xl border border-emerald-100 bg-emerald-50/80 px-3 py-2.5 text-[12px] text-emerald-900">
-          OAuth opens <strong>auth.ebay.com</strong> — sign in with your real
-          seller account (not Sandbox). If you were connected to Sandbox
-          before, disconnect first, then connect again.
-        </div>
+        <p className="text-[12px] text-muted-foreground">
+          OAuth opens <strong>auth.ebay.com</strong> — sign in with the seller
+          account you want Higlou to publish into.
+        </p>
       ) : (
-        <div className="rounded-xl border border-amber-100 bg-amber-50/80 px-3 py-2.5 text-[12px] text-amber-900">
-          Currently on Sandbox. Set{" "}
-          <code className="text-[11px]">EBAY_ENV=production</code> with
-          Production Client ID / Secret / RuName to connect a live seller
-          account.
-        </div>
+        <p className="text-[12px] text-amber-800">
+          Currently on Sandbox. Production keys are required to connect a live
+          seller.
+        </p>
       )}
     </div>
   );

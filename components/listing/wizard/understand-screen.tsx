@@ -10,6 +10,7 @@ import {
   Clock,
   Images,
   Layers,
+  Loader2,
   MapPin,
   PackageCheck,
   Palette,
@@ -31,6 +32,7 @@ import {
 } from "@/lib/ai/analysis-failure-ui";
 import { cn } from "@/lib/utils";
 import type { ConfidenceStatus } from "@/lib/ai/confidence-engine";
+import { LiveDot } from "@/components/ui/studio";
 
 const STAGES = [
   { key: "understanding", label: "Understanding product", pipe: "recognition" },
@@ -223,6 +225,13 @@ export function UnderstandScreen({
 
   const [revealed, setRevealed] = useState(complete ? findings.length : 0);
   const [progress, setProgress] = useState(complete ? 100 : 8);
+  const [elapsed, setElapsed] = useState(0);
+
+  useEffect(() => {
+    if (complete || hasError) return;
+    const t = setInterval(() => setElapsed((s) => s + 1), 1000);
+    return () => clearInterval(t);
+  }, [complete, hasError]);
 
   useEffect(() => {
     if (hasError) {
@@ -270,15 +279,20 @@ export function UnderstandScreen({
       <div className="mx-auto grid max-w-[1600px] gap-6 px-6 py-10 lg:grid-cols-[300px_1fr_420px]">
         <aside className="space-y-6">
           <div>
-            <h1 className="text-[34px] leading-[1.1] font-bold tracking-tight">
+            <h1 className="font-display text-[36px] leading-[1.08] tracking-tight">
               Higlou is
               <br />
               understanding
               <br />
               your product<span className="text-brand">.</span>
             </h1>
-            <p className="mt-4 text-[14px] text-muted-foreground">
-              We&apos;re looking at every detail to get it just right.
+            <p className="mt-4 flex items-center gap-2 text-[14px] text-muted-foreground">
+              {!complete && !hasError ? <LiveDot /> : null}
+              {complete
+                ? "Draft is ready to edit."
+                : hasError
+                  ? "We paused so you can fix this step."
+                  : "Watching every photo — nothing sits blank."}
             </p>
           </div>
           <ol className="relative space-y-1">
@@ -327,7 +341,7 @@ export function UnderstandScreen({
                     ) : state === "failed" ? (
                       <AlertTriangle className="h-4 w-4" />
                     ) : state === "active" ? (
-                      <ShieldCheck className="h-4 w-4" />
+                      <Loader2 className="h-4 w-4 animate-spin" />
                     ) : (
                       <Clock className="h-4 w-4" />
                     )}
@@ -373,6 +387,12 @@ export function UnderstandScreen({
               alt="Product"
               className="h-[320px] w-full object-cover sm:h-[420px] lg:h-[520px]"
             />
+            {!complete && !hasError ? (
+              <span
+                aria-hidden
+                className="pointer-events-none absolute inset-x-0 top-0 h-24 bg-gradient-to-b from-brand/25 to-transparent [animation:higlou-scan_2.4s_ease-in-out_infinite]"
+              />
+            ) : null}
             {[
               "top-3 left-3 border-t-2 border-l-2",
               "top-3 right-3 border-t-2 border-r-2",
@@ -381,7 +401,39 @@ export function UnderstandScreen({
             ].map((cls) => (
               <span key={cls} className={cn("absolute h-8 w-8 border-brand", cls)} />
             ))}
+            <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between rounded-xl bg-background/85 px-3 py-2 text-[12px] font-medium backdrop-blur-md">
+              <span className="inline-flex items-center gap-2">
+                {!complete && !hasError ? <LiveDot /> : null}
+                {hasError
+                  ? "Paused"
+                  : complete
+                    ? "Scan complete"
+                    : "Live scan"}
+              </span>
+              <span className="tabular-nums text-muted-foreground">
+                {complete || hasError
+                  ? `${progress}%`
+                  : `${String(Math.floor(elapsed / 60)).padStart(2, "0")}:${String(elapsed % 60).padStart(2, "0")} · ${progress}%`}
+              </span>
+            </div>
           </div>
+          {images.length > 1 ? (
+            <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
+              {images.slice(0, 8).map((img, i) => (
+                <div
+                  key={img.id || i}
+                  className="size-14 shrink-0 overflow-hidden rounded-lg border border-border bg-muted"
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={img.previewUrl || img.url}
+                    alt=""
+                    className="size-full object-cover"
+                  />
+                </div>
+              ))}
+            </div>
+          ) : null}
           <div className="mt-5">
             <div className="flex items-center gap-2 text-[14px] font-medium">
               <Sparkles className="h-4 w-4 text-brand-foreground" />
@@ -407,7 +459,10 @@ export function UnderstandScreen({
             <p className="mt-2 text-[12px] text-muted-foreground">
               {hasError
                 ? "Recognition, extraction, category, and listing are separate steps — only the failed step is blocked."
-                : "Analyzing shape, materials, color, text and more…"}
+                : complete
+                  ? "Ready to build the listing."
+                  : secondaryLines[0] ||
+                    "Analyzing shape, materials, color, text and more…"}
             </p>
           </div>
         </section>

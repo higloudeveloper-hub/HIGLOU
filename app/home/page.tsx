@@ -6,6 +6,8 @@ import {
   ArrowRight,
   Check,
   Circle,
+  FileSpreadsheet,
+  Images,
   Sparkles,
   Store,
   Truck,
@@ -14,6 +16,7 @@ import {
 import { AppShell } from "@/components/layout/app-shell";
 import { createClient } from "@/lib/supabase/client";
 import { formatRelativeTime } from "@/lib/format-relative-time";
+import { EmptyPanel, LiveDot, SkeletonBlock } from "@/components/ui/studio";
 import { cn } from "@/lib/utils";
 
 type ProductRow = {
@@ -59,6 +62,7 @@ export default function HomeWorkspacePage() {
   const [name, setName] = useState<string | null>(null);
   const [products, setProducts] = useState<ProductRow[]>([]);
   const [exportsList, setExportsList] = useState<CsvRow[]>([]);
+  const [ready, setReady] = useState(false);
   const [setup, setSetup] = useState<SetupState>({
     ebayConnected: false,
     policiesReady: false,
@@ -93,6 +97,8 @@ export default function HomeWorkspacePage() {
         if (!cancelled) setProducts(body.products ?? []);
       } catch {
         /* degrade gracefully */
+      } finally {
+        if (!cancelled) setReady(true);
       }
     })();
 
@@ -168,6 +174,10 @@ export default function HomeWorkspacePage() {
   );
 
   const greeting = name ? `Welcome back, ${name}` : "Welcome to Higlou";
+  const draftCount = products.filter((p) => {
+    const s = (p.status || "").toLowerCase();
+    return !s.includes("csv generated") && !s.includes("exported");
+  }).length;
   const setupItems = [
     {
       done: setup.ebayConnected,
@@ -202,10 +212,11 @@ export default function HomeWorkspacePage() {
             aria-hidden
             className="pointer-events-none absolute -left-24 -top-16 size-72 rounded-full bg-[radial-gradient(circle_at_center,rgba(244,201,40,0.16),transparent_70%)]"
           />
-          <p className="text-[11px] font-semibold tracking-[0.22em] text-muted-foreground">
-            HIGLOU
+          <p className="flex items-center gap-2 text-[11px] font-semibold tracking-[0.22em] text-muted-foreground">
+            <LiveDot />
+            HIGLOU STUDIO
           </p>
-          <h1 className="mt-3 text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">
+          <h1 className="mt-3 font-display text-4xl tracking-tight text-foreground sm:text-5xl">
             {greeting}
           </h1>
           <p className="mt-3 max-w-lg text-base text-muted-foreground">
@@ -229,6 +240,44 @@ export default function HomeWorkspacePage() {
               </Link>
             ) : null}
           </div>
+        </section>
+
+        <section className="grid gap-3 sm:grid-cols-3">
+          {[
+            {
+              label: "Listings",
+              value: ready ? String(products.length) : "—",
+              icon: Images,
+            },
+            {
+              label: "In progress",
+              value: ready ? String(draftCount) : "—",
+              icon: Sparkles,
+            },
+            {
+              label: "CSV exports",
+              value: ready ? String(exportsList.length) : "—",
+              icon: FileSpreadsheet,
+            },
+          ].map((stat) => {
+            const Icon = stat.icon;
+            return (
+              <div
+                key={stat.label}
+                className="rounded-2xl border border-border/80 bg-surface px-4 py-4"
+              >
+                <div className="flex items-center justify-between">
+                  <p className="text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">
+                    {stat.label}
+                  </p>
+                  <Icon className="size-4 text-muted-foreground" />
+                </div>
+                <p className="mt-2 font-display text-3xl tracking-tight">
+                  {stat.value}
+                </p>
+              </div>
+            );
+          })}
         </section>
 
         <section className="border-t border-border/80 py-8">
@@ -291,11 +340,35 @@ export default function HomeWorkspacePage() {
               All listings
             </Link>
           </div>
-          {drafts.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              No drafts yet — start a listing and Higlou will draft it from
-              photos.
-            </p>
+          { !ready ? (
+            <div className="grid gap-3 sm:grid-cols-2">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <div
+                  key={i}
+                  className="flex gap-3 rounded-2xl border border-border/70 bg-surface p-3"
+                >
+                  <SkeletonBlock className="size-16 rounded-xl" />
+                  <div className="flex-1 space-y-2 py-1">
+                    <SkeletonBlock className="h-4 w-3/4" />
+                    <SkeletonBlock className="h-3 w-1/2" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : drafts.length === 0 ? (
+            <EmptyPanel
+              title="No drafts yet"
+              body="Start a listing and Higlou drafts title, category, and specifics from your photos."
+              action={
+                <Link
+                  href="/listings/new"
+                  className="inline-flex h-11 items-center gap-2 rounded-xl bg-foreground px-5 text-sm font-semibold text-background"
+                >
+                  <Sparkles className="size-4" />
+                  New listing
+                </Link>
+              }
+            />
           ) : (
             <div className="grid gap-3 sm:grid-cols-2">
               {drafts.map((draft) => (
@@ -349,9 +422,10 @@ export default function HomeWorkspacePage() {
             </Link>
           </div>
           {exportsList.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              When you export a CSV, it shows up here.
-            </p>
+            <EmptyPanel
+              title="No exports yet"
+              body="When you export a CSV for eBay Seller Hub, it lands here."
+            />
           ) : (
             <ul className="space-y-2">
               {exportsList.slice(0, 5).map((row) => (

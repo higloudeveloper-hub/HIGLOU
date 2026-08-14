@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Menu, Sparkles } from "lucide-react";
+import { Menu, Plus, Sparkles } from "lucide-react";
 import { AppSidebar } from "@/components/layout/app-sidebar";
 import {
   Sheet,
@@ -11,6 +11,7 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
+import { LiveDot } from "@/components/ui/studio";
 import { cn } from "@/lib/utils";
 
 export function AppShell({
@@ -67,16 +68,20 @@ export function AppShell({
             href="/listings/new"
             className="ml-auto inline-flex h-8 items-center gap-1.5 rounded-lg bg-foreground px-3 text-[12px] font-semibold text-background"
           >
-            <Sparkles className="size-3" />
+            <Plus className="size-3" />
             New
           </Link>
         </div>
 
         {!hideHeader && title ? (
-          <header className="sticky top-0 z-20 bg-background/90 backdrop-blur-md md:top-0">
-            <div className="flex flex-col gap-3 px-5 py-6 sm:flex-row sm:items-end sm:justify-between sm:px-10 sm:py-8">
+          <header className="sticky top-0 z-20 border-b border-border/60 bg-background/90 backdrop-blur-md">
+            <div className="flex flex-col gap-3 px-5 py-5 sm:flex-row sm:items-end sm:justify-between sm:px-10 sm:py-6">
               <div>
-                <h1 className="text-2xl font-semibold tracking-tight text-foreground">
+                <p className="mb-1 flex items-center gap-1.5 text-[11px] font-semibold tracking-[0.16em] text-muted-foreground uppercase">
+                  <LiveDot />
+                  Studio
+                </p>
+                <h1 className="font-display text-3xl tracking-tight text-foreground">
                   {title}
                 </h1>
                 {description ? (

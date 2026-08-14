@@ -56,6 +56,7 @@ import { ReviewScreen } from "@/components/listing/wizard/review-screen";
 import { ExportScreen } from "@/components/listing/wizard/export-screen";
 import { MoreDetailsDialog } from "@/components/listing/wizard/more-details-dialog";
 import { humanizeAnalysisFailure } from "@/lib/ai/analysis-failure-ui";
+import { SkeletonBlock } from "@/components/ui/studio";
 
 const LISTING_SAVE_REQUIRED_MESSAGE =
   "Save the listing first so your draft can sync to eBay export.";
@@ -1573,12 +1574,23 @@ export function NewListingWorkspace({
       }
     >
       {loadingProduct ? (
-        <p className="mb-4 px-6 text-sm text-muted-foreground">
-          Loading product…
-        </p>
+        <div className="mx-auto grid max-w-[1600px] gap-6 px-6 py-10 lg:grid-cols-[300px_1fr_420px]">
+          <div className="space-y-4">
+            <SkeletonBlock className="h-10 w-48" />
+            <SkeletonBlock className="h-24 w-full" />
+            <SkeletonBlock className="h-40 w-full" />
+          </div>
+          <SkeletonBlock className="min-h-[420px] rounded-3xl" />
+          <div className="space-y-3">
+            <SkeletonBlock className="h-16 w-full rounded-2xl" />
+            <SkeletonBlock className="h-14 w-full rounded-2xl" />
+            <SkeletonBlock className="h-14 w-full rounded-2xl" />
+            <SkeletonBlock className="h-14 w-full rounded-2xl" />
+          </div>
+        </div>
       ) : null}
 
-      {step === "photos" ? (
+      {!loadingProduct && step === "photos" ? (
         <PhotosScreen
           images={listing.images}
           productId={listing.id}
@@ -1602,7 +1614,7 @@ export function NewListingWorkspace({
         />
       ) : null}
 
-      {step === "analyzing" || step === "reveal" ? (
+      {!loadingProduct && (step === "analyzing" || step === "reveal") ? (
         <UnderstandScreen
           mode={step === "reveal" ? "reveal" : "analyzing"}
           listing={listing}
@@ -1630,7 +1642,7 @@ export function NewListingWorkspace({
         />
       ) : null}
 
-      {step === "review" ? (
+      {!loadingProduct && step === "review" ? (
         <ReviewScreen
           listing={listing}
           attentionFields={attentionFields}
@@ -1668,7 +1680,7 @@ export function NewListingWorkspace({
         />
       ) : null}
 
-      {step === "export" ? (
+      {!loadingProduct && step === "export" ? (
         <ExportScreen
           listing={listing}
           productName={productLabel}

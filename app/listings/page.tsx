@@ -2,9 +2,10 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { Search } from "lucide-react";
+import { Plus, Search } from "lucide-react";
 import { AppShell } from "@/components/layout/app-shell";
 import { formatRelativeTime } from "@/lib/format-relative-time";
+import { EmptyPanel, SkeletonBlock } from "@/components/ui/studio";
 import { cn } from "@/lib/utils";
 
 type ProductRow = {
@@ -88,9 +89,10 @@ export default function ListingsPage() {
       actions={
         <Link
           href="/listings/new"
-          className="inline-flex h-10 items-center justify-center rounded-xl bg-zinc-950 px-4 text-sm font-medium text-white hover:bg-zinc-800"
+          className="inline-flex h-10 items-center justify-center gap-1.5 rounded-xl bg-foreground px-4 text-sm font-medium text-background hover:opacity-90"
         >
-          New Listing
+          <Plus className="size-4" />
+          New listing
         </Link>
       }
     >
@@ -101,43 +103,60 @@ export default function ListingsPage() {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search brand, title, SKU…"
-            className="h-11 w-full rounded-xl border-0 bg-white pl-10 pr-4 text-sm text-zinc-900 shadow-sm ring-1 ring-zinc-200/80 placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-zinc-900/15"
+            className="h-11 w-full rounded-xl border-0 bg-surface pl-10 pr-4 text-sm text-foreground shadow-sm ring-1 ring-border placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand/40"
           />
         </label>
       </div>
 
       {loading ? (
-        <p className="text-sm text-zinc-500">Loading your listings…</p>
-      ) : error ? (
-        <div className="max-w-md space-y-3">
-          <p className="text-sm text-zinc-600">{error}</p>
-          <button
-            type="button"
-            onClick={() => window.location.reload()}
-            className="text-sm font-medium text-zinc-950 underline-offset-4 hover:underline"
-          >
-            Retry
-          </button>
-        </div>
-      ) : filtered.length === 0 ? (
-        <div className="max-w-md py-8">
-          <p className="text-base font-medium text-zinc-950">
-            {products.length === 0 ? "No listings yet" : "No matches"}
-          </p>
-          <p className="mt-2 text-sm text-zinc-500">
-            {products.length === 0
-              ? "Start with New Listing — drop photos and I’ll draft the eBay fields."
-              : "Try a different search."}
-          </p>
-          {products.length === 0 ? (
-            <Link
-              href="/listings/new"
-              className="mt-6 inline-flex h-10 items-center rounded-xl bg-zinc-950 px-4 text-sm font-medium text-white hover:bg-zinc-800"
+        <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+          {Array.from({ length: 8 }).map((_, i) => (
+            <div
+              key={i}
+              className="overflow-hidden rounded-2xl border border-border/70 bg-surface"
             >
-              New Listing
-            </Link>
-          ) : null}
+              <SkeletonBlock className="aspect-[4/3] rounded-none" />
+              <div className="space-y-2 p-4">
+                <SkeletonBlock className="h-3 w-20" />
+                <SkeletonBlock className="h-4 w-4/5" />
+                <SkeletonBlock className="h-3 w-1/2" />
+              </div>
+            </div>
+          ))}
         </div>
+      ) : error ? (
+        <EmptyPanel
+          title="Couldn’t load listings"
+          body={error}
+          action={
+            <button
+              type="button"
+              onClick={() => window.location.reload()}
+              className="rounded-xl bg-foreground px-4 py-2.5 text-sm font-semibold text-background"
+            >
+              Retry
+            </button>
+          }
+        />
+      ) : filtered.length === 0 ? (
+        <EmptyPanel
+          title={products.length === 0 ? "No listings yet" : "No matches"}
+          body={
+            products.length === 0
+              ? "Drop photos on New listing — Higlou drafts the eBay fields for you."
+              : "Try a different search."
+          }
+          action={
+            products.length === 0 ? (
+              <Link
+                href="/listings/new"
+                className="inline-flex h-11 items-center rounded-xl bg-foreground px-5 text-sm font-semibold text-background"
+              >
+                New listing
+              </Link>
+            ) : undefined
+          }
+        />
       ) : (
         <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
           {filtered.map((product) => {
@@ -146,7 +165,7 @@ export default function ListingsPage() {
               <Link
                 key={product.id}
                 href={`/listings/${product.id}`}
-                className="group flex flex-col overflow-hidden rounded-2xl bg-white transition hover:-translate-y-0.5 hover:shadow-md"
+                className="group flex flex-col overflow-hidden rounded-2xl border border-border/70 bg-surface transition hover:-translate-y-0.5 hover:shadow-md"
               >
                 <div className="relative aspect-[4/3] bg-zinc-100">
                   {product.coverUrl ? (

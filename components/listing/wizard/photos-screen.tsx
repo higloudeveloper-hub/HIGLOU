@@ -63,11 +63,11 @@ export function PhotosScreen({
     <div className="pb-28">
       <div className="mx-auto grid max-w-[1600px] gap-8 px-6 py-10 lg:grid-cols-[340px_1fr]">
         <aside className="space-y-6">
-          <span className="inline-flex items-center rounded-full bg-brand-soft px-3 py-1 text-[11px] font-semibold tracking-wider text-brand-foreground uppercase">
+          <span className="inline-flex items-center gap-2 rounded-full bg-brand-soft px-3 py-1 text-[11px] font-semibold tracking-wider text-brand-foreground uppercase">
             Step 1 of 4
           </span>
           <div>
-            <h1 className="text-[42px] leading-[1.05] font-bold tracking-tight">
+            <h1 className="font-display text-[42px] leading-[1.05] tracking-tight">
               Let&apos;s create
               <br />
               your listing<span className="text-brand">.</span>

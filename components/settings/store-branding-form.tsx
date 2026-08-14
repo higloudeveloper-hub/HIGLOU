@@ -214,7 +214,7 @@ export function StoreBrandingForm() {
   return (
     <div className="space-y-6">
       <LookLiveDemo
-        storeName={branding.storeNameDisplay || branding.storeName}
+        storeName={ebayStoreName || branding.storeNameDisplay || branding.storeName}
         slogan={branding.slogan}
         headerBg={branding.colors.headerBackground}
         headerText={branding.colors.headerText}

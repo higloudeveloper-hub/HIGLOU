@@ -1,7 +1,58 @@
 "use client";
 
-import { motion } from "motion/react";
+import { useEffect, useState } from "react";
+import { AnimatePresence, motion } from "motion/react";
+import { Heart, Search, ShoppingCart, Star } from "lucide-react";
+import { displayNameFromEbayUsername } from "@/lib/ebay/store-display-name";
 import { cn } from "@/lib/utils";
+
+function EbayWordmark({ className }: { className?: string }) {
+  return (
+    <span
+      className={cn("select-none font-bold tracking-tight", className)}
+      aria-label="eBay"
+    >
+      <span style={{ color: "#E53238" }}>e</span>
+      <span style={{ color: "#0064D2" }}>B</span>
+      <span style={{ color: "#F5AF02" }}>a</span>
+      <span style={{ color: "#86B817" }}>y</span>
+    </span>
+  );
+}
+
+export function useConnectedEbayStoreName(passed?: string | null) {
+  const [connected, setConnected] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch("/api/ebay/store-name");
+        if (!res.ok) return;
+        const body = (await res.json()) as {
+          storeName?: string | null;
+          username?: string | null;
+        };
+        const resolved =
+          body.storeName?.trim() ||
+          (body.username ? displayNameFromEbayUsername(body.username) : "");
+        if (!cancelled && resolved) setConnected(resolved);
+      } catch {
+        /* keep passed name */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const fromProp = passed?.trim() || "";
+  const generic =
+    !fromProp ||
+    /^your eBay store$/i.test(fromProp) ||
+    /^your store$/i.test(fromProp);
+  return connected || (generic ? "" : fromProp) || "your eBay store";
+}
 
 export function EbayLivePreview({
   photoSrc,
@@ -18,65 +69,145 @@ export function EbayLivePreview({
   live: boolean;
   compact?: boolean;
 }) {
-  const shop = storeName.trim() || "your eBay store";
+  const shop = useConnectedEbayStoreName(storeName);
+  const price = live ? priceLabel.replace(/^US\s*/i, "") : "—";
 
   return (
-    <div className="overflow-hidden rounded-xl bg-white shadow-[0_12px_32px_-18px_rgba(0,0,0,0.5)] ring-1 ring-black/10">
-      <div className="flex items-center justify-between bg-[#191919] px-3 py-1.5">
-        <span className="text-[12px] font-bold tracking-tight text-white">
-          e<span className="text-[#e53238]">Bay</span>
-        </span>
-        <span
-          className={cn(
-            "rounded-full px-2 py-0.5 text-[10px] font-semibold tracking-[0.12em] uppercase",
-            live ? "bg-success text-white" : "bg-white/15 text-white/70",
-          )}
-        >
-          {live ? "Published" : "Uploading…"}
-        </span>
+    <div className="overflow-hidden rounded-xl bg-white font-sans text-[#191919] shadow-[0_12px_32px_-18px_rgba(0,0,0,0.5)] ring-1 ring-black/10">
+      <div className="flex items-center gap-2 border-b border-[#e5e5e5] bg-white px-2.5 py-2">
+        <EbayWordmark className={compact ? "text-[15px]" : "text-[18px]"} />
+        {!compact ? (
+          <div className="flex min-w-0 flex-1 items-center gap-1 rounded-full border border-[#ccc] bg-[#f7f7f7] px-2.5 py-1 text-[11px] text-[#707070]">
+            <Search className="size-3 shrink-0" strokeWidth={2} />
+            <span className="truncate">Search eBay</span>
+          </div>
+        ) : (
+          <span className="ml-auto truncate text-[10px] font-medium text-[#707070]">
+            {shop}
+          </span>
+        )}
+        <ShoppingCart className="size-3.5 shrink-0 text-[#191919]" strokeWidth={1.8} />
       </div>
-      <div className={cn("relative bg-[#f2f2f2]", compact ? "aspect-[16/10]" : "aspect-[16/9]")}>
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src={photoSrc}
-          alt=""
-          className={cn(
-            "absolute inset-0 h-full w-full object-cover transition duration-500",
-            live ? "opacity-100" : "opacity-40 grayscale",
+
+      <div
+        className={cn(
+          "relative bg-white",
+          compact ? "aspect-[4/3]" : "aspect-square",
+        )}
+      >
+        <AnimatePresence mode="wait">
+          {live ? (
+            // eslint-disable-next-line @next/next/no-img-element -- eBay listing photo
+            <motion.img
+              key={photoSrc}
+              src={photoSrc}
+              alt=""
+              initial={{ y: -56, opacity: 0, scale: 0.92 }}
+              animate={{ y: 0, opacity: 1, scale: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ type: "spring", stiffness: 280, damping: 22 }}
+              className="absolute inset-0 size-full object-contain p-3"
+            />
+          ) : (
+            <motion.div
+              key="wait"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="absolute inset-0 grid place-items-center bg-[#f7f7f7]"
+            >
+              <p className="text-[11px] font-medium text-[#707070]">
+                Uploading to eBay…
+              </p>
+            </motion.div>
           )}
-        />
+        </AnimatePresence>
         {live ? (
-          <motion.span
-            initial={{ scale: 0.7, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            className="absolute top-2 left-2 rounded-full bg-brand px-2.5 py-1 text-[11px] font-semibold text-brand-foreground shadow-sm"
+          <button
+            type="button"
+            tabIndex={-1}
+            className="absolute top-2 right-2 grid size-8 place-items-center rounded-full bg-white/90 text-[#191919] shadow-sm ring-1 ring-black/10"
+            aria-hidden
           >
-            Live on eBay
-          </motion.span>
+            <Heart className="size-3.5" strokeWidth={1.8} />
+          </button>
         ) : null}
       </div>
-      <div className={cn("p-3", !compact && "sm:p-4")}>
-        <p className="line-clamp-2 text-[13px] font-semibold leading-snug text-zinc-950">
-          {live ? title : "Your listing appears on eBay here"}
-        </p>
-        <p className="mt-1 text-[20px] font-bold tabular-nums text-zinc-950">
-          {live ? priceLabel : "—"}
-        </p>
-        <p className="text-[11px] text-zinc-500">
-          {live ? "Buy It Now · New · Free returns" : "Waiting for publish"}
-        </p>
-        <div
+
+      <div className={cn(compact ? "p-2.5" : "p-3")}>
+        {!compact ? (
+          <p className="mb-1 text-[10px] text-[#707070]">
+            Home › Business & Industrial › Power Tools
+          </p>
+        ) : null}
+        <p
           className={cn(
-            "mt-2.5 rounded-full py-2 text-center text-[12px] font-semibold",
-            live ? "bg-[#0064d2] text-white" : "bg-zinc-200 text-zinc-500",
+            "font-semibold leading-snug",
+            compact ? "line-clamp-2 text-[12px]" : "line-clamp-2 text-[14px]",
+            live ? "text-[#191919]" : "text-[#9b9b9b]",
           )}
         >
-          {live ? "Buy It Now" : "Goes live next"}
-        </div>
-        <p className="mt-2 truncate text-[11px] text-zinc-500">
-          Sold by {shop}
-          {live ? " · itm 135928401" : ""}
+          {live ? title : "Your listing appears here on eBay"}
         </p>
+        <p className="mt-1 text-[11px] text-[#707070]">
+          Condition: <span className="font-semibold text-[#191919]">New</span>
+        </p>
+        <p
+          className={cn(
+            "mt-1 font-bold tabular-nums",
+            compact ? "text-[18px]" : "text-[22px]",
+          )}
+        >
+          {live ? (
+            <>
+              <span className="text-[12px] font-semibold">US </span>
+              {price}
+            </>
+          ) : (
+            "—"
+          )}
+        </p>
+        <p className="text-[11px] text-[#707070]">
+          {live ? "Free shipping · Arrives in 3–5 days" : "Waiting for publish"}
+        </p>
+
+        <div className={cn("mt-2.5 grid gap-1.5", !compact && "grid-cols-1")}>
+          <div
+            className={cn(
+              "rounded-lg py-2 text-center text-[12px] font-bold",
+              live
+                ? "bg-[#3665F3] text-white"
+                : "bg-[#e5e5e5] text-[#9b9b9b]",
+            )}
+          >
+            {live ? "Buy It Now" : "Goes live next"}
+          </div>
+          {!compact ? (
+            <div
+              className={cn(
+                "rounded-lg border py-2 text-center text-[12px] font-bold",
+                live
+                  ? "border-[#3665F3] text-[#3665F3]"
+                  : "border-[#e5e5e5] text-[#9b9b9b]",
+              )}
+            >
+              Add to cart
+            </div>
+          ) : null}
+        </div>
+
+        <div className="mt-2.5 flex items-center gap-2 border-t border-[#e5e5e5] pt-2.5">
+          <span className="grid size-7 shrink-0 place-items-center rounded-full bg-[#191919] text-[9px] font-bold text-white">
+            {shop.slice(0, 1).toUpperCase()}
+          </span>
+          <div className="min-w-0">
+            <p className="truncate text-[12px] font-semibold">{shop}</p>
+            <p className="flex items-center gap-1 text-[10px] text-[#707070]">
+              <Star className="size-2.5 fill-[#F5AF02] text-[#F5AF02]" />
+              {live ? "99.8% positive · Top Rated Seller" : "Connected eBay store"}
+            </p>
+          </div>
+        </div>
       </div>
     </div>
   );

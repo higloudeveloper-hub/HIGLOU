@@ -5,7 +5,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { Check, Eye, Sparkles, Store } from "lucide-react";
 import { usePrefersReducedMotion } from "@/components/listing/wizard/use-prefers-reduced-motion";
 import { LiveDot } from "@/components/ui/studio";
-import { EbayLivePreview } from "@/components/studio/ebay-live-preview";
+import { EbayLivePreview, useConnectedEbayStoreName } from "@/components/studio/ebay-live-preview";
 import type { ProductImage } from "@/types/product";
 import { cn } from "@/lib/utils";
 
@@ -58,7 +58,7 @@ export function PhotosWowStrip({
 }) {
   const reduce = usePrefersReducedMotion();
   const [beat, setBeat] = useState(reduce ? BEATS.length - 1 : 0);
-  const shop = storeName?.trim() || "your eBay store";
+  const shop = useConnectedEbayStoreName(storeName);
   const writing = beat >= 1;
   const live = beat >= 3;
   const typing = useTyped(SAMPLE_TITLE, writing && !live, reduce);

@@ -5,7 +5,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { Check, Loader2 } from "lucide-react";
 import { usePrefersReducedMotion } from "@/components/listing/wizard/use-prefers-reduced-motion";
 import { LiveDot } from "@/components/ui/studio";
-import { EbayLivePreview } from "@/components/studio/ebay-live-preview";
+import { EbayLivePreview, useConnectedEbayStoreName } from "@/components/studio/ebay-live-preview";
 import { cn } from "@/lib/utils";
 
 const STAGES = [
@@ -71,7 +71,7 @@ export function ListingPipeline({
 }) {
   const reduce = usePrefersReducedMotion();
   const [stage, setStage] = useState(0);
-  const shop = storeName?.trim() || "your eBay store";
+  const shop = useConnectedEbayStoreName(storeName);
   const typing = useTyped(SAMPLE_TITLE, stage >= 1, reduce);
   const photosOn = stage >= 0;
   const draftOn = stage >= 1;

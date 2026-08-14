@@ -47,6 +47,10 @@ import {
   getAttentionFields,
 } from "@/components/listing/review-helpers";
 import { readAiProviderSettings } from "@/components/settings/ai-settings-form";
+import {
+  brandingFromEbayStoreName,
+  displayNameFromEbayUsername,
+} from "@/lib/ebay/store-display-name";
 import type { ConfidenceStatus } from "@/lib/ai/confidence-engine";
 import {
   wizardStepToProgressIndex,
@@ -244,8 +248,15 @@ export function NewListingWorkspace({
     connected: boolean;
     configured: boolean;
     ebayUsername: string | null;
-  }>({ connected: false, configured: false, ebayUsername: null });
+    ebayStoreName: string | null;
+  }>({
+    connected: false,
+    configured: false,
+    ebayUsername: null,
+    ebayStoreName: null,
+  });
   const brandingDirtyRef = useRef(false);
+  const ebayNameLockRef = useRef(false);
   const brandingSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
     null,
   );
@@ -259,7 +270,7 @@ export function NewListingWorkspace({
         const cached = localStorage.getItem("higlou-active-branding");
         if (cached) {
           const parsed = JSON.parse(cached) as StoreBranding;
-          if (!cancelled && parsed?.storeName && !brandingDirtyRef.current) {
+        if (!cancelled && parsed?.storeName && !brandingDirtyRef.current && !ebayNameLockRef.current) {
             setStoreBranding(cloneStoreBranding(parsed));
           }
         }
@@ -271,7 +282,12 @@ export function NewListingWorkspace({
         if (!res.ok) return;
         const body = (await res.json()) as { branding: StoreBranding };
         // Don't clobber in-progress typing if the user already edited.
-        if (!cancelled && body.branding && !brandingDirtyRef.current) {
+        if (
+          !cancelled &&
+          body.branding &&
+          !brandingDirtyRef.current &&
+          !ebayNameLockRef.current
+        ) {
           setStoreBranding(cloneStoreBranding(body.branding));
           try {
             localStorage.setItem(
@@ -328,6 +344,19 @@ export function NewListingWorkspace({
 
   useEffect(() => {
     let cancelled = false;
+    const applyEbayStoreName = (name: string, username: string | null) => {
+      if (!name.trim() || brandingDirtyRef.current) return;
+      ebayNameLockRef.current = true;
+      setEbayConnection((prev) => ({
+        ...prev,
+        ebayUsername: username ?? prev.ebayUsername,
+        ebayStoreName: name,
+      }));
+      setStoreBranding((prev) => {
+        const next = brandingFromEbayStoreName(prev, name);
+        return next.storeName === prev.storeName ? prev : next;
+      });
+    };
     void (async () => {
       try {
         const res = await fetch("/api/ebay/connection");
@@ -339,15 +368,35 @@ export function NewListingWorkspace({
             ebayUsername?: string | null;
           };
         };
-        if (!cancelled && body.connection) {
-          setEbayConnection({
-            connected: Boolean(body.connection.connected),
-            configured: Boolean(body.connection.configured),
-            ebayUsername: body.connection.ebayUsername || null,
-          });
+        if (cancelled || !body.connection) return;
+        const username = body.connection.ebayUsername || null;
+        setEbayConnection({
+          connected: Boolean(body.connection.connected),
+          configured: Boolean(body.connection.configured),
+          ebayUsername: username,
+          ebayStoreName: username
+            ? displayNameFromEbayUsername(username)
+            : null,
+        });
+        if (body.connection.connected && username) {
+          applyEbayStoreName(displayNameFromEbayUsername(username), username);
         }
       } catch {
         /* optional */
+      }
+      if (cancelled) return;
+      try {
+        const res = await fetch("/api/ebay/store-name");
+        if (!res.ok) return;
+        const body = (await res.json()) as {
+          storeName?: string | null;
+          username?: string | null;
+        };
+        if (!cancelled && body.storeName) {
+          applyEbayStoreName(body.storeName, body.username || null);
+        }
+      } catch {
+        /* username already applied */
       }
     })();
     return () => {
@@ -1704,6 +1753,7 @@ export function NewListingWorkspace({
           onStoreBrandingChange={handleStoreBrandingChange}
           ebayConnected={ebayConnection.connected}
           ebayUsername={ebayConnection.ebayUsername}
+          ebayStoreName={ebayConnection.ebayStoreName}
           ebayConfigured={ebayConnection.configured}
           onPublishToEbay={(mode) => void publishToEbay(mode)}
           publishingEbay={publishingEbay}

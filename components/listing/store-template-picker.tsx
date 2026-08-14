@@ -28,10 +28,13 @@ export function StoreTemplatePicker({
   branding,
   onChange,
   compact = false,
+  nameSource = null,
 }: {
   branding: StoreBranding;
   onChange: (next: StoreBranding) => void;
   compact?: boolean;
+  /** When set, compact bar shows where the name came from (e.g. "eBay"). */
+  nameSource?: string | null;
 }) {
   // Keep empty strings editable — never coerce to "My Store" in the input value
   // (that made typed text collide with the fallback, e.g. "HMy Store").
@@ -89,6 +92,9 @@ export function StoreTemplatePicker({
           <span className="font-semibold">
             {storeName.trim() || "Your store"}
           </span>
+          {nameSource ? (
+            <span className="text-muted-foreground"> · {nameSource}</span>
+          ) : null}
           <span className="text-muted-foreground">
             {" "}
             · {templateMeta.name}

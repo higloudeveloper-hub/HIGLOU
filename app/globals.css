@@ -227,13 +227,22 @@
   }
 }
 
-@keyframes higlou-progress {
-  0% {
-    transform: translateX(-60%);
-  }
+@keyframes higlou-cta-glow {
+  0%,
   100% {
-    transform: translateX(220%);
+    box-shadow:
+      0 0 0 0 oklch(0.86 0.16 90 / 0.55),
+      0 10px 28px -12px oklch(0.7 0.14 85 / 0.55);
   }
+  50% {
+    box-shadow:
+      0 0 0 10px oklch(0.86 0.16 90 / 0),
+      0 14px 32px -10px oklch(0.7 0.14 85 / 0.7);
+  }
+}
+
+@utility higlou-cta-pulse {
+  animation: higlou-cta-glow 2.2s ease-in-out infinite;
 }
 
 @utility live-dot {
@@ -244,7 +253,8 @@
   .shimmer,
   .live-dot,
   .higlou-scan,
-  .higlou-indeterminate {
+  .higlou-indeterminate,
+  .higlou-cta-pulse {
     animation: none !important;
   }
 }

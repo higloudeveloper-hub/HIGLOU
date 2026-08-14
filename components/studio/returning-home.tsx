@@ -30,6 +30,96 @@ function statusTone(status: string) {
   return "Needs a look";
 }
 
+/** Mix of a hero banner, wide banners, and square tiles. */
+function tileKind(index: number): "hero" | "banner" | "square" {
+  if (index === 0) return "hero";
+  const slot = index % 5;
+  return slot === 3 ? "banner" : "square";
+}
+
+function QueueCard({
+  draft,
+  kind,
+  index,
+}: {
+  draft: ProductRow;
+  kind: "hero" | "banner" | "square";
+  index: number;
+}) {
+  const wide = kind !== "square";
+  const title = draft.title || "Untitled listing";
+  const meta = `${draft.brand || "Brand TBD"} · ${formatRelativeTime(draft.updatedAt)}`;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: 0.03 * index, duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
+      className={cn(
+        kind === "hero" && "col-span-2 lg:col-span-4",
+        kind === "banner" && "col-span-2",
+        kind === "square" && "col-span-1",
+      )}
+    >
+      <Link
+        href={`/listings/${draft.id}`}
+        className={cn(
+          "group relative block overflow-hidden rounded-[28px] bg-muted shadow-[0_12px_32px_-24px_rgba(20,16,8,0.55)] ring-1 ring-black/5 transition duration-300",
+          "hover:-translate-y-0.5 hover:shadow-[0_20px_40px_-24px_rgba(20,16,8,0.55)]",
+          kind === "hero" && "aspect-[16/7] min-h-[168px] sm:aspect-[24/8]",
+          kind === "banner" && "aspect-[16/8] min-h-[140px]",
+          kind === "square" && "aspect-square",
+        )}
+      >
+        {draft.coverUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={draft.coverUrl}
+            alt=""
+            className="absolute inset-0 size-full object-cover transition duration-500 group-hover:scale-[1.04]"
+          />
+        ) : (
+          <div className="absolute inset-0 bg-gradient-to-br from-muted to-muted-foreground/15" />
+        )}
+        <div
+          className={cn(
+            "absolute inset-0 bg-gradient-to-t from-black/75 via-black/20 to-transparent",
+            wide && "via-black/10",
+          )}
+        />
+        <div
+          className={cn(
+            "absolute inset-x-0 bottom-0 text-white",
+            wide ? "p-4 sm:p-5" : "p-3 sm:p-3.5",
+          )}
+        >
+          <span className="inline-flex rounded-full bg-white/18 px-2 py-0.5 text-[10px] font-semibold tracking-wide backdrop-blur-md">
+            {statusTone(draft.status)}
+          </span>
+          <p
+            className={cn(
+              "mt-1.5 font-semibold tracking-tight",
+              wide
+                ? "line-clamp-1 text-[17px] sm:text-[20px]"
+                : "line-clamp-2 text-[13.5px] leading-snug sm:text-[15px]",
+            )}
+          >
+            {title}
+          </p>
+          <p
+            className={cn(
+              "mt-0.5 text-white/75",
+              wide ? "text-[12.5px]" : "text-[11px]",
+            )}
+          >
+            {meta}
+          </p>
+        </div>
+      </Link>
+    </motion.div>
+  );
+}
+
 export function ReturningHome({
   name,
   listingCount,
@@ -46,7 +136,7 @@ export function ReturningHome({
   const hello = name ? `Hi, ${name}` : "Higlou";
 
   return (
-    <div className="mx-auto max-w-[880px] pb-16">
+    <div className="mx-auto max-w-[1080px] pb-16">
       <motion.header
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
@@ -100,38 +190,25 @@ export function ReturningHome({
             All listings
           </Link>
         </div>
-        <div className="grid gap-2">
-          {drafts.map((draft, i) => (
-            <motion.div
-              key={draft.id}
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.04 * i, duration: 0.35 }}
-            >
-              <Link
-                href={`/listings/${draft.id}`}
-                className="group flex items-center gap-3 rounded-2xl border border-border/70 bg-surface px-3 py-2.5 transition hover:border-border hover:bg-muted/40"
-              >
-                <div className="size-12 shrink-0 overflow-hidden rounded-xl bg-muted">
-                  {draft.coverUrl ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={draft.coverUrl} alt="" className="size-full object-cover" />
-                  ) : null}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium">
-                    {draft.title || "Untitled listing"}
-                  </p>
-                  <p className="truncate text-[12px] text-muted-foreground">
-                    {draft.brand || "Brand TBD"} · {statusTone(draft.status)} ·{" "}
-                    {formatRelativeTime(draft.updatedAt)}
-                  </p>
-                </div>
-                <ArrowRight className="size-4 shrink-0 text-muted-foreground/30 group-hover:text-foreground" />
-              </Link>
-            </motion.div>
-          ))}
-        </div>
+        {drafts.length === 0 ? (
+          <Link
+            href="/listings/new"
+            className="flex aspect-[21/8] items-center justify-center rounded-[28px] border border-dashed border-border bg-muted/40 text-sm text-muted-foreground hover:bg-muted"
+          >
+            No drafts waiting — start a new listing
+          </Link>
+        ) : (
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-4">
+            {drafts.map((draft, i) => (
+              <QueueCard
+                key={draft.id}
+                draft={draft}
+                kind={tileKind(i)}
+                index={i}
+              />
+            ))}
+          </div>
+        )}
       </section>
 
       {exportsList.length > 0 ? (

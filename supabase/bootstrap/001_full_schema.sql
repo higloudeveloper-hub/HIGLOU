@@ -699,7 +699,9 @@ create policy "ebay_connections_delete_own"
 alter table public.products
   add column if not exists ebay_offer_id text,
   add column if not exists ebay_listing_id text,
-  add column if not exists ebay_status text;
+  add column if not exists ebay_status text,
+  add column if not exists ebay_sold_qty integer,
+  add column if not exists ebay_last_sold_at timestamptz;
 
 -- ===== END supabase\migrations\20260806_ebay_connections.sql =====
 

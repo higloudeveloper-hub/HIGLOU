@@ -6,6 +6,7 @@ import { motion } from "motion/react";
 import { ArrowRight, Sparkles } from "lucide-react";
 import { formatRelativeTime } from "@/lib/format-relative-time";
 import { ListingPipeline } from "@/components/studio/listing-pipeline";
+import { EbaySalesPulse } from "@/components/studio/ebay-sales-pulse";
 import { cn } from "@/lib/utils";
 
 type ProductRow = {
@@ -181,6 +182,8 @@ export function ReturningHome({
       <div className="mb-8">
         <ListingPipeline compact storeName={ebayStoreName} />
       </div>
+
+      {ebayConnected ? <EbaySalesPulse /> : null}
 
       {!ebayConnected ? (
         <motion.div

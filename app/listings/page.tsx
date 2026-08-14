@@ -177,7 +177,9 @@ export default function ListingsPage() {
                     <img
                       src={product.coverUrl}
                       alt=""
-                      className="size-full object-cover transition duration-500 group-hover:scale-[1.02]"
+                      decoding="async"
+                      loading="lazy"
+                      className="size-full object-contain p-3"
                     />
                   ) : (
                     <div className="flex size-full items-center justify-center text-xs text-zinc-400">

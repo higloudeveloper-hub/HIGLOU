@@ -40,6 +40,31 @@ function tileKind(index: number): "hero" | "banner" | "square" {
   return slot === 3 ? "banner" : "square";
 }
 
+function CoverPhoto({
+  src,
+  priority = false,
+}: {
+  src?: string | null;
+  priority?: boolean;
+}) {
+  if (!src) {
+    return (
+      <div className="absolute inset-0 bg-gradient-to-br from-zinc-800 to-zinc-950" />
+    );
+  }
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={src}
+      alt=""
+      decoding="async"
+      loading={priority ? "eager" : "lazy"}
+      fetchPriority={priority ? "high" : "auto"}
+      className="absolute inset-0 size-full object-contain p-3 sm:p-4"
+    />
+  );
+}
+
 function QueueCard({
   draft,
   kind,
@@ -67,57 +92,64 @@ function QueueCard({
       <Link
         href={`/listings/${draft.id}`}
         className={cn(
-          "group relative block overflow-hidden rounded-[28px] bg-muted shadow-[0_12px_32px_-24px_rgba(20,16,8,0.55)] ring-1 ring-black/5 transition duration-300",
+          "group overflow-hidden rounded-[28px] bg-zinc-950 shadow-[0_12px_32px_-24px_rgba(20,16,8,0.55)] ring-1 ring-black/5 transition duration-300",
           "hover:-translate-y-0.5 hover:shadow-[0_20px_40px_-24px_rgba(20,16,8,0.55)]",
-          kind === "hero" && "aspect-[16/7] min-h-[168px] sm:aspect-[24/8]",
-          kind === "banner" && "aspect-[16/8] min-h-[140px]",
+          kind === "hero"
+            ? "grid lg:grid-cols-[minmax(0,1.25fr)_minmax(260px,0.75fr)]"
+            : "relative block",
+          kind === "banner" && "aspect-[4/3] sm:aspect-[16/10]",
           kind === "square" && "aspect-square",
         )}
       >
-        {draft.coverUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={draft.coverUrl}
-            alt=""
-            className="absolute inset-0 size-full object-cover transition duration-500 group-hover:scale-[1.04]"
-          />
+        {kind === "hero" ? (
+          <>
+            <div className="relative aspect-[4/3] bg-zinc-950 lg:aspect-auto lg:min-h-[300px]">
+              <CoverPhoto src={draft.coverUrl} priority />
+            </div>
+            <div className="flex flex-col justify-end gap-2 bg-zinc-900 px-5 py-5 text-white sm:px-6 sm:py-6">
+              <span className="inline-flex w-fit rounded-full bg-white/18 px-2 py-0.5 text-[10px] font-semibold tracking-wide">
+                {statusTone(draft.status)}
+              </span>
+              <p className="font-semibold tracking-tight line-clamp-2 text-[18px] sm:text-[22px]">
+                {title}
+              </p>
+              <p className="text-[12.5px] text-white/70">{meta}</p>
+            </div>
+          </>
         ) : (
-          <div className="absolute inset-0 bg-gradient-to-br from-muted to-muted-foreground/15" />
+          <>
+            <CoverPhoto src={draft.coverUrl} />
+            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/15 to-transparent" />
+            <div
+              className={cn(
+                "absolute inset-x-0 bottom-0 text-white",
+                wide ? "p-4 sm:p-5" : "p-3 sm:p-3.5",
+              )}
+            >
+              <span className="inline-flex rounded-full bg-white/18 px-2 py-0.5 text-[10px] font-semibold tracking-wide backdrop-blur-md">
+                {statusTone(draft.status)}
+              </span>
+              <p
+                className={cn(
+                  "mt-1.5 font-semibold tracking-tight",
+                  wide
+                    ? "line-clamp-1 text-[17px] sm:text-[20px]"
+                    : "line-clamp-2 text-[13.5px] leading-snug sm:text-[15px]",
+                )}
+              >
+                {title}
+              </p>
+              <p
+                className={cn(
+                  "mt-0.5 text-white/75",
+                  wide ? "text-[12.5px]" : "text-[11px]",
+                )}
+              >
+                {meta}
+              </p>
+            </div>
+          </>
         )}
-        <div
-          className={cn(
-            "absolute inset-0 bg-gradient-to-t from-black/75 via-black/20 to-transparent",
-            wide && "via-black/10",
-          )}
-        />
-        <div
-          className={cn(
-            "absolute inset-x-0 bottom-0 text-white",
-            wide ? "p-4 sm:p-5" : "p-3 sm:p-3.5",
-          )}
-        >
-          <span className="inline-flex rounded-full bg-white/18 px-2 py-0.5 text-[10px] font-semibold tracking-wide backdrop-blur-md">
-            {statusTone(draft.status)}
-          </span>
-          <p
-            className={cn(
-              "mt-1.5 font-semibold tracking-tight",
-              wide
-                ? "line-clamp-1 text-[17px] sm:text-[20px]"
-                : "line-clamp-2 text-[13.5px] leading-snug sm:text-[15px]",
-            )}
-          >
-            {title}
-          </p>
-          <p
-            className={cn(
-              "mt-0.5 text-white/75",
-              wide ? "text-[12.5px]" : "text-[11px]",
-            )}
-          >
-            {meta}
-          </p>
-        </div>
       </Link>
     </motion.div>
   );

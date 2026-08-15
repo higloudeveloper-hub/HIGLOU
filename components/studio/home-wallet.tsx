@@ -1,12 +1,13 @@
 "use client";
 
-import { Wallet } from "lucide-react";
+import { BadgeCheck } from "lucide-react";
 
 function money(n: number) {
   return new Intl.NumberFormat("en-US", {
     style: "currency",
     currency: "USD",
-    maximumFractionDigits: 0,
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
   }).format(n);
 }
 
@@ -19,11 +20,9 @@ export function HomeWallet({
 }) {
   if (compact) {
     return (
-      <div className="hidden min-w-[140px] text-right sm:block">
-        <p className="text-[10px] font-medium tracking-[0.14em] text-white/70 uppercase">
-          Wallet
-        </p>
-        <p className="text-[16px] font-semibold tabular-nums tracking-tight">
+      <div className="hidden min-w-[128px] text-right sm:block">
+        <p className="text-[11px] text-white/70">Available</p>
+        <p className="text-[15px] font-medium tabular-nums tracking-tight">
           {money(available)}
         </p>
       </div>
@@ -31,25 +30,20 @@ export function HomeWallet({
   }
 
   return (
-    <div className="mx-4 mb-3 flex items-center gap-3 rounded-2xl bg-white px-4 py-3 shadow-[0_1px_3px_rgba(15,17,17,0.08)]">
-      <span className="grid size-9 shrink-0 place-items-center rounded-full bg-[#141414] text-white">
-        <Wallet className="size-4" strokeWidth={1.8} />
-      </span>
-      <div className="min-w-0 flex-1">
-        <p className="text-[11px] font-medium tracking-[0.12em] text-[#8a8a8a] uppercase">
-          Available
-        </p>
-        <p className="text-[22px] font-semibold tabular-nums tracking-tight text-[#141414]">
-          {money(available)}
-        </p>
-      </div>
-      <span className="flex shrink-0 items-center gap-1.5 text-[12px] text-[#707070]">
-        <span className="relative flex size-1.5">
-          <span className="absolute inset-0 animate-ping rounded-full bg-[#3665F3]/70" />
-          <span className="relative size-1.5 rounded-full bg-[#3665F3]" />
+    <div className="shrink-0 border-b border-[#e5e5e5] bg-white px-4 py-4">
+      <div className="flex items-start justify-between gap-3">
+        <p className="text-[12px] text-[#707070]">Available balance</p>
+        <span className="inline-flex items-center gap-1 text-[12px] text-[#141414]">
+          <BadgeCheck className="size-3.5" strokeWidth={1.75} />
+          Verified
         </span>
-        Live
-      </span>
+      </div>
+      <p className="mt-1 text-[28px] font-medium tabular-nums tracking-tight text-[#141414] leading-none">
+        {money(available)}
+      </p>
+      <p className="mt-2 text-[12px] text-[#8a8a8a]">
+        USD · Higlou business payouts · ••2048
+      </p>
     </div>
   );
 }

@@ -59,14 +59,14 @@ const STEPS = [
   { id: "photos", ms: 1700, x: 20, y: 8, click: false, label: "Four photos" },
   { id: "title", ms: 2000, x: 40, y: 8, click: false, label: "Title written" },
   { id: "price", ms: 900, x: 40, y: 8, click: false, label: "$189.00" },
-  { id: "ready", ms: 1200, x: 40, y: 8, click: false, label: "Ready" },
-  { id: "aim", ms: 900, x: 91, y: 8, click: false, label: "One click" },
-  { id: "publish", ms: 1300, x: 91, y: 8, click: true, label: "Push" },
-  { id: "ebay", ms: 750, x: 16, y: 38, click: true, label: "Milwaukee drill" },
-  { id: "amazon", ms: 700, x: 50, y: 38, click: true, label: "Flood light" },
-  { id: "facebook", ms: 700, x: 84, y: 38, click: true, label: "Kettle" },
-  { id: "shopify", ms: 700, x: 24, y: 70, click: true, label: "Sneakers" },
-  { id: "web", ms: 750, x: 76, y: 70, click: true, label: "Comforter" },
+  { id: "ready", ms: 1000, x: 40, y: 8, click: false, label: "Ready" },
+  { id: "aim", ms: 1600, x: 91, y: 8, click: false, label: "Publishing" },
+  { id: "publish", ms: 1100, x: 91, y: 8, click: false, label: "Live" },
+  { id: "ebay", ms: 750, x: 16, y: 38, click: false, label: "Milwaukee drill" },
+  { id: "amazon", ms: 700, x: 50, y: 38, click: false, label: "Flood light" },
+  { id: "facebook", ms: 700, x: 84, y: 38, click: false, label: "Kettle" },
+  { id: "shopify", ms: 700, x: 24, y: 70, click: false, label: "Sneakers" },
+  { id: "web", ms: 750, x: 76, y: 70, click: false, label: "Comforter" },
   { id: "sales", ms: 2800, x: 88, y: 93, click: false, label: "Sales up" },
   { id: "hold", ms: 4000, x: 88, y: 93, click: false, label: "Try it" },
 ] as const;
@@ -320,7 +320,7 @@ function ChannelShell({
       animate={{
         opacity: live ? 1 : focused ? 0.78 : 0.32,
         filter: live ? "saturate(1)" : "saturate(0.4)",
-        scale: live ? 1 : 0.985,
+        y: live ? 0 : 10,
       }}
       transition={{ type: "spring", stiffness: 320, damping: 26 }}
       className={cn(
@@ -368,9 +368,10 @@ function ProductShot({
           initial={false}
           animate={{
             opacity: live ? 1 : present ? 0.38 : 0,
-            scale: live || present ? 1 : 0.97,
+            y: live ? 0 : present ? 14 : 22,
+            scale: live ? 1 : 0.96,
           }}
-          transition={{ duration: 0.4 }}
+          transition={{ type: "spring", stiffness: 260, damping: 24 }}
           className="absolute inset-0 size-full object-contain p-2"
         />
       </div>
@@ -584,13 +585,11 @@ export function ListingPipeline({
             x={beat === 3 ? 8 + Math.max(0, filled - 1) * 5.2 : step.x}
             y={step.y}
             click={step.click || (beat === 3 && filled > 1)}
-            visible
+            visible={beat <= 5}
             label={
               beat === 3
                 ? `${filled} of ${shots.length} photos`
-                : beat >= 14
-                  ? `$${sales.toLocaleString("en-US")} sales up`
-                  : step.label
+                : step.label
             }
             clickKey={`${step.id}-${beat === 3 ? filled : beat}`}
           />
@@ -684,33 +683,35 @@ export function ListingPipeline({
               "One photo. Then one click."
             )}
             {draftOn && !readyOn ? " · writing…" : null}
-            {readyOn && !clickOn ? " · ready to publish" : null}
+            {readyOn && beat < 7 ? " · ready" : null}
+            {beat === 7 ? " · publishing…" : null}
             {clickOn ? " · eBay · Amazon · Facebook · Shopify · site" : null}
           </p>
         </div>
-        <motion.div
-          initial={false}
-          animate={
-            beat === 7 || beat === 8
-              ? {
-                  scale: beat === 8 ? [1, 0.88, 1] : 1.05,
-                  boxShadow:
-                    beat === 8
-                      ? "0 0 0 12px rgba(20,20,20,0.12)"
-                      : "0 0 0 8px rgba(20,20,20,0.08)",
-                }
-              : { scale: 1, boxShadow: "0 0 0 0px rgba(20,20,20,0)" }
-          }
-          transition={{ duration: 0.42 }}
+        <div
           className={cn(
-            "inline-flex h-10 shrink-0 items-center rounded-md px-4 text-[13px] font-semibold tracking-[-0.01em]",
-            clickOn || readyOn
-              ? "bg-[#141414] text-white"
-              : "bg-[#ececec] text-[#9b9b9b]",
+            "relative h-10 w-[122px] shrink-0 overflow-hidden rounded-md text-[13px] font-semibold tracking-[-0.01em]",
+            readyOn || clickOn ? "bg-[#ececec] text-white" : "bg-[#ececec] text-[#9b9b9b]",
           )}
         >
-          {beat === 8 ? "Push" : allLive || webOn ? "Live" : "Publish"}
-        </motion.div>
+          <motion.div
+            className="absolute inset-x-0 bottom-0 bg-[#141414]"
+            initial={false}
+            animate={{
+              height:
+                beat < 7 ? (readyOn ? "12%" : "0%") : beat === 7 ? "70%" : "100%",
+            }}
+            transition={{ duration: beat === 7 ? 1.35 : 0.45, ease: [0.22, 1, 0.36, 1] }}
+          />
+          <span
+            className={cn(
+              "relative z-10 grid h-full place-items-center",
+              beat >= 7 || clickOn ? "text-white" : readyOn ? "text-[#141414]" : "text-[#9b9b9b]",
+            )}
+          >
+            {beat === 7 ? "Publishing" : allLive || webOn || beat >= 8 ? "Live" : "Publish"}
+          </span>
+        </div>
       </div>
 
       <div className="relative min-h-0 flex-1">

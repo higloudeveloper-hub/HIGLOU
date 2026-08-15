@@ -79,18 +79,21 @@ export function EbayLivePreview({
   const price = live ? priceLabel.replace(/^US\s*/i, "") : "—";
   const was = compareAtLabel?.replace(/^US\s*/i, "") || "";
   const dropping = Boolean(live && was && was !== price);
+  const tight = compact || fill;
 
   return (
     <div
       className={cn(
-        "flex min-h-0 flex-col overflow-hidden rounded-xl bg-white font-sans text-[#191919] shadow-[0_12px_32px_-18px_rgba(0,0,0,0.5)] ring-1 ring-black/10",
-        (compact || fill) && "h-full",
+        "min-h-0 bg-white font-sans text-[#191919] shadow-[0_12px_32px_-18px_rgba(0,0,0,0.5)] ring-1 ring-black/10",
+        tight
+          ? "grid h-full min-h-0 flex-1 grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden rounded-none"
+          : "flex flex-col overflow-hidden rounded-xl",
         className,
       )}
     >
-      <div className="flex shrink-0 items-center gap-2 border-b border-[#e5e5e5] bg-white px-2.5 py-2">
-        <EbayWordmark className={compact ? "text-[15px]" : "text-[18px]"} />
-        <div className="flex min-w-0 flex-1 items-center gap-1 rounded-full border border-[#ccc] bg-[#f7f7f7] px-2.5 py-1 text-[11px] text-[#707070]">
+      <div className="flex shrink-0 items-center gap-2 border-b border-[#e5e5e5] bg-white px-2 py-1">
+        <EbayWordmark className={tight ? "text-[14px]" : "text-[18px]"} />
+        <div className="flex min-w-0 flex-1 items-center gap-1 rounded-full border border-[#ccc] bg-[#f7f7f7] px-2 py-0.5 text-[11px] text-[#707070]">
           <Search className="size-3 shrink-0" strokeWidth={2} />
           <span className="truncate">Search eBay</span>
         </div>
@@ -99,8 +102,8 @@ export function EbayLivePreview({
 
       <div
         className={cn(
-          "relative bg-white",
-          compact || fill ? "min-h-0 flex-1" : "aspect-square",
+          "relative min-h-0 overflow-hidden bg-white",
+          tight ? "h-full" : "aspect-square",
         )}
       >
         <AnimatePresence mode="wait">
@@ -110,7 +113,7 @@ export function EbayLivePreview({
               key={photoSrc}
               src={photoSrc}
               alt=""
-              initial={{ y: -48, opacity: 0, scale: 0.9 }}
+              initial={{ y: -16, opacity: 0, scale: 0.94 }}
               animate={{ y: 0, opacity: 1, scale: 1 }}
               exit={{ opacity: 0 }}
               transition={{ type: "spring", stiffness: 280, damping: 22 }}
@@ -142,19 +145,19 @@ export function EbayLivePreview({
         ) : null}
       </div>
 
-      <div className={cn("shrink-0", compact || fill ? "p-2" : "p-3")}>
-        {!compact && !fill ? (
+      <div className={cn("shrink-0", tight ? "px-2 pt-1 pb-2" : "p-3")}>
+        {!tight ? (
           <p className="mb-1 text-[10px] text-[#707070]">
             Home › Business & Industrial › Power Tools
           </p>
         ) : null}
         <motion.p
-          initial={live ? { opacity: 0, y: 8 } : false}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.12, duration: 0.32 }}
+          initial={live ? { opacity: 0 } : false}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.06, duration: 0.18 }}
           className={cn(
             "font-semibold leading-snug",
-            compact || fill
+            tight
               ? "line-clamp-1 text-[12px]"
               : "line-clamp-2 text-[14px]",
             live ? "text-[#191919]" : "text-[#9b9b9b]",
@@ -162,7 +165,7 @@ export function EbayLivePreview({
         >
           {live ? title : "Your listing appears here on eBay"}
         </motion.p>
-        {compact || fill ? null : (
+        {tight ? null : (
           <p className="mt-1 text-[11px] text-[#707070]">
             Condition: <span className="font-semibold text-[#191919]">New</span>
           </p>
@@ -177,16 +180,16 @@ export function EbayLivePreview({
             <AnimatePresence mode="wait">
               <motion.p
                 key={price}
-                initial={{ y: 16, opacity: 0, scale: 0.88 }}
-                animate={{ y: 0, opacity: 1, scale: 1 }}
-                transition={{ type: "spring", stiffness: 420, damping: 22, delay: 0.18 }}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ duration: 0.16, delay: 0.08 }}
                 className={cn(
                   "font-bold tabular-nums",
-                  compact || fill ? "text-[16px]" : "text-[22px]",
+                  tight ? "text-[15px]" : "text-[22px]",
                   dropping ? "text-[#E53238]" : "text-[#191919]",
                 )}
               >
-                <span className="text-[12px] font-semibold">US </span>
+                <span className="text-[11px] font-semibold">US </span>
                 {price}
               </motion.p>
             </AnimatePresence>
@@ -195,42 +198,39 @@ export function EbayLivePreview({
           <p
             className={cn(
               "mt-0.5 font-bold tabular-nums text-[#9b9b9b]",
-              compact || fill ? "text-[16px]" : "text-[22px]",
+              tight ? "text-[15px]" : "text-[22px]",
             )}
           >
             —
           </p>
         )}
-        {compact || fill ? null : (
+        {tight ? null : (
           <p className="min-h-[16px] text-[11px] text-[#707070]">
             {live ? "Free shipping · Arrives in 3–5 days" : "Waiting for publish"}
           </p>
         )}
 
-        <motion.div
-          initial={live ? { opacity: 0, y: 10 } : false}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.28, duration: 0.32 }}
+        <div
           className={cn(
-            "mt-1.5 grid gap-1.5",
-            compact || fill ? "grid-cols-2" : "grid-cols-1",
+            "mt-1 grid gap-1",
+            tight ? "grid-cols-2" : "grid-cols-1",
           )}
         >
           <div
             className={cn(
-              "rounded-lg text-center text-[11px] font-bold",
-              compact || fill ? "py-1.5" : "py-2 text-[12px]",
+              "grid h-7 place-items-center rounded-lg text-center text-[10px] font-bold whitespace-nowrap",
+              !tight && "h-9 text-[12px]",
               live
                 ? "bg-[#3665F3] text-white"
                 : "bg-[#e5e5e5] text-[#9b9b9b]",
             )}
           >
-            {live ? "Buy It Now" : "Goes live next"}
+            {live ? "Buy It Now" : tight ? "Soon" : "Goes live next"}
           </div>
           <div
             className={cn(
-              "rounded-lg border text-center text-[11px] font-bold",
-              compact || fill ? "py-1.5" : "py-2 text-[12px]",
+              "grid h-7 place-items-center rounded-lg border text-center text-[10px] font-bold whitespace-nowrap",
+              !tight && "h-9 text-[12px]",
               live
                 ? "border-[#3665F3] text-[#3665F3]"
                 : "border-[#e5e5e5] text-[#9b9b9b]",
@@ -238,9 +238,9 @@ export function EbayLivePreview({
           >
             Add to cart
           </div>
-        </motion.div>
+        </div>
 
-        {compact || fill ? null : (
+        {tight ? null : (
         <div className="mt-2.5 flex items-center gap-2 border-t border-[#e5e5e5] pt-2.5">
           <span className="grid size-7 shrink-0 place-items-center rounded-full bg-[#191919] text-[9px] font-bold text-white">
             {shop.slice(0, 1).toUpperCase()}

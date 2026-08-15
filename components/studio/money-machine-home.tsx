@@ -1,10 +1,12 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { ListingPipeline } from "@/components/studio/listing-pipeline";
 import { ListingCard } from "@/components/studio/listing-card";
 import { MarketPromos } from "@/components/studio/market-promos";
 import { NewListingButton } from "@/components/brand/new-listing-button";
+import { HomeWallet } from "@/components/studio/home-wallet";
 import { formatRelativeTime } from "@/lib/format-relative-time";
 
 export type HomeDraft = {
@@ -37,6 +39,8 @@ export function MoneyMachineHome({
   setupHref?: string | null;
   drafts?: HomeDraft[];
 }) {
+  const [wallet, setWallet] = useState(0);
+
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-white md:h-full">
       <div className="flex shrink-0 items-center gap-4 bg-[#3665F3] px-5 py-2.5 text-white">
@@ -50,13 +54,15 @@ export function MoneyMachineHome({
         <p className="hidden min-w-0 flex-1 truncate text-[13px] text-white/85 sm:block">
           One photo. Five live storefronts.
         </p>
+        <HomeWallet available={wallet} compact />
         <NewListingButton tone="on-blue" size="sm" className="shrink-0" />
       </div>
 
       <div className="grid min-h-0 flex-1 lg:grid-cols-[minmax(0,1.05fr)_minmax(420px,0.95fr)]">
-        <ListingPipeline storeName={storeName} />
+        <ListingPipeline storeName={storeName} onWallet={setWallet} />
 
         <aside className="flex min-h-0 flex-col border-t border-[#eee] bg-[#f3f3f3] lg:border-t-0 lg:border-l">
+          <HomeWallet available={wallet} />
           <div className="flex shrink-0 items-center justify-between px-4 py-3">
             <div>
               <p className="text-[15px] font-bold tracking-tight text-[#191919]">

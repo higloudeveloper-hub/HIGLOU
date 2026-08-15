@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { Check, Globe, MousePointer2, Search, ShoppingCart, Star } from "lucide-react";
+import { Check, Globe, MousePointer2, Search, ShoppingCart } from "lucide-react";
 import { usePrefersReducedMotion } from "@/components/listing/wizard/use-prefers-reduced-motion";
 import {
   EbayLivePreview,
@@ -59,34 +59,34 @@ const CATALOG = [
 ] as const;
 
 const STEPS = [
-  { id: "grab", ms: 1400, x: 14, y: 74, click: true, label: "Grab one photo" },
-  { id: "drag", ms: 2100, x: 9, y: 11, click: false, label: "Drop on listing" },
-  { id: "drop", ms: 1100, x: 9, y: 11, click: true, label: "Photo in" },
-  { id: "photos", ms: 2400, x: 22, y: 8, click: false, label: "Higlou adds shots" },
-  { id: "title", ms: 2400, x: 40, y: 8, click: false, label: "Title writes itself" },
-  { id: "desc", ms: 2000, x: 40, y: 8, click: false, label: "Description" },
-  { id: "compare", ms: 2200, x: 40, y: 8, click: false, label: "Priced vs sold comps" },
-  { id: "fillEbay", ms: 1300, x: 16, y: 38, click: false, label: "eBay" },
-  { id: "fillAmazon", ms: 1200, x: 50, y: 38, click: false, label: "Amazon" },
-  { id: "fillFacebook", ms: 1200, x: 84, y: 38, click: false, label: "Facebook" },
-  { id: "fillShopify", ms: 1200, x: 24, y: 70, click: false, label: "Shopify" },
-  { id: "fillWeb", ms: 1300, x: 76, y: 70, click: false, label: "Your site" },
-  { id: "ready", ms: 1100, x: 91, y: 8, click: false, label: "Publish" },
-  { id: "publish", ms: 1800, x: 91, y: 8, click: true, label: "Publishing" },
-  { id: "ebayLive", ms: 1200, x: 16, y: 38, click: false, label: "Live on eBay" },
-  { id: "amazonLive", ms: 1100, x: 50, y: 38, click: false, label: "Live on Amazon" },
-  { id: "facebookLive", ms: 1100, x: 84, y: 38, click: false, label: "Live on Facebook" },
-  { id: "shopifyLive", ms: 1100, x: 24, y: 70, click: false, label: "Live on Shopify" },
-  { id: "webLive", ms: 1200, x: 76, y: 70, click: false, label: "Live on your site" },
-  { id: "sales", ms: 2600, x: 88, y: 93, click: false, label: "Revenue" },
-  { id: "hold", ms: 2200, x: 88, y: 93, click: false, label: "Next product" },
+  { id: "grab", ms: 520, x: 14, y: 74, click: true, label: "Grab one photo" },
+  { id: "drag", ms: 780, x: 9, y: 11, click: false, label: "Drop on listing" },
+  { id: "drop", ms: 420, x: 9, y: 11, click: true, label: "Photo in" },
+  { id: "photos", ms: 780, x: 22, y: 8, click: false, label: "Higlou adds shots" },
+  { id: "title", ms: 720, x: 40, y: 8, click: false, label: "Title writes itself" },
+  { id: "desc", ms: 560, x: 40, y: 8, click: false, label: "Description" },
+  { id: "compare", ms: 620, x: 40, y: 8, click: false, label: "Priced vs sold comps" },
+  { id: "fillEbay", ms: 480, x: 16, y: 38, click: false, label: "eBay" },
+  { id: "fillAmazon", ms: 420, x: 50, y: 38, click: false, label: "Amazon" },
+  { id: "fillFacebook", ms: 420, x: 84, y: 38, click: false, label: "Facebook" },
+  { id: "fillShopify", ms: 420, x: 24, y: 70, click: false, label: "Shopify" },
+  { id: "fillWeb", ms: 480, x: 76, y: 70, click: false, label: "Your site" },
+  { id: "ready", ms: 380, x: 91, y: 8, click: false, label: "Publish" },
+  { id: "publish", ms: 640, x: 91, y: 8, click: true, label: "Publishing" },
+  { id: "ebayLive", ms: 420, x: 16, y: 38, click: false, label: "Live on eBay" },
+  { id: "amazonLive", ms: 380, x: 50, y: 38, click: false, label: "Live on Amazon" },
+  { id: "facebookLive", ms: 380, x: 84, y: 38, click: false, label: "Live on Facebook" },
+  { id: "shopifyLive", ms: 380, x: 24, y: 70, click: false, label: "Live on Shopify" },
+  { id: "webLive", ms: 420, x: 76, y: 70, click: false, label: "Live on your site" },
+  { id: "sales", ms: 1100, x: 88, y: 93, click: false, label: "Revenue" },
+  { id: "hold", ms: 640, x: 88, y: 93, click: false, label: "Next product" },
 ] as const;
 
 const DROP_STEPS = [
-  { id: "grab", ms: 1400, x: 14, y: 74, click: true, label: "Grab one photo" },
-  { id: "drag", ms: 2100, x: 9, y: 11, click: false, label: "Drop on listing" },
-  { id: "drop", ms: 1100, x: 9, y: 11, click: true, label: "Photo in" },
-  { id: "hold", ms: 2000, x: 9, y: 11, click: false, label: "Your turn" },
+  { id: "grab", ms: 520, x: 14, y: 74, click: true, label: "Grab one photo" },
+  { id: "drag", ms: 780, x: 9, y: 11, click: false, label: "Drop on listing" },
+  { id: "drop", ms: 420, x: 9, y: 11, click: true, label: "Photo in" },
+  { id: "hold", ms: 800, x: 9, y: 11, click: false, label: "Your turn" },
 ] as const;
 
 type StepId = (typeof STEPS)[number]["id"];
@@ -153,7 +153,7 @@ function useTyped(text: string, on: boolean, reduce: boolean) {
       i += 1;
       setOut(text.slice(0, i));
       if (i >= text.length) window.clearInterval(t);
-    }, 32);
+    }, 11);
     return () => window.clearInterval(t);
   }, [text, on, reduce]);
   return out;
@@ -172,7 +172,7 @@ function useCountUp(target: number, on: boolean, reduce: boolean) {
     }
     setN(0);
     const start = performance.now();
-    const dur = 980;
+    const dur = 560;
     let raf = 0;
     const tick = (now: number) => {
       const t = Math.min(1, (now - start) / dur);
@@ -197,7 +197,7 @@ function useCountToward(target: number, reduce: boolean) {
     }
     const from = current.current;
     const start = performance.now();
-    const dur = 920;
+    const dur = 540;
     let raf = 0;
     const tick = (now: number) => {
       const t = Math.min(1, (now - start) / dur);
@@ -274,7 +274,7 @@ function GuideCursor({
         top: `${y}%`,
         opacity: visible ? 1 : 0,
       }}
-      transition={{ type: "spring", stiffness: 170, damping: 22 }}
+      transition={{ type: "spring", stiffness: 260, damping: 24 }}
     >
       <motion.div
         key={clickKey}
@@ -341,8 +341,8 @@ function DragGhost({
       }}
       transition={{
         type: "spring",
-        stiffness: phase === "drag" ? 78 : 150,
-        damping: phase === "drag" ? 14 : 18,
+        stiffness: phase === "drag" ? 160 : 240,
+        damping: phase === "drag" ? 20 : 22,
       }}
     >
       <div
@@ -393,7 +393,7 @@ function FlyClone({
         opacity: 0,
         rotate: 0,
       }}
-      transition={{ duration: 0.78, ease: [0.16, 1, 0.3, 1] }}
+      transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
     >
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img src={src} alt="" className="size-full object-contain p-0.5" />
@@ -421,11 +421,10 @@ function ChannelShell({
       animate={{
         opacity: on ? 1 : focused ? 0.7 : 0.28,
         filter: on ? "saturate(1)" : "saturate(0.35)",
-        y: on ? 0 : 8,
       }}
-      transition={{ type: "spring", stiffness: 320, damping: 26 }}
+      transition={{ type: "spring", stiffness: 380, damping: 28 }}
       className={cn(
-        "relative flex min-h-0 flex-col overflow-hidden bg-white",
+        "relative flex h-full min-h-0 flex-col overflow-hidden bg-white",
         focused && "z-10 ring-2 ring-inset ring-[#141414]/20 shadow-[0_8px_28px_-18px_rgba(0,0,0,0.35)]",
         className,
       )}
@@ -463,39 +462,18 @@ function LivePill({ on, label }: { on: boolean; label: string }) {
 
 function LivePhoto({ src, className }: { src: string; className?: string }) {
   return (
-    <div className={cn("relative min-h-0 flex-1 overflow-hidden bg-white", className)}>
+    <div className={cn("relative h-full min-h-0 overflow-hidden bg-white", className)}>
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <motion.img
         key={src}
         src={src}
         alt=""
-        initial={{ y: -44, opacity: 0, scale: 0.9 }}
+        initial={{ y: -16, opacity: 0, scale: 0.94 }}
         animate={{ y: 0, opacity: 1, scale: 1 }}
-        transition={{ type: "spring", stiffness: 280, damping: 22 }}
-        className="absolute inset-0 size-full object-contain p-2"
+        transition={{ type: "spring", stiffness: 380, damping: 26 }}
+        className="absolute inset-0 size-full object-contain p-1.5"
       />
     </div>
-  );
-}
-
-function Stamp({
-  delay,
-  children,
-  className,
-}: {
-  delay: number;
-  children: ReactNode;
-  className?: string;
-}) {
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 12 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ delay, duration: 0.36, ease: [0.22, 1, 0.36, 1] }}
-      className={className}
-    >
-      {children}
-    </motion.div>
   );
 }
 
@@ -509,11 +487,11 @@ function AmazonStorefront({
   price: string;
 }) {
   return (
-    <div className="flex h-full min-h-0 flex-col bg-white">
-      <div className="flex shrink-0 items-center gap-2 bg-[#131921] px-2 py-1.5">
+    <div className="grid h-full min-h-0 flex-1 grid-rows-[auto_minmax(0,1fr)_auto] bg-white">
+      <div className="flex shrink-0 items-center gap-2 bg-[#131921] px-2 py-1">
         <AmazonMark className="text-[13px] text-white" />
         <div className="flex min-w-0 flex-1 overflow-hidden rounded-sm">
-          <span className="min-w-0 flex-1 truncate bg-white px-2 py-1 text-[10px] text-[#888]">
+          <span className="min-w-0 flex-1 truncate bg-white px-2 py-0.5 text-[10px] text-[#888]">
             Search Amazon
           </span>
           <span className="grid w-7 shrink-0 place-items-center bg-[#FEBD69] text-[#131921]">
@@ -523,29 +501,17 @@ function AmazonStorefront({
         <ShoppingCart className="size-3.5 shrink-0 text-white" />
       </div>
       <LivePhoto src={src} />
-      <div className="shrink-0 px-2.5 pb-2.5 pt-1">
-        <Stamp delay={0.12}>
-          <p className="line-clamp-2 text-[11px] leading-snug text-[#0F1111]">{title}</p>
-          <p className="mt-0.5 flex items-center gap-0.5 text-[10px] text-[#007185]">
-            {Array.from({ length: 5 }).map((_, i) => (
-              <Star key={i} className="size-2.5 fill-[#DE7921] text-[#DE7921]" />
-            ))}
-            <span className="ml-1">1,284</span>
-          </p>
-        </Stamp>
-        <Stamp delay={0.22}>
-          <p className="text-[20px] font-semibold tabular-nums text-[#0F1111]">{price}</p>
-          <p className="text-[10px] font-semibold text-[#C45500]">FREE delivery Tomorrow</p>
-          <p className="text-[10px] font-medium text-[#007600]">In Stock</p>
-        </Stamp>
-        <Stamp delay={0.34} className="mt-1.5 grid gap-1">
-          <p className="grid h-7 place-items-center rounded-full bg-[#FFD814] text-[11px] font-semibold text-[#0F1111]">
+      <div className="shrink-0 px-2 pb-2 pt-1">
+        <p className="line-clamp-1 text-[11px] leading-snug text-[#0F1111]">{title}</p>
+        <p className="text-[15px] font-semibold tabular-nums text-[#0F1111]">{price}</p>
+        <div className="mt-1 grid grid-cols-2 gap-1">
+          <p className="grid h-7 place-items-center rounded-full bg-[#FFD814] text-[10px] font-semibold whitespace-nowrap text-[#0F1111]">
             Add to Cart
           </p>
-          <p className="grid h-7 place-items-center rounded-full bg-[#FFA41C] text-[11px] font-semibold text-[#0F1111]">
+          <p className="grid h-7 place-items-center rounded-full bg-[#FFA41C] text-[10px] font-semibold whitespace-nowrap text-[#0F1111]">
             Buy Now
           </p>
-        </Stamp>
+        </div>
       </div>
     </div>
   );
@@ -563,33 +529,25 @@ function FacebookStorefront({
   seller: string;
 }) {
   return (
-    <div className="flex h-full min-h-0 flex-col bg-white">
-      <div className="flex shrink-0 items-center justify-between border-b border-[#E4E6EB] px-2.5 py-2">
-        <span className="text-[13px] font-bold tracking-tight text-[#0866FF]">
-          marketplace
-        </span>
-        <Search className="size-3.5 text-[#050505]" />
-      </div>
-      <Stamp delay={0.06} className="flex shrink-0 items-center gap-2 px-2.5 py-1.5">
-        <span className="grid size-7 shrink-0 place-items-center rounded-full bg-[#E4E6EB] text-[10px] font-bold text-[#050505]">
+    <div className="grid h-full min-h-0 flex-1 grid-rows-[auto_minmax(0,1fr)_auto] bg-white">
+      <div className="flex shrink-0 items-center gap-2 border-b border-[#E4E6EB] px-2.5 py-1.5">
+        <span className="grid size-6 shrink-0 place-items-center rounded-full bg-[#E4E6EB] text-[10px] font-bold text-[#050505]">
           {seller.slice(0, 1).toUpperCase()}
         </span>
-        <div className="min-w-0">
-          <p className="truncate text-[12px] font-semibold text-[#050505]">{seller}</p>
-          <p className="text-[10px] text-[#65676B]">Listed just now · Nearby</p>
-        </div>
-      </Stamp>
+        <span className="min-w-0 flex-1 truncate text-[12px] font-semibold text-[#050505]">
+          {seller}
+        </span>
+        <span className="text-[12px] font-bold tracking-tight text-[#0866FF]">
+          marketplace
+        </span>
+      </div>
       <LivePhoto src={src} className="bg-[#F0F2F5]" />
-      <div className="shrink-0 px-2.5 py-2">
-        <Stamp delay={0.2}>
-          <p className="text-[20px] font-bold tabular-nums text-[#050505]">{price}</p>
-          <p className="line-clamp-1 text-[12px] text-[#050505]">{title}</p>
-        </Stamp>
-        <Stamp delay={0.34} className="mt-1.5">
-          <p className="grid h-8 place-items-center rounded-md bg-[#E7F3FF] text-[12px] font-semibold text-[#0866FF]">
-            Message
-          </p>
-        </Stamp>
+      <div className="shrink-0 px-2.5 py-1.5">
+        <p className="text-[15px] font-bold tabular-nums text-[#050505]">{price}</p>
+        <p className="line-clamp-1 text-[12px] text-[#050505]">{title}</p>
+        <p className="mt-1 grid h-7 place-items-center rounded-md bg-[#E7F3FF] text-[12px] font-semibold text-[#0866FF]">
+          Message
+        </p>
       </div>
     </div>
   );
@@ -605,31 +563,23 @@ function ShopifyStorefront({
   price: string;
 }) {
   return (
-    <div className="flex h-full min-h-0 flex-col bg-white">
-      <p className="shrink-0 bg-[#121212] py-1 text-center text-[10px] font-medium tracking-wide text-white">
-        Free shipping over $50
-      </p>
-      <div className="flex shrink-0 items-center justify-between border-b border-[#e5e5e5] px-3 py-2">
-        <span className="text-[13px] font-semibold tracking-tight">Your store</span>
-        <ShoppingCart className="size-3.5" />
+    <div className="grid h-full min-h-0 flex-1 grid-rows-[auto_minmax(0,1fr)_auto] bg-white">
+      <div className="flex shrink-0 items-center justify-between bg-[#121212] px-3 py-1.5">
+        <span className="text-[12px] font-semibold tracking-tight text-white">Your store</span>
+        <ShoppingCart className="size-3.5 text-white" />
       </div>
       <LivePhoto src={src} />
-      <div className="shrink-0 px-3 pb-3 pt-1.5">
-        <Stamp delay={0.14}>
-          <p className="text-[10px] font-medium tracking-[0.14em] text-[#6a6a6a]">
-            HIGLOU
-          </p>
-          <p className="line-clamp-2 text-[13px] font-medium tracking-tight">{title}</p>
-          <p className="mt-1 text-[16px] tabular-nums">{price}</p>
-        </Stamp>
-        <Stamp delay={0.32} className="mt-2 grid gap-1">
-          <p className="grid h-8 place-items-center rounded-md bg-[#121212] text-[12px] font-semibold text-white">
+      <div className="shrink-0 px-3 pb-2 pt-1">
+        <p className="line-clamp-1 text-[13px] font-medium tracking-tight">{title}</p>
+        <p className="mt-0.5 text-[15px] tabular-nums">{price}</p>
+        <div className="mt-1 grid grid-cols-2 gap-1">
+          <p className="grid h-7 place-items-center rounded-md bg-[#121212] text-[10px] font-semibold whitespace-nowrap text-white">
             Add to cart
           </p>
-          <p className="grid h-8 place-items-center rounded-md bg-[#008060] text-[12px] font-semibold text-white">
+          <p className="grid h-7 place-items-center rounded-md bg-[#008060] text-[10px] font-semibold whitespace-nowrap text-white">
             Buy it now
           </p>
-        </Stamp>
+        </div>
       </div>
     </div>
   );
@@ -647,8 +597,8 @@ function SiteStorefront({
   slug: string;
 }) {
   return (
-    <div className="flex h-full min-h-0 flex-col bg-white">
-      <div className="flex shrink-0 items-center gap-1.5 border-b border-[#e5e5e5] bg-[#f3f3f3] px-2 py-1.5">
+    <div className="grid h-full min-h-0 flex-1 grid-rows-[auto_minmax(0,1fr)_auto] bg-white">
+      <div className="flex shrink-0 items-center gap-1.5 border-b border-[#e5e5e5] bg-[#f3f3f3] px-2 py-1">
         <span className="size-1.5 rounded-full bg-[#FF5F57]" />
         <span className="size-1.5 rounded-full bg-[#FEBC2E]" />
         <span className="size-1.5 rounded-full bg-[#28C840]" />
@@ -664,22 +614,13 @@ function SiteStorefront({
           </motion.span>
         </span>
       </div>
-      <div className="flex shrink-0 items-center justify-between border-b border-[#eee] px-3 py-2">
-        <span className="text-[13px] font-semibold tracking-tight">HIGLOU</span>
-        <span className="text-[11px] text-[#707070]">Shop · About · Cart</span>
-      </div>
       <LivePhoto src={src} />
-      <div className="shrink-0 px-3 pb-3 pt-1.5">
-        <Stamp delay={0.14}>
-          <p className="text-[11px] text-[#707070]">Home / Shop / {title}</p>
-          <p className="mt-0.5 line-clamp-2 text-[14px] font-semibold tracking-tight">{title}</p>
-          <p className="mt-1 text-[18px] font-semibold tabular-nums">{price}</p>
-        </Stamp>
-        <Stamp delay={0.32} className="mt-2">
-          <p className="grid h-9 place-items-center rounded-md bg-[#141414] text-[12px] font-semibold text-white">
-            Add to bag
-          </p>
-        </Stamp>
+      <div className="shrink-0 px-3 pb-2 pt-1">
+        <p className="line-clamp-1 text-[13px] font-semibold tracking-tight">{title}</p>
+        <p className="mt-0.5 text-[15px] font-semibold tabular-nums">{price}</p>
+        <p className="mt-1 grid h-7 place-items-center rounded-md bg-[#141414] text-[11px] font-semibold text-white">
+          Add to bag
+        </p>
       </div>
     </div>
   );
@@ -770,12 +711,14 @@ export function ListingPipeline({
   className,
   photos,
   mode = "story",
+  onWallet,
 }: {
   storeName?: string | null;
   compact?: boolean;
   className?: string;
   photos?: string[] | null;
   mode?: "story" | "drop";
+  onWallet?: (available: number) => void;
 }) {
   const reduce = usePrefersReducedMotion();
   const dropMode = mode === "drop";
@@ -817,6 +760,16 @@ export function ListingPipeline({
   const descTyping = useTyped(item.description, at("desc"), reduce);
   const price = useCountUp(item.price, at("compare"), reduce);
   const sales = useCountToward(money, reduce);
+  const walletRef = useRef(0);
+  const prevSales = useRef(0);
+
+  useEffect(() => {
+    const delta = sales - prevSales.current;
+    prevSales.current = sales;
+    if (delta <= 0) return;
+    walletRef.current += delta;
+    onWallet?.(walletRef.current);
+  }, [sales, onWallet]);
 
   const photoIn = freezeDrop || at("drop");
   const dragging = !freezeDrop && beat <= timeline.findIndex((s) => s.id === "drag");
@@ -888,7 +841,7 @@ export function ListingPipeline({
       n += 1;
       setFilled(Math.min(shots.length, n));
       if (n >= shots.length) window.clearInterval(t);
-    }, 560);
+    }, 200);
     return () => window.clearInterval(t);
   }, [photoIn, photosOn, reduce, freezeDrop, shots.length]);
 
@@ -1081,7 +1034,7 @@ export function ListingPipeline({
             animate={{
               height: allLive ? "100%" : publishing || liveOn ? "85%" : "0%",
             }}
-            transition={{ duration: publishing ? 1.4 : 0.45, ease: [0.22, 1, 0.36, 1] }}
+            transition={{ duration: publishing ? 0.62 : 0.32, ease: [0.22, 1, 0.36, 1] }}
           />
           <span
             className={cn(

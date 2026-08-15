@@ -73,6 +73,13 @@ export type StoreInsight = {
   suggestedPrice?: number | null;
 };
 
+export type DealRecommend = {
+  kind: "offer" | "drop" | "keep";
+  pct: number;
+  price: number | null;
+  afterChance: number;
+};
+
 export type DealCard = {
   listingId: string;
   title: string;
@@ -86,6 +93,7 @@ export type DealCard = {
   why: string;
   move: string;
   vsStore: "lower" | "higher" | "even" | null;
+  recommend: DealRecommend;
 };
 
 function clampScore(n: number, min: number, max: number) {
@@ -171,6 +179,7 @@ export function scoreDeals(
       chance = clampScore(chance, 4, 18);
     }
 
+    const chanceFinal = clampScore(chance, 4, 96);
     pushCard({
       listingId: row.listingId,
       title: row.title,
@@ -179,11 +188,12 @@ export function scoreDeals(
       watchers: row.watchers,
       soldQty: row.soldQty,
       inCart,
-      chance: clampScore(chance, 4, 96),
+      chance: chanceFinal,
       signal,
       why,
       move,
       vsStore,
+      recommend: recommendFor(signal, row.price, chanceFinal),
     });
   }
 
@@ -201,6 +211,7 @@ export function scoreDeals(
       why: "Someone has this in a cart right now.",
       move: "Send the price you want — this one can close today.",
       vsStore: null,
+      recommend: recommendFor("close_now", move.price, 86),
     });
   }
 
@@ -211,14 +222,15 @@ export function scoreDeals(
     priced_right: 3,
     sleeping: 4,
   };
-  return cards
-    .sort(
-      (a, b) =>
-        rank[a.signal] - rank[b.signal] ||
-        b.chance - a.chance ||
-        b.watchers - a.watchers,
-    )
-    .slice(0, 12);
+  const sorted = cards.sort(
+    (a, b) =>
+      rank[a.signal] - rank[b.signal] ||
+      b.chance - a.chance ||
+      b.watchers - a.watchers,
+  );
+  const live = sorted.filter((row) => row.signal !== "sleeping").slice(0, 9);
+  const quiet = sorted.filter((row) => row.signal === "sleeping").slice(0, 3);
+  return [...live, ...quiet];
 }
 
 export type SalesSnapshot = {
@@ -440,6 +452,42 @@ function suggestOffer(price: number | null) {
   return {
     pct,
     amount: Math.round(price * (1 - pct / 100) * 100) / 100,
+  };
+}
+
+function dropBy(price: number | null, pct: number) {
+  if (!price || price < 2) return { pct: 0, amount: null as number | null };
+  const cut = Math.min(20, Math.max(5, pct));
+  return {
+    pct: cut,
+    amount: Math.round(price * (1 - cut / 100) * 100) / 100,
+  };
+}
+
+function recommendFor(
+  signal: DealCard["signal"],
+  price: number | null,
+  chance: number,
+): DealRecommend {
+  if (signal === "close_now") {
+    const offer = dropBy(price, 10);
+    return {
+      kind: "offer",
+      pct: offer.pct || 10,
+      price: offer.amount,
+      afterChance: clampScore(chance + 12, chance, 96),
+    };
+  }
+  if (signal === "priced_right") {
+    return { kind: "keep", pct: 0, price: null, afterChance: chance };
+  }
+  const pct = signal === "hot" ? 5 : 10;
+  const drop = dropBy(price, pct);
+  return {
+    kind: "drop",
+    pct: drop.pct,
+    price: drop.amount,
+    afterChance: clampScore(chance + (signal === "sleeping" ? 16 : 22), 8, 88),
   };
 }
 

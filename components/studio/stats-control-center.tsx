@@ -7,7 +7,6 @@ import { ArrowRight, Heart } from "lucide-react";
 import { toast } from "sonner";
 import { formatRelativeTime } from "@/lib/format-relative-time";
 import {
-  SALES_POLL_MS,
   usd,
   useEbaySales,
 } from "@/lib/studio/use-ebay-sales";
@@ -19,7 +18,9 @@ import {
 import {
   ChanceMeter,
   DealDesk,
+  OneClickMove,
   OpportunityList,
+  recommendCopy,
 } from "@/components/studio/opportunity-board";
 import type {
   DealCard,
@@ -127,7 +128,10 @@ export function StatsControlCenter() {
   const active: Pane = pane ?? "opps";
 
   const pickedDeal =
-    deals.find((row) => row.listingId === pickedId) || deals[0] || null;
+    deals.find((row) => row.listingId === pickedId) ||
+    deals.find((row) => row.signal !== "sleeping") ||
+    deals[0] ||
+    null;
   const featuredInv =
     snap.inventory.find((row) => row.listingId === pickedDeal?.listingId) ||
     feed[0] ||
@@ -137,11 +141,38 @@ export function StatsControlCenter() {
   const featuredPhoto = pickedDeal?.pictureUrl || featuredInv?.pictureUrl;
   const featuredPrice = pickedDeal?.price ?? featuredInv?.price ?? null;
   const featuredId = pickedDeal?.listingId || featuredInv?.listingId || "";
-  const featuredWatchers = pickedDeal?.watchers ?? featuredInv?.watchers ?? 0;
-  const featuredSold = pickedDeal?.soldQty ?? featuredInv?.soldQty ?? 0;
   const canOffer =
     Boolean(featuredId) &&
     (pickedDeal?.inCart || carts.some((c) => c.listingId === featuredId));
+  const dropTo =
+    pickedDeal?.recommend.kind === "drop" ? pickedDeal.recommend.price : null;
+
+  const runRecommend = (deal: DealCard) => {
+    setPickedId(deal.listingId);
+    if (deal.recommend.kind === "offer") {
+      void act(
+        `offer-${deal.listingId}`,
+        {
+          action: "offer",
+          listingId: deal.listingId,
+          discountPercentage: deal.recommend.pct || 10,
+        },
+        recommendCopy(deal).button + " sent",
+      );
+      return;
+    }
+    if (deal.recommend.kind === "drop" && deal.recommend.price != null) {
+      void act(
+        `price-${deal.listingId}`,
+        {
+          action: "price",
+          listingId: deal.listingId,
+          price: deal.recommend.price,
+        },
+        `BIN dropped to ${usd(deal.recommend.price, true)}`,
+      );
+    }
+  };
 
   return (
     <div className="mx-auto max-w-[1100px] pb-16">
@@ -236,47 +267,90 @@ export function StatsControlCenter() {
                       photoSrc={hiRes(featuredPhoto)}
                       title={featuredTitle}
                       priceLabel={
-                        featuredPrice != null
+                        dropTo != null
+                          ? `US ${usd(dropTo, true)}`
+                          : featuredPrice != null
+                            ? `US ${usd(featuredPrice, true)}`
+                            : "US —"
+                      }
+                      compareAtLabel={
+                        dropTo != null && featuredPrice != null
                           ? `US ${usd(featuredPrice, true)}`
-                          : "US —"
+                          : null
                       }
                       storeName={shop}
                       live
                     />
                     {pickedDeal ? (
-                      <div className="mt-3 rounded-xl bg-white p-3 ring-1 ring-[#e5e5e5]">
-                        <ChanceMeter chance={pickedDeal.chance} big />
-                        <p className="mt-2 text-[13px] font-medium text-[#191919]">
-                          {pickedDeal.why}
-                        </p>
-                        <p className="mt-1 text-[12px] text-[#707070]">
-                          {pickedDeal.move}
-                        </p>
-                        {pickedDeal.vsStore === "lower" ? (
-                          <p className="mt-1 text-[12px] font-semibold text-[#86B817]">
-                            Priced lower than the rest of the store — higher
-                            chance to sell.
+                      <div className="mt-3 space-y-3">
+                        <div className="rounded-xl bg-white p-3 ring-1 ring-[#e5e5e5]">
+                          <ChanceMeter
+                            chance={pickedDeal.chance}
+                            next={
+                              pickedDeal.recommend.kind === "keep"
+                                ? undefined
+                                : pickedDeal.recommend.afterChance
+                            }
+                            big
+                          />
+                          <p className="mt-2 text-[13px] font-medium text-[#191919]">
+                            {pickedDeal.why}
                           </p>
-                        ) : null}
-                        {pickedDeal.vsStore === "higher" &&
-                        pickedDeal.signal === "stuck" ? (
-                          <p className="mt-1 text-[12px] font-semibold text-[#c41e3a]">
-                            Priced high vs the store — buyers are watching, not
-                            buying.
+                          <p className="mt-1 text-[12px] text-[#707070]">
+                            {pickedDeal.move}
                           </p>
+                          {pickedDeal.vsStore === "lower" ? (
+                            <p className="mt-1 text-[12px] font-semibold text-[#86B817]">
+                              Priced lower than the rest of the store.
+                            </p>
+                          ) : null}
+                          {pickedDeal.vsStore === "higher" &&
+                          pickedDeal.signal === "stuck" ? (
+                            <p className="mt-1 text-[12px] font-semibold text-[#c41e3a]">
+                              Priced high vs the store — watching, not buying.
+                            </p>
+                          ) : null}
+                          <div className="mt-3">
+                            <OneClickMove
+                              deal={pickedDeal}
+                              busy={busy}
+                              onGo={runRecommend}
+                              large
+                            />
+                          </div>
+                        </div>
+                        {featuredId ? (
+                          <DealDesk
+                            listingId={featuredId}
+                            price={featuredPrice}
+                            canOffer={canOffer}
+                            busy={busy}
+                            onOffer={(pct, label) =>
+                              void act(
+                                `offer-${featuredId}`,
+                                {
+                                  action: "offer",
+                                  listingId: featuredId,
+                                  discountPercentage: pct,
+                                },
+                                label,
+                              )
+                            }
+                            onDrop={(price) =>
+                              void act(
+                                `price-${featuredId}`,
+                                {
+                                  action: "price",
+                                  listingId: featuredId,
+                                  price,
+                                },
+                                `BIN set to ${usd(price, true)}`,
+                              )
+                            }
+                          />
                         ) : null}
                       </div>
-                    ) : (
-                      <p className="mt-3 text-center text-[12px] text-[#707070]">
-                        {featuredWatchers
-                          ? `${featuredWatchers} people watching this right now`
-                          : "Live on eBay"}
-                        {featuredSold ? ` · ${featuredSold} sold` : ""}
-                        <span className="mx-1">·</span>
-                        refreshes every {SALES_POLL_MS / 1000}s
-                      </p>
-                    )}
-                    {featuredId ? (
+                    ) : featuredId ? (
                       <div className="mt-3">
                         <DealDesk
                           listingId={featuredId}
@@ -362,7 +436,9 @@ export function StatsControlCenter() {
                 <OpportunityList
                   deals={deals}
                   selectedId={featuredId || null}
+                  busy={busy}
                   onPick={setPickedId}
+                  onGo={runRecommend}
                 />
               ) : feed.length === 0 ? (
                 <p className="px-4 py-10 text-[14px] text-[#707070]">

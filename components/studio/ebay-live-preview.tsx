@@ -62,6 +62,7 @@ export function EbayLivePreview({
   live,
   compact = false,
   className,
+  compareAtLabel,
 }: {
   photoSrc: string;
   title: string;
@@ -70,9 +71,12 @@ export function EbayLivePreview({
   live: boolean;
   compact?: boolean;
   className?: string;
+  compareAtLabel?: string | null;
 }) {
   const shop = useConnectedEbayStoreName(storeName);
   const price = live ? priceLabel.replace(/^US\s*/i, "") : "—";
+  const was = compareAtLabel?.replace(/^US\s*/i, "") || "";
+  const dropping = Boolean(live && was && was !== price);
 
   return (
     <div
@@ -160,21 +164,40 @@ export function EbayLivePreview({
         <p className="mt-1 text-[11px] text-[#707070]">
           Condition: <span className="font-semibold text-[#191919]">New</span>
         </p>
-        <p
-          className={cn(
-            "mt-1 font-bold tabular-nums",
-            compact ? "text-[18px]" : "text-[22px]",
-          )}
-        >
-          {live ? (
-            <>
-              <span className="text-[12px] font-semibold">US </span>
-              {price}
-            </>
-          ) : (
-            "—"
-          )}
-        </p>
+        {live ? (
+          <div className="mt-1">
+            {dropping ? (
+              <p className="text-[12px] font-semibold text-[#707070] line-through decoration-[#E53238] tabular-nums">
+                US {was}
+              </p>
+            ) : null}
+            <AnimatePresence mode="wait">
+              <motion.p
+                key={price}
+                initial={dropping ? { y: 14, opacity: 0, scale: 0.86 } : false}
+                animate={{ y: 0, opacity: 1, scale: 1 }}
+                transition={{ type: "spring", stiffness: 420, damping: 22 }}
+                className={cn(
+                  "font-bold tabular-nums",
+                  compact ? "text-[18px]" : "text-[22px]",
+                  dropping ? "text-[#E53238]" : "text-[#191919]",
+                )}
+              >
+                <span className="text-[12px] font-semibold">US </span>
+                {price}
+              </motion.p>
+            </AnimatePresence>
+          </div>
+        ) : (
+          <p
+            className={cn(
+              "mt-1 font-bold tabular-nums text-[#9b9b9b]",
+              compact ? "text-[18px]" : "text-[22px]",
+            )}
+          >
+            —
+          </p>
+        )}
         <p className="min-h-[16px] text-[11px] text-[#707070]">
           {live ? "Free shipping · Arrives in 3–5 days" : "Waiting for publish"}
         </p>

@@ -60,59 +60,58 @@ export function MoneyMachineHome({
           <div className="flex shrink-0 items-center justify-between px-4 py-3">
             <div>
               <p className="text-[15px] font-bold tracking-tight text-[#191919]">
-                {drafts.length === 0 ? "What sells now" : "Ready to list"}
+                Ready to list
               </p>
-              {drafts.length === 0 ? (
-                <p className="mt-0.5 text-[12px] text-[#707070]">
-                  Hot on other marketplaces. Your cut if you list them.
-                </p>
-              ) : null}
+              <p className="mt-0.5 text-[12px] text-[#707070]">
+                Supplier stock. List to your stores. Keep the spread.
+              </p>
             </div>
-            {drafts.length === 0 ? (
-              <Link
-                href="/listings/new"
-                className="shrink-0 text-[13px] font-semibold text-[#3665F3]"
-              >
-                List one
-              </Link>
-            ) : (
-              <Link href="/listings" className="text-[13px] font-semibold text-[#3665F3]">
-                See all
-              </Link>
-            )}
+            <Link
+              href="/listings/new"
+              className="shrink-0 text-[13px] font-semibold text-[#3665F3]"
+            >
+              List one
+            </Link>
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-4">
-            {drafts.length === 0 ? (
-              <MarketPromos />
-            ) : (
-              <div className="grid grid-cols-2 gap-3">
-                {drafts.map((draft, i) => {
-                  const ready = statusLabel(draft.status);
-                  return (
-                    <ListingCard
-                      key={draft.id}
-                      href={`/listings/${draft.id}`}
-                      photo={draft.coverUrl}
-                      title={draft.title}
-                      brand={draft.brand}
-                      meta={
-                        draft.updatedAt
-                          ? formatRelativeTime(draft.updatedAt)
-                          : undefined
-                      }
-                      price={
-                        draft.price != null
-                          ? `$${draft.price.toFixed(2)}`
-                          : null
-                      }
-                      badge={ready.label}
-                      badgeTone={ready.ready ? "ready" : "muted"}
-                      priority={i < 2}
-                    />
-                  );
-                })}
+            <MarketPromos />
+            {drafts.length > 0 ? (
+              <div className="mt-6">
+                <div className="mb-3 flex items-center justify-between">
+                  <p className="text-[13px] font-semibold text-[#191919]">Your drafts</p>
+                  <Link href="/listings" className="text-[13px] font-semibold text-[#3665F3]">
+                    See all
+                  </Link>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  {drafts.map((draft, i) => {
+                    const ready = statusLabel(draft.status);
+                    return (
+                      <ListingCard
+                        key={draft.id}
+                        href={`/listings/${draft.id}`}
+                        photo={draft.coverUrl}
+                        title={draft.title}
+                        brand={draft.brand}
+                        meta={
+                          draft.updatedAt
+                            ? formatRelativeTime(draft.updatedAt)
+                            : undefined
+                        }
+                        price={
+                          draft.price != null
+                            ? `$${draft.price.toFixed(2)}`
+                            : null
+                        }
+                        badge={ready.label}
+                        badgeTone={ready.ready ? "ready" : "muted"}
+                        priority={i < 2}
+                      />
+                    );
+                  })}
+                </div>
               </div>
-            )}
+            ) : null}
           </div>
         </aside>
       </div>

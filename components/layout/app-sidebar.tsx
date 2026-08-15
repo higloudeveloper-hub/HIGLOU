@@ -20,7 +20,7 @@ export const STUDIO_NAV = [
   {
     href: "/home",
     label: "Home",
-    hint: "Overview",
+    hint: "Money machine",
     icon: Home,
     match: (path: string) => path === "/home",
   },

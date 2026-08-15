@@ -1,4 +1,5 @@
 import { getEbayConfig } from "@/lib/ebay/config";
+import { fetchEbayStoreName } from "@/lib/ebay/fetch-store-name";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 export type EbaySaleLine = {
@@ -31,23 +32,30 @@ export type InventoryLine = {
   status: string;
   price: number | null;
   higlouProductId: string | null;
+  watchers: number;
+  soldQty: number;
+  pictureUrl: string | null;
 };
 
 export type SalesSnapshot = {
   syncedAt: string;
   connected: boolean;
+  storeName: string | null;
   orders30d: number;
   units30d: number;
   revenue30d: number;
   ordersToday: number;
   revenueToday: number;
+  avgOrder: number;
   matchedToHiglou: number;
   unmatchedEbaySales: number;
   reflectedThisSync: number;
   inventoryLive: number;
   inventoryUnits: number;
+  inventoryValue: number;
   inventoryLow: number;
   inventoryOut: number;
+  watchers: number;
   inventory: InventoryLine[];
   recent: EbaySaleLine[];
   opportunities: SalesOpportunity[];
@@ -60,18 +68,22 @@ export function emptySalesSnapshot(
   return {
     syncedAt: new Date().toISOString(),
     connected: false,
+    storeName: null,
     orders30d: 0,
     units30d: 0,
     revenue30d: 0,
     ordersToday: 0,
     revenueToday: 0,
+    avgOrder: 0,
     matchedToHiglou: 0,
     unmatchedEbaySales: 0,
     reflectedThisSync: 0,
     inventoryLive: 0,
     inventoryUnits: 0,
+    inventoryValue: 0,
     inventoryLow: 0,
     inventoryOut: 0,
+    watchers: 0,
     inventory: [],
     recent: [],
     opportunities: [],
@@ -115,7 +127,7 @@ async function fetchEbayOrders(accessToken: string): Promise<FulfillmentOrder[]>
   const from = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
   const to = new Date().toISOString();
   const filter = `creationdate:[${from}..${to}]`;
-  const path = `/sell/fulfillment/v1/order?limit=50&filter=${encodeURIComponent(filter)}`;
+  const path = `/sell/fulfillment/v1/order?limit=200&filter=${encodeURIComponent(filter)}`;
 
   const res = await fetch(`${cfg.apiBase}${path}`, {
     headers: {
@@ -142,6 +154,129 @@ async function fetchEbayOrders(accessToken: string): Promise<FulfillmentOrder[]>
     );
   }
   return json.orders ?? [];
+}
+
+async function tradingXml(
+  accessToken: string,
+  callName: string,
+  body: string,
+): Promise<string> {
+  const cfg = getEbayConfig();
+  const res = await fetch(`${cfg.apiBase}/ws/api.dll`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "text/xml",
+      "X-EBAY-API-IAF-TOKEN": accessToken,
+      "X-EBAY-API-CALL-NAME": callName,
+      "X-EBAY-API-SITEID": "0",
+      "X-EBAY-API-COMPATIBILITY-LEVEL": "1193",
+    },
+    body,
+    cache: "no-store",
+  });
+  return res.text();
+}
+
+function xmlTag(block: string, tag: string) {
+  return block.match(new RegExp(`<${tag}[^>]*>([^<]*)</${tag}>`, "i"))?.[1]?.trim() || "";
+}
+
+async function fetchTradingActiveInventory(accessToken: string): Promise<{
+  total: number;
+  rows: Array<{
+    sku: string;
+    status: string;
+    qty: number;
+    listingId: string;
+    title: string;
+    price: number | null;
+    watchers: number;
+    soldQty: number;
+    pictureUrl: string | null;
+  }>;
+}> {
+  const rows: Array<{
+    sku: string;
+    status: string;
+    qty: number;
+    listingId: string;
+    title: string;
+    price: number | null;
+    watchers: number;
+    soldQty: number;
+    pictureUrl: string | null;
+  }> = [];
+  let total = 0;
+
+  for (let page = 1; page <= 1; page++) {
+    const xml = await tradingXml(
+      accessToken,
+      "GetMyeBaySelling",
+      `<?xml version="1.0" encoding="utf-8"?>
+<GetMyeBaySellingRequest xmlns="urn:ebay:apis:eBLBaseComponents">
+  <ErrorLanguage>en_US</ErrorLanguage>
+  <WarningLevel>High</WarningLevel>
+  <DetailLevel>ReturnAll</DetailLevel>
+  <IncludeWatchCount>true</IncludeWatchCount>
+  <ActiveList>
+    <Include>true</Include>
+    <IncludeNotes>false</IncludeNotes>
+    <Pagination>
+      <EntriesPerPage>200</EntriesPerPage>
+      <PageNumber>${page}</PageNumber>
+    </Pagination>
+  </ActiveList>
+</GetMyeBaySellingRequest>`,
+    );
+    if (/<Ack>Failure<\/Ack>/i.test(xml)) break;
+
+    total = Number(
+      xml.match(
+        /<ActiveList>[\s\S]*?<TotalNumberOfEntries>(\d+)<\/TotalNumberOfEntries>/i,
+      )?.[1] || total,
+    );
+
+    const itemBlocks = xml.match(/<Item>([\s\S]*?)<\/Item>/gi) || [];
+    for (const block of itemBlocks) {
+      const listingId = xmlTag(block, "ItemID");
+      if (!listingId) continue;
+      const quantity = Number(xmlTag(block, "Quantity") || "0");
+      const soldQty = Number(xmlTag(block, "QuantitySold") || "0");
+      const availableRaw = xmlTag(block, "QuantityAvailable");
+      const qty = Math.max(
+        0,
+        availableRaw
+          ? Number(availableRaw)
+          : quantity - soldQty,
+      );
+      const priceRaw =
+        block.match(
+          /<SellingStatus>[\s\S]*?<CurrentPrice[^>]*>([^<]+)<\/CurrentPrice>/i,
+        )?.[1] || xmlTag(block, "BuyItNowPrice");
+      const pictureUrl =
+        xmlTag(block, "GalleryURL") || xmlTag(block, "PictureURL") || null;
+      rows.push({
+        sku: xmlTag(block, "SKU") || xmlTag(block, "CustomLabel") || listingId,
+        status: "PUBLISHED",
+        qty: Number.isFinite(qty) ? qty : 0,
+        listingId,
+        title: xmlTag(block, "Title") || listingId,
+        price: Number(priceRaw) || null,
+        watchers: Number(xmlTag(block, "WatchCount") || "0") || 0,
+        soldQty: Number.isFinite(soldQty) ? soldQty : 0,
+        pictureUrl,
+      });
+    }
+
+    const pages = Number(
+      xml.match(
+        /<ActiveList>[\s\S]*?<TotalNumberOfPages>(\d+)<\/TotalNumberOfPages>/i,
+      )?.[1] || "1",
+    );
+    if (page >= pages || itemBlocks.length === 0) break;
+  }
+
+  return { total: total || rows.length, rows };
 }
 
 async function fetchEbayOffers(accessToken: string): Promise<
@@ -212,15 +347,23 @@ export async function syncEbaySalesForUser(
   accessToken: string,
 ): Promise<SalesSnapshot> {
   const syncedAt = new Date().toISOString();
-  let orders: FulfillmentOrder[] = [];
-  let orderError: string | undefined;
-  try {
-    orders = await fetchEbayOrders(accessToken);
-  } catch (error) {
-    orderError =
-      error instanceof Error ? error.message : "Could not read eBay orders";
-  }
-  const offers = await fetchEbayOffers(accessToken).catch(() => []);
+  const [ordersResult, offers, trading, storeName] = await Promise.all([
+    fetchEbayOrders(accessToken)
+      .then((rows) => ({ rows, error: undefined as string | undefined }))
+      .catch((error) => ({
+        rows: [] as FulfillmentOrder[],
+        error:
+          error instanceof Error ? error.message : "Could not read eBay orders",
+      })),
+    fetchEbayOffers(accessToken).catch(() => []),
+    fetchTradingActiveInventory(accessToken).catch(() => ({
+      total: 0,
+      rows: [] as Awaited<ReturnType<typeof fetchTradingActiveInventory>>["rows"],
+    })),
+    fetchEbayStoreName(accessToken).catch(() => null),
+  ]);
+  const orders = ordersResult.rows;
+  const orderError = ordersResult.error;
 
   const { data: productRows } = await supabase
     .from("products")
@@ -377,51 +520,83 @@ export async function syncEbaySalesForUser(
     });
   }
 
-  const inventory: InventoryLine[] = offers
-    .filter((o) => o.status === "PUBLISHED" || o.listingId)
-    .map((o) => {
-      const match =
-        (o.sku ? bySku.get(o.sku.toLowerCase()) : undefined) ||
-        (o.listingId ? byListing.get(o.listingId) : undefined);
-      return {
-        sku: o.sku,
-        title: o.title || match?.title || o.sku || o.listingId || "Listing",
-        qty: o.qty,
-        listingId: o.listingId,
-        status: o.status,
-        price: o.price,
-        higlouProductId: match?.id || null,
-      };
-    })
-    .sort((a, b) => a.qty - b.qty);
+  const byListingId = new Map<string, InventoryLine>();
+  for (const o of offers.filter((row) => row.status === "PUBLISHED" || row.listingId)) {
+    const match =
+      (o.sku ? bySku.get(o.sku.toLowerCase()) : undefined) ||
+      (o.listingId ? byListing.get(o.listingId) : undefined);
+    const key = o.listingId || o.sku;
+    if (!key) continue;
+    byListingId.set(key, {
+      sku: o.sku,
+      title: o.title || match?.title || o.sku || o.listingId || "Listing",
+      qty: o.qty,
+      listingId: o.listingId,
+      status: o.status || "PUBLISHED",
+      price: o.price,
+      higlouProductId: match?.id || null,
+      watchers: 0,
+      soldQty: 0,
+      pictureUrl: null,
+    });
+  }
+  for (const o of trading.rows) {
+    const match =
+      (o.sku ? bySku.get(o.sku.toLowerCase()) : undefined) ||
+      (o.listingId ? byListing.get(o.listingId) : undefined);
+    const prev = byListingId.get(o.listingId);
+    byListingId.set(o.listingId, {
+      sku: o.sku || prev?.sku || "",
+      title: o.title || prev?.title || match?.title || o.listingId,
+      qty: o.qty,
+      listingId: o.listingId,
+      status: "PUBLISHED",
+      price: o.price ?? prev?.price ?? null,
+      higlouProductId: match?.id || prev?.higlouProductId || null,
+      watchers: o.watchers,
+      soldQty: o.soldQty,
+      pictureUrl: o.pictureUrl || prev?.pictureUrl || null,
+    });
+  }
 
+  const inventory = [...byListingId.values()].sort((a, b) => a.qty - b.qty);
   const liveRows = inventory.filter((r) => r.status === "PUBLISHED");
-  const inventoryLive = liveRows.length;
+  const inventoryLive = Math.max(trading.total, liveRows.length);
   const inventoryUnits = liveRows.reduce((sum, r) => sum + r.qty, 0);
+  const inventoryValue = liveRows.reduce(
+    (sum, r) => sum + (r.price || 0) * r.qty,
+    0,
+  );
   const inventoryLow = liveRows.filter((r) => r.qty > 0 && r.qty <= 1).length;
   const inventoryOut = liveRows.filter((r) => r.qty <= 0).length;
+  const watchers = liveRows.reduce((sum, r) => sum + r.watchers, 0);
+  const avgOrder = orders.length ? revenue30d / orders.length : 0;
 
   return {
     syncedAt,
     connected: true,
+    storeName,
     orders30d: orders.length,
     units30d,
     revenue30d,
     ordersToday,
     revenueToday,
+    avgOrder,
     matchedToHiglou,
     unmatchedEbaySales,
     reflectedThisSync,
     inventoryLive,
     inventoryUnits,
+    inventoryValue,
     inventoryLow,
     inventoryOut,
+    watchers,
     inventory: inventory.slice(0, 12),
     recent: recent
       .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))
       .slice(0, 8),
     opportunities: opportunities.slice(0, 8),
     error:
-      orders.length === 0 && offers.length === 0 ? orderError : undefined,
+      orders.length === 0 && inventory.length === 0 ? orderError : undefined,
   };
 }

@@ -192,7 +192,7 @@ export function LiveConfirm({
             type="button"
             disabled={busy}
             onClick={onCancel}
-            className="h-10 flex-1 rounded-full border border-[#ccc] bg-white text-[13px] font-semibold text-[#191919] disabled:opacity-50"
+            className="h-10 flex-1 rounded-md border border-[#ccc] bg-white text-[13px] font-semibold text-[#191919] disabled:opacity-50"
           >
             No, cancel
           </button>
@@ -201,7 +201,7 @@ export function LiveConfirm({
             disabled={busy}
             onClick={onAccept}
             className={cn(
-              "h-10 flex-1 rounded-full bg-[#3665F3] text-[13px] font-semibold text-white disabled:opacity-50",
+              "h-10 flex-1 rounded-md bg-[#141414] text-[13px] font-semibold text-white disabled:opacity-50",
             )}
           >
             {busy ? "Working…" : op.confirmLabel}

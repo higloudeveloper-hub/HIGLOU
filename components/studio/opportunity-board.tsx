@@ -28,29 +28,29 @@ const SIGNAL: Record<
   { label: string; className: string; section: string }
 > = {
   close_now: {
-    label: "Close now",
-    className: "bg-[#3665F3] text-white",
-    section: "Close now",
+    label: "Close",
+    className: "text-[#3665F3]",
+    section: "Close these",
   },
   stuck: {
-    label: "Price block",
-    className: "bg-[#F5AF02] text-[#191919]",
-    section: "Price is blocking the sale",
+    label: "Blocked",
+    className: "text-[#9a6700]",
+    section: "Price is blocking",
   },
   hot: {
-    label: "Hot",
-    className: "bg-[#E53238] text-white",
-    section: "Hot right now",
+    label: "Demand",
+    className: "text-[#c41e3a]",
+    section: "Demand now",
   },
   priced_right: {
     label: "Selling",
-    className: "bg-[#86B817] text-white",
+    className: "text-[#3d7a0f]",
     section: "Already selling",
   },
   sleeping: {
     label: "Quiet",
-    className: "bg-[#eee] text-[#707070]",
-    section: "Quiet — one tap to wake up",
+    className: "text-[#9b9b9b]",
+    section: "Quiet",
   },
 };
 
@@ -173,11 +173,13 @@ export function OneClickMove({
   busy,
   onGo,
   large = false,
+  quiet = false,
 }: {
   deal: DealCard;
   busy: string | null;
   onGo: (deal: DealCard) => void;
   large?: boolean;
+  quiet?: boolean;
 }) {
   const copy = recommendCopy(deal);
   const locked = busy !== null;
@@ -185,7 +187,7 @@ export function OneClickMove({
     busy === `offer-${deal.listingId}` || busy === `price-${deal.listingId}`;
   if (deal.recommend.kind === "keep") {
     return (
-      <p className="text-[12px] font-medium text-[#86B817]">{copy.hint}</p>
+      <p className="text-[12px] font-medium text-[#3d7a0f]">{copy.hint}</p>
     );
   }
   return (
@@ -198,15 +200,15 @@ export function OneClickMove({
           onGo(deal);
         }}
         className={cn(
-          "rounded-full bg-[#3665F3] font-semibold text-white disabled:opacity-50",
-          large
-            ? "h-12 w-full text-[15px]"
-            : "h-8 px-3 text-[12px]",
+          "bg-[#141414] font-semibold tracking-[-0.01em] text-white transition hover:bg-[#2a2a2a] disabled:opacity-50",
+          large ? "h-11 w-full rounded-md text-[14px]" : "h-8 rounded-md px-3 text-[12px]",
         )}
       >
         {working ? "Working…" : copy.button}
       </button>
-      <p className="text-[11px] text-[#707070]">{copy.hint}</p>
+      {!quiet ? (
+        <p className="text-[11px] text-[#707070]">{copy.hint}</p>
+      ) : null}
     </div>
   );
 }
@@ -299,7 +301,7 @@ export function DealDesk({
                       `Offer sent · ${usd(derived.usd, true)} (${derived.pct}% off)`,
                     );
                   }}
-                  className="h-10 shrink-0 rounded-full bg-[#3665F3] px-4 text-[13px] font-semibold text-white disabled:opacity-50"
+                  className="h-10 shrink-0 rounded-md bg-[#141414] px-4 text-[13px] font-semibold text-white disabled:opacity-50"
                 >
                   {busy === `offer-${listingId}` ? "Sending…" : "Send"}
                 </button>
@@ -333,7 +335,7 @@ export function DealDesk({
                   }
                   onDrop(next);
                 }}
-                className="h-10 shrink-0 rounded-full border border-[#111] bg-white px-4 text-[13px] font-semibold text-[#111] disabled:opacity-50"
+                className="h-10 shrink-0 rounded-md border border-[#141414] bg-white px-4 text-[13px] font-semibold text-[#141414] disabled:opacity-50"
               >
                 {busy === `price-${listingId}` ? "Updating…" : "Set price"}
               </button>
@@ -372,7 +374,7 @@ export function OpportunityList({
         if (rows.length === 0) return null;
         return (
           <section key={signal}>
-            <p className="sticky top-0 z-10 border-b border-[#eee] bg-[#f7f7f7] px-4 py-2 text-[11px] font-semibold tracking-wide text-[#707070] uppercase">
+            <p className="sticky top-0 z-10 border-b border-[#eee] bg-white px-4 py-2.5 text-[12px] font-medium tracking-tight text-[#707070]">
               {SIGNAL[signal].section}
             </p>
             <ul>
@@ -388,13 +390,13 @@ export function OpportunityList({
                     <div
                       className={cn(
                         "flex gap-3 border-b border-[#eee] px-4 py-3 transition",
-                        selected ? "bg-[#eef4ff]" : "hover:bg-[#f7f7f7]",
+                        selected ? "bg-[#f6f6f6]" : "hover:bg-[#fafafa]",
                       )}
                     >
                       <button
                         type="button"
                         onClick={() => onPick(deal.listingId)}
-                        className="size-[92px] shrink-0 overflow-hidden rounded-md bg-white ring-1 ring-[#e5e5e5]"
+                        className="size-[80px] shrink-0 overflow-hidden rounded-md bg-white ring-1 ring-[#e5e5e5]"
                       >
                         {hiRes(deal.pictureUrl) ? (
                           // eslint-disable-next-line @next/next/no-img-element
@@ -415,13 +417,13 @@ export function OpportunityList({
                           onClick={() => onPick(deal.listingId)}
                           className="w-full text-left"
                         >
-                          <div className="flex items-start justify-between gap-2">
+                          <div className="flex items-start justify-between gap-3">
                             <p className="line-clamp-2 text-[13px] leading-snug text-[#191919]">
                               {deal.title}
                             </p>
                             <span
                               className={cn(
-                                "shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold",
+                                "shrink-0 pt-0.5 text-[10px] font-semibold tracking-[0.12em] uppercase",
                                 tone.className,
                               )}
                             >
@@ -431,30 +433,13 @@ export function OpportunityList({
                           <div className="mt-1">
                             <PriceDrop from={deal.price} to={next ?? null} />
                           </div>
-                          <div className="mt-1.5">
-                            <ChanceMeter
-                              chance={deal.chance}
-                              next={
-                                deal.recommend.kind === "keep"
-                                  ? undefined
-                                  : deal.recommend.afterChance
-                              }
-                            />
-                          </div>
-                          <p className="mt-1 line-clamp-2 text-[11px] text-[#707070]">
-                            {deal.why}
-                          </p>
-                          {deal.evidence ? (
-                            <p className="mt-0.5 line-clamp-1 text-[10px] text-[#9b9b9b]">
-                              {deal.evidence}
-                            </p>
-                          ) : null}
                         </button>
                         <div className="mt-2">
                           <OneClickMove
                             deal={deal}
                             busy={busy}
                             onGo={onGo}
+                            quiet
                           />
                         </div>
                       </div>
@@ -484,7 +469,6 @@ export function LiveBanner({
   syncedAt: string;
 }) {
   const tape = deals.length > 0 ? [...deals, ...deals] : [];
-  const next = deals[0];
   return (
     <div className="shrink-0 bg-[#3665F3] text-white">
       <div className="flex items-center gap-4 px-5 py-3">
@@ -498,7 +482,7 @@ export function LiveBanner({
             <span className="relative size-2 rounded-full bg-white" />
           </span>
           <p className="text-[11px] font-semibold tracking-[0.22em] uppercase">
-            Live machine
+            Live
           </p>
         </div>
         <p className="hidden shrink-0 text-[12px] font-medium text-white/70 lg:block">
@@ -540,7 +524,6 @@ export function LiveBanner({
         </div>
         <p className="hidden shrink-0 text-[12px] font-medium tracking-wide text-white/75 sm:block">
           {watching} watching · {inCart} in cart
-          {next ? ` · next: ${recommendCopy(next).button}` : ""}
         </p>
         <p className="hidden shrink-0 text-[11px] tracking-wide text-white/55 xl:block">
           {formatRelativeTime(syncedAt)}

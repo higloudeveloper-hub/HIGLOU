@@ -13,7 +13,6 @@ import {
 import { cn } from "@/lib/utils";
 import {
   EbayLivePreview,
-  EbayWordmark,
 } from "@/components/studio/ebay-live-preview";
 import {
   ChanceMeter,
@@ -192,21 +191,6 @@ export function StatsControlCenter() {
         syncedAt={snap.syncedAt}
       />
       <div className="flex min-h-0 flex-1 flex-col">
-        <div className="flex shrink-0 items-center gap-3 border-b border-[#e5e5e5] px-4 py-2">
-          <button type="button" onClick={() => setPane("opps")}>
-            <EbayWordmark className="text-[22px]" />
-          </button>
-          <button
-            type="button"
-            onClick={() => setPane("opps")}
-            className="min-w-0 flex-1 rounded-full border border-[#ccc] bg-[#f7f7f7] px-3 py-1.5 text-left text-[12px] text-[#707070]"
-          >
-            {shop} · opportunity machine
-          </button>
-          <span className="hidden text-[12px] font-medium text-[#191919] sm:inline">
-            Scanning every 12s · {formatRelativeTime(snap.syncedAt)}
-          </span>
-        </div>
 
         {snap.error ? (
           <Link
@@ -232,6 +216,7 @@ export function StatsControlCenter() {
             label="Sold · 30 days"
             value={usd(snap.revenue30d)}
             hint={`${snap.orders30d} orders`}
+            spark={sparkFromOrders(snap.recent)}
           />
           <StatCell
             active={active === "orders"}
@@ -269,8 +254,8 @@ export function StatsControlCenter() {
             <OrdersBoard rows={snap.recent} />
           </div>
         ) : (
-          <div className="grid min-h-0 flex-1 lg:grid-cols-[minmax(380px,0.9fr)_minmax(0,1.2fr)]">
-            <div className="flex min-h-0 flex-col border-b border-[#e5e5e5] bg-[#f7f7f7] p-3 lg:border-r lg:border-b-0">
+          <div className="grid min-h-0 flex-1 lg:grid-cols-[minmax(440px,1.1fr)_minmax(0,0.9fr)]">
+            <div className="flex min-h-0 flex-col border-b border-[#e5e5e5] bg-[#f3f3f3] p-4 lg:border-r lg:border-b-0">
               {featuredTitle ? (
                 <AnimatePresence mode="wait">
                   <motion.div
@@ -303,7 +288,7 @@ export function StatsControlCenter() {
                     />
                     {pickedDeal ? (
                       <div className="mt-3 shrink-0 space-y-2">
-                        <div className="rounded-xl bg-white p-3 ring-1 ring-[#e5e5e5]">
+                        <div className="rounded-lg bg-white p-3 ring-1 ring-[#e5e5e5]">
                           <ChanceMeter
                             chance={pickedDeal.chance}
                             next={
@@ -312,18 +297,10 @@ export function StatsControlCenter() {
                                 : pickedDeal.recommend.afterChance
                             }
                           />
-                          <p className="mt-1.5 text-[12px] font-medium text-[#191919]">
+                          <p className="mt-2 line-clamp-1 text-[12px] text-[#707070]">
                             {pickedDeal.why}
                           </p>
-                          <p className="mt-1 text-[11px] text-[#707070]">
-                            {pickedDeal.move}
-                          </p>
-                          {pickedDeal.evidence ? (
-                            <p className="mt-1 text-[11px] text-[#9b9b9b]">
-                              {pickedDeal.evidence}
-                            </p>
-                          ) : null}
-                          <div className="mt-2">
+                          <div className="mt-3">
                             <OneClickMove
                               deal={pickedDeal}
                               busy={locked ? busy ?? "pending" : null}
@@ -414,15 +391,15 @@ export function StatsControlCenter() {
                   <ArrowRight className="size-4" />
                 </Link>
               ) : null}
-              <div className="flex shrink-0 items-center justify-between border-b border-[#eee] px-4 py-2">
-                <p className="text-[13px] font-semibold text-[#191919]">
+              <div className="flex shrink-0 items-center justify-between border-b border-[#eee] px-4 py-2.5">
+                <p className="text-[13px] font-semibold tracking-tight text-[#191919]">
                   {active === "opps"
-                    ? "Opportunity machine · live"
+                    ? "Needs a move"
                     : active === "act"
                       ? "Stock alerts"
                       : snap.inCart > 0 && active === "carts"
                         ? "In cart"
-                        : "Watching now · like eBay search"}
+                        : "Watching now"}
                 </p>
                 {active === "opps" && carts.length > 1 ? (
                   <button
@@ -438,7 +415,7 @@ export function StatsControlCenter() {
                         }),
                       )
                     }
-                    className="h-7 rounded-full bg-[#3665F3] px-3 text-[11px] font-semibold text-white disabled:opacity-50"
+                    className="h-8 rounded-md bg-[#141414] px-3 text-[12px] font-semibold text-white disabled:opacity-50"
                   >
                     {busy === "offer-all" ? "Sending…" : "Offer all carts"}
                   </button>
@@ -498,12 +475,57 @@ export function StatsControlCenter() {
   );
 }
 
+function sparkFromOrders(
+  rows: Array<{ createdAt: string; amount: number }>,
+) {
+  if (rows.length < 2) return [] as number[];
+  const sorted = [...rows].sort(
+    (a, b) => +new Date(a.createdAt) - +new Date(b.createdAt),
+  );
+  let sum = 0;
+  return sorted.map((row) => {
+    sum += row.amount;
+    return sum;
+  });
+}
+
+function MiniSpark({ values }: { values: number[] }) {
+  if (values.length < 2) return null;
+  const max = Math.max(...values, 1);
+  const min = Math.min(...values, 0);
+  const w = 72;
+  const h = 22;
+  const d = values
+    .map((v, i) => {
+      const x = (i / (values.length - 1)) * w;
+      const y = h - ((v - min) / (max - min || 1)) * (h - 3) - 1.5;
+      return `${i === 0 ? "M" : "L"}${x.toFixed(1)} ${y.toFixed(1)}`;
+    })
+    .join(" ");
+  return (
+    <svg viewBox={`0 0 ${w} ${h}`} className="mt-1 h-[22px] w-[72px]" aria-hidden>
+      <motion.path
+        d={d}
+        fill="none"
+        stroke="#141414"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        initial={{ pathLength: 0 }}
+        animate={{ pathLength: 1 }}
+        transition={{ duration: 1.15, ease: "easeOut" }}
+      />
+    </svg>
+  );
+}
+
 function StatCell({
   label,
   value,
   hint,
   active,
   warn,
+  spark,
   onClick,
 }: {
   label: string;
@@ -511,6 +533,7 @@ function StatCell({
   hint: string;
   active?: boolean;
   warn?: boolean;
+  spark?: number[];
   onClick: () => void;
 }) {
   return (
@@ -518,11 +541,15 @@ function StatCell({
       type="button"
       onClick={onClick}
       className={cn(
-        "px-3 py-2.5 text-left transition",
-        active ? "bg-[#eef4ff]" : "hover:bg-[#f7f7f7]",
+        "border-b-2 px-3 py-2.5 text-left transition",
+        active
+          ? "border-[#141414] bg-white"
+          : "border-transparent hover:bg-[#fafafa]",
       )}
     >
-      <p className="text-[11px] font-medium text-[#707070]">{label}</p>
+      <p className="text-[11px] font-medium tracking-wide text-[#707070]">
+        {label}
+      </p>
       <p
         className={cn(
           "mt-0.5 text-[22px] font-semibold tabular-nums tracking-tight",
@@ -531,7 +558,14 @@ function StatCell({
       >
         {value}
       </p>
-      <p className="text-[11px] text-[#707070]">{hint}</p>
+      {spark && spark.length > 1 ? (
+        <div className="mt-1 flex items-end justify-between gap-2">
+          <p className="text-[11px] text-[#707070]">{hint}</p>
+          <MiniSpark values={spark} />
+        </div>
+      ) : (
+        <p className="text-[11px] text-[#707070]">{hint}</p>
+      )}
     </button>
   );
 }
@@ -619,7 +653,7 @@ function EbayResultRow({
         <button
           type="button"
           onClick={onWork}
-          className="mt-2 h-7 rounded-full bg-[#3665F3] px-3 text-[11px] font-semibold text-white"
+          className="mt-2 h-8 rounded-md bg-[#141414] px-3 text-[12px] font-semibold text-white"
         >
           Work this deal
         </button>

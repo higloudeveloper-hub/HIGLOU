@@ -19,6 +19,39 @@ const SAMPLE_PHOTOS = [
 ] as const;
 const PRICE = 189;
 
+const CHANNELS = {
+  ebay: {
+    src: "/demo/m18-front.webp",
+    gallery: SAMPLE_PHOTOS,
+    price: "$189.00",
+    name: "Milwaukee M18 drill",
+  },
+  amazon: {
+    src: "/landing/floodlight.png",
+    gallery: ["/landing/floodlight.png"],
+    price: "$64.99",
+    name: "LED flood light",
+  },
+  facebook: {
+    src: "/demo/kettle.jpg",
+    gallery: ["/demo/kettle.jpg"],
+    price: "$28",
+    name: "Electric kettle",
+  },
+  shopify: {
+    src: "/demo/sneakers.jpg",
+    gallery: ["/demo/sneakers.jpg"],
+    price: "$120.00",
+    name: "Runner sneakers",
+  },
+  web: {
+    src: "/demo/bedding.jpg",
+    gallery: ["/demo/bedding.jpg"],
+    price: "$89.00",
+    name: "Queen comforter",
+  },
+} as const;
+
 const STEPS = [
   { id: "grab", ms: 1000, x: 12, y: 86, click: true, label: "One photo" },
   { id: "drag", ms: 1500, x: 9, y: 11, click: false, label: "Drop here" },
@@ -29,11 +62,11 @@ const STEPS = [
   { id: "ready", ms: 1200, x: 40, y: 8, click: false, label: "Ready" },
   { id: "aim", ms: 900, x: 91, y: 8, click: false, label: "One click" },
   { id: "publish", ms: 1300, x: 91, y: 8, click: true, label: "Push" },
-  { id: "ebay", ms: 750, x: 16, y: 38, click: true, label: "Live on eBay" },
-  { id: "amazon", ms: 700, x: 50, y: 38, click: true, label: "Amazon" },
-  { id: "facebook", ms: 700, x: 84, y: 38, click: true, label: "Facebook" },
-  { id: "shopify", ms: 700, x: 24, y: 70, click: true, label: "Shopify" },
-  { id: "web", ms: 750, x: 76, y: 70, click: true, label: "Your site" },
+  { id: "ebay", ms: 750, x: 16, y: 38, click: true, label: "Milwaukee drill" },
+  { id: "amazon", ms: 700, x: 50, y: 38, click: true, label: "Flood light" },
+  { id: "facebook", ms: 700, x: 84, y: 38, click: true, label: "Kettle" },
+  { id: "shopify", ms: 700, x: 24, y: 70, click: true, label: "Sneakers" },
+  { id: "web", ms: 750, x: 76, y: 70, click: true, label: "Comforter" },
   { id: "sales", ms: 2800, x: 88, y: 93, click: false, label: "Sales up" },
   { id: "hold", ms: 4000, x: 88, y: 93, click: false, label: "Try it" },
 ] as const;
@@ -687,13 +720,18 @@ export function ListingPipeline({
             <EbayWordmark className="text-[16px]" />
             <LivePill on={ebayOn} label="Live" />
           </div>
-          <ProductShot live={ebayOn} present={photoIn} src={cover} gallery={shots} />
+          <ProductShot
+            live={ebayOn}
+            present
+            src={photos?.length ? cover : CHANNELS.ebay.src}
+            gallery={photos?.length ? shots : [...CHANNELS.ebay.gallery]}
+          />
           <div className="shrink-0 px-3 py-2">
             <p className="text-[16px] font-semibold tabular-nums">
-              {ebayOn ? "$189.00" : "—"}
+              {ebayOn ? CHANNELS.ebay.price : "—"}
             </p>
             <p className="truncate text-[12px] text-[#707070]">
-              {ebayOn ? `Buy It Now · ${shop}` : "eBay store"}
+              {ebayOn ? `Buy It Now · ${shop}` : CHANNELS.ebay.name}
             </p>
           </div>
         </ChannelShell>
@@ -703,12 +741,17 @@ export function ListingPipeline({
             <AmazonMark className="text-[15px] text-white" />
             <LivePill on={amazonOn} label="Listed" />
           </div>
-          <ProductShot live={amazonOn} present={photoIn} src={cover} gallery={shots} />
+          <ProductShot
+            live={amazonOn}
+            present
+            src={CHANNELS.amazon.src}
+            gallery={[...CHANNELS.amazon.gallery]}
+          />
           <div className="shrink-0 px-3 py-2">
             <p className="text-[16px] font-semibold text-[#B12704]">
-              {amazonOn ? "$189.00" : "—"}
+              {amazonOn ? CHANNELS.amazon.price : "—"}
             </p>
-            <p className="truncate text-[12px] text-[#707070]">Amazon · Add to Cart</p>
+            <p className="truncate text-[12px] text-[#707070]">{CHANNELS.amazon.name}</p>
           </div>
         </ChannelShell>
 
@@ -719,12 +762,17 @@ export function ListingPipeline({
             </span>
             <LivePill on={facebookOn} label="Posted" />
           </div>
-          <ProductShot live={facebookOn} present={photoIn} src={cover} gallery={shots} />
+          <ProductShot
+            live={facebookOn}
+            present
+            src={CHANNELS.facebook.src}
+            gallery={[...CHANNELS.facebook.gallery]}
+          />
           <div className="shrink-0 px-3 py-2">
-            <p className="text-[16px] font-semibold">{facebookOn ? "$189" : "—"}</p>
-            <p className="truncate text-[12px] text-[#707070]">
-              {facebookOn ? "Listed just now" : "Facebook Marketplace"}
+            <p className="text-[16px] font-semibold">
+              {facebookOn ? CHANNELS.facebook.price : "—"}
             </p>
+            <p className="truncate text-[12px] text-[#707070]">{CHANNELS.facebook.name}</p>
           </div>
         </ChannelShell>
 
@@ -733,10 +781,15 @@ export function ListingPipeline({
             <ShopifyMark />
             <LivePill on={shopifyOn} label="On store" />
           </div>
-          <ProductShot live={shopifyOn} present={photoIn} src={cover} gallery={shots} />
+          <ProductShot
+            live={shopifyOn}
+            present
+            src={CHANNELS.shopify.src}
+            gallery={[...CHANNELS.shopify.gallery]}
+          />
           <div className="shrink-0 px-3 py-2">
             <p className="text-[16px] font-semibold tabular-nums">
-              {shopifyOn ? "$189.00" : "—"}
+              {shopifyOn ? CHANNELS.shopify.price : "—"}
             </p>
             <p
               className={cn(
@@ -760,12 +813,17 @@ export function ListingPipeline({
             </span>
             <LivePill on={webOn} label="On site" />
           </div>
-          <ProductShot live={webOn} present={photoIn} src={cover} gallery={shots} />
+          <ProductShot
+            live={webOn}
+            present
+            src={CHANNELS.web.src}
+            gallery={[...CHANNELS.web.gallery]}
+          />
           <div className="shrink-0 px-3 py-2">
             <p className="text-[16px] font-semibold tabular-nums">
-              {webOn ? "$189.00" : "—"}
+              {webOn ? CHANNELS.web.price : "—"}
             </p>
-            <p className="truncate text-[12px] text-[#707070]">Your website</p>
+            <p className="truncate text-[12px] text-[#707070]">{CHANNELS.web.name}</p>
           </div>
         </ChannelShell>
         </div>

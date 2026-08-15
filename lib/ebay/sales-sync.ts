@@ -73,6 +73,154 @@ export type StoreInsight = {
   suggestedPrice?: number | null;
 };
 
+export type DealCard = {
+  listingId: string;
+  title: string;
+  pictureUrl: string | null;
+  price: number | null;
+  watchers: number;
+  soldQty: number;
+  inCart: boolean;
+  chance: number;
+  signal: "close_now" | "hot" | "stuck" | "priced_right" | "sleeping";
+  why: string;
+  move: string;
+  vsStore: "lower" | "higher" | "even" | null;
+};
+
+function clampScore(n: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, Math.round(n)));
+}
+
+export function scoreDeals(
+  liveRows: InventoryLine[],
+  cartMoves: OfferMove[],
+): DealCard[] {
+  const cartIds = new Set(
+    cartMoves.filter((m) => m.kind === "in_cart").map((m) => m.listingId),
+  );
+  const prices = liveRows
+    .map((row) => row.price)
+    .filter((n): n is number => n != null && n > 0)
+    .sort((a, b) => a - b);
+  const median = prices.length ? prices[Math.floor(prices.length / 2)] : null;
+
+  const cards: DealCard[] = [];
+  const seen = new Set<string>();
+
+  const pushCard = (card: DealCard) => {
+    if (!card.listingId || seen.has(card.listingId)) return;
+    seen.add(card.listingId);
+    cards.push(card);
+  };
+
+  for (const row of liveRows) {
+    const inCart = cartIds.has(row.listingId);
+    const vsStore =
+      row.price != null && median
+        ? row.price < median * 0.92
+          ? "lower"
+          : row.price > median * 1.12
+            ? "higher"
+            : "even"
+        : null;
+
+    let chance = 10;
+    chance += Math.min(36, row.watchers * 8);
+    if (inCart) chance += 38;
+    chance += Math.min(24, row.soldQty * 6);
+    if (vsStore === "lower") chance += 10;
+    if (vsStore === "higher" && row.soldQty === 0) chance -= 14;
+
+    let signal: DealCard["signal"];
+    let why: string;
+    let move: string;
+
+    if (inCart) {
+      signal = "close_now";
+      why = "Someone has this in a cart right now.";
+      move = "Send the price you want — this one can close today.";
+      chance = Math.max(chance, 80);
+    } else if (row.watchers >= 3 && row.soldQty === 0) {
+      signal = "stuck";
+      why = `${row.watchers} watching, 0 sold${
+        vsStore === "higher" ? " · priced above the store" : ""
+      }.`;
+      move = "Price is blocking the sale. Set the BIN you want.";
+      chance = clampScore(chance, 22, 58);
+    } else if (row.watchers >= 3 && row.soldQty > 0) {
+      signal = "hot";
+      why = `${row.watchers} watching · ${row.soldQty} sold${
+        vsStore === "lower" ? " · priced lower than the store" : ""
+      }.`;
+      move =
+        vsStore === "lower"
+          ? "High chance to sell again — priced to move."
+          : "This one is converting. Keep it, or send a small offer.";
+    } else if (row.soldQty > 0) {
+      signal = "priced_right";
+      why = `${row.soldQty} sold. The price is working.`;
+      move =
+        vsStore === "lower"
+          ? "Priced lower — strong chance to sell again."
+          : "Leave it unless you want more volume.";
+    } else {
+      signal = "sleeping";
+      why = "Quiet right now — no watchers, no sales.";
+      move = "Drop the BIN to wake it up.";
+      chance = clampScore(chance, 4, 18);
+    }
+
+    pushCard({
+      listingId: row.listingId,
+      title: row.title,
+      pictureUrl: row.pictureUrl,
+      price: row.price,
+      watchers: row.watchers,
+      soldQty: row.soldQty,
+      inCart,
+      chance: clampScore(chance, 4, 96),
+      signal,
+      why,
+      move,
+      vsStore,
+    });
+  }
+
+  for (const move of cartMoves.filter((m) => m.kind === "in_cart")) {
+    pushCard({
+      listingId: move.listingId,
+      title: move.title,
+      pictureUrl: move.pictureUrl,
+      price: move.price,
+      watchers: move.watchers,
+      soldQty: 0,
+      inCart: true,
+      chance: 86,
+      signal: "close_now",
+      why: "Someone has this in a cart right now.",
+      move: "Send the price you want — this one can close today.",
+      vsStore: null,
+    });
+  }
+
+  const rank: Record<DealCard["signal"], number> = {
+    close_now: 0,
+    stuck: 1,
+    hot: 2,
+    priced_right: 3,
+    sleeping: 4,
+  };
+  return cards
+    .sort(
+      (a, b) =>
+        rank[a.signal] - rank[b.signal] ||
+        b.chance - a.chance ||
+        b.watchers - a.watchers,
+    )
+    .slice(0, 12);
+}
+
 export type SalesSnapshot = {
   syncedAt: string;
   connected: boolean;
@@ -97,6 +245,7 @@ export type SalesSnapshot = {
   stockAlerts: StockAlert[];
   offerMoves: OfferMove[];
   insights: StoreInsight[];
+  deals: DealCard[];
   recent: EbaySaleLine[];
   opportunities: SalesOpportunity[];
   cartError?: string;
@@ -130,6 +279,7 @@ export function emptySalesSnapshot(
     stockAlerts: [],
     offerMoves: [],
     insights: [],
+    deals: [],
     recent: [],
     opportunities: [],
     ...partial,
@@ -1042,6 +1192,13 @@ export async function syncEbaySalesForUser(
     });
   }
 
+  const deals = scoreDeals(liveRows, offerMoves);
+  const dealIds = new Set(deals.map((row) => row.listingId));
+  const rankedInventory = [
+    ...inventory.filter((row) => dealIds.has(row.listingId)),
+    ...inventory.filter((row) => !dealIds.has(row.listingId)),
+  ];
+
   return {
     syncedAt,
     connected: true,
@@ -1062,10 +1219,11 @@ export async function syncEbaySalesForUser(
     inventoryOut,
     watchers,
     inCart,
-    inventory: inventory.slice(0, 24),
+    inventory: rankedInventory.slice(0, 40),
     stockAlerts: stockAlerts.slice(0, 16),
     offerMoves: offerMoves.slice(0, 16),
     insights: insights.slice(0, 6),
+    deals,
     recent: recent
       .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))
       .slice(0, 12),

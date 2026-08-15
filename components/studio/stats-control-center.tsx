@@ -16,14 +16,19 @@ import {
   EbayLivePreview,
   EbayWordmark,
 } from "@/components/studio/ebay-live-preview";
+import {
+  ChanceMeter,
+  DealDesk,
+  OpportunityList,
+} from "@/components/studio/opportunity-board";
 import type {
+  DealCard,
   InventoryLine,
   OfferMove,
   StockAlert,
-  StoreInsight,
 } from "@/lib/ebay/sales-sync";
 
-type Pane = "act" | "carts" | "listings" | "orders";
+type Pane = "opps" | "act" | "carts" | "listings" | "orders";
 
 function hiRes(url: string | null | undefined) {
   if (!url) return "";
@@ -31,12 +36,6 @@ function hiRes(url: string | null | undefined) {
     .replace(/s-l\d+/gi, "s-l500")
     .replace(/\$_\d+/g, "$_57")
     .replace(/^http:\/\//i, "https://");
-}
-
-function suggestDrop(price: number | null) {
-  if (!price || price < 2) return { pct: 10, amount: null as number | null };
-  const pct = price >= 50 ? 10 : 5;
-  return { pct, amount: Math.round(price * (1 - pct / 100) * 100) / 100 };
 }
 
 async function runPremium(body: {
@@ -58,7 +57,7 @@ async function runPremium(body: {
 export function StatsControlCenter() {
   const { snap, loading, reload } = useEbaySales();
   const [pane, setPane] = useState<Pane | null>(null);
-  const [hero, setHero] = useState(0);
+  const [pickedId, setPickedId] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const lastOrdersRef = useRef<number | null>(null);
 
@@ -70,6 +69,7 @@ export function StatsControlCenter() {
     () => (snap?.offerMoves ?? []).filter((row) => row.kind === "in_cart"),
     [snap],
   );
+  const deals = snap?.deals ?? [];
   const feed = useMemo(() => {
     if (!snap) return [] as InventoryLine[];
     if (pane === "act") {
@@ -84,15 +84,6 @@ export function StatsControlCenter() {
     if (watching.length) return watching;
     return snap.inventory;
   }, [snap, pane, carts, watching]);
-
-  useEffect(() => {
-    if (feed.length < 2) return;
-    const t = window.setInterval(
-      () => setHero((n) => (n + 1) % Math.min(feed.length, 6)),
-      4200,
-    );
-    return () => window.clearInterval(t);
-  }, [feed.length]);
 
   useEffect(() => {
     if (!snap) return;
@@ -133,29 +124,41 @@ export function StatsControlCenter() {
 
   const shop = snap.storeName?.trim() || "eBay store";
   const alertCount = snap.inventoryLow + snap.inventoryOut;
-  const active: Pane =
-    pane ??
-    (snap.inCart > 0
-      ? "carts"
-      : alertCount > 0
-        ? "act"
-        : watching.length
-          ? "carts"
-          : "listings");
+  const active: Pane = pane ?? "opps";
 
-  const featured = feed[hero % Math.max(feed.length, 1)];
-  const rest = feed.filter((row) => row.listingId !== featured?.listingId);
+  const pickedDeal =
+    deals.find((row) => row.listingId === pickedId) || deals[0] || null;
+  const featuredInv =
+    snap.inventory.find((row) => row.listingId === pickedDeal?.listingId) ||
+    feed[0] ||
+    null;
+
+  const featuredTitle = pickedDeal?.title || featuredInv?.title || "";
+  const featuredPhoto = pickedDeal?.pictureUrl || featuredInv?.pictureUrl;
+  const featuredPrice = pickedDeal?.price ?? featuredInv?.price ?? null;
+  const featuredId = pickedDeal?.listingId || featuredInv?.listingId || "";
+  const featuredWatchers = pickedDeal?.watchers ?? featuredInv?.watchers ?? 0;
+  const featuredSold = pickedDeal?.soldQty ?? featuredInv?.soldQty ?? 0;
+  const canOffer =
+    Boolean(featuredId) &&
+    (pickedDeal?.inCart || carts.some((c) => c.listingId === featuredId));
 
   return (
     <div className="mx-auto max-w-[1100px] pb-16">
       <div className="overflow-hidden rounded-xl bg-white shadow-[0_12px_32px_-18px_rgba(0,0,0,0.45)] ring-1 ring-black/10">
         <div className="flex items-center gap-3 border-b border-[#e5e5e5] px-4 py-2.5">
-          <EbayWordmark className="text-[22px]" />
-          <div className="min-w-0 flex-1 rounded-full border border-[#ccc] bg-[#f7f7f7] px-3 py-1.5 text-[12px] text-[#707070]">
-            {shop} · live store
-          </div>
+          <button type="button" onClick={() => setPane("opps")}>
+            <EbayWordmark className="text-[22px]" />
+          </button>
+          <button
+            type="button"
+            onClick={() => setPane("opps")}
+            className="min-w-0 flex-1 rounded-full border border-[#ccc] bg-[#f7f7f7] px-3 py-1.5 text-left text-[12px] text-[#707070]"
+          >
+            {shop} · opportunity center
+          </button>
           <span className="hidden text-[12px] font-medium text-[#191919] sm:inline">
-            Updated {formatRelativeTime(snap.syncedAt)}
+            Live · {formatRelativeTime(snap.syncedAt)}
           </span>
         </div>
 
@@ -170,6 +173,13 @@ export function StatsControlCenter() {
         ) : null}
 
         <div className="grid grid-cols-2 divide-x divide-[#eee] border-b border-[#e5e5e5] lg:grid-cols-6">
+          <StatCell
+            active={active === "opps"}
+            onClick={() => setPane("opps")}
+            label="Deals"
+            value={String(deals.length)}
+            hint="Ranked live"
+          />
           <StatCell
             active={active === "orders"}
             onClick={() => setPane("orders")}
@@ -196,14 +206,7 @@ export function StatsControlCenter() {
             onClick={() => setPane("carts")}
             label="In cart"
             value={String(snap.inCart)}
-            hint="Send an offer"
-          />
-          <StatCell
-            active={active === "carts"}
-            onClick={() => setPane("carts")}
-            label="Watching"
-            value={String(snap.watchers)}
-            hint={`${watching.length} listings`}
+            hint={`${snap.watchers} watching`}
           />
           <StatCell
             active={active === "act"}
@@ -215,127 +218,95 @@ export function StatsControlCenter() {
           />
         </div>
 
-        {snap.insights.length > 0 ? (
-          <PremiumStrip
-            insights={snap.insights}
-            busy={busy}
-            onOffer={(listingId, pct) =>
-              void act(
-                `offer-${listingId}`,
-                {
-                  action: "offer",
-                  listingId,
-                  discountPercentage: pct,
-                },
-                `Offer sent · ${pct}% off`,
-              )
-            }
-            onPrice={(listingId, price) => {
-              if (
-                !window.confirm(
-                  `Drop this listing to ${usd(price, true)} on eBay?`,
-                )
-              ) {
-                return;
-              }
-              void act(
-                `price-${listingId}`,
-                { action: "price", listingId, price },
-                `Price updated to ${usd(price, true)}`,
-              );
-            }}
-            onOfferAll={() =>
-              void act(
-                "offer-all",
-                {
-                  action: "offer_all",
-                  listingIds: snap.offerMoves
-                    .filter((m) => m.kind === "in_cart")
-                    .map((m) => m.listingId),
-                  discountPercentage: 10,
-                },
-                "Offers sent to interested buyers",
-              )
-            }
-          />
-        ) : null}
-
         {active === "orders" ? (
           <OrdersBoard rows={snap.recent} />
         ) : (
           <div className="grid gap-0 lg:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)]">
             <div className="border-b border-[#e5e5e5] bg-[#f7f7f7] p-4 lg:border-r lg:border-b-0">
-              {featured ? (
+              {featuredTitle ? (
                 <AnimatePresence mode="wait">
                   <motion.div
-                    key={featured.listingId}
+                    key={featuredId || featuredTitle}
                     initial={{ opacity: 0, y: 12 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -8 }}
                     transition={{ duration: 0.35 }}
                   >
                     <EbayLivePreview
-                      photoSrc={hiRes(featured.pictureUrl)}
-                      title={featured.title}
+                      photoSrc={hiRes(featuredPhoto)}
+                      title={featuredTitle}
                       priceLabel={
-                        featured.price != null
-                          ? `US ${usd(featured.price, true)}`
+                        featuredPrice != null
+                          ? `US ${usd(featuredPrice, true)}`
                           : "US —"
                       }
                       storeName={shop}
                       live
                     />
-                    <p className="mt-3 text-center text-[12px] text-[#707070]">
-                      {featured.watchers
-                        ? `${featured.watchers} people watching this right now`
-                        : "Live on eBay"}
-                      {featured.soldQty ? ` · ${featured.soldQty} sold` : ""}
-                      <span className="mx-1">·</span>
-                      refreshes every {SALES_POLL_MS / 1000}s
-                    </p>
-                    {featured.listingId ? (
-                      <FeaturedActions
-                        listingId={featured.listingId}
-                        price={featured.price}
-                        busy={busy}
-                        canOffer={carts.some(
-                          (c) => c.listingId === featured.listingId,
-                        )}
-                        onOffer={() =>
-                          void act(
-                            `offer-${featured.listingId}`,
-                            {
-                              action: "offer",
-                              listingId: featured.listingId,
-                              discountPercentage: 10,
-                            },
-                            "10% offer sent to interested buyers",
-                          )
-                        }
-                        onDrop={() => {
-                          const next = suggestDrop(featured.price).amount;
-                          if (next == null) {
-                            toast.error("This listing has no price to drop.");
-                            return;
-                          }
-                          if (
-                            !window.confirm(
-                              `Drop BIN to ${usd(next, true)} on eBay?`,
+                    {pickedDeal ? (
+                      <div className="mt-3 rounded-xl bg-white p-3 ring-1 ring-[#e5e5e5]">
+                        <ChanceMeter chance={pickedDeal.chance} big />
+                        <p className="mt-2 text-[13px] font-medium text-[#191919]">
+                          {pickedDeal.why}
+                        </p>
+                        <p className="mt-1 text-[12px] text-[#707070]">
+                          {pickedDeal.move}
+                        </p>
+                        {pickedDeal.vsStore === "lower" ? (
+                          <p className="mt-1 text-[12px] font-semibold text-[#86B817]">
+                            Priced lower than the rest of the store — higher
+                            chance to sell.
+                          </p>
+                        ) : null}
+                        {pickedDeal.vsStore === "higher" &&
+                        pickedDeal.signal === "stuck" ? (
+                          <p className="mt-1 text-[12px] font-semibold text-[#c41e3a]">
+                            Priced high vs the store — buyers are watching, not
+                            buying.
+                          </p>
+                        ) : null}
+                      </div>
+                    ) : (
+                      <p className="mt-3 text-center text-[12px] text-[#707070]">
+                        {featuredWatchers
+                          ? `${featuredWatchers} people watching this right now`
+                          : "Live on eBay"}
+                        {featuredSold ? ` · ${featuredSold} sold` : ""}
+                        <span className="mx-1">·</span>
+                        refreshes every {SALES_POLL_MS / 1000}s
+                      </p>
+                    )}
+                    {featuredId ? (
+                      <div className="mt-3">
+                        <DealDesk
+                          listingId={featuredId}
+                          price={featuredPrice}
+                          canOffer={canOffer}
+                          busy={busy}
+                          onOffer={(pct, label) =>
+                            void act(
+                              `offer-${featuredId}`,
+                              {
+                                action: "offer",
+                                listingId: featuredId,
+                                discountPercentage: pct,
+                              },
+                              label,
                             )
-                          ) {
-                            return;
                           }
-                          void act(
-                            `price-${featured.listingId}`,
-                            {
-                              action: "price",
-                              listingId: featured.listingId,
-                              price: next,
-                            },
-                            `Price dropped to ${usd(next, true)}`,
-                          );
-                        }}
-                      />
+                          onDrop={(price) =>
+                            void act(
+                              `price-${featuredId}`,
+                              {
+                                action: "price",
+                                listingId: featuredId,
+                                price,
+                              },
+                              `BIN set to ${usd(price, true)}`,
+                            )
+                          }
+                        />
+                      </div>
                     ) : null}
                   </motion.div>
                 </AnimatePresence>
@@ -346,7 +317,7 @@ export function StatsControlCenter() {
               )}
             </div>
 
-            <div className="max-h-[720px] overflow-y-auto bg-white">
+            <div className="max-h-[820px] overflow-y-auto bg-white">
               {snap.cartError ? (
                 <Link
                   href="/settings#ebay-store"
@@ -356,58 +327,65 @@ export function StatsControlCenter() {
                   <ArrowRight className="size-4" />
                 </Link>
               ) : null}
-              <p className="border-b border-[#eee] px-4 py-2.5 text-[13px] font-semibold text-[#191919]">
-                {active === "act"
-                  ? "Stock alerts"
-                  : snap.inCart > 0 && active === "carts"
-                    ? "In cart — send an offer"
-                    : "Watching now · like eBay search"}
-              </p>
-              {rest.length === 0 && !featured ? (
+              <div className="flex items-center justify-between border-b border-[#eee] px-4 py-2.5">
+                <p className="text-[13px] font-semibold text-[#191919]">
+                  {active === "opps"
+                    ? "Opportunity center · live"
+                    : active === "act"
+                      ? "Stock alerts"
+                      : snap.inCart > 0 && active === "carts"
+                        ? "In cart"
+                        : "Watching now · like eBay search"}
+                </p>
+                {active === "opps" && carts.length > 1 ? (
+                  <button
+                    type="button"
+                    disabled={busy !== null}
+                    onClick={() =>
+                      void act(
+                        "offer-all",
+                        {
+                          action: "offer_all",
+                          listingIds: carts.map((m) => m.listingId),
+                          discountPercentage: 10,
+                        },
+                        "Offers sent to interested buyers",
+                      )
+                    }
+                    className="h-7 rounded-full bg-[#3665F3] px-3 text-[11px] font-semibold text-white disabled:opacity-50"
+                  >
+                    {busy === "offer-all" ? "Sending…" : "Offer all carts"}
+                  </button>
+                ) : null}
+              </div>
+              {active === "opps" ? (
+                <OpportunityList
+                  deals={deals}
+                  selectedId={featuredId || null}
+                  onPick={setPickedId}
+                />
+              ) : feed.length === 0 ? (
                 <p className="px-4 py-10 text-[14px] text-[#707070]">
                   Nothing in this view yet.
                 </p>
               ) : (
                 <ul>
-                  {(featured ? [featured, ...rest] : rest)
-                    .slice(0, 12)
-                    .map((row, i) => (
-                      <EbayResultRow
-                        key={row.listingId || row.sku}
-                        row={row}
-                        offer={carts.find((c) => c.listingId === row.listingId)}
-                        alert={snap.stockAlerts.find(
-                          (a) => a.listingId === row.listingId,
-                        )}
-                        delay={i * 0.04}
-                        busy={busy}
-                        onOffer={(listingId, pct) =>
-                          void act(
-                            `offer-${listingId}`,
-                            {
-                              action: "offer",
-                              listingId,
-                              discountPercentage: pct,
-                            },
-                            `Offer sent · ${pct}% off`,
-                          )
-                        }
-                        onDrop={(listingId, price) => {
-                          if (
-                            !window.confirm(
-                              `Drop BIN to ${usd(price, true)} on eBay?`,
-                            )
-                          ) {
-                            return;
-                          }
-                          void act(
-                            `price-${listingId}`,
-                            { action: "price", listingId, price },
-                            `Price dropped to ${usd(price, true)}`,
-                          );
-                        }}
-                      />
-                    ))}
+                  {feed.slice(0, 12).map((row, i) => (
+                    <EbayResultRow
+                      key={row.listingId || row.sku}
+                      row={row}
+                      offer={carts.find((c) => c.listingId === row.listingId)}
+                      alert={snap.stockAlerts.find(
+                        (a) => a.listingId === row.listingId,
+                      )}
+                      deal={deals.find((d) => d.listingId === row.listingId)}
+                      delay={i * 0.04}
+                      onWork={() => {
+                        setPickedId(row.listingId);
+                        setPane("opps");
+                      }}
+                    />
+                  ))}
                 </ul>
               )}
             </div>
@@ -456,181 +434,24 @@ function StatCell({
   );
 }
 
-function PremiumStrip({
-  insights,
-  busy,
-  onOffer,
-  onPrice,
-  onOfferAll,
-}: {
-  insights: StoreInsight[];
-  busy: string | null;
-  onOffer: (listingId: string, pct: number) => void;
-  onPrice: (listingId: string, price: number) => void;
-  onOfferAll: () => void;
-}) {
-  const offers = insights.filter((row) => row.kind === "send_offer");
-  return (
-    <div className="border-b border-[#e5e5e5] bg-[#f7f7f7] px-4 py-3">
-      <div className="mb-2 flex items-center justify-between gap-3">
-        <p className="text-[13px] font-semibold text-[#191919]">
-          Seller moves
-        </p>
-        {offers.length > 1 ? (
-          <button
-            type="button"
-            disabled={busy !== null}
-            onClick={onOfferAll}
-            className="h-8 rounded-full bg-[#3665F3] px-3.5 text-[12px] font-semibold text-white disabled:opacity-50"
-          >
-            {busy === "offer-all" ? "Sending…" : "Send all cart offers"}
-          </button>
-        ) : null}
-      </div>
-      <div className="flex gap-2 overflow-x-auto pb-1">
-        {insights.map((insight) => {
-          const pct = insight.suggestedPct || 10;
-          const drop = insight.suggestedPrice;
-          return (
-            <article
-              key={insight.id}
-              className="flex min-w-[280px] max-w-[320px] shrink-0 gap-2.5 rounded-lg bg-white p-2.5 ring-1 ring-[#e5e5e5]"
-            >
-              <div className="size-14 shrink-0 overflow-hidden rounded-md bg-[#f7f7f7] ring-1 ring-[#eee]">
-                {hiRes(insight.pictureUrl) ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={hiRes(insight.pictureUrl)}
-                    alt=""
-                    className="size-full object-contain p-1"
-                  />
-                ) : null}
-              </div>
-              <div className="min-w-0 flex-1">
-                <p className="line-clamp-1 text-[12px] font-medium text-[#191919]">
-                  {insight.title}
-                </p>
-                <p className="mt-0.5 line-clamp-2 text-[11px] text-[#707070]">
-                  {insight.detail}
-                </p>
-                <div className="mt-1.5">
-                  {insight.kind === "send_offer" ? (
-                    <button
-                      type="button"
-                      disabled={busy !== null}
-                      onClick={() => onOffer(insight.listingId, pct)}
-                      className="h-7 rounded-full bg-[#3665F3] px-2.5 text-[11px] font-semibold text-white disabled:opacity-50"
-                    >
-                      {busy === `offer-${insight.listingId}`
-                        ? "Sending…"
-                        : `Send ${pct}% offer`}
-                    </button>
-                  ) : (insight.kind === "cut_price" || insight.kind === "hot") &&
-                    drop != null ? (
-                    <button
-                      type="button"
-                      disabled={busy !== null}
-                      onClick={() => onPrice(insight.listingId, drop)}
-                      className="h-7 rounded-full border border-[#111]/15 px-2.5 text-[11px] font-semibold text-[#111] disabled:opacity-50"
-                    >
-                      {busy === `price-${insight.listingId}`
-                        ? "Updating…"
-                        : `Drop to ${usd(drop, true)}`}
-                    </button>
-                  ) : (
-                    <a
-                      href={`https://www.ebay.com/itm/${insight.listingId}`}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="inline-flex h-7 items-center text-[11px] font-semibold text-[#3665F3]"
-                    >
-                      Open on eBay
-                    </a>
-                  )}
-                </div>
-              </div>
-            </article>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-function FeaturedActions({
-  listingId,
-  price,
-  busy,
-  canOffer,
-  onOffer,
-  onDrop,
-}: {
-  listingId: string;
-  price: number | null;
-  busy: string | null;
-  canOffer: boolean;
-  onOffer: () => void;
-  onDrop: () => void;
-}) {
-  const next = suggestDrop(price).amount;
-  return (
-    <div className="mt-3 flex flex-wrap justify-center gap-2">
-      {canOffer ? (
-        <button
-          type="button"
-          disabled={busy !== null}
-          onClick={onOffer}
-          className="h-8 rounded-full bg-[#3665F3] px-3.5 text-[12px] font-semibold text-white disabled:opacity-50"
-        >
-          {busy === `offer-${listingId}` ? "Sending…" : "Send 10% offer"}
-        </button>
-      ) : null}
-      {next != null ? (
-        <button
-          type="button"
-          disabled={busy !== null}
-          onClick={onDrop}
-          className="h-8 rounded-full border border-[#111]/15 bg-white px-3.5 text-[12px] font-semibold text-[#111] disabled:opacity-50"
-        >
-          {busy === `price-${listingId}`
-            ? "Updating…"
-            : `Drop to ${usd(next, true)}`}
-        </button>
-      ) : null}
-      <a
-        href={`https://www.ebay.com/itm/${listingId}`}
-        target="_blank"
-        rel="noreferrer"
-        className="inline-flex h-8 items-center rounded-full px-3 text-[12px] font-medium text-[#3665F3]"
-      >
-        View on eBay
-      </a>
-    </div>
-  );
-}
-
 function EbayResultRow({
   row,
   offer,
   alert,
+  deal,
   delay,
-  busy,
-  onOffer,
-  onDrop,
+  onWork,
 }: {
   row: InventoryLine;
   offer?: OfferMove;
   alert?: StockAlert;
+  deal?: DealCard;
   delay: number;
-  busy: string | null;
-  onOffer: (listingId: string, pct: number) => void;
-  onDrop: (listingId: string, price: number) => void;
+  onWork: () => void;
 }) {
   const href = row.listingId
     ? `https://www.ebay.com/itm/${row.listingId}`
     : "#";
-  const drop = offer?.suggestedPrice ?? suggestDrop(row.price).amount;
-  const pct = offer?.suggestedOffPct || 10;
   return (
     <motion.li
       initial={{ opacity: 0, y: 8 }}
@@ -673,68 +494,33 @@ function EbayResultRow({
             {usd(row.price, true)}
           </p>
         ) : null}
-        <p className="mt-0.5 text-[12px] text-[#707070]">
-          {row.watchers ? `${row.watchers} watching` : "Live"}
-          {row.soldQty ? ` · ${row.soldQty} sold` : ""}
-          {row.qty != null ? ` · ${row.qty} available` : ""}
-        </p>
+        {deal ? (
+          <div className="mt-1.5 max-w-[220px]">
+            <ChanceMeter chance={deal.chance} />
+          </div>
+        ) : (
+          <p className="mt-0.5 text-[12px] text-[#707070]">
+            {row.watchers ? `${row.watchers} watching` : "Live"}
+            {row.soldQty ? ` · ${row.soldQty} sold` : ""}
+          </p>
+        )}
         {offer?.kind === "in_cart" ? (
           <p className="mt-1 text-[12px] font-semibold text-[#3665F3]">
             In cart
-            {offer.suggestedPrice != null
-              ? ` · offer ${usd(offer.suggestedPrice, true)} (${pct}% off)`
-              : ""}
           </p>
-        ) : offer?.kind === "best_offer" ? (
-          <p className="mt-1 text-[12px] font-semibold text-[#3665F3]">
-            Buyer sent a Best Offer
-          </p>
-        ) : (
-          <p className="mt-1 text-[12px] font-bold text-[#3665F3]">Buy It Now</p>
-        )}
+        ) : null}
         {alert ? (
           <p className="mt-1 text-[12px] font-medium text-[#c41e3a]">
             {alert.why} {alert.fix}
           </p>
         ) : null}
-        {row.listingId ? (
-          <div className="mt-2 flex flex-wrap gap-1.5">
-            {offer?.kind === "in_cart" ? (
-              <button
-                type="button"
-                disabled={busy !== null}
-                onClick={() => onOffer(row.listingId, pct)}
-                className="h-7 rounded-full bg-[#3665F3] px-2.5 text-[11px] font-semibold text-white disabled:opacity-50"
-              >
-                {busy === `offer-${row.listingId}`
-                  ? "Sending…"
-                  : `Send ${pct}% offer`}
-              </button>
-            ) : null}
-            {drop != null ? (
-              <button
-                type="button"
-                disabled={busy !== null}
-                onClick={() => onDrop(row.listingId, drop)}
-                className="h-7 rounded-full border border-[#111]/15 bg-white px-2.5 text-[11px] font-semibold text-[#111] disabled:opacity-50"
-              >
-                {busy === `price-${row.listingId}`
-                  ? "Updating…"
-                  : `Drop to ${usd(drop, true)}`}
-              </button>
-            ) : null}
-            {offer?.kind === "best_offer" ? (
-              <a
-                href={offer.href}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex h-7 items-center px-1 text-[11px] font-semibold text-[#3665F3]"
-              >
-                Open offers
-              </a>
-            ) : null}
-          </div>
-        ) : null}
+        <button
+          type="button"
+          onClick={onWork}
+          className="mt-2 h-7 rounded-full bg-[#3665F3] px-3 text-[11px] font-semibold text-white"
+        >
+          Work this deal
+        </button>
       </div>
     </motion.li>
   );

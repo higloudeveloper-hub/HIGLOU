@@ -59,8 +59,11 @@ export function FirstRunHome({
       }
       scroll={false}
     >
-      <div className="grid min-h-0 flex-1 lg:grid-cols-[minmax(360px,0.9fr)_minmax(0,1.15fr)]">
-        <div className="flex min-h-0 flex-col gap-4 overflow-y-auto border-b border-[#e5e5e5] bg-[#f7f7f7] p-5 lg:border-r lg:border-b-0">
+      <div className="grid min-h-0 flex-1 lg:grid-cols-[minmax(0,1.4fr)_minmax(280px,0.6fr)]">
+        <div className="order-1 flex min-h-0 flex-col bg-[#f7f7f7] p-3 lg:order-none lg:p-4">
+          <MoneyEngine />
+        </div>
+        <div className="order-2 flex min-h-0 flex-col gap-4 overflow-y-auto border-t border-[#e5e5e5] bg-white p-5 lg:order-none lg:border-t-0 lg:border-l">
           <p className="text-[14px] leading-relaxed text-[#565959]">
             You bring photos of what you sell. Higlou writes the listing. One
             click sends it to eBay, Amazon, Facebook, and your website.
@@ -119,9 +122,6 @@ export function FirstRunHome({
               ))}
             </div>
           </div>
-        </div>
-        <div className="flex min-h-0 flex-col bg-white p-4">
-          <MoneyEngine />
         </div>
       </div>
     </StudioFrame>

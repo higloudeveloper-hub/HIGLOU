@@ -86,7 +86,7 @@ function ChannelShell({
       }}
       transition={{ type: "spring", stiffness: 280, damping: 24 }}
       className={cn(
-        "flex min-h-0 flex-col overflow-hidden rounded-xl bg-white ring-1",
+        "flex h-full min-h-0 flex-col overflow-hidden rounded-xl bg-white ring-1",
         live
           ? "shadow-[0_12px_28px_-18px_rgba(0,0,0,0.45)] ring-black/10"
           : "ring-[#e5e5e5]",
@@ -181,8 +181,10 @@ export function ListingPipeline({
   return (
     <section
       className={cn(
-        "flex min-h-0 flex-col overflow-hidden rounded-[24px] border border-[#e5e5e5] bg-white",
-        compact ? "p-3.5" : "h-full p-4 sm:p-5",
+        "flex min-h-0 flex-1 flex-col overflow-hidden",
+        compact
+          ? "rounded-[24px] border border-[#e5e5e5] bg-white p-3.5"
+          : "h-full bg-white p-4 sm:p-5",
       )}
     >
       <div className="flex shrink-0 items-center justify-between gap-3">
@@ -196,10 +198,10 @@ export function ListingPipeline({
 
       <div
         className={cn(
-          "mt-3 grid min-h-0 gap-3",
+          "mt-3 grid min-h-0 flex-1 gap-3",
           compact
             ? "grid-cols-1"
-            : "lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]",
+            : "lg:grid-cols-[minmax(220px,0.7fr)_minmax(0,1.3fr)]",
         )}
       >
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
@@ -298,7 +300,7 @@ export function ListingPipeline({
         <div
           className={cn(
             "grid min-h-0 gap-2",
-            compact ? "grid-cols-2" : "grid-cols-2 lg:grid-rows-2",
+            compact ? "grid-cols-2" : "grid-cols-2 lg:h-full lg:grid-rows-2",
           )}
         >
           <ChannelShell live={ebayOn}>
@@ -308,7 +310,7 @@ export function ListingPipeline({
             </div>
             <ProductShot
               live={ebayOn}
-              className={compact ? "h-[92px]" : "min-h-[88px] flex-1"}
+              className={compact ? "h-[92px]" : "min-h-[150px] flex-1"}
             />
             <div className="px-2.5 py-2">
               <p className="line-clamp-2 text-[11px] leading-snug font-medium text-[#191919]">
@@ -330,7 +332,7 @@ export function ListingPipeline({
             </div>
             <ProductShot
               live={amazonOn}
-              className={compact ? "h-[92px]" : "min-h-[88px] flex-1"}
+              className={compact ? "h-[92px]" : "min-h-[150px] flex-1"}
             />
             <div className="px-2.5 py-2">
               <p className="line-clamp-2 text-[11px] leading-snug font-medium text-[#0F1111]">
@@ -361,7 +363,7 @@ export function ListingPipeline({
             </div>
             <ProductShot
               live={facebookOn}
-              className={compact ? "h-[92px]" : "min-h-[88px] flex-1"}
+              className={compact ? "h-[92px]" : "min-h-[150px] flex-1"}
             />
             <div className="px-2.5 py-2">
               <p className="text-[13px] font-semibold text-[#050505]">
@@ -387,7 +389,7 @@ export function ListingPipeline({
             </div>
             <ProductShot
               live={webOn}
-              className={compact ? "h-[92px]" : "min-h-[88px] flex-1"}
+              className={compact ? "h-[92px]" : "min-h-[150px] flex-1"}
             />
             <div className="px-2.5 py-2">
               <p className="line-clamp-2 text-[12px] font-semibold text-[#191919]">

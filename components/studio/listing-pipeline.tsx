@@ -168,7 +168,7 @@ function useCountToward(target: number, reduce: boolean) {
   return n;
 }
 
-function StoreTargets() {
+function StoreTargets({ compact = false }: { compact?: boolean }) {
   const stores = [
     { key: "ebay", node: <EbayMark className="h-[18px]" /> },
     { key: "amazon", node: <AmazonMark className="h-4" /> },
@@ -178,15 +178,25 @@ function StoreTargets() {
   ] as const;
 
   return (
-    <div className="shrink-0 border-t border-[#e5e5e5] bg-white px-4 py-3">
-      <p className="mb-2.5 text-center text-[11px] font-medium tracking-[0.16em] text-[#8a8a8a] uppercase">
-        Publishes to five stores
-      </p>
+    <div
+      className={cn(
+        "shrink-0 border-t border-[#e5e5e5] bg-white px-4",
+        compact ? "py-2" : "py-3",
+      )}
+    >
+      {compact ? null : (
+        <p className="mb-2.5 text-center text-[11px] font-medium tracking-[0.16em] text-[#8a8a8a] uppercase">
+          Publishes to five stores
+        </p>
+      )}
       <div className="flex flex-wrap items-center justify-center gap-2">
         {stores.map((store) => (
           <div
             key={store.key}
-            className="flex h-11 min-w-[108px] items-center justify-center rounded-lg bg-white px-3 ring-1 ring-[#e5e5e5]"
+            className={cn(
+              "flex items-center justify-center rounded-lg bg-white px-3 ring-1 ring-[#e5e5e5]",
+              compact ? "h-9 min-w-[96px]" : "h-11 min-w-[108px]",
+            )}
           >
             {store.node}
           </div>
@@ -1464,7 +1474,7 @@ export function ListingPipeline({
             sku={sku}
             compact={compact}
           />
-          <StoreTargets />
+          <StoreTargets compact={compact} />
         </>
       ) : (
       <div className="relative min-h-0 flex-1">

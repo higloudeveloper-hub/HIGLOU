@@ -20,11 +20,12 @@ export function EditPromoStrip({
 }) {
   return (
     <div className="mt-4 overflow-hidden rounded-xl border border-[#e5e5e5] bg-white">
-      <div className="h-[280px]">
+      <div className="h-[280px] overflow-hidden">
         <ListingPipeline
           storeName={storeName}
           photos={photoSrc ? [photoSrc] : undefined}
           mode="drop"
+          compact
         />
       </div>
       <div className="flex items-center justify-between border-t border-[#e5e5e5] px-4 py-3">

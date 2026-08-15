@@ -45,8 +45,14 @@ export function DropStage({
     : catalog.map((item) => item.photos[0]);
 
   return (
-    <div className="relative flex min-h-0 flex-1 flex-col bg-[#f7f7f7]">
-      <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-5 px-4 py-5 sm:gap-6">
+    <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-[#f7f7f7]">
+      <div
+        className={cn(
+          "flex min-h-0 flex-1 flex-col items-center justify-center px-4",
+          compact ? "gap-2 py-2" : "gap-5 py-5 sm:gap-6",
+        )}
+      >
+        {compact && freezeDrop ? null : (
         <div className="text-center">
           <p
             className={cn(
@@ -62,6 +68,7 @@ export function DropStage({
               : "On this pad. Higlou writes the listing. Five stores go live."}
           </p>
         </div>
+        )}
 
         <motion.div
           data-listing-slot=""
@@ -72,8 +79,10 @@ export function DropStage({
           }}
           transition={{ duration: 0.28, ease: EASE }}
           className={cn(
-            "relative flex w-full max-w-[440px] flex-col items-center justify-center bg-white",
-            compact ? "h-[168px]" : "h-[min(38vh,300px)] min-h-[200px]",
+            "relative flex w-full max-w-[440px] flex-col items-center justify-center overflow-hidden bg-white",
+            compact
+              ? "h-[112px] min-h-0"
+              : "h-[min(38vh,300px)] min-h-[200px]",
             fileDrag
               ? "border-2 border-solid border-[#141414]"
               : "border border-dashed border-[#141414]",
@@ -84,7 +93,7 @@ export function DropStage({
             <img
               src={hero}
               alt=""
-              className="absolute inset-0 size-full object-contain p-6"
+              className="absolute inset-0 size-full object-contain p-3"
             />
           ) : (
             <div className="flex flex-col items-center px-6 text-center">
@@ -116,6 +125,7 @@ export function DropStage({
           )}
         </motion.div>
 
+        {compact ? null : (
         <div className="flex items-end justify-center gap-2 sm:gap-2.5">
           {extras.map((src, i) => {
             const on = freezeDrop ? i === 0 : i === sku % catalog.length;
@@ -145,6 +155,7 @@ export function DropStage({
             );
           })}
         </div>
+        )}
       </div>
     </div>
   );

@@ -31,6 +31,7 @@ import { fetchCategoryAspectMeta } from "@/lib/ebay/sanitize-aspects";
 import {
   ensureCompatibleAspects,
   ensureInferredElectricalAspects,
+  ensureRequiredCategoryAspects,
   formatEbayVoltage,
   inferAspectValueFromText,
   inferVoltageFromText,
@@ -500,10 +501,16 @@ export async function POST(request: Request) {
       title: listing.title,
       brand: listing.brand,
       model: listing.model,
+      mpn: listing.mpn,
       productType: listing.productType || listing.type,
     };
     if (!inventory.aspects) inventory.aspects = {};
     ensureCompatibleAspects(
+      inventory.aspects,
+      aspectMeta.required,
+      compatibleExtras,
+    );
+    ensureRequiredCategoryAspects(
       inventory.aspects,
       aspectMeta.required,
       compatibleExtras,
@@ -554,8 +561,16 @@ export async function POST(request: Request) {
             inferAspectValueFromText(missingAspect, hay, {
               brand: listing.brand,
               model: listing.model,
+              mpn: listing.mpn,
               productType: listing.productType || listing.type,
             }) || "";
+        }
+
+        if (
+          !filled &&
+          /^(model|mpn|compatible\s)/i.test(missingAspect)
+        ) {
+          filled = "Does Not Apply";
         }
 
         if (filled) {

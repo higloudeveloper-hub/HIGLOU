@@ -4,10 +4,13 @@ import {
   inferVoltageFromText,
   inferBatteryTechnologyFromText,
   inferCompatibleAspect,
+  inferModelAspect,
+  inferAspectValueFromText,
   parseMissingAspectFromEbayError,
   humanizeEbayPublishError,
   ensureInferredElectricalAspects,
   ensureCompatibleAspects,
+  ensureRequiredCategoryAspects,
 } from "@/lib/ebay/infer-voltage";
 import { listingToInventoryItem } from "@/lib/ebay/listing-to-inventory";
 import { createEmptyListing } from "@/lib/demo/sample-listing";
@@ -193,5 +196,65 @@ describe("compatible aspects (eBay 25002 Compatible Model)", () => {
     );
     expect(msg.headline).toContain("Compatible Model");
     expect(msg.detail.toLowerCase()).toContain("try again");
+  });
+});
+
+describe("Model aspect (eBay 25002 Model)", () => {
+  it("parses Model from eBay 25002 text", () => {
+    expect(
+      parseMissingAspectFromEbayError(
+        "A user error has occurred. The item specific Model is missing. Add Model to this listing, enter a valid value, and then try again. [eBay 25002]",
+      ),
+    ).toBe("Model");
+  });
+
+  it("uses Does Not Apply for a kettle with no model number", () => {
+    expect(
+      inferModelAspect({
+        title: "Pinky Up Electric Ceramic Kettle with Gooseneck Spout",
+        brand: "Pinky Up",
+      }),
+    ).toBe("Does Not Apply");
+  });
+
+  it("keeps an explicit model like Noelle", () => {
+    expect(
+      inferModelAspect({
+        title: "Pinky Up Noelle Ceramic Electric Tea Kettle",
+        brand: "Pinky Up",
+        model: "Noelle",
+      }),
+    ).toBe("Noelle");
+  });
+
+  it("fills Model on 25002 retry inference", () => {
+    expect(
+      inferAspectValueFromText(
+        "Model",
+        "Pinky Up Electric Ceramic Kettle with Gooseneck Spout",
+        { brand: "Pinky Up" },
+      ),
+    ).toBe("Does Not Apply");
+  });
+
+  it("fills required Model before Inventory PUT", () => {
+    const aspects: Record<string, string[]> = { Brand: ["Pinky Up"] };
+    ensureRequiredCategoryAspects(aspects, ["Model", "Color"], {
+      title: "Pinky Up Electric Ceramic Kettle with Gooseneck Spout",
+      brand: "Pinky Up",
+      productType: "Electric Kettle",
+    });
+    expect(aspects.Model).toEqual(["Does Not Apply"]);
+  });
+
+  it("puts Model on the inventory item even when the listing has none", () => {
+    const listing = createEmptyListing();
+    listing.title = "Pinky Up Electric Ceramic Kettle with Gooseneck Spout";
+    listing.brand = "Pinky Up";
+    listing.model = "";
+    listing.categoryId = "20681";
+    listing.categoryName = "Electric Kettles";
+    const item = listingToInventoryItem(listing);
+    expect(item.aspects?.Model?.[0]).toBeTruthy();
   });
 });

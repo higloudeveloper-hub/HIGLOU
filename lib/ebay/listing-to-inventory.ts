@@ -11,7 +11,7 @@ import type {
   EbayOfferInput,
 } from "@/lib/ebay/inventory-api";
 import { sanitizeEbayAspects } from "@/lib/ebay/sanitize-aspects";
-import { ensureInferredElectricalAspects } from "@/lib/ebay/infer-voltage";
+import { ensureInferredElectricalAspects, inferModelAspect, listingHasAspect } from "@/lib/ebay/infer-voltage";
 import { ensureInferredDimensionAspects } from "@/lib/ebay/infer-item-dimensions";
 
 /** eBay Inventory API product.description must be 1–4000 chars. */
@@ -152,6 +152,17 @@ export function listingToInventoryItem(
     widthIn: listing.packageWidthIn,
     depthIn: listing.packageDepthIn,
   });
+
+  if (!listingHasAspect(aspects, "Model")) {
+    aspects.Model = [
+      inferModelAspect({
+        model: listing.model,
+        mpn: listing.mpn,
+        brand: listing.brand || brand,
+        title: listing.title,
+      }),
+    ];
+  }
 
   return {
     sku: listing.sku,

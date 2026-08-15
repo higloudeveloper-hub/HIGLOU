@@ -151,7 +151,12 @@ export function inferBatteryTechnologyFromText(text: string): string | null {
 export function inferAspectValueFromText(
   aspectName: string,
   text: string,
-  extras?: { brand?: string; model?: string; productType?: string },
+  extras?: {
+    brand?: string;
+    model?: string;
+    mpn?: string;
+    productType?: string;
+  },
 ): string | null {
   const name = String(aspectName || "").trim().toLowerCase();
   if (!name) return null;
@@ -163,6 +168,14 @@ export function inferAspectValueFromText(
   ) {
     return inferBatteryTechnologyFromText(text);
   }
+  if (name === "model") {
+    return inferModelAspect({
+      model: extras?.model,
+      mpn: extras?.mpn,
+      brand: extras?.brand,
+      title: text,
+    });
+  }
   const compatible = inferCompatibleAspect(aspectName, {
     title: text,
     brand: extras?.brand,
@@ -171,6 +184,52 @@ export function inferAspectValueFromText(
   });
   if (compatible) return compatible;
   return inferItemDimensionAspect(aspectName, text);
+}
+
+const EMPTY_ASPECT = /^(n\/?a|none|null|unknown|-|does\s*not\s*apply)$/i;
+
+/**
+ * eBay 25002 Model — kitchen/appliance categories require Model even when
+ * Compatible Model does not apply. Prefer the real model, else MPN, else DNA.
+ */
+export function inferModelAspect(opts: {
+  model?: string;
+  mpn?: string;
+  brand?: string;
+  title?: string;
+}): string {
+  const model = String(opts.model || "").trim();
+  if (model.length >= 1 && !EMPTY_ASPECT.test(model)) {
+    return model.slice(0, 65);
+  }
+
+  const mpn = String(opts.mpn || "").trim();
+  if (mpn.length >= 2 && !EMPTY_ASPECT.test(mpn)) {
+    return mpn.replace(/\s+/g, "").slice(0, 65);
+  }
+
+  const title = String(opts.title || "").trim();
+  const brand = String(opts.brand || "").trim();
+  let rest = title;
+  if (brand && rest.toLowerCase().startsWith(brand.toLowerCase())) {
+    rest = rest.slice(brand.length).replace(/^[\s,:\-|–]+/, "").trim();
+  }
+  const coded = rest.match(
+    /\b([A-Z]{1,5}[-/]?\d{2,}[A-Z0-9-]{0,12}|\d{2,}[A-Z]{1,6}\d*)\b/,
+  );
+  if (coded?.[1]) return coded[1].slice(0, 65);
+
+  const line = rest.match(/^([A-Z][a-zA-Z0-9]+(?:\s+[A-Z][a-zA-Z0-9]+)?)/);
+  if (
+    line?.[1] &&
+    !/^(electric|ceramic|stainless|portable|digital|automatic|gooseneck|kitchen|tea|coffee|white|black|blue|pink)/i.test(
+      line[1],
+    )
+  ) {
+    return line[1].slice(0, 65);
+  }
+
+  return "Does Not Apply";
 }
 
 /**
@@ -242,6 +301,71 @@ export function ensureCompatibleAspects(
     aspects[trimmed] = [value];
     added.push(trimmed);
   }
+  return added;
+}
+
+const DNA_REQUIRED = new Set(
+  [
+    "Model",
+    "MPN",
+    "Compatible Model",
+    "Compatible Brand",
+    "Compatible Product",
+    "Unit Type",
+    "Custom Bundle",
+    "Modified Item",
+  ].map((n) => n.toLowerCase()),
+);
+
+/**
+ * Fill taxonomy-required aspects before Inventory PUT so 25002 never ships
+ * an empty Model / Compatible Model / MPN.
+ */
+export function ensureRequiredCategoryAspects(
+  aspects: Record<string, string[]>,
+  requiredNames: string[],
+  extras: {
+    title?: string;
+    brand?: string;
+    model?: string;
+    mpn?: string;
+    productType?: string;
+  },
+): string[] {
+  const added: string[] = [];
+  const hay = [
+    extras.title,
+    extras.brand,
+    extras.model,
+    extras.mpn,
+    extras.productType,
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  for (const name of requiredNames) {
+    const trimmed = String(name || "").trim();
+    if (!trimmed || listingHasAspect(aspects, trimmed)) continue;
+    const value =
+      inferAspectValueFromText(trimmed, hay, extras) ||
+      (DNA_REQUIRED.has(trimmed.toLowerCase()) ? "Does Not Apply" : "");
+    if (!value) continue;
+    aspects[trimmed] = [value];
+    added.push(trimmed);
+  }
+
+  if (!listingHasAspect(aspects, "Model")) {
+    aspects.Model = [
+      inferModelAspect({
+        model: extras.model,
+        mpn: extras.mpn,
+        brand: extras.brand,
+        title: extras.title,
+      }),
+    ];
+    added.push("Model");
+  }
+
   return added;
 }
 

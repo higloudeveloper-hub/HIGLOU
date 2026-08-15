@@ -39,6 +39,17 @@ describe("enrichItemSpecificsForExport", () => {
     expect(columns["C:MPN"]).toBe("Does Not Apply");
   });
 
+  it("always sends Model so eBay 25002 cannot reject a kettle", () => {
+    const { columns } = enrichItemSpecificsForExport({
+      categoryId: "20681",
+      categoryName: "Electric Kettles",
+      title: "Pinky Up Electric Ceramic Kettle with Gooseneck Spout",
+      brand: "Pinky Up",
+      itemSpecifics: [],
+    });
+    expect(columns["C:Model"]).toBe("Does Not Apply");
+  });
+
   it("keeps explicit MPN when provided", () => {
     const { columns } = enrichItemSpecificsForExport({
       categoryId: "177019",

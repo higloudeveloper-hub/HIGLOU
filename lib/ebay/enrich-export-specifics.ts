@@ -1,5 +1,5 @@
 import { resolveCategorySpecifics } from "@/config/category-specifics";
-import { inferVoltageFromText, inferBatteryTechnologyFromText } from "@/lib/ebay/infer-voltage";
+import { inferVoltageFromText, inferBatteryTechnologyFromText, inferModelAspect } from "@/lib/ebay/infer-voltage";
 import {
   formatEbayInches,
   inferItemDimsFromText,
@@ -249,6 +249,15 @@ export function enrichItemSpecificsForExport(input: {
 
   // Always push core commerce aspects even if category family omitted them.
   // Brand + MPN must both be present (eBay error 25002 BrandMPN).
+  // Model is required in many kitchen/appliance categories (eBay 25002 Model).
+  if (!columns["C:Model"]?.trim()) {
+    columns["C:Model"] = inferModelAspect({
+      model: derived.model,
+      mpn: derived.mpn,
+      brand: derived.brand,
+      title: input.title,
+    });
+  }
   const coreAlways: Array<[string, string]> = [
     ["C:Brand", derived.brand],
     ["C:Type", derived.type],

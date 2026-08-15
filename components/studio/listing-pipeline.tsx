@@ -19,28 +19,28 @@ const SAMPLE_PHOTOS = [
 ] as const;
 const PRICE = 189;
 
-const BEATS = [
-  { id: "photos", ms: 1500 },
-  { id: "draft", ms: 2100 },
-  { id: "click", ms: 1100 },
-  { id: "ebay", ms: 520 },
-  { id: "amazon", ms: 520 },
-  { id: "facebook", ms: 520 },
-  { id: "shopify", ms: 520 },
-  { id: "web", ms: 520 },
-  { id: "sales", ms: 1800 },
-  { id: "hold", ms: 2600 },
+const STEPS = [
+  { id: "photos", ms: 2800, x: 9, y: 8, click: true, caption: "Drop photos" },
+  { id: "write", ms: 2600, x: 38, y: 8, click: false, caption: "Higlou writes the listing" },
+  { id: "aim", ms: 900, x: 91, y: 8, click: false, caption: "Move to Publish" },
+  { id: "publish", ms: 1100, x: 91, y: 8, click: true, caption: "Click Publish" },
+  { id: "ebay", ms: 1200, x: 16, y: 38, click: true, caption: "Live on eBay" },
+  { id: "amazon", ms: 1200, x: 50, y: 38, click: true, caption: "Then Amazon" },
+  { id: "facebook", ms: 1200, x: 84, y: 38, click: true, caption: "Then Facebook" },
+  { id: "shopify", ms: 1200, x: 24, y: 70, click: true, caption: "Then Shopify" },
+  { id: "web", ms: 1200, x: 76, y: 70, click: true, caption: "Then your site" },
+  { id: "sales", ms: 2200, x: 58, y: 93, click: false, caption: "Sales start climbing" },
+  { id: "hold", ms: 2800, x: 58, y: 93, click: false, caption: "Two clicks. Five stores." },
 ] as const;
 
-const SALES_DOLLARS = [0, 0, 0, 189, 378, 567, 945, 1323, 1890, 2268] as const;
+const SALES_DOLLARS = [0, 0, 0, 0, 189, 378, 567, 945, 1323, 1890, 2268] as const;
 const SALES_LINE =
   "M0 36 C40 35 70 34 96 32 C130 29 150 24 176 18 C204 11 230 7 256 4 C284 1 304 1 320 1";
 
 function salesProgress(beat: number) {
-  if (beat < 2) return 0.06;
-  if (beat === 2) return 0.2;
-  if (beat <= 7) return 0.2 + (beat - 2) * 0.1;
-  if (beat === 8) return 0.92;
+  if (beat < 4) return 0.06;
+  if (beat <= 8) return 0.18 + (beat - 4) * 0.12;
+  if (beat === 9) return 0.92;
   return 1;
 }
 
@@ -61,7 +61,7 @@ function useTyped(text: string, on: boolean, reduce: boolean) {
       i += 1;
       setOut(text.slice(0, i));
       if (i >= text.length) window.clearInterval(t);
-    }, 18);
+    }, 22);
     return () => window.clearInterval(t);
   }, [text, on, reduce]);
   return out;
@@ -80,7 +80,7 @@ function useCountUp(target: number, on: boolean, reduce: boolean) {
     }
     setN(0);
     const start = performance.now();
-    const dur = 640;
+    const dur = 720;
     let raf = 0;
     const tick = (now: number) => {
       const t = Math.min(1, (now - start) / dur);
@@ -105,7 +105,7 @@ function useCountToward(target: number, reduce: boolean) {
     }
     const from = current.current;
     const start = performance.now();
-    const dur = 520;
+    const dur = 620;
     let raf = 0;
     const tick = (now: number) => {
       const t = Math.min(1, (now - start) / dur);
@@ -157,12 +157,68 @@ function ShopifyMark() {
   );
 }
 
+function GuideCursor({
+  x,
+  y,
+  click,
+  visible,
+  label,
+  clickKey,
+}: {
+  x: number;
+  y: number;
+  click: boolean;
+  visible: boolean;
+  label: string;
+  clickKey: string;
+}) {
+  return (
+    <motion.div
+      className="pointer-events-none absolute z-30"
+      initial={false}
+      animate={{
+        left: `${x}%`,
+        top: `${y}%`,
+        opacity: visible ? 1 : 0,
+      }}
+      transition={{ type: "spring", stiffness: 170, damping: 22 }}
+    >
+      <motion.div
+        key={clickKey}
+        initial={false}
+        animate={click ? { scale: [1, 0.78, 1] } : { scale: 1 }}
+        transition={{ duration: 0.38, times: [0, 0.35, 1] }}
+        className="relative -translate-x-0.5 -translate-y-0.5"
+      >
+        {click ? (
+          <motion.span
+            initial={{ scale: 0.3, opacity: 0.45 }}
+            animate={{ scale: 2.1, opacity: 0 }}
+            transition={{ duration: 0.55, ease: "easeOut" }}
+            className="absolute top-0 left-0 size-7 rounded-full border-2 border-[#141414]"
+          />
+        ) : null}
+        <MousePointer2
+          className="size-6 text-[#141414] drop-shadow-[0_2px_6px_rgba(0,0,0,0.28)]"
+          fill="white"
+          strokeWidth={1.75}
+        />
+      </motion.div>
+      <span className="mt-1 ml-5 inline-block whitespace-nowrap rounded-md bg-[#141414] px-2 py-0.5 text-[11px] font-medium text-white shadow-sm">
+        {label}
+      </span>
+    </motion.div>
+  );
+}
+
 function ChannelShell({
   live,
+  focused,
   className,
   children,
 }: {
   live: boolean;
+  focused?: boolean;
   className?: string;
   children: ReactNode;
 }) {
@@ -170,12 +226,13 @@ function ChannelShell({
     <motion.div
       initial={false}
       animate={{
-        opacity: live ? 1 : 0.38,
-        filter: live ? "saturate(1)" : "saturate(0.55)",
+        opacity: live ? 1 : focused ? 0.72 : 0.34,
+        filter: live ? "saturate(1)" : "saturate(0.45)",
       }}
-      transition={{ type: "spring", stiffness: 260, damping: 28 }}
+      transition={{ type: "spring", stiffness: 220, damping: 28 }}
       className={cn(
         "relative flex min-h-0 flex-col overflow-hidden bg-white",
+        focused && "z-10 ring-2 ring-inset ring-[#141414]/25",
         className,
       )}
     >
@@ -184,10 +241,10 @@ function ChannelShell({
         {live ? (
           <motion.span
             key="flash"
-            initial={{ opacity: 0.45 }}
+            initial={{ opacity: 0.4 }}
             animate={{ opacity: 0 }}
             exit={{ opacity: 0 }}
-            transition={{ duration: 0.7, ease: "easeOut" }}
+            transition={{ duration: 0.65, ease: "easeOut" }}
             className="pointer-events-none absolute inset-0 bg-white"
           />
         ) : null}
@@ -198,41 +255,22 @@ function ChannelShell({
 
 function ProductShot({
   live,
-  shots,
+  src,
 }: {
   live: boolean;
-  shots: readonly string[];
+  src: string;
 }) {
-  const [idx, setIdx] = useState(0);
-
-  useEffect(() => {
-    if (!live || shots.length <= 1) {
-      setIdx(0);
-      return;
-    }
-    const t = window.setInterval(
-      () => setIdx((i) => (i + 1) % shots.length),
-      1600,
-    );
-    return () => window.clearInterval(t);
-  }, [live, shots]);
-
-  const src = shots[Math.min(idx, shots.length - 1)] || SAMPLE_PHOTOS[0];
-
   return (
     <div className="relative min-h-0 flex-1 bg-white">
-      <AnimatePresence mode="wait">
-        <motion.img
-          key={live ? src : `dim-${src}`}
-          src={src}
-          alt=""
-          initial={{ opacity: 0, scale: 0.97 }}
-          animate={{ opacity: live ? 1 : 0.12, scale: live ? 1 : 0.97 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: 0.35 }}
-          className="absolute inset-0 size-full object-contain p-3"
-        />
-      </AnimatePresence>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <motion.img
+        src={src}
+        alt=""
+        initial={false}
+        animate={{ opacity: live ? 1 : 0.1, scale: live ? 1 : 0.97 }}
+        transition={{ duration: 0.4 }}
+        className="absolute inset-0 size-full object-contain p-3"
+      />
     </div>
   );
 }
@@ -255,15 +293,17 @@ function SalesStrip({
   beat,
   dollars,
   reduce,
+  caption,
 }: {
   beat: number;
   dollars: number;
   reduce: boolean;
+  caption: string;
 }) {
   const progress = reduce ? 1 : salesProgress(beat);
-  const click1 = beat >= 0;
-  const click2 = beat >= 2;
-  const climbing = beat >= 3;
+  const click1 = beat >= 1;
+  const click2 = beat >= 3;
+  const climbing = beat >= 4;
 
   return (
     <div className="flex h-[52px] shrink-0 items-center gap-3 border-t border-[#e5e5e5] bg-white px-3 sm:gap-4 sm:px-4">
@@ -285,7 +325,6 @@ function SalesStrip({
         >
           2
         </span>
-        <span className="hidden text-[11px] text-[#707070] sm:inline">clicks</span>
       </div>
 
       <svg
@@ -304,9 +343,15 @@ function SalesStrip({
           strokeLinejoin="round"
           initial={false}
           animate={{ pathLength: progress }}
-          transition={{ duration: reduce ? 0 : 0.7, ease: "easeOut" }}
+          transition={{ duration: reduce ? 0 : 0.85, ease: "easeOut" }}
         />
       </svg>
+
+      <div className="hidden min-w-0 shrink-0 sm:block">
+        <p className="text-[12px] font-medium tracking-tight text-[#565959]">
+          {caption}
+        </p>
+      </div>
 
       <div className="w-[92px] shrink-0 text-right sm:w-[108px]">
         <p className="text-[15px] font-semibold tabular-nums tracking-tight text-[#141414]">
@@ -333,6 +378,7 @@ export function ListingPipeline({
 }) {
   const reduce = usePrefersReducedMotion();
   const [beat, setBeat] = useState(0);
+  const [photoN, setPhotoN] = useState(reduce ? 4 : 0);
   const shop = useConnectedEbayStoreName(storeName);
   const typing = useTyped(SAMPLE_TITLE, beat >= 1, reduce);
   const price = useCountUp(PRICE, beat >= 1, reduce);
@@ -342,43 +388,75 @@ export function ListingPipeline({
   );
   const shots =
     photos && photos.length > 0 ? photos.slice(0, 4) : [...SAMPLE_PHOTOS];
+  const cover = shots[0] || SAMPLE_PHOTOS[0];
+  const step = STEPS[beat] ?? STEPS[0];
 
-  const photosOn = beat >= 0;
   const draftOn = beat >= 1;
-  const clickOn = beat >= 2;
-  const ebayOn = beat >= 3;
-  const amazonOn = beat >= 4;
-  const facebookOn = beat >= 5;
-  const shopifyOn = beat >= 6;
-  const webOn = beat >= 7;
-  const allLive = beat >= 8;
+  const clickOn = beat >= 3;
+  const ebayOn = beat >= 4;
+  const amazonOn = beat >= 5;
+  const facebookOn = beat >= 6;
+  const shopifyOn = beat >= 7;
+  const webOn = beat >= 8;
+  const allLive = beat >= 9;
+  const shownPhotos = beat === 0 ? photoN : shots.length;
+
+  const cursorX =
+    beat === 0 ? 6 + Math.max(0, photoN - 1) * 4.2 : step.x;
 
   useEffect(() => {
     if (reduce) {
-      setBeat(BEATS.length - 1);
+      setBeat(STEPS.length - 1);
+      setPhotoN(4);
       return;
     }
     let i = 0;
     let id = 0;
     const loop = () => {
       id = window.setTimeout(() => {
-        i = (i + 1) % BEATS.length;
+        i = (i + 1) % STEPS.length;
         setBeat(i);
         loop();
-      }, BEATS[i].ms);
+      }, STEPS[i].ms);
     };
     loop();
     return () => window.clearTimeout(id);
   }, [reduce]);
 
+  useEffect(() => {
+    if (reduce || beat !== 0) {
+      if (beat !== 0) setPhotoN(shots.length);
+      return;
+    }
+    setPhotoN(0);
+    let n = 0;
+    const t = window.setInterval(() => {
+      n += 1;
+      setPhotoN(Math.min(shots.length, n));
+      if (n >= shots.length) window.clearInterval(t);
+    }, 580);
+    return () => window.clearInterval(t);
+  }, [beat, reduce, shots.length]);
+
   return (
     <section
       className={cn(
-        "flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-white",
+        "relative flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-white",
         compact && "rounded-2xl border border-[#e5e5e5]",
         className,
       )}
     >
+      {!reduce ? (
+        <GuideCursor
+          x={cursorX}
+          y={step.y}
+          click={step.click}
+          visible
+          label={step.caption}
+          clickKey={`${step.id}-${beat === 0 ? photoN : beat}`}
+        />
+      ) : null}
+
       <div className="flex shrink-0 items-center gap-3 border-b border-[#e5e5e5] bg-white px-3 py-2.5 sm:px-4">
         <div className="relative flex shrink-0 items-center gap-1">
           {shots.map((src, i) => (
@@ -386,29 +464,21 @@ export function ListingPipeline({
               key={src}
               initial={false}
               animate={{
-                opacity: photosOn ? 1 : 0.25,
-                y: photosOn ? 0 : 6,
+                opacity: i < shownPhotos ? 1 : 0.22,
+                y: i < shownPhotos ? 0 : 8,
+                scale: i < shownPhotos ? 1 : 0.94,
               }}
-              transition={{ delay: i * 0.08, type: "spring", stiffness: 340, damping: 24 }}
+              transition={{ type: "spring", stiffness: 320, damping: 24 }}
               className="relative size-11 overflow-hidden rounded-md bg-[#f7f7f7] sm:size-12"
             >
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={src} alt="" className="absolute inset-0 size-full object-contain p-0.5" />
             </motion.div>
           ))}
-          {beat === 0 && !reduce ? (
-            <motion.span
-              aria-hidden
-              className="pointer-events-none absolute inset-y-0 w-10 bg-gradient-to-r from-transparent via-[#C9A227]/40 to-transparent"
-              initial={{ x: "-60%", opacity: 0 }}
-              animate={{ x: "280%", opacity: [0, 1, 0] }}
-              transition={{ duration: 1.35, ease: "easeInOut" }}
-            />
-          ) : null}
         </div>
         <div className="min-w-0 flex-1">
           <p className="truncate text-[13px] font-semibold tracking-tight text-[#191919] sm:text-[15px]">
-            {draftOn ? typing : "Photos in. Listing writes itself."}
+            {draftOn ? typing : "Drop photos. Higlou writes the rest."}
             {beat === 1 && typing.length < SAMPLE_TITLE.length ? (
               <span className="ml-0.5 inline-block h-3 w-px animate-pulse bg-[#191919]" />
             ) : null}
@@ -419,47 +489,36 @@ export function ListingPipeline({
                 ${price.toFixed(2)}
               </span>
             ) : (
-              "Title, price, five storefronts."
+              step.caption
             )}
-            {draftOn ? " · eBay · Amazon · Facebook · Shopify · site" : null}
+            {draftOn && beat < 3 ? " · writing…" : null}
+            {clickOn ? " · eBay · Amazon · Facebook · Shopify · site" : null}
           </p>
         </div>
-        <div className="relative shrink-0">
-          <motion.div
-            initial={false}
-            animate={
-              beat === 2
-                ? { scale: [1, 0.92, 1], boxShadow: "0 0 0 8px rgba(20,20,20,0.08)" }
-                : { scale: 1, boxShadow: "0 0 0 0px rgba(20,20,20,0)" }
-            }
-            transition={{ duration: 0.45 }}
-            className={cn(
-              "inline-flex h-10 items-center rounded-md px-4 text-[13px] font-semibold tracking-[-0.01em]",
-              clickOn ? "bg-[#141414] text-white" : "bg-[#ececec] text-[#9b9b9b]",
-            )}
-          >
-            {beat === 2 ? "Publishing" : allLive || webOn ? "Live" : "Publish"}
-          </motion.div>
-          {beat === 2 && !reduce ? (
-            <motion.div
-              initial={{ x: 28, y: 18, opacity: 0 }}
-              animate={{ x: 8, y: 6, opacity: 1 }}
-              transition={{ type: "spring", stiffness: 380, damping: 22 }}
-              className="pointer-events-none absolute -right-1 -bottom-2 text-[#141414]"
-            >
-              <MousePointer2 className="size-4 fill-white" strokeWidth={2} />
-            </motion.div>
-          ) : null}
-        </div>
+        <motion.div
+          initial={false}
+          animate={
+            beat === 3
+              ? { scale: [1, 0.9, 1], boxShadow: "0 0 0 8px rgba(20,20,20,0.1)" }
+              : { scale: 1, boxShadow: "0 0 0 0px rgba(20,20,20,0)" }
+          }
+          transition={{ duration: 0.42 }}
+          className={cn(
+            "inline-flex h-10 shrink-0 items-center rounded-md px-4 text-[13px] font-semibold tracking-[-0.01em]",
+            clickOn ? "bg-[#141414] text-white" : "bg-[#ececec] text-[#9b9b9b]",
+          )}
+        >
+          {beat === 3 ? "Publishing" : allLive || webOn ? "Live" : "Publish"}
+        </motion.div>
       </div>
 
       <div className="grid min-h-0 flex-1 grid-cols-6 grid-rows-2 divide-x divide-y divide-[#e5e5e5]">
-        <ChannelShell live={ebayOn} className="col-span-2">
+        <ChannelShell live={ebayOn} focused={beat === 4} className="col-span-2">
           <div className="flex shrink-0 items-center justify-between border-b border-[#eee] px-3 py-2">
             <EbayWordmark className="text-[16px]" />
             <LivePill on={ebayOn} label="Live" />
           </div>
-          <ProductShot live={ebayOn} shots={shots} />
+          <ProductShot live={ebayOn} src={cover} />
           <div className="shrink-0 px-3 py-2">
             <p className="text-[16px] font-semibold tabular-nums">
               {ebayOn ? "$189.00" : "—"}
@@ -470,12 +529,12 @@ export function ListingPipeline({
           </div>
         </ChannelShell>
 
-        <ChannelShell live={amazonOn} className="col-span-2">
+        <ChannelShell live={amazonOn} focused={beat === 5} className="col-span-2">
           <div className="flex shrink-0 items-center justify-between bg-[#232F3E] px-3 py-2">
             <AmazonMark className="text-[15px] text-white" />
             <LivePill on={amazonOn} label="Listed" />
           </div>
-          <ProductShot live={amazonOn} shots={shots} />
+          <ProductShot live={amazonOn} src={cover} />
           <div className="shrink-0 px-3 py-2">
             <p className="text-[16px] font-semibold text-[#B12704]">
               {amazonOn ? "$189.00" : "—"}
@@ -484,14 +543,14 @@ export function ListingPipeline({
           </div>
         </ChannelShell>
 
-        <ChannelShell live={facebookOn} className="col-span-2">
+        <ChannelShell live={facebookOn} focused={beat === 6} className="col-span-2">
           <div className="flex shrink-0 items-center justify-between border-b border-[#eee] px-3 py-2">
             <span className="text-[13px] font-bold text-[#1877F2]">
               facebook <span className="font-semibold text-[#65676B]">Marketplace</span>
             </span>
             <LivePill on={facebookOn} label="Posted" />
           </div>
-          <ProductShot live={facebookOn} shots={shots} />
+          <ProductShot live={facebookOn} src={cover} />
           <div className="shrink-0 px-3 py-2">
             <p className="text-[16px] font-semibold">{facebookOn ? "$189" : "—"}</p>
             <p className="truncate text-[12px] text-[#707070]">
@@ -500,12 +559,12 @@ export function ListingPipeline({
           </div>
         </ChannelShell>
 
-        <ChannelShell live={shopifyOn} className="col-span-3">
+        <ChannelShell live={shopifyOn} focused={beat === 7} className="col-span-3">
           <div className="flex shrink-0 items-center justify-between bg-[#212326] px-3 py-2">
             <ShopifyMark />
             <LivePill on={shopifyOn} label="On store" />
           </div>
-          <ProductShot live={shopifyOn} shots={shots} />
+          <ProductShot live={shopifyOn} src={cover} />
           <div className="shrink-0 px-3 py-2">
             <p className="text-[16px] font-semibold tabular-nums">
               {shopifyOn ? "$189.00" : "—"}
@@ -521,7 +580,7 @@ export function ListingPipeline({
           </div>
         </ChannelShell>
 
-        <ChannelShell live={webOn} className="col-span-3">
+        <ChannelShell live={webOn} focused={beat === 8} className="col-span-3">
           <div className="flex shrink-0 items-center gap-1.5 border-b border-[#eee] bg-[#f7f7f7] px-3 py-2">
             <span className="size-1.5 rounded-full bg-[#FF5F57]" />
             <span className="size-1.5 rounded-full bg-[#FEBC2E]" />
@@ -532,7 +591,7 @@ export function ListingPipeline({
             </span>
             <LivePill on={webOn} label="On site" />
           </div>
-          <ProductShot live={webOn} shots={shots} />
+          <ProductShot live={webOn} src={cover} />
           <div className="shrink-0 px-3 py-2">
             <p className="text-[16px] font-semibold tabular-nums">
               {webOn ? "$189.00" : "—"}
@@ -542,7 +601,12 @@ export function ListingPipeline({
         </ChannelShell>
       </div>
 
-      <SalesStrip beat={beat} dollars={sales} reduce={reduce} />
+      <SalesStrip
+        beat={beat}
+        dollars={sales}
+        reduce={reduce}
+        caption={step.caption}
+      />
     </section>
   );
 }

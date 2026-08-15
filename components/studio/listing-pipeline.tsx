@@ -67,13 +67,14 @@ const STEPS = [
   { id: "facebookLive", ms: 1400, x: 84, y: 38, click: true, label: "Live on Facebook" },
   { id: "shopifyLive", ms: 1400, x: 24, y: 70, click: true, label: "Live on Shopify" },
   { id: "webLive", ms: 1500, x: 76, y: 70, click: true, label: "Live on your site" },
-  { id: "sales", ms: 2200, x: 88, y: 93, click: false, label: "Revenue" },
-  { id: "hold", ms: 2000, x: 88, y: 93, click: false, label: "Next product" },
+  { id: "sales", ms: 2600, x: 88, y: 93, click: false, label: "Revenue" },
+  { id: "hold", ms: 2200, x: 88, y: 93, click: false, label: "Next product" },
 ] as const;
 
 function ordersAt(beat: number) {
-  if (beat < 13) return 0;
-  return [1, 2, 3, 4, 6, 8, 10][Math.min(6, beat - 13)];
+  if (beat < 18) return 0;
+  if (beat === 18) return 4;
+  return 9;
 }
 
 function useTyped(text: string, on: boolean, reduce: boolean) {

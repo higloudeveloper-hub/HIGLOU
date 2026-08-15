@@ -20,33 +20,34 @@ const SAMPLE_PHOTOS = [
 const PRICE = 189;
 
 const STEPS = [
-  { id: "grab", ms: 1100, x: 12, y: 86, click: true, line: "One photo.", sub: "Pick it up." },
-  { id: "drag", ms: 1700, x: 9, y: 11, click: false, line: "Drop it.", sub: "On your listing." },
-  { id: "drop", ms: 900, x: 9, y: 11, click: true, line: "In.", sub: "Now watch it fill." },
-  { id: "photos", ms: 2000, x: 20, y: 8, click: false, line: "Four photos.", sub: "Front. Label. Box. Angle." },
-  { id: "title", ms: 2400, x: 40, y: 8, click: false, line: "Title written.", sub: "For every store." },
-  { id: "price", ms: 1200, x: 40, y: 8, click: false, line: "Priced.", sub: "$189.00" },
-  { id: "ready", ms: 1500, x: 40, y: 8, click: false, line: "Ready.", sub: "The listing is complete." },
-  { id: "aim", ms: 1100, x: 91, y: 8, click: false, line: "Only one click.", sub: "Publish is last." },
-  { id: "publish", ms: 1800, x: 91, y: 8, click: true, line: "Only one click.", sub: "Now it goes live." },
-  { id: "ebay", ms: 1300, x: 16, y: 38, click: true, line: "Live on eBay.", sub: "Complete listing. 4 photos." },
-  { id: "amazon", ms: 1000, x: 50, y: 38, click: true, line: "Now Amazon.", sub: "2 of 5 stores" },
-  { id: "facebook", ms: 1000, x: 84, y: 38, click: true, line: "Now Facebook.", sub: "3 of 5 stores" },
-  { id: "shopify", ms: 1000, x: 24, y: 70, click: true, line: "Now Shopify.", sub: "4 of 5 stores" },
-  { id: "web", ms: 1100, x: 76, y: 70, click: true, line: "Now your site.", sub: "5 of 5 stores" },
-  { id: "sales", ms: 2400, x: 58, y: 93, click: false, line: "Sales start.", sub: "Same listing. Every channel." },
-  { id: "hold", ms: 3600, x: 58, y: 93, click: false, line: "One photo. One click. Five stores.", sub: "Try it." },
+  { id: "grab", ms: 1000, x: 12, y: 86, click: true, line: "One photo.", sub: "That’s the work." },
+  { id: "drag", ms: 1500, x: 9, y: 11, click: false, line: "Drop it.", sub: "Higlou does the rest." },
+  { id: "drop", ms: 800, x: 9, y: 11, click: true, line: "In.", sub: "Listing starts itself." },
+  { id: "photos", ms: 1700, x: 20, y: 8, click: false, line: "Four photos.", sub: "No extra work." },
+  { id: "title", ms: 2000, x: 40, y: 8, click: false, line: "Written for you.", sub: "Title. Ready." },
+  { id: "price", ms: 900, x: 40, y: 8, click: false, line: "Priced.", sub: "$189.00" },
+  { id: "ready", ms: 1200, x: 40, y: 8, click: false, line: "Ready.", sub: "One button left." },
+  { id: "aim", ms: 900, x: 91, y: 8, click: false, line: "One click.", sub: "Publish." },
+  { id: "publish", ms: 1300, x: 91, y: 8, click: true, line: "Push.", sub: "Everything goes live." },
+  { id: "ebay", ms: 420, x: 16, y: 38, click: false, line: "Push.", sub: "eBay" },
+  { id: "amazon", ms: 420, x: 50, y: 38, click: false, line: "Push.", sub: "Amazon" },
+  { id: "facebook", ms: 420, x: 84, y: 38, click: false, line: "Push.", sub: "Facebook" },
+  { id: "shopify", ms: 420, x: 24, y: 70, click: false, line: "Push.", sub: "Shopify" },
+  { id: "web", ms: 500, x: 76, y: 70, click: false, line: "Push.", sub: "Your site" },
+  { id: "sales", ms: 2800, x: 58, y: 93, click: false, line: "Sales up.", sub: "One click. Easy money." },
+  { id: "hold", ms: 4000, x: 58, y: 93, click: false, line: "One click. Sales up.", sub: "Try it." },
 ] as const;
 
 const SALES_DOLLARS = [
-  0, 0, 0, 0, 0, 0, 0, 0, 0, 189, 378, 567, 945, 1323, 1890, 2268,
+  0, 0, 0, 0, 0, 0, 0, 0, 0, 189, 567, 1134, 1890, 2835, 3780, 4536,
 ] as const;
 const SALES_LINE =
   "M0 36 C40 35 70 34 96 32 C130 29 150 24 176 18 C204 11 230 7 256 4 C284 1 304 1 320 1";
 
 function salesProgress(beat: number) {
-  if (beat < 9) return 0.06;
-  if (beat <= 13) return 0.18 + (beat - 9) * 0.12;
+  if (beat < 8) return 0.04;
+  if (beat === 8) return 0.12;
+  if (beat <= 13) return 0.22 + (beat - 9) * 0.12;
   if (beat === 14) return 0.92;
   return 1;
 }
@@ -112,7 +113,7 @@ function useCountToward(target: number, reduce: boolean) {
     }
     const from = current.current;
     const start = performance.now();
-    const dur = 620;
+    const dur = 920;
     let raf = 0;
     const tick = (now: number) => {
       const t = Math.min(1, (now - start) / dur);
@@ -218,11 +219,13 @@ function StoryBanner({
   sub,
   punch,
   compact,
+  bannerKey,
 }: {
   line: string;
   sub: string;
   punch: boolean;
   compact: boolean;
+  bannerKey: string;
 }) {
   return (
     <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20">
@@ -230,7 +233,7 @@ function StoryBanner({
       <div className="absolute inset-x-0 bottom-3 px-4 text-center sm:bottom-4">
         <AnimatePresence mode="wait">
           <motion.div
-            key={line}
+            key={bannerKey}
             initial={{ opacity: 0, y: 14, filter: "blur(4px)" }}
             animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
             exit={{ opacity: 0, y: -8, filter: "blur(4px)" }}
@@ -323,10 +326,11 @@ function ChannelShell({
     <motion.div
       initial={false}
       animate={{
-        opacity: live ? 1 : focused ? 0.72 : 0.34,
-        filter: live ? "saturate(1)" : "saturate(0.45)",
+        opacity: live ? 1 : focused ? 0.78 : 0.32,
+        filter: live ? "saturate(1)" : "saturate(0.4)",
+        scale: live ? 1 : 0.985,
       }}
-      transition={{ type: "spring", stiffness: 220, damping: 28 }}
+      transition={{ type: "spring", stiffness: 320, damping: 26 }}
       className={cn(
         "relative flex min-h-0 flex-col overflow-hidden bg-white",
         focused && "z-10 ring-2 ring-inset ring-[#141414]/25",
@@ -427,10 +431,16 @@ function SalesStrip({
   const progress = reduce ? 1 : salesProgress(beat);
   const clicked = beat >= 8;
   const climbing = beat >= 9;
+  const boom = beat >= 14;
   const liveCount = Math.max(0, Math.min(5, beat - 8));
 
   return (
-    <div className="flex h-[52px] shrink-0 items-center gap-3 border-t border-[#e5e5e5] bg-white px-3 sm:gap-4 sm:px-4">
+    <div
+      className={cn(
+        "flex shrink-0 items-center gap-3 border-t bg-white px-3 sm:gap-4 sm:px-4",
+        boom ? "h-[72px] border-[#141414]" : "h-[52px] border-[#e5e5e5]",
+      )}
+    >
       <div className="flex shrink-0 items-center gap-2">
         <span
           className={cn(
@@ -447,29 +457,34 @@ function SalesStrip({
 
       <svg
         viewBox="0 0 320 40"
-        className="h-8 min-w-0 flex-1"
+        className={cn("min-w-0 flex-1", boom ? "h-10" : "h-8")}
         preserveAspectRatio="none"
         aria-hidden
       >
-        <path d={`${SALES_LINE} L320 40 L0 40 Z`} fill="#008060" opacity={0.08} />
+        <path d={`${SALES_LINE} L320 40 L0 40 Z`} fill="#008060" opacity={climbing ? 0.16 : 0.06} />
         <motion.path
           d={SALES_LINE}
           fill="none"
-          stroke="#141414"
-          strokeWidth="1.75"
+          stroke={climbing ? "#008060" : "#141414"}
+          strokeWidth={boom ? 2.4 : 1.75}
           strokeLinecap="round"
           strokeLinejoin="round"
           initial={false}
           animate={{ pathLength: progress }}
-          transition={{ duration: reduce ? 0 : 0.85, ease: "easeOut" }}
+          transition={{ duration: reduce ? 0 : 0.7, ease: "easeOut" }}
         />
       </svg>
 
-      <div className="w-[92px] shrink-0 text-right sm:w-[108px]">
-        <p className="text-[15px] font-semibold tabular-nums tracking-tight text-[#141414]">
+      <div className={cn("shrink-0 text-right", boom ? "w-[128px] sm:w-[148px]" : "w-[92px] sm:w-[108px]")}>
+        <p
+          className={cn(
+            "font-semibold tabular-nums tracking-tight",
+            boom ? "text-[26px] text-[#008060] sm:text-[30px]" : "text-[15px] text-[#141414]",
+          )}
+        >
           ${dollars.toLocaleString("en-US")}
         </p>
-        <p className="text-[11px] text-[#707070]">
+        <p className={cn("text-[11px]", climbing ? "font-medium text-[#008060]" : "text-[#707070]")}>
           {climbing ? "sales up" : "after one click"}
         </p>
       </div>
@@ -573,7 +588,7 @@ export function ListingPipeline({
           {beat <= 2 ? (
             <DragGhost src={cover} x={step.x} y={step.y} phase={dragPhase} />
           ) : null}
-          {beat >= 3 ? (
+          {beat >= 3 && beat <= 8 ? (
             <GuideCursor
               x={step.x}
               y={step.y}
@@ -697,7 +712,7 @@ export function ListingPipeline({
               : "bg-[#ececec] text-[#9b9b9b]",
           )}
         >
-          {beat === 8 ? "Publishing" : allLive || webOn ? "Live" : "Publish"}
+          {beat === 8 ? "Push" : allLive || webOn ? "Live" : "Publish"}
         </motion.div>
       </div>
 
@@ -792,14 +807,26 @@ export function ListingPipeline({
         </div>
         {!reduce ? (
           <StoryBanner
-            line={step.line}
-            sub={step.sub}
-            punch={beat === 6 || beat === 7 || beat === 8 || beat === 15}
+            bannerKey={beat >= 14 ? "money" : beat >= 8 ? "push" : step.id}
+            line={
+              beat >= 14
+                ? `$${sales.toLocaleString("en-US")}`
+                : step.line
+            }
+            sub={
+              beat >= 14
+                ? "Sales up. One click."
+                : beat >= 8 && beat < 14
+                  ? "Five stores. Generating."
+                  : step.sub
+            }
+            punch={beat >= 8}
             compact={compact}
           />
         ) : (
           <StoryBanner
-            line="One photo. One click. Five stores."
+            bannerKey="done"
+            line="One click. Sales up."
             sub="Try it."
             punch
             compact={compact}

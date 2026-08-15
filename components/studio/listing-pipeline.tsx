@@ -55,13 +55,13 @@ const STEPS = [
   { id: "photos", ms: 1700, x: 20, y: 8, click: false, label: "Photos in" },
   { id: "title", ms: 2000, x: 40, y: 8, click: false, label: "Title written" },
   { id: "price", ms: 900, x: 40, y: 8, click: false, label: "Priced" },
-  { id: "fillEbay", ms: 700, x: 16, y: 38, click: true, label: "eBay" },
-  { id: "fillAmazon", ms: 650, x: 50, y: 38, click: true, label: "Amazon" },
-  { id: "fillFacebook", ms: 650, x: 84, y: 38, click: true, label: "Facebook" },
-  { id: "fillShopify", ms: 650, x: 24, y: 70, click: true, label: "Shopify" },
-  { id: "fillWeb", ms: 700, x: 76, y: 70, click: true, label: "Your site" },
-  { id: "ready", ms: 1000, x: 40, y: 8, click: false, label: "All stores ready" },
-  { id: "publish", ms: 1500, x: 91, y: 8, click: false, label: "Publishing" },
+  { id: "fillEbay", ms: 1200, x: 16, y: 38, click: true, label: "eBay" },
+  { id: "fillAmazon", ms: 1100, x: 50, y: 38, click: true, label: "Amazon" },
+  { id: "fillFacebook", ms: 1100, x: 84, y: 38, click: true, label: "Facebook" },
+  { id: "fillShopify", ms: 1100, x: 24, y: 70, click: true, label: "Shopify" },
+  { id: "fillWeb", ms: 1200, x: 76, y: 70, click: true, label: "Your site" },
+  { id: "ready", ms: 2200, x: 40, y: 8, click: false, label: "All stores ready" },
+  { id: "publish", ms: 1600, x: 91, y: 8, click: false, label: "Publishing" },
   { id: "ebayLive", ms: 1500, x: 16, y: 38, click: true, label: "Live on eBay" },
   { id: "amazonLive", ms: 1400, x: 50, y: 38, click: true, label: "Live on Amazon" },
   { id: "facebookLive", ms: 1400, x: 84, y: 38, click: true, label: "Live on Facebook" },
@@ -301,22 +301,25 @@ function DragGhost({
 
 function ChannelShell({
   live,
+  filled,
   focused,
   className,
   children,
 }: {
   live: boolean;
+  filled?: boolean;
   focused?: boolean;
   className?: string;
   children: ReactNode;
 }) {
+  const on = live || filled;
   return (
     <motion.div
       initial={false}
       animate={{
-        opacity: live ? 1 : focused ? 0.78 : 0.32,
-        filter: live ? "saturate(1)" : "saturate(0.4)",
-        y: live ? 0 : 10,
+        opacity: on ? 1 : focused ? 0.7 : 0.28,
+        filter: on ? "saturate(1)" : "saturate(0.35)",
+        y: on ? 0 : 8,
       }}
       transition={{ type: "spring", stiffness: 320, damping: 26 }}
       className={cn(
@@ -330,7 +333,7 @@ function ChannelShell({
         {live ? (
           <motion.span
             key="flash"
-            initial={{ opacity: 0.4 }}
+            initial={{ opacity: 0.45 }}
             animate={{ opacity: 0 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.65, ease: "easeOut" }}
@@ -339,58 +342,6 @@ function ChannelShell({
         ) : null}
       </AnimatePresence>
     </motion.div>
-  );
-}
-
-function ProductShot({
-  live,
-  present,
-  src,
-  gallery,
-}: {
-  live: boolean;
-  present?: boolean;
-  src: string;
-  gallery?: string[];
-}) {
-  const thumbs = live && gallery && gallery.length > 1 ? gallery : null;
-  return (
-    <div className="relative flex min-h-0 flex-1 flex-col bg-white">
-      <div className="relative min-h-0 flex-1">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <motion.img
-          src={src}
-          alt=""
-          initial={false}
-          animate={{
-            opacity: live ? 1 : present ? 0.38 : 0,
-            y: live ? 0 : present ? 14 : 22,
-            scale: live ? 1 : 0.96,
-          }}
-          transition={{ type: "spring", stiffness: 260, damping: 24 }}
-          className="absolute inset-0 size-full object-contain p-2"
-        />
-      </div>
-      {thumbs ? (
-        <div className="flex shrink-0 gap-1 px-2 pb-2">
-          {thumbs.map((shot, i) => (
-            <motion.div
-              key={shot}
-              initial={{ opacity: 0, y: 6 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: i * 0.07, duration: 0.28 }}
-              className={cn(
-                "relative h-8 min-w-0 flex-1 overflow-hidden rounded-sm bg-[#f7f7f7]",
-                i === 0 ? "ring-1 ring-[#141414]" : "ring-1 ring-[#e5e5e5]",
-              )}
-            >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={shot} alt="" className="absolute inset-0 size-full object-contain p-0.5" />
-            </motion.div>
-          ))}
-        </div>
-      ) : null}
-    </div>
   );
 }
 
@@ -946,7 +897,7 @@ export function ListingPipeline({
             className="absolute inset-x-0 bottom-0 bg-[#141414]"
             initial={false}
             animate={{
-              height: allLive ? "100%" : publishing || liveOn ? "85%" : readyOn ? "18%" : "0%",
+              height: allLive ? "100%" : publishing || liveOn ? "85%" : "0%",
             }}
             transition={{ duration: publishing ? 1.4 : 0.45, ease: [0.22, 1, 0.36, 1] }}
           />
@@ -963,8 +914,8 @@ export function ListingPipeline({
 
       <div className="relative min-h-0 flex-1">
         <div className="grid h-full min-h-0 grid-cols-6 grid-rows-2 divide-x divide-y divide-[#e5e5e5]">
-        <ChannelShell live={ebayLive} focused={beat === 6 || beat === 13} className="col-span-2">
-          {ebayLive ? (
+        <ChannelShell live={ebayLive} filled={ebayIn} focused={beat === 6 || beat === 13} className="col-span-2">
+          {ebayIn ? (
             <EbayLivePreview
               key={`ebay-${cover}`}
               photoSrc={cover}
@@ -982,21 +933,17 @@ export function ListingPipeline({
                 <EbayWordmark className="text-[16px]" />
                 <LivePill on={false} label="Live" />
               </div>
-              <ProductShot live={false} present={ebayIn} src={cover} gallery={shots} />
+              <div className="min-h-0 flex-1 bg-[#f7f7f7]" />
               <div className="shrink-0 px-3 py-2">
-                <p className="text-[16px] font-semibold tabular-nums">
-                  {ebayIn ? `US ${priceLabel}` : "—"}
-                </p>
-                <p className="truncate text-[12px] text-[#707070]">
-                  {ebayIn ? item.name : "eBay store"}
-                </p>
+                <p className="text-[16px] font-semibold tabular-nums">—</p>
+                <p className="truncate text-[12px] text-[#707070]">eBay store</p>
               </div>
             </>
           )}
         </ChannelShell>
 
-        <ChannelShell live={amazonLive} focused={beat === 7 || beat === 14} className="col-span-2">
-          {amazonLive ? (
+        <ChannelShell live={amazonLive} filled={amazonIn} focused={beat === 7 || beat === 14} className="col-span-2">
+          {amazonIn ? (
             <AmazonStorefront key={`amz-${cover}`} src={cover} title={item.title} price={priceLabel} />
           ) : (
             <>
@@ -1004,21 +951,17 @@ export function ListingPipeline({
                 <AmazonMark className="text-[15px] text-white" />
                 <LivePill on={false} label="Listed" />
               </div>
-              <ProductShot live={false} present={amazonIn} src={cover} gallery={shots} />
+              <div className="min-h-0 flex-1 bg-[#f7f7f7]" />
               <div className="shrink-0 px-3 py-2">
-                <p className="text-[16px] font-semibold text-[#B12704]">
-                  {amazonIn ? priceLabel : "—"}
-                </p>
-                <p className="truncate text-[12px] text-[#707070]">
-                  {amazonIn ? item.name : "Amazon"}
-                </p>
+                <p className="text-[16px] font-semibold text-[#B12704]">—</p>
+                <p className="truncate text-[12px] text-[#707070]">Amazon</p>
               </div>
             </>
           )}
         </ChannelShell>
 
-        <ChannelShell live={facebookLive} focused={beat === 8 || beat === 15} className="col-span-2">
-          {facebookLive ? (
+        <ChannelShell live={facebookLive} filled={facebookIn} focused={beat === 8 || beat === 15} className="col-span-2">
+          {facebookIn ? (
             <FacebookStorefront
               key={`fb-${cover}`}
               src={cover}
@@ -1034,19 +977,17 @@ export function ListingPipeline({
                 </span>
                 <LivePill on={false} label="Posted" />
               </div>
-              <ProductShot live={false} present={facebookIn} src={cover} gallery={shots} />
+              <div className="min-h-0 flex-1 bg-[#f7f7f7]" />
               <div className="shrink-0 px-3 py-2">
-                <p className="text-[16px] font-semibold">{facebookIn ? priceLabel : "—"}</p>
-                <p className="truncate text-[12px] text-[#707070]">
-                  {facebookIn ? item.name : "Facebook Marketplace"}
-                </p>
+                <p className="text-[16px] font-semibold">—</p>
+                <p className="truncate text-[12px] text-[#707070]">Facebook Marketplace</p>
               </div>
             </>
           )}
         </ChannelShell>
 
-        <ChannelShell live={shopifyLive} focused={beat === 9 || beat === 16} className="col-span-3">
-          {shopifyLive ? (
+        <ChannelShell live={shopifyLive} filled={shopifyIn} focused={beat === 9 || beat === 16} className="col-span-3">
+          {shopifyIn ? (
             <ShopifyStorefront key={`shop-${cover}`} src={cover} title={item.title} price={priceLabel} />
           ) : (
             <>
@@ -1054,11 +995,9 @@ export function ListingPipeline({
                 <ShopifyMark />
                 <LivePill on={false} label="On store" />
               </div>
-              <ProductShot live={false} present={shopifyIn} src={cover} gallery={shots} />
+              <div className="min-h-0 flex-1 bg-[#f7f7f7]" />
               <div className="shrink-0 px-3 py-2">
-                <p className="text-[16px] font-semibold tabular-nums">
-                  {shopifyIn ? priceLabel : "—"}
-                </p>
+                <p className="text-[16px] font-semibold tabular-nums">—</p>
                 <p className="mt-1.5 grid h-8 place-items-center rounded-md bg-[#eee] text-[12px] font-semibold text-[#bbb]">
                   Add to cart
                 </p>
@@ -1067,8 +1006,8 @@ export function ListingPipeline({
           )}
         </ChannelShell>
 
-        <ChannelShell live={webLive} focused={beat === 10 || beat === 17} className="col-span-3">
-          {webLive ? (
+        <ChannelShell live={webLive} filled={webIn} focused={beat === 10 || beat === 17} className="col-span-3">
+          {webIn ? (
             <SiteStorefront
               key={`web-${cover}`}
               src={cover}
@@ -1088,14 +1027,10 @@ export function ListingPipeline({
                 </span>
                 <LivePill on={false} label="On site" />
               </div>
-              <ProductShot live={false} present={webIn} src={cover} gallery={shots} />
+              <div className="min-h-0 flex-1 bg-[#f7f7f7]" />
               <div className="shrink-0 px-3 py-2">
-                <p className="text-[16px] font-semibold tabular-nums">
-                  {webIn ? priceLabel : "—"}
-                </p>
-                <p className="truncate text-[12px] text-[#707070]">
-                  {webIn ? item.name : "Your website"}
-                </p>
+                <p className="text-[16px] font-semibold tabular-nums">—</p>
+                <p className="truncate text-[12px] text-[#707070]">Your website</p>
               </div>
             </>
           )}

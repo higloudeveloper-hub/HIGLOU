@@ -1,13 +1,13 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { Plus, Search } from "lucide-react";
+import { Search } from "lucide-react";
 import { AppShell } from "@/components/layout/app-shell";
 import { StudioFrame } from "@/components/layout/studio-frame";
 import { EmptyPanel, SkeletonBlock } from "@/components/ui/studio";
 import { ListingPipeline } from "@/components/studio/listing-pipeline";
 import { ListingCard } from "@/components/studio/listing-card";
+import { NewListingButton } from "@/components/brand/new-listing-button";
 import { formatRelativeTime } from "@/lib/format-relative-time";
 import { cn } from "@/lib/utils";
 
@@ -98,15 +98,7 @@ export default function ListingsPage() {
         kicker="Library"
         title="Listings"
         hint={`${products.length} in the store`}
-        action={
-          <Link
-            href="/listings/new"
-            className="inline-flex h-9 items-center gap-1.5 rounded-full bg-[#3665F3] px-4 text-[13px] font-semibold text-white"
-          >
-            <Plus className="size-3.5" />
-            New listing
-          </Link>
-        }
+        action={<NewListingButton size="sm" />}
         scroll={false}
       >
         <div className="grid min-h-0 flex-1 lg:grid-cols-[220px_minmax(0,1fr)]">
@@ -197,12 +189,7 @@ export default function ListingsPage() {
                   }
                   action={
                     products.length === 0 ? (
-                      <Link
-                        href="/listings/new"
-                        className="inline-flex h-10 items-center rounded-full bg-[#3665F3] px-5 text-sm font-semibold text-white"
-                      >
-                        New listing
-                      </Link>
+                      <NewListingButton />
                     ) : undefined
                   }
                 />

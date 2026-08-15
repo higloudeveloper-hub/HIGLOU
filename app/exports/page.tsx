@@ -6,6 +6,7 @@ import { AppShell } from "@/components/layout/app-shell";
 import { StudioFrame } from "@/components/layout/studio-frame";
 import { formatRelativeTime } from "@/lib/format-relative-time";
 import { EmptyPanel, SkeletonBlock } from "@/components/ui/studio";
+import { NewListingButton } from "@/components/brand/new-listing-button";
 
 type CsvRow = {
   id: string;
@@ -58,14 +59,7 @@ export default function ExportsPage() {
         kicker="File Exchange"
         title="Exports"
         hint="CSV files ready for eBay"
-        action={
-          <Link
-            href="/listings/new"
-            className="inline-flex h-9 items-center rounded-full bg-[#3665F3] px-4 text-[13px] font-semibold text-white"
-          >
-            New listing
-          </Link>
-        }
+        action={<NewListingButton size="sm" />}
       >
         <div className="grid min-h-full p-5">
           {loading ? (
@@ -89,14 +83,7 @@ export default function ExportsPage() {
             <EmptyPanel
               title="No exports yet"
               body="When a listing is ready, export a CSV and Higlou keeps it here."
-              action={
-                <Link
-                  href="/listings/new"
-                  className="inline-flex h-10 items-center rounded-full bg-[#3665F3] px-5 text-sm font-semibold text-white"
-                >
-                  New listing
-                </Link>
-              }
+              action={<NewListingButton />}
             />
           ) : (
             <ul className="divide-y divide-[#eee] overflow-hidden rounded-xl border border-[#e5e5e5] bg-white">

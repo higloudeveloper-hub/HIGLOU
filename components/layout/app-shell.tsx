@@ -1,9 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
-import { Menu, Plus, Sparkles } from "lucide-react";
+import { Menu } from "lucide-react";
 import { AppSidebar } from "@/components/layout/app-sidebar";
+import { HiglouLogo } from "@/components/brand/higlou-logo";
+import { NewListingButton } from "@/components/brand/new-listing-button";
 import {
   Sheet,
   SheetContent,
@@ -64,21 +65,8 @@ export function AppShell({
               <AppSidebar onNavigate={() => setMobileOpen(false)} />
             </SheetContent>
           </Sheet>
-          <Link href="/home" className="inline-flex items-center gap-2">
-            <span className="grid size-7 place-items-center rounded-md bg-brand-gradient text-brand-foreground">
-              <Sparkles className="size-3.5" strokeWidth={2.5} />
-            </span>
-            <span className="text-[16px] font-semibold tracking-tight">
-              Higlou
-            </span>
-          </Link>
-          <Link
-            href="/listings/new"
-            className="ml-auto inline-flex h-8 items-center gap-1.5 rounded-lg bg-foreground px-3 text-[12px] font-semibold text-background"
-          >
-            <Plus className="size-3" />
-            New
-          </Link>
+          <HiglouLogo href="/home" size={28} />
+          <NewListingButton size="sm" className="ml-auto" label="New" />
         </div>
 
         {!hideHeader && title ? (

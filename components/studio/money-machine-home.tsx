@@ -1,9 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { Sparkles } from "lucide-react";
 import { ListingPipeline } from "@/components/studio/listing-pipeline";
 import { ListingCard } from "@/components/studio/listing-card";
+import { NewListingButton } from "@/components/brand/new-listing-button";
 import { formatRelativeTime } from "@/lib/format-relative-time";
 
 export type HomeDraft = {
@@ -47,15 +47,9 @@ export function MoneyMachineHome({
           Money machine
         </p>
         <p className="hidden min-w-0 flex-1 truncate text-[13px] text-white/85 sm:block">
-          Photos in · Higlou writes · one click · eBay · Amazon · Facebook · your website
+          Photos in · one click · eBay · Amazon · Facebook · Shopify · your site
         </p>
-        <Link
-          href="/listings/new"
-          className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full bg-white px-4 text-[13px] font-semibold text-[#3665F3]"
-        >
-          <Sparkles className="size-3.5" />
-          New listing
-        </Link>
+        <NewListingButton tone="on-blue" size="sm" className="shrink-0" />
       </div>
 
       <div className="grid min-h-0 flex-1 lg:grid-cols-[minmax(0,1.05fr)_minmax(420px,0.95fr)]">

@@ -64,6 +64,9 @@
 
 .brand {
   justify-self: start;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
   font-family: var(--display);
   font-size: 1.65rem;
   line-height: 1;

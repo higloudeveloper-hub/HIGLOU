@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { BrowserMockup } from "@/components/landing/browser-mockup";
 import { Reveal } from "@/components/landing/reveal";
+import { HiglouMarkIcon } from "@/components/brand/higlou-logo";
 import styles from "@/components/landing/landing.module.css";
 
 const START_HREF = "/login?redirect=/listings/new";
@@ -37,6 +38,7 @@ export function LandingPage() {
       <header className={styles.nav}>
         <div className={styles.navInner}>
           <Link href="/" className={styles.brand} aria-label="Higlou home">
+            <HiglouMarkIcon size={28} />
             Higlou
           </Link>
 

@@ -8,13 +8,12 @@ import {
   Home,
   Images,
   LogOut,
-  Plus,
   Settings,
-  Sparkles,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { signOut } from "@/app/login/sign-out";
-import { LiveDot } from "@/components/ui/studio";
+import { HiglouLogo } from "@/components/brand/higlou-logo";
+import { NewListingButton } from "@/components/brand/new-listing-button";
 
 export const STUDIO_NAV = [
   {
@@ -78,41 +77,15 @@ export function AppSidebar({
       )}
     >
       <div className="px-5 pb-5 pt-7">
-        <Link href="/home" onClick={onNavigate} className="group block">
-          <div className="flex items-center gap-2.5">
-            <span className="grid size-9 place-items-center rounded-xl bg-brand-gradient text-brand-foreground shadow-sm">
-              <Sparkles className="size-4" strokeWidth={2.5} />
-            </span>
-            <div>
-              <div className="text-[17px] font-semibold leading-none tracking-tight text-foreground">
-                Higlou
-              </div>
-              <div className="mt-1.5 flex items-center gap-1.5 text-[11px] text-muted-foreground">
-                <LiveDot tone="success" />
-                Listing engine
-              </div>
-            </div>
-          </div>
-        </Link>
+        <HiglouLogo href="/home" size={34} subtitle="Studio" onClick={onNavigate} />
       </div>
 
       <div className="px-3 pb-5">
-        <Link
-          href="/listings/new"
+        <NewListingButton
+          block
           onClick={onNavigate}
-          className={cn(
-            "flex items-center justify-center gap-2 rounded-2xl px-3 py-3 text-sm font-semibold shadow-sm transition",
-            onNewListing
-              ? "bg-brand text-brand-foreground"
-              : "bg-foreground text-background hover:opacity-90",
-          )}
-        >
-          <Plus className="size-4" strokeWidth={2.5} />
-          New listing
-        </Link>
-        <p className="mt-2.5 px-1 text-[11px] leading-relaxed text-muted-foreground">
-          1 Photos · 2 AI draft · 3 Edit · 4 Publish
-        </p>
+          className={onNewListing ? "bg-[#2a2a2a]" : undefined}
+        />
       </div>
 
       <nav className="flex-1 space-y-1 px-3">
@@ -128,7 +101,7 @@ export function AppSidebar({
               href={item.href}
               onClick={onNavigate}
               className={cn(
-                "flex items-center gap-3 rounded-2xl px-3 py-2.5 transition-colors",
+                "flex items-center gap-3 rounded-md px-3 py-2.5 transition-colors",
                 active
                   ? "bg-brand-soft text-foreground shadow-xs"
                   : "text-muted-foreground hover:bg-muted hover:text-foreground",

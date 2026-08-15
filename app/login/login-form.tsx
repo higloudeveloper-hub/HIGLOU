@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { HiglouLogo } from "@/components/brand/higlou-logo";
 import { useActionState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -30,12 +31,7 @@ export default function LoginForm() {
         className="pointer-events-none absolute inset-0 bg-[radial-gradient(70%_50%_at_18%_-8%,rgba(255,199,44,0.05),transparent_58%),radial-gradient(55%_40%_at_92%_8%,rgba(10,10,10,0.03),transparent_52%)]"
       />
       <div className="relative w-full max-w-md">
-        <Link
-          href="/"
-          className="font-[family-name:var(--font-instrument-serif)] text-3xl tracking-[-0.02em] text-zinc-950"
-        >
-          Higlou
-        </Link>
+        <HiglouLogo href="/" size={36} className="text-zinc-950" />
         <p className="mt-2 text-sm tracking-[-0.01em] text-zinc-500">
           Sign in to create eBay listings from product photos.
         </p>

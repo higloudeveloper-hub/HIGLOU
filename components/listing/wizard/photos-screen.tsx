@@ -141,7 +141,7 @@ export function PhotosScreen({
             type="button"
             disabled={!canContinue}
             onClick={onContinue}
-            className="inline-flex items-center gap-2 rounded-full bg-[#3665F3] px-5 py-3 text-[14px] font-semibold text-white shadow-sm transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+            className="inline-flex items-center gap-2 rounded-md bg-[#141414] px-5 py-3 text-[14px] font-semibold tracking-[-0.01em] text-white transition hover:bg-[#2a2a2a] disabled:cursor-not-allowed disabled:opacity-40"
           >
             Continue
             <ArrowRight className="h-4 w-4" />

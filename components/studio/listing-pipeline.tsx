@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import Link from "next/link";
 import { AnimatePresence, motion } from "motion/react";
 import { Check, Globe, MapPin, MousePointer2, Search, ShoppingCart } from "lucide-react";
 import { usePrefersReducedMotion } from "@/components/listing/wizard/use-prefers-reduced-motion";
@@ -11,6 +12,33 @@ import {
 } from "@/components/studio/ebay-live-preview";
 import { cn } from "@/lib/utils";
 import { STORY_CATALOG, type StoryItem } from "@/components/studio/ready-catalog";
+
+const STORY_SEEN = "higlou-home-story-seen";
+
+function storyAlreadySeen() {
+  if (typeof window === "undefined") return false;
+  try {
+    return sessionStorage.getItem(STORY_SEEN) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function markStorySeen() {
+  try {
+    sessionStorage.setItem(STORY_SEEN, "1");
+  } catch {
+    /* private mode */
+  }
+}
+
+function clearStorySeen() {
+  try {
+    sessionStorage.removeItem(STORY_SEEN);
+  } catch {
+    /* private mode */
+  }
+}
 
 const CATALOG = STORY_CATALOG;
 
@@ -31,7 +59,7 @@ const STEPS = [
   { id: "publish", ms: 1600, x: 50, y: 48, click: true, label: "Publishing" },
   { id: "dispatch", ms: 4000, x: 50, y: 48, click: false, label: "Sending" },
   { id: "sales", ms: 1800, x: 88, y: 93, click: false, label: "Revenue" },
-  { id: "hold", ms: 1200, x: 88, y: 93, click: false, label: "Next product" },
+  { id: "hold", ms: 2000, x: 88, y: 93, click: false, label: "Next product" },
 ] as const;
 
 const DROP_STEPS = [
@@ -450,6 +478,42 @@ function storyCaption(
     default:
       return { headline: "Watch this.", sub: "One photo becomes five live storefronts." };
   }
+}
+
+function YourTurn({ onReplay }: { onReplay: () => void }) {
+  return (
+    <div className="absolute inset-0 z-50 flex items-center justify-center bg-white/62 px-6">
+      <motion.div
+        initial={{ opacity: 0, y: 14 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
+        className="w-full max-w-[400px] bg-white px-8 py-9 text-center shadow-[0_28px_64px_-28px_rgba(0,0,0,0.38)] ring-1 ring-black/10"
+      >
+        <p className="text-[11px] font-medium tracking-[0.18em] text-[#8a8a8a] uppercase">
+          Your turn
+        </p>
+        <p className="mt-3 text-[28px] font-medium tracking-tight text-[#141414] leading-[1.05]">
+          List one of yours.
+        </p>
+        <p className="mt-2 text-[14px] leading-relaxed text-[#707070]">
+          One photo. Higlou writes the listing. Five stores go live.
+        </p>
+        <Link
+          href="/listings/new"
+          className="mt-7 grid h-11 place-items-center bg-[#141414] text-[14px] font-medium text-white"
+        >
+          Start a listing
+        </Link>
+        <button
+          type="button"
+          onClick={onReplay}
+          className="mt-3 text-[13px] text-[#8a8a8a] transition hover:text-[#141414]"
+        >
+          Watch again
+        </button>
+      </motion.div>
+    </div>
+  );
 }
 
 function CenterLine({
@@ -1100,6 +1164,7 @@ export function ListingPipeline({
   catalogItems,
   onWallet,
   onStory,
+  onRest,
 }: {
   storeName?: string | null;
   compact?: boolean;
@@ -1113,17 +1178,21 @@ export function ListingPipeline({
     phase: "grab" | "drag" | "drop" | "gone";
     cover: string;
   }) => void;
+  onRest?: (resting: boolean) => void;
 }) {
   const reduce = usePrefersReducedMotion();
   const dropMode = mode === "drop";
   const hasUserPhotos = Boolean(photos && photos.length > 0);
   const freezeDrop = dropMode && hasUserPhotos;
   const timeline = dropMode ? DROP_STEPS : STEPS;
-  const [beat, setBeat] = useState(0);
+  const [beat, setBeat] = useState(() => (storyAlreadySeen() ? stepIndex("sales") : 0));
   const [sku, setSku] = useState(0);
   const [fileDrag, setFileDrag] = useState(false);
-  const [filled, setFilled] = useState(reduce ? 4 : 0);
-  const [landed, setLanded] = useState(0);
+  const [filled, setFilled] = useState(reduce || storyAlreadySeen() ? 8 : 0);
+  const [landed, setLanded] = useState(() => (storyAlreadySeen() ? 5 : 0));
+  const [resting, setResting] = useState(() => storyAlreadySeen());
+  const [runId, setRunId] = useState(0);
+  const skuRef = useRef(0);
   const shop = useConnectedEbayStoreName(storeName);
   const storyCatalog =
     catalogItems && catalogItems.length > 0 ? catalogItems : CATALOG;
@@ -1141,6 +1210,8 @@ export function ListingPipeline({
         ]
       : storyCatalog;
   const item = catalog[sku % catalog.length] ?? storyCatalog[0] ?? CATALOG[0];
+  const playCount = Math.min(2, Math.max(1, catalog.length));
+  skuRef.current = sku;
   const shots = [...item.photos];
   const cover = shots[0] || storyCatalog[0]?.photos[0] || CATALOG[0].photos[0];
   const slug = item.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
@@ -1227,8 +1298,17 @@ export function ListingPipeline({
       onStory?.({ sku: 0, phase: "gone", cover });
       return;
     }
-    onStory?.({ sku: sku % catalog.length, phase: dragPhase, cover });
-  }, [dropMode, sku, dragPhase, cover, onStory, catalog.length]);
+    onStory?.({
+      sku: sku % catalog.length,
+      phase: resting ? "gone" : dragPhase,
+      cover,
+    });
+  }, [dropMode, sku, dragPhase, cover, onStory, catalog.length, resting]);
+
+  useEffect(() => {
+    if (dropMode) return;
+    onRest?.(resting);
+  }, [dropMode, resting, onRest]);
 
   useEffect(() => {
     if (!dropMode || freezeDrop) {
@@ -1262,11 +1342,22 @@ export function ListingPipeline({
       return;
     }
     if (reduce) {
-      setBeat(timeline.length - 1);
+      setBeat(dropMode ? timeline.length - 1 : stepIndex("sales"));
+      if (!dropMode) {
+        setLanded(5);
+        setResting(true);
+      }
       return;
     }
+    if (!dropMode && resting) return;
     let i = 0;
     let id = 0;
+    const finishStory = () => {
+      setBeat(stepIndex("sales"));
+      setLanded(5);
+      setResting(true);
+      markStorySeen();
+    };
     const loop = () => {
       id = window.setTimeout(() => {
         if (fileDragRef.current) {
@@ -1274,6 +1365,10 @@ export function ListingPipeline({
           return;
         }
         i += 1;
+        if (!dropMode && skuRef.current + 1 >= playCount && i >= stepIndex("hold")) {
+          finishStory();
+          return;
+        }
         if (i >= timeline.length) {
           i = 0;
           setSku((n) => n + 1);
@@ -1284,10 +1379,10 @@ export function ListingPipeline({
     };
     loop();
     return () => window.clearTimeout(id);
-  }, [reduce, dropMode, freezeDrop, timeline]);
+  }, [reduce, dropMode, freezeDrop, timeline, resting, runId, playCount]);
 
   useEffect(() => {
-    if (reduce || freezeDrop) {
+    if (reduce || freezeDrop || resting) {
       setFilled(shots.length);
       return;
     }
@@ -1307,11 +1402,11 @@ export function ListingPipeline({
       if (n >= shots.length) window.clearInterval(t);
     }, 180);
     return () => window.clearInterval(t);
-  }, [photoIn, photosOn, reduce, freezeDrop, shots.length]);
+  }, [photoIn, photosOn, reduce, freezeDrop, shots.length, resting]);
 
   useEffect(() => {
     if (dropMode) return;
-    if (reduce) {
+    if (reduce || resting) {
       setLanded(5);
       return;
     }
@@ -1328,7 +1423,17 @@ export function ListingPipeline({
       return;
     }
     setLanded(0);
-  }, [dropMode, reduce, step.id, sku]);
+  }, [dropMode, reduce, step.id, sku, resting]);
+
+  const replayStory = () => {
+    clearStorySeen();
+    setSku(0);
+    setBeat(0);
+    setLanded(0);
+    setFilled(0);
+    setResting(false);
+    setRunId((n) => n + 1);
+  };
 
   return (
     <section
@@ -1371,6 +1476,7 @@ export function ListingPipeline({
             y={step.y}
             click={step.click || (is("photos") && filled > 1)}
             visible={
+              !resting &&
               !CURSOR_OFF.has(step.id) &&
               !(dropMode && is("hold")) &&
               !(!dropMode && (is("grab") || is("drag")))
@@ -1534,7 +1640,7 @@ export function ListingPipeline({
         ) : null}
       </div>
 
-      {showCenter ? (
+      {showCenter && !resting ? (
         <CenterLine
           headline={stampName ? "" : caption.headline}
           sub={stampName ? "Now live." : caption.sub}
@@ -1727,6 +1833,7 @@ export function ListingPipeline({
         reduce={reduce}
       />
       )}
+      {!dropMode && resting ? <YourTurn onReplay={replayStory} /> : null}
     </section>
   );
 }

@@ -58,6 +58,7 @@ export function MoneyMachineHome({
     photos: item.photos,
   }));
   const [wallet, setWallet] = useState(0);
+  const [resting, setResting] = useState(false);
   const [story, setStory] = useState<{
     sku: number;
     phase: "grab" | "drag" | "drop" | "gone";
@@ -68,7 +69,9 @@ export function MoneyMachineHome({
     <div className="flex min-h-0 flex-1 flex-col bg-white md:h-full">
       <div className="flex shrink-0 items-center gap-4 bg-[#3665F3] px-5 py-2.5 text-white">
         <span className="relative flex size-2">
-          <span className="absolute inset-0 animate-ping rounded-full bg-white/70" />
+          {resting ? null : (
+            <span className="absolute inset-0 animate-ping rounded-full bg-white/70" />
+          )}
           <span className="relative size-2 rounded-full bg-white" />
         </span>
         <p className="text-[11px] font-semibold tracking-[0.2em] uppercase">
@@ -87,6 +90,7 @@ export function MoneyMachineHome({
           catalogItems={storyCatalog}
           onWallet={setWallet}
           onStory={setStory}
+          onRest={setResting}
         />
 
         <aside className="flex min-h-0 flex-col border-t border-[#eee] bg-[#f3f3f3] lg:border-t-0 lg:border-l">
@@ -108,7 +112,7 @@ export function MoneyMachineHome({
             </Link>
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-4">
-            <MarketPromos activeIndex={story.sku} listings={listings} />
+            <MarketPromos activeIndex={resting ? -1 : story.sku} listings={listings} />
             {drafts.length > 0 ? (
               <div className="mt-6">
                 <div className="mb-3 flex items-center justify-between">

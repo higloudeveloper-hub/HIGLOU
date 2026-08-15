@@ -20,19 +20,19 @@ const SAMPLE_PHOTOS = [
 const PRICE = 189;
 
 const STEPS = [
-  { id: "grab", ms: 1000, x: 12, y: 86, click: true, caption: "Grab photo" },
-  { id: "drag", ms: 1700, x: 50, y: 48, click: false, caption: "Drop on the panel" },
-  { id: "drop", ms: 900, x: 50, y: 48, click: true, caption: "Photo in" },
-  { id: "write", ms: 2600, x: 38, y: 8, click: false, caption: "Higlou writes the listing" },
-  { id: "aim", ms: 900, x: 91, y: 8, click: false, caption: "Move to Publish" },
-  { id: "publish", ms: 1100, x: 91, y: 8, click: true, caption: "Click Publish" },
-  { id: "ebay", ms: 1200, x: 16, y: 38, click: true, caption: "Live on eBay" },
-  { id: "amazon", ms: 1200, x: 50, y: 38, click: true, caption: "Then Amazon" },
-  { id: "facebook", ms: 1200, x: 84, y: 38, click: true, caption: "Then Facebook" },
-  { id: "shopify", ms: 1200, x: 24, y: 70, click: true, caption: "Then Shopify" },
-  { id: "web", ms: 1200, x: 76, y: 70, click: true, caption: "Then your site" },
-  { id: "sales", ms: 2200, x: 58, y: 93, click: false, caption: "Sales start climbing" },
-  { id: "hold", ms: 2800, x: 58, y: 93, click: false, caption: "Two clicks. Five stores." },
+  { id: "grab", ms: 1100, x: 12, y: 86, click: true, line: "One photo.", sub: "Pick it up." },
+  { id: "drag", ms: 1800, x: 50, y: 48, click: false, line: "Drop it.", sub: "Higlou does the rest." },
+  { id: "drop", ms: 1000, x: 50, y: 48, click: true, line: "In.", sub: "That’s the hard part." },
+  { id: "write", ms: 2600, x: 38, y: 8, click: false, line: "Written for you.", sub: "Title. Price. Listing." },
+  { id: "aim", ms: 1200, x: 91, y: 8, click: false, line: "Only one click.", sub: "Publish to every store." },
+  { id: "publish", ms: 1600, x: 91, y: 8, click: true, line: "Only one click.", sub: "Watch it go live." },
+  { id: "ebay", ms: 1100, x: 16, y: 38, click: true, line: "Live on eBay.", sub: "1 of 5 stores" },
+  { id: "amazon", ms: 1000, x: 50, y: 38, click: true, line: "Now Amazon.", sub: "2 of 5 stores" },
+  { id: "facebook", ms: 1000, x: 84, y: 38, click: true, line: "Now Facebook.", sub: "3 of 5 stores" },
+  { id: "shopify", ms: 1000, x: 24, y: 70, click: true, line: "Now Shopify.", sub: "4 of 5 stores" },
+  { id: "web", ms: 1100, x: 76, y: 70, click: true, line: "Now your site.", sub: "5 of 5 stores" },
+  { id: "sales", ms: 2400, x: 58, y: 93, click: false, line: "Sales start.", sub: "Same listing. Every channel." },
+  { id: "hold", ms: 3400, x: 58, y: 93, click: false, line: "One photo. One click. Five stores.", sub: "Try it." },
 ] as const;
 
 const SALES_DOLLARS = [0, 0, 0, 0, 0, 0, 189, 378, 567, 945, 1323, 1890, 2268] as const;
@@ -164,14 +164,12 @@ function GuideCursor({
   y,
   click,
   visible,
-  label,
   clickKey,
 }: {
   x: number;
   y: number;
   click: boolean;
   visible: boolean;
-  label: string;
   clickKey: string;
 }) {
   return (
@@ -195,7 +193,7 @@ function GuideCursor({
         {click ? (
           <motion.span
             initial={{ scale: 0.3, opacity: 0.45 }}
-            animate={{ scale: 2.1, opacity: 0 }}
+            animate={{ scale: 2.4, opacity: 0 }}
             transition={{ duration: 0.55, ease: "easeOut" }}
             className="absolute top-0 left-0 size-7 rounded-full border-2 border-[#141414]"
           />
@@ -206,10 +204,57 @@ function GuideCursor({
           strokeWidth={1.75}
         />
       </motion.div>
-      <span className="mt-1 ml-5 inline-block whitespace-nowrap rounded-md bg-[#141414] px-2 py-0.5 text-[11px] font-medium text-white shadow-sm">
-        {label}
-      </span>
     </motion.div>
+  );
+}
+
+function StoryBanner({
+  line,
+  sub,
+  punch,
+  compact,
+}: {
+  line: string;
+  sub: string;
+  punch: boolean;
+  compact: boolean;
+}) {
+  return (
+    <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20">
+      <div className="h-28 bg-gradient-to-t from-white via-white/92 to-transparent sm:h-32" />
+      <div className="absolute inset-x-0 bottom-3 px-4 text-center sm:bottom-4">
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={line}
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            transition={{ duration: 0.28, ease: "easeOut" }}
+          >
+            <p
+              className={cn(
+                "font-semibold tracking-[-0.05em] text-[#141414]",
+                compact
+                  ? "text-[18px]"
+                  : punch
+                    ? "text-[30px] sm:text-[42px]"
+                    : "text-[24px] sm:text-[34px]",
+              )}
+            >
+              {line}
+            </p>
+            <p
+              className={cn(
+                "mt-1 font-medium tracking-[-0.01em] text-[#707070]",
+                compact ? "text-[11px]" : "text-[13px] sm:text-[15px]",
+              )}
+            >
+              {sub}
+            </p>
+          </motion.div>
+        </AnimatePresence>
+      </div>
+    </div>
   );
 }
 
@@ -227,7 +272,7 @@ function DragGhost({
   const holding = phase === "grab" || phase === "drag";
   return (
     <motion.div
-      className="pointer-events-none absolute z-20"
+      className="pointer-events-none absolute z-30"
       initial={false}
       animate={{
         left: `${x}%`,
@@ -345,37 +390,29 @@ function SalesStrip({
   beat,
   dollars,
   reduce,
-  caption,
 }: {
   beat: number;
   dollars: number;
   reduce: boolean;
-  caption: string;
 }) {
   const progress = reduce ? 1 : salesProgress(beat);
-  const click1 = beat >= 2;
-  const click2 = beat >= 5;
+  const clicked = beat >= 5;
   const climbing = beat >= 6;
+  const liveCount = Math.max(0, Math.min(5, beat - 5));
 
   return (
     <div className="flex h-[52px] shrink-0 items-center gap-3 border-t border-[#e5e5e5] bg-white px-3 sm:gap-4 sm:px-4">
-      <div className="flex shrink-0 items-center gap-1.5">
+      <div className="flex shrink-0 items-center gap-2">
         <span
           className={cn(
-            "grid size-5 place-items-center rounded text-[10px] font-semibold",
-            click1 ? "bg-[#141414] text-white" : "bg-[#eee] text-[#bbb]",
+            "inline-flex h-6 items-center rounded-md px-2 text-[11px] font-semibold tracking-[-0.01em]",
+            clicked ? "bg-[#141414] text-white" : "bg-[#eee] text-[#9b9b9b]",
           )}
         >
-          1
+          1 click
         </span>
-        <span className="text-[11px] text-[#ccc]">→</span>
-        <span
-          className={cn(
-            "grid size-5 place-items-center rounded text-[10px] font-semibold",
-            click2 ? "bg-[#141414] text-white" : "bg-[#eee] text-[#bbb]",
-          )}
-        >
-          2
+        <span className="hidden text-[12px] font-medium tabular-nums text-[#707070] sm:inline">
+          {liveCount}/5 live
         </span>
       </div>
 
@@ -399,18 +436,12 @@ function SalesStrip({
         />
       </svg>
 
-      <div className="hidden min-w-0 shrink-0 sm:block">
-        <p className="text-[12px] font-medium tracking-tight text-[#565959]">
-          {caption}
-        </p>
-      </div>
-
       <div className="w-[92px] shrink-0 text-right sm:w-[108px]">
         <p className="text-[15px] font-semibold tabular-nums tracking-tight text-[#141414]">
           ${dollars.toLocaleString("en-US")}
         </p>
         <p className="text-[11px] text-[#707070]">
-          {climbing ? "sales up" : "after publish"}
+          {climbing ? "sales up" : "after one click"}
         </p>
       </div>
     </div>
@@ -492,7 +523,6 @@ export function ListingPipeline({
               y={step.y}
               click={step.click}
               visible
-              label={step.caption}
               clickKey={`${step.id}-${beat}`}
             />
           ) : null}
@@ -533,7 +563,7 @@ export function ListingPipeline({
                 ${price.toFixed(2)}
               </span>
             ) : (
-              step.caption
+              "One photo. Then one click."
             )}
             {draftOn && beat < 5 ? " · writing…" : null}
             {clickOn ? " · eBay · Amazon · Facebook · Shopify · site" : null}
@@ -542,14 +572,20 @@ export function ListingPipeline({
         <motion.div
           initial={false}
           animate={
-            beat === 5
-              ? { scale: [1, 0.9, 1], boxShadow: "0 0 0 8px rgba(20,20,20,0.1)" }
+            beat === 4 || beat === 5
+              ? {
+                  scale: beat === 5 ? [1, 0.88, 1] : 1.04,
+                  boxShadow:
+                    beat === 5
+                      ? "0 0 0 10px rgba(20,20,20,0.12)"
+                      : "0 0 0 6px rgba(20,20,20,0.08)",
+                }
               : { scale: 1, boxShadow: "0 0 0 0px rgba(20,20,20,0)" }
           }
           transition={{ duration: 0.42 }}
           className={cn(
             "inline-flex h-10 shrink-0 items-center rounded-md px-4 text-[13px] font-semibold tracking-[-0.01em]",
-            clickOn ? "bg-[#141414] text-white" : "bg-[#ececec] text-[#9b9b9b]",
+            clickOn ? "bg-[#141414] text-white" : beat === 4 ? "bg-[#141414] text-white" : "bg-[#ececec] text-[#9b9b9b]",
           )}
         >
           {beat === 5 ? "Publishing" : allLive || webOn ? "Live" : "Publish"}
@@ -558,11 +594,7 @@ export function ListingPipeline({
 
       <div className="relative min-h-0 flex-1">
         {dragging ? (
-          <div className="pointer-events-none absolute inset-3 z-10 grid place-items-center rounded-xl border-2 border-dashed border-[#141414]/25 bg-white/40">
-            <p className="rounded-md bg-white/95 px-3 py-1.5 text-[13px] font-medium text-[#141414] shadow-sm">
-              Drop photo here
-            </p>
-          </div>
+          <div className="pointer-events-none absolute inset-3 z-10 rounded-xl border-2 border-dashed border-[#141414]/25" />
         ) : null}
         <div className="grid h-full min-h-0 grid-cols-6 grid-rows-2 divide-x divide-y divide-[#e5e5e5]">
         <ChannelShell live={ebayOn} focused={beat === 6} className="col-span-2">
@@ -652,13 +684,27 @@ export function ListingPipeline({
           </div>
         </ChannelShell>
         </div>
+        {!reduce ? (
+          <StoryBanner
+            line={step.line}
+            sub={step.sub}
+            punch={beat === 4 || beat === 5 || beat === 12}
+            compact={compact}
+          />
+        ) : (
+          <StoryBanner
+            line="One photo. One click. Five stores."
+            sub="Try it."
+            punch
+            compact={compact}
+          />
+        )}
       </div>
 
       <SalesStrip
         beat={beat}
         dollars={sales}
         reduce={reduce}
-        caption={step.caption}
       />
     </section>
   );

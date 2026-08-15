@@ -17,11 +17,11 @@ const CATALOG = STORY_CATALOG;
 const STEPS = [
   { id: "grab", ms: 1400, x: 14, y: 74, click: true, label: "Grab one photo" },
   { id: "drag", ms: 1600, x: 9, y: 11, click: false, label: "Drop on listing" },
-  { id: "drop", ms: 1000, x: 9, y: 11, click: true, label: "Photo in" },
-  { id: "photos", ms: 1600, x: 22, y: 8, click: false, label: "Higlou adds shots" },
-  { id: "title", ms: 1500, x: 40, y: 8, click: false, label: "Title writes itself" },
-  { id: "desc", ms: 1300, x: 40, y: 8, click: false, label: "Description" },
-  { id: "compare", ms: 1400, x: 40, y: 8, click: false, label: "Priced vs sold comps" },
+  { id: "drop", ms: 800, x: 9, y: 11, click: true, label: "Photo in" },
+  { id: "photos", ms: 1000, x: 22, y: 8, click: false, label: "Higlou adds shots" },
+  { id: "title", ms: 850, x: 40, y: 8, click: false, label: "Title writes itself" },
+  { id: "desc", ms: 750, x: 40, y: 8, click: false, label: "Description" },
+  { id: "compare", ms: 800, x: 40, y: 8, click: false, label: "Priced vs sold comps" },
   { id: "fillEbay", ms: 1300, x: 16, y: 38, click: false, label: "eBay" },
   { id: "fillAmazon", ms: 1300, x: 50, y: 38, click: false, label: "Amazon" },
   { id: "fillFacebook", ms: 1300, x: 84, y: 38, click: false, label: "Facebook" },
@@ -109,7 +109,7 @@ function useTyped(text: string, on: boolean, reduce: boolean) {
       i += 1;
       setOut(text.slice(0, i));
       if (i >= text.length) window.clearInterval(t);
-    }, 16);
+    }, 10);
     return () => window.clearInterval(t);
   }, [text, on, reduce]);
   return out;
@@ -128,7 +128,7 @@ function useCountUp(target: number, on: boolean, reduce: boolean) {
     }
     setN(0);
     const start = performance.now();
-    const dur = 560;
+    const dur = 380;
     let raf = 0;
     const tick = (now: number) => {
       const t = Math.min(1, (now - start) / dur);
@@ -1101,9 +1101,9 @@ export function ListingPipeline({
     return i >= 0 && beat >= i;
   };
   const is = (id: StepId) => step.id === id;
-  const typing = useTyped(item.title, at("title"), reduce);
-  const descTyping = useTyped(item.description, at("desc"), reduce);
-  const price = useCountUp(item.price, at("compare"), reduce);
+  const typing = useTyped(item.title, at("photos"), reduce);
+  const descTyping = useTyped(item.description, at("title"), reduce);
+  const price = useCountUp(item.price, at("desc"), reduce);
   const sales = useCountToward(money, reduce);
   const walletRef = useRef(0);
   const prevSales = useRef(0);
@@ -1121,9 +1121,9 @@ export function ListingPipeline({
   const photoIn = freezeDrop || at("drop");
   const dragging = !freezeDrop && beat <= timeline.findIndex((s) => s.id === "drag");
   const photosOn = at("photos");
-  const draftOn = at("title");
-  const descOn = at("desc");
-  const priceOn = at("compare");
+  const draftOn = at("photos");
+  const descOn = at("title");
+  const priceOn = at("desc");
   const ebayIn = at("fillEbay");
   const amazonIn = at("fillAmazon");
   const facebookIn = at("fillFacebook");
@@ -1254,7 +1254,7 @@ export function ListingPipeline({
       n += 1;
       setFilled(Math.min(shots.length, n));
       if (n >= shots.length) window.clearInterval(t);
-    }, 320);
+    }, 180);
     return () => window.clearInterval(t);
   }, [photoIn, photosOn, reduce, freezeDrop, shots.length]);
 
@@ -1422,14 +1422,14 @@ export function ListingPipeline({
                   : photoIn
                     ? item.name
                     : "New listing"}
-            {!dropMode && is("title") && typing.length < item.title.length ? (
+            {!dropMode && draftOn && typing.length < item.title.length ? (
               <span className="ml-0.5 inline-block h-3 w-px animate-pulse bg-[#191919]" />
             ) : null}
           </p>
           {descOn ? (
             <p className="mt-0.5 truncate text-[12px] text-[#707070]">
               {descTyping}
-              {is("desc") && descTyping.length < item.description.length ? (
+              {descOn && descTyping.length < item.description.length ? (
                 <span className="ml-0.5 inline-block h-3 w-px animate-pulse bg-[#707070]" />
               ) : null}
             </p>

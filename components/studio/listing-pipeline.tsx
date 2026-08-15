@@ -7,9 +7,16 @@ import { Globe, MapPin, MousePointer2, Search, ShoppingCart } from "lucide-react
 import { usePrefersReducedMotion } from "@/components/listing/wizard/use-prefers-reduced-motion";
 import {
   EbayLivePreview,
-  EbayWordmark,
   useConnectedEbayStoreName,
 } from "@/components/studio/ebay-live-preview";
+import {
+  AmazonMark,
+  EbayMark,
+  FacebookFMark,
+  FacebookMark,
+  ShopifyMark,
+  SiteMark,
+} from "@/components/brand/store-marks";
 import { cn } from "@/lib/utils";
 import { STORY_CATALOG, type StoryItem } from "@/components/studio/ready-catalog";
 
@@ -186,104 +193,13 @@ function useCountToward(target: number, reduce: boolean) {
   return n;
 }
 
-function AmazonMark({ className, hero = false }: { className?: string; hero?: boolean }) {
-  return (
-    <span className={cn("relative inline-block font-semibold tracking-tight", className)}>
-      amazon
-      <span
-        aria-hidden
-        className={cn(
-          "absolute right-0 left-[18%] rounded-full",
-          hero ? "-bottom-2 h-3" : "-bottom-1 h-[5px]",
-        )}
-        style={{
-          background:
-            "radial-gradient(120% 120% at 50% -20%, transparent 42%, #FF9900 43%, #FF9900 70%, transparent 71%)",
-        }}
-      />
-    </span>
-  );
-}
-
-function FacebookLogo({ hero = false, word = false }: { hero?: boolean; word?: boolean }) {
-  return (
-    <span className="inline-flex items-center gap-2.5">
-      <svg
-        viewBox="0 0 36 36"
-        className={hero ? "size-[56px] sm:size-[64px]" : "size-6"}
-        aria-label="Facebook"
-      >
-        <rect width="36" height="36" rx="8" fill="#1877F2" />
-        <path
-          fill="#fff"
-          d="M25.2 18.6h-4.3V32h-5.4V18.6H12v-4.5h3.5v-2.8c0-3.6 1.6-5.6 5.7-5.6H25v4.6h-2.3c-1.7 0-2.2.8-2.2 2.1v1.7h4.4l-.7 4.5Z"
-        />
-      </svg>
-      {hero || word ? (
-        <span
-          className={cn(
-            "font-bold tracking-tight text-[#1877F2]",
-            hero ? "text-[32px] sm:text-[40px]" : "text-[13px]",
-          )}
-        >
-          facebook
-        </span>
-      ) : null}
-    </span>
-  );
-}
-
-function ShopifyLogo({
-  hero = false,
-  light = false,
-  word = true,
-}: {
-  hero?: boolean;
-  light?: boolean;
-  word?: boolean;
-}) {
-  return (
-    <span
-      className={cn(
-        "inline-flex items-center gap-2",
-        light ? "text-white" : "text-[#141414]",
-      )}
-    >
-      <svg viewBox="0 0 24 24" className={hero ? "size-[56px] sm:size-[64px]" : "size-5"} aria-hidden>
-        <path
-          fill="#95BF47"
-          d="M19.2 4.6 17.6.4c-.1-.2-.3-.3-.5-.2l-1.6.5C15.2.3 14.6 0 14.2 0 11.7 0 9.6 2.6 9 6.3L3.8 8c-.3.1-.5.4-.5.7L2 21.2c0 .3.2.6.5.6h14.4c.3 0 .5-.2.6-.5l2.2-16c.1-.3-.1-.6-.5-.7ZM14.2 2c.2 0 .4 0 .6.1l-1.2 3.7c-.8-.2-1.6-.3-2.4-.3.4-2 1.3-3.5 3-3.5Zm-2.2 5.8c.9 0 1.9.1 2.9.4L13.6 12c-1.2-.4-2.2-.5-3-.5-.2-1.3.2-2.7 1.4-3.7Z"
-        />
-      </svg>
-      {word ? (
-        <span
-          className={cn(
-            "font-semibold tracking-tight",
-            hero ? "text-[36px] sm:text-[44px]" : "text-[14px]",
-          )}
-        >
-          Shopify
-        </span>
-      ) : null}
-    </span>
-  );
-}
-
 function StoreTargets() {
   const stores = [
-    { key: "ebay", node: <EbayWordmark className="text-[18px]" /> },
-    { key: "amazon", node: <AmazonMark className="text-[16px] text-[#131921]" /> },
-    { key: "facebook", node: <FacebookLogo word /> },
-    { key: "shopify", node: <ShopifyLogo /> },
-    {
-      key: "site",
-      node: (
-        <span className="inline-flex items-center gap-1.5 text-[13px] font-semibold tracking-tight text-[#141414]">
-          <Globe className="size-3.5" />
-          Your site
-        </span>
-      ),
-    },
+    { key: "ebay", node: <EbayMark className="h-[18px]" /> },
+    { key: "amazon", node: <AmazonMark className="h-4" /> },
+    { key: "facebook", node: <FacebookMark className="h-4" /> },
+    { key: "shopify", node: <ShopifyMark className="h-5" /> },
+    { key: "site", node: <SiteMark className="h-5" /> },
   ] as const;
 
   return (
@@ -717,10 +633,10 @@ function WaitingStore({
 function WaitingEbay() {
   return (
     <WaitingStore
-      mark={<EbayWordmark className="text-[32px] leading-none sm:text-[40px]" />}
+      mark={<EbayMark className="h-10 sm:h-12" />}
       header={
         <div className="flex shrink-0 items-center gap-1.5 border-b border-[#e5e5e5] bg-white px-2 py-1">
-          <EbayWordmark className="text-[14px]" />
+          <EbayMark className="h-4" />
           <div className="flex min-w-0 flex-1 overflow-hidden rounded-sm border border-[#ccc]">
             <span className="min-w-0 flex-1 truncate bg-white px-2 py-0.5 text-[10px] text-[#707070]">
               Search for anything
@@ -738,10 +654,10 @@ function WaitingEbay() {
 function WaitingAmazon() {
   return (
     <WaitingStore
-      mark={<AmazonMark className="text-[26px] text-[#131921] sm:text-[32px]" />}
+      mark={<AmazonMark className="h-8 sm:h-10" />}
       header={
         <div className="flex shrink-0 items-center gap-1.5 bg-[#131921] px-2 py-1">
-          <AmazonMark className="text-[13px] text-white" />
+          <AmazonMark invert className="h-4" />
           <div className="flex min-w-0 flex-1 overflow-hidden rounded-sm">
             <span className="min-w-0 flex-1 truncate bg-white px-2 py-0.5 text-[10px] text-[#888]">
               Search Amazon
@@ -759,14 +675,10 @@ function WaitingAmazon() {
 function WaitingFacebook() {
   return (
     <WaitingStore
-      mark={
-        <span className="text-[22px] font-semibold tracking-tight text-[#1877F2] sm:text-[26px]">
-          facebook
-        </span>
-      }
+      mark={<FacebookMark className="h-7 sm:h-8" />}
       header={
         <div className="flex shrink-0 items-center gap-2 border-b border-[#E4E6EB] bg-white px-2 py-1.5">
-          <FacebookLogo />
+          <FacebookFMark className="h-5" />
           <span className="min-w-0 flex-1 truncate text-[12px] font-bold text-[#050505]">
             Marketplace
           </span>
@@ -779,14 +691,10 @@ function WaitingFacebook() {
 function WaitingShopify() {
   return (
     <WaitingStore
-      mark={
-        <span className="text-[22px] font-medium tracking-tight text-[#141414] sm:text-[26px]">
-          Shopify
-        </span>
-      }
+      mark={<ShopifyMark className="h-8 sm:h-10" />}
       header={
         <div className="flex shrink-0 items-center justify-between border-b border-[#e5e5e5] bg-white px-3 py-1.5">
-          <ShopifyLogo />
+          <ShopifyMark className="h-5" />
           <Search className="size-3.5 text-[#6b6b6b]" strokeWidth={1.8} />
         </div>
       }
@@ -797,11 +705,7 @@ function WaitingShopify() {
 function WaitingSite() {
   return (
     <WaitingStore
-      mark={
-        <span className="text-[22px] font-medium tracking-tight text-[#141414] sm:text-[26px]">
-          Your site
-        </span>
-      }
+      mark={<SiteMark className="h-10 sm:h-12" />}
       header={
         <div>
           <div className="flex items-center gap-1.5 border-b border-[#e5e5e5] bg-[#f3f3f3] px-2 py-1">
@@ -862,7 +766,7 @@ function AmazonStorefront({
   return (
     <div className="grid h-full min-h-0 flex-1 grid-rows-[auto_minmax(0,1fr)_auto] bg-white">
       <div className="flex shrink-0 items-center gap-1.5 bg-[#131921] px-2 py-1">
-        <AmazonMark className="text-[13px] text-white" />
+        <AmazonMark invert className="h-4" />
         <div className="flex min-w-0 flex-1 overflow-hidden rounded-sm">
           <span className="hidden shrink-0 bg-[#232F3E] px-1.5 py-0.5 text-[9px] text-white/80 sm:block">
             All
@@ -911,7 +815,7 @@ function FacebookStorefront({
   return (
     <div className="grid h-full min-h-0 flex-1 grid-rows-[auto_minmax(0,1fr)_auto] bg-white">
       <div className="flex shrink-0 items-center gap-2 border-b border-[#E4E6EB] bg-white px-2 py-1.5">
-        <FacebookLogo />
+        <FacebookFMark className="h-5" />
         <span className="min-w-0 flex-1 truncate text-[12px] font-bold text-[#050505]">
           Marketplace
         </span>
@@ -945,7 +849,7 @@ function ShopifyStorefront({
   return (
     <div className="grid h-full min-h-0 flex-1 grid-rows-[auto_minmax(0,1fr)_auto] bg-white">
       <div className="flex shrink-0 items-center justify-between border-b border-[#e5e5e5] bg-white px-3 py-1.5">
-        <ShopifyLogo />
+        <ShopifyMark className="h-5" />
         <div className="flex items-center gap-2 text-[11px] text-[#6b6b6b]">
           <Search className="size-3.5" strokeWidth={1.8} />
           <span className="relative">

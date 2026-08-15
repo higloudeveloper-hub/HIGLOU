@@ -6,19 +6,8 @@ import { Heart, Search, ShoppingCart, Star } from "lucide-react";
 import { displayNameFromEbayUsername } from "@/lib/ebay/store-display-name";
 import { cn } from "@/lib/utils";
 
-export function EbayWordmark({ className }: { className?: string }) {
-  return (
-    <span
-      className={cn("select-none font-bold tracking-tight", className)}
-      aria-label="eBay"
-    >
-      <span style={{ color: "#E53238" }}>e</span>
-      <span style={{ color: "#0064D2" }}>B</span>
-      <span style={{ color: "#F5AF02" }}>a</span>
-      <span style={{ color: "#86B817" }}>y</span>
-    </span>
-  );
-}
+export { EbayMark as EbayWordmark } from "@/components/brand/store-marks";
+import { EbayMark } from "@/components/brand/store-marks";
 
 export function useConnectedEbayStoreName(passed?: string | null) {
   const [connected, setConnected] = useState("");
@@ -92,7 +81,7 @@ export function EbayLivePreview({
       )}
     >
       <div className="flex shrink-0 items-center gap-1.5 border-b border-[#e5e5e5] bg-white px-2 py-1">
-        <EbayWordmark className={tight ? "text-[14px]" : "text-[18px]"} />
+        <EbayMark className={tight ? "h-3.5" : "h-4"} />
         {tight ? (
           <div className="flex min-w-0 flex-1 overflow-hidden rounded-sm border border-[#ccc]">
             <span className="min-w-0 flex-1 truncate bg-white px-2 py-0.5 text-[10px] text-[#707070]">

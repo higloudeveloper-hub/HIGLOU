@@ -4,21 +4,8 @@ import { useEffect, useState } from "react";
 import { motion } from "motion/react";
 import { usePrefersReducedMotion } from "@/components/listing/wizard/use-prefers-reduced-motion";
 import { LiveDot } from "@/components/ui/studio";
+import { EbayMark } from "@/components/brand/store-marks";
 import { cn } from "@/lib/utils";
-
-function EbayMark({ className }: { className?: string }) {
-  return (
-    <span
-      className={cn("select-none font-bold tracking-tight", className)}
-      aria-label="eBay"
-    >
-      <span style={{ color: "#E53238" }}>e</span>
-      <span style={{ color: "#0064D2" }}>B</span>
-      <span style={{ color: "#F5AF02" }}>a</span>
-      <span style={{ color: "#86B817" }}>y</span>
-    </span>
-  );
-}
 
 function SignalBars({
   strength,
@@ -144,7 +131,7 @@ export function StoreLinkLive({
           </span>
           <FiberBar live={live} pinging={pinging} reduce={reduce} />
           <span className="rounded-full bg-white px-2.5 py-1 text-[13px] leading-none">
-            <EbayMark className="text-[13px]" />
+            <EbayMark className="h-3.5" />
           </span>
         </div>
 

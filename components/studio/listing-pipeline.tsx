@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { Check, Globe, MousePointer2 } from "lucide-react";
 import { usePrefersReducedMotion } from "@/components/listing/wizard/use-prefers-reduced-motion";
@@ -28,8 +28,21 @@ const BEATS = [
   { id: "facebook", ms: 520 },
   { id: "shopify", ms: 520 },
   { id: "web", ms: 520 },
-  { id: "hold", ms: 2800 },
+  { id: "sales", ms: 1800 },
+  { id: "hold", ms: 2600 },
 ] as const;
+
+const SALES_DOLLARS = [0, 0, 0, 189, 378, 567, 945, 1323, 1890, 2268] as const;
+const SALES_LINE =
+  "M0 36 C40 35 70 34 96 32 C130 29 150 24 176 18 C204 11 230 7 256 4 C284 1 304 1 320 1";
+
+function salesProgress(beat: number) {
+  if (beat < 2) return 0.06;
+  if (beat === 2) return 0.2;
+  if (beat <= 7) return 0.2 + (beat - 2) * 0.1;
+  if (beat === 8) return 0.92;
+  return 1;
+}
 
 function useTyped(text: string, on: boolean, reduce: boolean) {
   const [out, setOut] = useState(reduce || !on ? text : "");
@@ -77,6 +90,34 @@ function useCountUp(target: number, on: boolean, reduce: boolean) {
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
   }, [target, on, reduce]);
+  return n;
+}
+
+function useCountToward(target: number, reduce: boolean) {
+  const [n, setN] = useState(reduce ? target : 0);
+  const current = useRef(reduce ? target : 0);
+
+  useEffect(() => {
+    if (reduce) {
+      current.current = target;
+      setN(target);
+      return;
+    }
+    const from = current.current;
+    const start = performance.now();
+    const dur = 520;
+    let raf = 0;
+    const tick = (now: number) => {
+      const t = Math.min(1, (now - start) / dur);
+      const val = Math.round(from + (target - from) * (1 - (1 - t) ** 3));
+      current.current = val;
+      setN(val);
+      if (t < 1) raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [target, reduce]);
+
   return n;
 }
 
@@ -202,6 +243,75 @@ function LivePill({ on, label }: { on: boolean; label: string }) {
   );
 }
 
+function SalesStrip({
+  beat,
+  dollars,
+  reduce,
+}: {
+  beat: number;
+  dollars: number;
+  reduce: boolean;
+}) {
+  const progress = reduce ? 1 : salesProgress(beat);
+  const click1 = beat >= 0;
+  const click2 = beat >= 2;
+  const climbing = beat >= 3;
+
+  return (
+    <div className="flex h-[52px] shrink-0 items-center gap-3 border-t border-[#e5e5e5] bg-white px-3 sm:gap-4 sm:px-4">
+      <div className="flex shrink-0 items-center gap-1.5">
+        <span
+          className={cn(
+            "grid size-5 place-items-center rounded text-[10px] font-semibold",
+            click1 ? "bg-[#141414] text-white" : "bg-[#eee] text-[#bbb]",
+          )}
+        >
+          1
+        </span>
+        <span className="text-[11px] text-[#ccc]">→</span>
+        <span
+          className={cn(
+            "grid size-5 place-items-center rounded text-[10px] font-semibold",
+            click2 ? "bg-[#141414] text-white" : "bg-[#eee] text-[#bbb]",
+          )}
+        >
+          2
+        </span>
+        <span className="hidden text-[11px] text-[#707070] sm:inline">clicks</span>
+      </div>
+
+      <svg
+        viewBox="0 0 320 40"
+        className="h-8 min-w-0 flex-1"
+        preserveAspectRatio="none"
+        aria-hidden
+      >
+        <path d={`${SALES_LINE} L320 40 L0 40 Z`} fill="#008060" opacity={0.08} />
+        <motion.path
+          d={SALES_LINE}
+          fill="none"
+          stroke="#141414"
+          strokeWidth="1.75"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          initial={false}
+          animate={{ pathLength: progress }}
+          transition={{ duration: reduce ? 0 : 0.7, ease: "easeOut" }}
+        />
+      </svg>
+
+      <div className="w-[92px] shrink-0 text-right sm:w-[108px]">
+        <p className="text-[15px] font-semibold tabular-nums tracking-tight text-[#141414]">
+          ${dollars.toLocaleString("en-US")}
+        </p>
+        <p className="text-[11px] text-[#707070]">
+          {climbing ? "sales up" : "after publish"}
+        </p>
+      </div>
+    </div>
+  );
+}
+
 export function ListingPipeline({
   storeName,
   compact = false,
@@ -216,6 +326,10 @@ export function ListingPipeline({
   const shop = useConnectedEbayStoreName(storeName);
   const typing = useTyped(SAMPLE_TITLE, beat >= 1, reduce);
   const price = useCountUp(PRICE, beat >= 1, reduce);
+  const sales = useCountToward(
+    SALES_DOLLARS[Math.min(beat, SALES_DOLLARS.length - 1)] ?? 0,
+    reduce,
+  );
 
   const photosOn = beat >= 0;
   const draftOn = beat >= 1;
@@ -415,6 +529,8 @@ export function ListingPipeline({
           </div>
         </ChannelShell>
       </div>
+
+      <SalesStrip beat={beat} dollars={sales} reduce={reduce} />
     </section>
   );
 }

@@ -385,7 +385,10 @@ function CenterLine({
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: -6 }}
           transition={{ duration: 0.34, ease: [0.22, 1, 0.36, 1] }}
-          className="relative max-w-[440px] text-center"
+          className={cn(
+            "relative max-w-[320px] text-center sm:max-w-[360px]",
+            stamp ? "" : "bg-white px-5 py-3 ring-1 ring-[#e5e5e5]",
+          )}
         >
           {mark ? (
             <div className="mb-2 flex justify-center">

@@ -481,10 +481,14 @@ function CenterLine({
       <AnimatePresence mode="wait">
         <motion.div
           key={stepKey}
-          initial={{ opacity: 0, y: stamp ? 18 : 10, scale: 0.94 }}
-          animate={{ opacity: 1, y: 0, scale: 1 }}
+          initial={{ opacity: 0, y: stamp ? 22 : 10, scale: stamp ? 0.72 : 0.94 }}
+          animate={{ opacity: 1, y: 0, scale: stamp ? 1.04 : 1 }}
           exit={{ opacity: 0, y: -10, scale: 0.98 }}
-          transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
+          transition={
+            stamp
+              ? { type: "spring", stiffness: 320, damping: 18 }
+              : { duration: 0.32, ease: [0.22, 1, 0.36, 1] }
+          }
           className={cn(
             "relative max-w-[560px] text-center",
             stamp
@@ -595,16 +599,18 @@ function FlyClone({
         x: "-50%",
         y: "-50%",
         rotate: -8,
+        scale: 1,
       }}
       animate={{
-        left: `${toX}%`,
-        top: `${toY}%`,
-        width: 36,
-        height: 36,
-        opacity: 0,
-        rotate: 0,
+        left: [`${fromX}%`, `${fromX + (toX - fromX) * 0.42}%`, `${toX}%`],
+        top: [`${fromY}%`, `${Math.min(fromY, toY) - 10}%`, `${toY}%`],
+        width: [size, size + 8, 36],
+        height: [size, size + 8, 36],
+        opacity: [1, 1, 0],
+        rotate: [-8, 6, 0],
+        scale: [1, 1.12, 0.4],
       }}
-      transition={{ duration: 0.72, ease: [0.16, 1, 0.3, 1] }}
+      transition={{ duration: 0.78, times: [0, 0.32, 1], ease: [0.16, 1, 0.3, 1] }}
     >
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img src={src} alt="" className="size-full object-contain p-0.5" />
@@ -624,31 +630,38 @@ function CompressBundle({
   return (
     <motion.div
       className="pointer-events-none absolute z-30"
-      initial={{ left: "18%", top: "9%", scale: 0.28, opacity: 0, x: "-50%", y: "-50%", rotate: -12 }}
+      initial={{ left: "18%", top: "9%", scale: 0.22, opacity: 0, x: "-50%", y: "-50%", rotate: -16 }}
       animate={
         packed
-          ? { left: "50%", top: "50%", scale: 0.78, opacity: 0.42, rotate: 0 }
+          ? { left: "50%", top: "50%", scale: 0.72, opacity: 0.32, rotate: 0 }
           : { left: "50%", top: "50%", scale: 1, opacity: 1, rotate: -3 }
       }
-      transition={{ type: "spring", stiffness: 160, damping: 18 }}
+      transition={{ type: "spring", stiffness: 170, damping: 15 }}
     >
       {extras.slice(1, 3).map((shot, i) => (
-        <div
+        <motion.div
           key={shot}
-          className="absolute overflow-hidden rounded-[3px] bg-white p-1 pb-5 shadow-[0_16px_32px_-16px_rgba(0,0,0,0.4)] ring-1 ring-black/10"
-          style={{
-            width: 128,
-            height: 156,
-            left: (i + 1) * 10,
-            top: (i + 1) * -8,
-            rotate: `${(i + 1) * 6}deg`,
+          className="absolute overflow-hidden rounded-[3px] bg-white p-1 pb-5 shadow-[0_20px_40px_-14px_rgba(0,0,0,0.45)] ring-1 ring-black/10"
+          initial={{
+            left: i === 0 ? -78 : 96,
+            top: 48,
+            rotate: i === 0 ? -22 : 22,
+            opacity: 0,
           }}
+          animate={{
+            left: packed ? (i === 0 ? -6 : 26) : (i + 1) * 11,
+            top: packed ? (i + 1) * -5 : (i + 1) * -10,
+            rotate: packed ? (i === 0 ? -3 : 7) : (i + 1) * 7,
+            opacity: packed ? 0.15 : 1,
+          }}
+          transition={{ type: "spring", stiffness: 220, damping: 16, delay: packed ? 0 : 0.1 + i * 0.12 }}
+          style={{ width: 128, height: 156 }}
         >
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={shot} alt="" className="size-full object-contain" />
-        </div>
+        </motion.div>
       ))}
-      <div className="relative h-[176px] w-[142px] overflow-hidden rounded-[4px] bg-white p-2 pb-8 shadow-[0_32px_60px_-18px_rgba(0,0,0,0.5)] ring-1 ring-black/10">
+      <div className="relative h-[176px] w-[142px] overflow-hidden rounded-[4px] bg-white p-2 pb-8 shadow-[0_40px_70px_-16px_rgba(0,0,0,0.55)] ring-1 ring-black/10">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src={src} alt="" className="size-full object-contain" />
       </div>
@@ -669,47 +682,52 @@ function FallPacket({
   delay: number;
   hopKey: string;
 }) {
-  const midX = 50 + (toX - 50) * 0.38;
-  const midY = Math.min(toY, 46) - 18;
-  const spin = toX >= 50 ? 16 : -14;
+  const midX = 50 + (toX - 50) * 0.46;
+  const midY = Math.min(toY, 38) - 22;
+  const spin = toX >= 50 ? 22 : -20;
 
   return (
     <motion.div
       key={hopKey}
-      className="pointer-events-none absolute z-40 overflow-hidden rounded-[3px] bg-white p-1 pb-5 shadow-[0_28px_50px_-14px_rgba(0,0,0,0.48)] ring-1 ring-black/10"
+      className="pointer-events-none absolute z-40"
       initial={{
         left: "50%",
         top: "50%",
-        width: 128,
-        height: 158,
         opacity: 0,
         x: "-50%",
         y: "-50%",
-        rotate: -8,
-        scale: 0.35,
+        rotate: -10,
+        scale: 0.28,
       }}
       animate={{
         left: ["50%", `${midX}%`, `${toX}%`],
         top: ["50%", `${midY}%`, `${toY}%`],
-        width: [128, 112, 40],
-        height: [158, 138, 50],
         opacity: [0, 1, 1, 0],
-        rotate: [-8, spin * 0.35, spin],
-        scale: [0.35, 1.04, 0.22],
+        rotate: [-10, spin * 0.4, spin],
+        scale: [0.28, 1.08, 0.18],
       }}
       transition={{
         delay,
-        duration: 0.98,
-        times: [0, 0.26, 1],
+        duration: 1.05,
+        times: [0, 0.24, 1],
         ease: [
           [0.16, 1, 0.3, 1],
-          [0.48, 0.04, 0.88, 0.32],
+          [0.55, 0.02, 0.9, 0.28],
         ],
-        opacity: { delay, duration: 0.98, times: [0, 0.08, 0.78, 1] },
+        opacity: { delay, duration: 1.05, times: [0, 0.07, 0.8, 1] },
       }}
     >
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src={src} alt="" className="size-full object-contain" />
+      <motion.span
+        aria-hidden
+        className="absolute top-full left-1/2 mt-2 h-2 w-[72px] -translate-x-1/2 rounded-full bg-black/30 blur-[6px]"
+        initial={{ opacity: 0, scaleX: 0.4 }}
+        animate={{ opacity: [0, 0.45, 0], scaleX: [0.4, 1.25, 0.25] }}
+        transition={{ delay, duration: 1.05, times: [0, 0.24, 1] }}
+      />
+      <div className="h-[158px] w-[128px] overflow-hidden rounded-[3px] bg-white p-1 pb-5 shadow-[0_36px_60px_-12px_rgba(0,0,0,0.52)] ring-1 ring-black/10">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={src} alt="" className="size-full object-contain" />
+      </div>
     </motion.div>
   );
 }
@@ -745,14 +763,24 @@ function ChannelShell({
       {children}
       <AnimatePresence>
         {live ? (
-          <motion.span
-            key="flash"
-            initial={{ opacity: 0.45 }}
-            animate={{ opacity: 0 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.65, ease: "easeOut" }}
-            className="pointer-events-none absolute inset-0 bg-white"
-          />
+          <>
+            <motion.span
+              key="flash"
+              initial={{ opacity: 0.55 }}
+              animate={{ opacity: 0 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.7, ease: "easeOut" }}
+              className="pointer-events-none absolute inset-0 z-20 bg-white"
+            />
+            <motion.span
+              key="ring"
+              initial={{ scale: 0.82, opacity: 0.4 }}
+              animate={{ scale: 1.12, opacity: 0 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
+              className="pointer-events-none absolute inset-3 z-20 rounded-md ring-2 ring-[#141414]/30"
+            />
+          </>
         ) : null}
       </AnimatePresence>
     </motion.div>
@@ -1238,7 +1266,7 @@ export function ListingPipeline({
     }
     if (step.id === "dispatch") {
       setLanded(0);
-      const times = [980, 1530, 2080, 2630, 3180];
+      const times = [1050, 1600, 2150, 2700, 3250];
       const timers = times.map((ms, i) =>
         window.setTimeout(() => setLanded(i + 1), ms),
       );
@@ -1319,13 +1347,20 @@ export function ListingPipeline({
         >
           {dragging || fileDrag ? (
             shots.map((_, i) => (
-              <div
+              <motion.div
                 key={`slot-${i}`}
                 data-listing-slot={i === 0 ? "" : undefined}
+                initial={false}
+                animate={
+                  i === 0
+                    ? { scale: 1.08 }
+                    : { scale: 1 }
+                }
+                transition={{ type: "spring", stiffness: 320, damping: 18 }}
                 className={cn(
                   "size-11 rounded-md sm:size-12",
                   i === 0
-                    ? "border-2 border-dashed border-[#141414] bg-[#f7f7f7]"
+                    ? "border-2 border-dashed border-[#141414] bg-[#f7f7f7] shadow-[0_0_0_6px_rgba(20,20,20,0.06)]"
                     : "border border-dashed border-[#d8d8d8] bg-[#fafafa]",
                 )}
               />
@@ -1497,7 +1532,7 @@ export function ListingPipeline({
         className="relative min-h-0 flex-1 origin-top"
         animate={
           packing
-            ? { scale: 0.9, y: 16, opacity: 0.28 }
+            ? { scale: 0.86, y: 20, opacity: 0.22 }
             : { scale: 1, y: 0, opacity: 1 }
         }
         transition={{ type: "spring", stiffness: 240, damping: 22 }}

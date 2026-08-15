@@ -13,39 +13,38 @@ import { cn } from "@/lib/utils";
 
 const CATALOG = [
   {
-    name: "M18 drill",
-    title: "Milwaukee M18 FUEL 1/2 in. Hammer Drill",
-    price: 189,
+    name: "Watch",
+    title: "Automatic Stainless Chronograph — Unworn",
+    price: 1895,
     photos: [
-      "/demo/m18-front.webp",
-      "/demo/m18-label.webp",
-      "/demo/m18-box.webp",
-      "/demo/m18-angle.webp",
+      "/demo/wow-watch.webp",
+      "/demo/wow-watch-dial.webp",
+      "/demo/wow-watch-side.webp",
     ],
   },
   {
-    name: "Kettle",
-    title: "Pinky Up Electric Ceramic Kettle",
-    price: 28,
-    photos: ["/demo/kettle.jpg"],
-  },
-  {
-    name: "Flood light",
-    title: "LED Flood Light 5000K",
-    price: 65,
-    photos: ["/landing/floodlight.png"],
+    name: "Headphones",
+    title: "Wireless Noise Cancelling Headphones",
+    price: 349,
+    photos: ["/demo/wow-headphones.webp"],
   },
   {
     name: "Sneakers",
-    title: "Runner sneakers",
-    price: 120,
-    photos: ["/demo/sneakers.jpg"],
+    title: "Premium Leather Court Sneakers — White",
+    price: 220,
+    photos: ["/demo/wow-sneakers.webp"],
   },
   {
-    name: "Comforter",
-    title: "Queen comforter set",
-    price: 89,
-    photos: ["/demo/bedding.jpg"],
+    name: "Gold",
+    title: "14K Gold Cuban Link Bracelet",
+    price: 2450,
+    photos: ["/demo/wow-gold.webp"],
+  },
+  {
+    name: "Camera",
+    title: "Full-Frame Mirrorless Camera + 50mm",
+    price: 1799,
+    photos: ["/demo/wow-camera.webp"],
   },
 ] as const;
 

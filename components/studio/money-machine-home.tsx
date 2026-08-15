@@ -48,7 +48,7 @@ export function MoneyMachineHome({
           Money machine
         </p>
         <p className="hidden min-w-0 flex-1 truncate text-[13px] text-white/85 sm:block">
-          One click. Sales up.
+          One photo. Five live storefronts.
         </p>
         <NewListingButton tone="on-blue" size="sm" className="shrink-0" />
       </div>

@@ -65,12 +65,12 @@ const STEPS = [
   { id: "photos", ms: 2400, x: 22, y: 8, click: false, label: "Higlou adds shots" },
   { id: "title", ms: 2400, x: 40, y: 8, click: false, label: "Title writes itself" },
   { id: "desc", ms: 2000, x: 40, y: 8, click: false, label: "Description" },
-  { id: "compare", ms: 1800, x: 40, y: 8, click: false, label: "Priced vs sold comps" },
-  { id: "fillEbay", ms: 1200, x: 16, y: 38, click: false, label: "eBay" },
-  { id: "fillAmazon", ms: 1100, x: 50, y: 38, click: false, label: "Amazon" },
-  { id: "fillFacebook", ms: 1100, x: 84, y: 38, click: false, label: "Facebook" },
-  { id: "fillShopify", ms: 1100, x: 24, y: 70, click: false, label: "Shopify" },
-  { id: "fillWeb", ms: 1200, x: 76, y: 70, click: false, label: "Your site" },
+  { id: "compare", ms: 2200, x: 40, y: 8, click: false, label: "Priced vs sold comps" },
+  { id: "fillEbay", ms: 1300, x: 16, y: 38, click: false, label: "eBay" },
+  { id: "fillAmazon", ms: 1200, x: 50, y: 38, click: false, label: "Amazon" },
+  { id: "fillFacebook", ms: 1200, x: 84, y: 38, click: false, label: "Facebook" },
+  { id: "fillShopify", ms: 1200, x: 24, y: 70, click: false, label: "Shopify" },
+  { id: "fillWeb", ms: 1300, x: 76, y: 70, click: false, label: "Your site" },
   { id: "ready", ms: 1100, x: 91, y: 8, click: false, label: "Publish" },
   { id: "publish", ms: 1800, x: 91, y: 8, click: true, label: "Publishing" },
   { id: "ebayLive", ms: 1200, x: 16, y: 38, click: false, label: "Live on eBay" },
@@ -94,6 +94,26 @@ type StepId = (typeof STEPS)[number]["id"];
 function stepIndex(id: StepId) {
   return STEPS.findIndex((s) => s.id === id);
 }
+
+const FILL_FLY: Partial<Record<StepId, { x: number; y: number }>> = {
+  fillEbay: { x: 16, y: 38 },
+  fillAmazon: { x: 50, y: 38 },
+  fillFacebook: { x: 84, y: 38 },
+  fillShopify: { x: 24, y: 70 },
+  fillWeb: { x: 76, y: 70 },
+};
+
+const SALE_TICKET = [
+  "eBay",
+  "Amazon",
+  "eBay",
+  "Shopify",
+  "Amazon",
+  "Facebook",
+  "eBay",
+  "Shopify",
+  "Amazon",
+] as const;
 
 const CURSOR_OFF: ReadonlySet<string> = new Set([
   "drag",
@@ -340,6 +360,47 @@ function DragGhost({
   );
 }
 
+function FlyClone({
+  src,
+  toX,
+  toY,
+  hopKey,
+}: {
+  src: string;
+  toX: number;
+  toY: number;
+  hopKey: string;
+}) {
+  return (
+    <motion.div
+      key={hopKey}
+      className="pointer-events-none absolute z-20 overflow-hidden rounded-md bg-white shadow-[0_24px_48px_-18px_rgba(0,0,0,0.42)] ring-1 ring-black/10"
+      initial={{
+        left: "9%",
+        top: "11%",
+        width: 48,
+        height: 48,
+        opacity: 1,
+        x: "-50%",
+        y: "-50%",
+        rotate: -8,
+      }}
+      animate={{
+        left: `${toX}%`,
+        top: `${toY}%`,
+        width: 36,
+        height: 36,
+        opacity: 0,
+        rotate: 0,
+      }}
+      transition={{ duration: 0.78, ease: [0.16, 1, 0.3, 1] }}
+    >
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={src} alt="" className="size-full object-contain p-0.5" />
+    </motion.div>
+  );
+}
+
 function ChannelShell({
   live,
   filled,
@@ -365,7 +426,7 @@ function ChannelShell({
       transition={{ type: "spring", stiffness: 320, damping: 26 }}
       className={cn(
         "relative flex min-h-0 flex-col overflow-hidden bg-white",
-        focused && "z-10 ring-2 ring-inset ring-[#141414]/25",
+        focused && "z-10 ring-2 ring-inset ring-[#141414]/20 shadow-[0_8px_28px_-18px_rgba(0,0,0,0.35)]",
         className,
       )}
     >
@@ -637,10 +698,12 @@ function moneyLabel(n: number) {
 function SalesStrip({
   dollars,
   sold,
+  unit,
   reduce,
 }: {
   dollars: number;
   sold: number;
+  unit: number;
   reduce: boolean;
 }) {
   const lit =
@@ -649,16 +712,27 @@ function SalesStrip({
       : sold === 0
         ? 0
         : Math.max(2, Math.round((sold / 10) * HOUR_BARS.length));
+  const ticket = sold > 0 ? SALE_TICKET[Math.min(sold - 1, SALE_TICKET.length - 1)] : null;
 
   return (
-    <div className="flex h-14 shrink-0 items-center gap-3 border-t border-[#e5e5e5] bg-white px-3 sm:gap-4 sm:px-4">
-      <div className="w-[72px] shrink-0 sm:w-[84px]">
+    <div className="flex h-16 shrink-0 items-center gap-3 border-t border-[#e5e5e5] bg-white px-3 sm:gap-4 sm:px-4">
+      <div className="w-[108px] shrink-0 sm:w-[128px]">
         <p className="text-[10px] font-medium tracking-[0.14em] text-[#8a8a8a] uppercase">
           Today
         </p>
-        <p className="text-[12px] tabular-nums text-[#565959]">
-          {sold} {sold === 1 ? "order" : "orders"}
-        </p>
+        <AnimatePresence mode="wait">
+          <motion.p
+            key={ticket ?? "idle"}
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -4 }}
+            className="truncate text-[12px] tabular-nums text-[#565959]"
+          >
+            {ticket
+              ? `Sold on ${ticket} · ${moneyLabel(unit)}`
+              : "No sales yet"}
+          </motion.p>
+        </AnimatePresence>
       </div>
 
       <div className="flex h-8 min-w-0 flex-1 items-end gap-[3px]" aria-hidden>
@@ -831,6 +905,17 @@ export function ListingPipeline({
           {beat <= timeline.findIndex((s) => s.id === "drop") ? (
             <DragGhost src={cover} x={step.x} y={step.y} phase={dragPhase} />
           ) : null}
+          {!dropMode && FILL_FLY[step.id] ? (
+            <FlyClone
+              src={cover}
+              toX={FILL_FLY[step.id]!.x}
+              toY={FILL_FLY[step.id]!.y}
+              hopKey={`${sku}-${step.id}`}
+            />
+          ) : null}
+          {is("drag") && !dropMode ? (
+            <div className="pointer-events-none absolute inset-0 z-10 bg-white/45" />
+          ) : null}
           <GuideCursor
             x={is("photos") ? 8 + Math.max(0, filled - 1) * 5.2 : step.x}
             y={step.y}
@@ -906,6 +991,14 @@ export function ListingPipeline({
                       alt=""
                       className="absolute inset-0 size-full object-contain p-0.5"
                     />
+                    {i === 0 && is("photos") ? (
+                      <motion.span
+                        className="pointer-events-none absolute inset-x-0 h-px bg-[#141414]"
+                        initial={{ top: "8%", opacity: 0.55 }}
+                        animate={{ top: "88%", opacity: 0 }}
+                        transition={{ duration: 1.15, ease: "easeInOut" }}
+                      />
+                    ) : null}
                   </>
                 ) : null}
               </motion.div>
@@ -947,13 +1040,14 @@ export function ListingPipeline({
               : priceOn ? (
               <motion.span
                 key="price"
-                initial={{ opacity: 0, y: 5 }}
+                initial={{ opacity: 0, y: 6 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="inline-flex items-center gap-1.5 font-semibold tabular-nums text-[#191919]"
+                className="inline-flex flex-wrap items-center gap-x-2.5 gap-y-0.5 tabular-nums"
               >
-                <span className="font-medium text-[#9b9b9b] line-through">{compsLabel}</span>
-                <span>${price.toFixed(2)}</span>
-                <span className="font-medium text-[#707070]">under sold comps</span>
+                <span className="text-[#8a8a8a]">Sold</span>
+                <span>eBay {compsLabel}</span>
+                <span>Amazon ${Math.round(item.comps * 0.94).toLocaleString("en-US")}</span>
+                <span className="font-semibold text-[#141414]">You ${price.toFixed(0)}</span>
               </motion.span>
             ) : photosOn ? (
               `${filled} of ${shots.length} photos`
@@ -973,11 +1067,13 @@ export function ListingPipeline({
           </p>
         </div>
         {!dropMode ? (
-        <div
+        <motion.div
           className={cn(
             "relative h-10 w-[122px] shrink-0 overflow-hidden rounded-md text-[13px] font-semibold tracking-[-0.01em]",
             readyOn || publishing || liveOn ? "bg-[#ececec] text-white" : "bg-[#ececec] text-[#9b9b9b]",
           )}
+          animate={{ scale: publishing ? [1, 0.96, 1] : 1 }}
+          transition={{ duration: 0.35 }}
         >
           <motion.div
             className="absolute inset-x-0 bottom-0 bg-[#141414]"
@@ -995,7 +1091,7 @@ export function ListingPipeline({
           >
             {publishing ? "Publishing" : liveOn ? "Live" : "Publish"}
           </span>
-        </div>
+        </motion.div>
         ) : null}
       </div>
 
@@ -1133,6 +1229,7 @@ export function ListingPipeline({
       <SalesStrip
         dollars={sales}
         sold={sold}
+        unit={item.price}
         reduce={reduce}
       />
       )}

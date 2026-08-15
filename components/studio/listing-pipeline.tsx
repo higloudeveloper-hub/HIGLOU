@@ -26,35 +26,35 @@ const CATALOG = [
     name: "Headphones",
     title: "Wireless Noise Cancelling Headphones",
     price: 349,
-    photos: ["/demo/wow-headphones.webp"],
+    photos: ["/demo/wow-headphones.webp", "/demo/wow-headphones-side.webp", "/demo/wow-headphones-cup.webp"],
   },
   {
     name: "Sneakers",
     title: "Premium Leather Court Sneakers — White",
     price: 220,
-    photos: ["/demo/wow-sneakers.webp"],
+    photos: ["/demo/wow-sneakers.webp", "/demo/wow-sneakers-pair.webp", "/demo/wow-sneakers-top.webp"],
   },
   {
     name: "Gold",
     title: "14K Gold Cuban Link Bracelet",
     price: 2450,
-    photos: ["/demo/wow-gold.webp"],
+    photos: ["/demo/wow-gold.webp", "/demo/wow-gold-line.webp", "/demo/wow-gold-links.webp"],
   },
   {
     name: "Camera",
     title: "Full-Frame Mirrorless Camera + 50mm",
     price: 1799,
-    photos: ["/demo/wow-camera.webp"],
+    photos: ["/demo/wow-camera.webp", "/demo/wow-camera-back.webp", "/demo/wow-camera-lens.webp"],
   },
 ] as const;
 
 const STEPS = [
-  { id: "grab", ms: 1000, x: 12, y: 86, click: true, label: "One photo" },
-  { id: "drag", ms: 1500, x: 9, y: 11, click: false, label: "Drop here" },
-  { id: "drop", ms: 800, x: 9, y: 11, click: true, label: "In" },
-  { id: "photos", ms: 1700, x: 20, y: 8, click: false, label: "Photos in" },
-  { id: "title", ms: 2000, x: 40, y: 8, click: false, label: "Title written" },
-  { id: "price", ms: 900, x: 40, y: 8, click: false, label: "Priced" },
+  { id: "grab", ms: 1400, x: 14, y: 74, click: true, label: "Grab one photo" },
+  { id: "drag", ms: 2100, x: 9, y: 11, click: false, label: "Drop on listing" },
+  { id: "drop", ms: 1100, x: 9, y: 11, click: true, label: "Photo in" },
+  { id: "photos", ms: 2400, x: 22, y: 8, click: false, label: "Higlou adds shots" },
+  { id: "title", ms: 2600, x: 40, y: 8, click: false, label: "Title writes itself" },
+  { id: "price", ms: 1300, x: 40, y: 8, click: false, label: "Price set" },
   { id: "fillEbay", ms: 1200, x: 16, y: 38, click: true, label: "eBay" },
   { id: "fillAmazon", ms: 1100, x: 50, y: 38, click: true, label: "Amazon" },
   { id: "fillFacebook", ms: 1100, x: 84, y: 38, click: true, label: "Facebook" },
@@ -94,7 +94,7 @@ function useTyped(text: string, on: boolean, reduce: boolean) {
       i += 1;
       setOut(text.slice(0, i));
       if (i >= text.length) window.clearInterval(t);
-    }, 22);
+    }, 32);
     return () => window.clearInterval(t);
   }, [text, on, reduce]);
   return out;
@@ -113,7 +113,7 @@ function useCountUp(target: number, on: boolean, reduce: boolean) {
     }
     setN(0);
     const start = performance.now();
-    const dur = 720;
+    const dur = 980;
     let raf = 0;
     const tick = (now: number) => {
       const t = Math.min(1, (now - start) / dur);
@@ -277,19 +277,25 @@ function DragGhost({
         left: `${x}%`,
         top: `${y}%`,
         opacity: phase === "gone" ? 0 : 1,
-        scale: phase === "drop" ? 0.22 : phase === "grab" ? 1 : 1.06,
-        rotate: phase === "drag" ? -7 : 0,
+        scale: phase === "drop" ? 0.16 : phase === "grab" ? 1 : 1.08,
+        rotate: phase === "grab" ? -4 : phase === "drag" ? -12 : 0,
       }}
-      transition={{ type: "spring", stiffness: 150, damping: 18 }}
+      transition={{
+        type: "spring",
+        stiffness: phase === "drag" ? 78 : 150,
+        damping: phase === "drag" ? 14 : 18,
+      }}
     >
       <div
         className={cn(
-          "relative overflow-hidden rounded-xl bg-white shadow-[0_18px_40px_-16px_rgba(0,0,0,0.45)] ring-1 ring-black/10",
-          holding ? "-translate-x-1/2 -translate-y-[110%] size-28 sm:size-32" : "-translate-x-1/2 -translate-y-1/2 size-14",
+          "relative overflow-hidden bg-white",
+          holding
+            ? "-translate-x-1/2 -translate-y-[108%] h-[148px] w-[118px] rounded-[4px] p-1.5 pb-7 shadow-[0_28px_50px_-18px_rgba(0,0,0,0.45)] ring-1 ring-black/10 sm:h-[168px] sm:w-[132px]"
+            : "-translate-x-1/2 -translate-y-1/2 size-12 rounded-md shadow-[0_10px_24px_-12px_rgba(0,0,0,0.4)] ring-1 ring-black/10",
         )}
       >
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={src} alt="" className="size-full object-contain p-2" />
+        <img src={src} alt="" className="size-full object-contain" />
       </div>
     </motion.div>
   );
@@ -747,7 +753,7 @@ export function ListingPipeline({
       n += 1;
       setFilled(Math.min(shots.length, n));
       if (n >= shots.length) window.clearInterval(t);
-    }, 420);
+    }, 560);
     return () => window.clearInterval(t);
   }, [photoIn, photosOn, reduce, shots.length]);
 
@@ -768,7 +774,7 @@ export function ListingPipeline({
             x={beat === 3 ? 8 + Math.max(0, filled - 1) * 5.2 : step.x}
             y={step.y}
             click={step.click || (beat === 3 && filled > 1)}
-            visible={beat !== 12}
+            visible={beat !== 12 && beat !== 1}
             label={
               beat === 3
                 ? `${filled} of ${shots.length} photos`
@@ -795,10 +801,13 @@ export function ListingPipeline({
                 initial={false}
                 animate={
                   i === 0
-                    ? { scale: [1, 1.06, 1], borderColor: "rgba(20,20,20,0.7)" }
+                    ? {
+                        scale: beat === 1 ? [1, 1.12, 1] : [1, 1.05, 1],
+                        borderColor: beat === 1 ? "rgba(20,20,20,1)" : "rgba(20,20,20,0.7)",
+                      }
                     : { scale: 1 }
                 }
-                transition={i === 0 ? { duration: 1.1, repeat: Infinity } : undefined}
+                transition={i === 0 ? { duration: beat === 1 ? 0.7 : 1.1, repeat: Infinity } : undefined}
                 className={cn(
                   "size-11 rounded-md sm:size-12",
                   i === 0
@@ -810,14 +819,15 @@ export function ListingPipeline({
           ) : (
             shots.map((src, i) => (
               <motion.div
-                key={src}
-                initial={false}
+                key={`${sku}-${src}`}
+                initial={i === 0 ? false : { opacity: 0, scale: 0.45, x: -18 }}
                 animate={{
-                  opacity: i < filled ? 1 : photoIn ? 0.22 : 0,
+                  opacity: i < filled ? 1 : photoIn ? 0.2 : 0,
                   y: i < filled ? 0 : 6,
-                  scale: i < filled ? 1 : 0.94,
+                  scale: i < filled ? 1 : 0.92,
+                  x: i < filled ? 0 : -8,
                 }}
-                transition={{ type: "spring", stiffness: 380, damping: 22 }}
+                transition={{ type: "spring", stiffness: 420, damping: 20 }}
                 className={cn(
                   "relative size-11 overflow-hidden rounded-md bg-[#f7f7f7] sm:size-12",
                   i === filled - 1 && photosOn && filled < shots.length
@@ -846,8 +856,10 @@ export function ListingPipeline({
             {draftOn
               ? typing
               : photosOn
-                ? "Building the listing…"
-                : "Drop a photo. Higlou writes the rest."}
+                ? "Higlou pulls more shots from that photo…"
+                : photoIn
+                  ? "One photo in. Watch this."
+                  : "Drop one photo. Higlou writes the rest."}
             {beat === 4 && typing.length < item.title.length ? (
               <span className="ml-0.5 inline-block h-3 w-px animate-pulse bg-[#191919]" />
             ) : null}
@@ -864,10 +876,13 @@ export function ListingPipeline({
               </motion.span>
             ) : photosOn ? (
               `${filled} of ${shots.length} photos`
+            ) : photoIn ? (
+              "One photo. Higlou does the rest."
             ) : (
-              "One photo. Then one click."
+              "Grab one photo. Drop it on the listing."
             )}
-            {draftOn && !readyOn ? " · writing…" : null}
+            {draftOn && !priceOn ? " · writing the title…" : null}
+            {priceOn && !readyOn ? " · priced" : null}
             {readyOn && !publishing && !liveOn ? " · all stores ready" : null}
             {publishing ? " · publishing…" : null}
             {liveOn && !allLive ? " · going live, store by store" : null}

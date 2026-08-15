@@ -958,6 +958,7 @@ export function ListingPipeline({
   const [beat, setBeat] = useState(0);
   const [sku, setSku] = useState(0);
   const [fileDrag, setFileDrag] = useState(false);
+  const [filled, setFilled] = useState(reduce ? 4 : 0);
   const [landed, setLanded] = useState(0);
   const shop = useConnectedEbayStoreName(storeName);
   const catalog =

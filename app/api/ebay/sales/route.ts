@@ -4,7 +4,7 @@ import {
   getEbayConnectionPublic,
   getValidAccessToken,
 } from "@/lib/ebay/oauth";
-import { syncEbaySalesForUser } from "@/lib/ebay/sales-sync";
+import { emptySalesSnapshot, syncEbaySalesForUser } from "@/lib/ebay/sales-sync";
 
 /** Live eBay sales + reflect sold items onto Higlou products. */
 export async function GET() {
@@ -17,20 +17,7 @@ export async function GET() {
       auth.user.id,
     );
     if (!connection.connected) {
-      return NextResponse.json({
-        connected: false,
-        syncedAt: new Date().toISOString(),
-        orders30d: 0,
-        units30d: 0,
-        revenue30d: 0,
-        ordersToday: 0,
-        revenueToday: 0,
-        matchedToHiglou: 0,
-        unmatchedEbaySales: 0,
-        reflectedThisSync: 0,
-        recent: [],
-        opportunities: [],
-      });
+      return NextResponse.json(emptySalesSnapshot());
     }
 
     const token = await getValidAccessToken(auth.supabase, auth.user.id);
@@ -49,23 +36,11 @@ export async function GET() {
       message,
     );
     return NextResponse.json(
-      {
-        connected: false,
-        syncedAt: new Date().toISOString(),
-        orders30d: 0,
-        units30d: 0,
-        revenue30d: 0,
-        ordersToday: 0,
-        revenueToday: 0,
-        matchedToHiglou: 0,
-        unmatchedEbaySales: 0,
-        reflectedThisSync: 0,
-        recent: [],
-        opportunities: [],
+      emptySalesSnapshot({
         error: needsReconnect
-          ? "Reconnect eBay in Settings so Higlou can read orders."
+          ? "Reconnect eBay in Settings so Higlou can read orders and inventory."
           : message,
-      },
+      }),
       { status: 200 },
     );
   }

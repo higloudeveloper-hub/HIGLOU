@@ -206,11 +206,11 @@ export function ReturningHome({
         </Link>
       </motion.header>
 
+      {ebayConnected ? <EbaySalesPulse /> : null}
+
       <div className="mb-8">
         <ListingPipeline compact storeName={ebayStoreName} />
       </div>
-
-      {ebayConnected ? <EbaySalesPulse /> : null}
 
       {!ebayConnected ? (
         <motion.div

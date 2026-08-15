@@ -23,6 +23,16 @@ export type SalesOpportunity = {
   href?: string;
 };
 
+export type InventoryLine = {
+  sku: string;
+  title: string;
+  qty: number;
+  listingId: string;
+  status: string;
+  price: number | null;
+  higlouProductId: string | null;
+};
+
 export type SalesSnapshot = {
   syncedAt: string;
   connected: boolean;
@@ -34,10 +44,40 @@ export type SalesSnapshot = {
   matchedToHiglou: number;
   unmatchedEbaySales: number;
   reflectedThisSync: number;
+  inventoryLive: number;
+  inventoryUnits: number;
+  inventoryLow: number;
+  inventoryOut: number;
+  inventory: InventoryLine[];
   recent: EbaySaleLine[];
   opportunities: SalesOpportunity[];
   error?: string;
 };
+
+export function emptySalesSnapshot(
+  partial?: Partial<SalesSnapshot>,
+): SalesSnapshot {
+  return {
+    syncedAt: new Date().toISOString(),
+    connected: false,
+    orders30d: 0,
+    units30d: 0,
+    revenue30d: 0,
+    ordersToday: 0,
+    revenueToday: 0,
+    matchedToHiglou: 0,
+    unmatchedEbaySales: 0,
+    reflectedThisSync: 0,
+    inventoryLive: 0,
+    inventoryUnits: 0,
+    inventoryLow: 0,
+    inventoryOut: 0,
+    inventory: [],
+    recent: [],
+    opportunities: [],
+    ...partial,
+  };
+}
 
 type FulfillmentOrder = {
   orderId?: string;
@@ -104,13 +144,83 @@ async function fetchEbayOrders(accessToken: string): Promise<FulfillmentOrder[]>
   return json.orders ?? [];
 }
 
+async function fetchEbayOffers(accessToken: string): Promise<
+  Array<{
+    sku: string;
+    status: string;
+    qty: number;
+    listingId: string;
+    title: string;
+    price: number | null;
+  }>
+> {
+  const cfg = getEbayConfig();
+  const rows: Array<{
+    sku: string;
+    status: string;
+    qty: number;
+    listingId: string;
+    title: string;
+    price: number | null;
+  }> = [];
+
+  for (let offset = 0; offset < 200; offset += 100) {
+    const res = await fetch(
+      `${cfg.apiBase}/sell/inventory/v1/offer?limit=100&offset=${offset}`,
+      {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          Accept: "application/json",
+          "Accept-Language": "en-US",
+          "Content-Language": "en-US",
+          "X-EBAY-C-MARKETPLACE-ID": "EBAY_US",
+        },
+        cache: "no-store",
+      },
+    );
+    const json = (await res.json().catch(() => ({}))) as {
+      total?: number;
+      offers?: Array<{
+        sku?: string;
+        status?: string;
+        availableQuantity?: number;
+        listing?: { listingId?: string; title?: string };
+        pricingSummary?: { price?: { value?: string } };
+      }>;
+    };
+    if (!res.ok) break;
+    const batch = json.offers ?? [];
+    for (const offer of batch) {
+      rows.push({
+        sku: String(offer.sku || "").trim(),
+        status: String(offer.status || "").toUpperCase(),
+        qty: Math.max(0, Number(offer.availableQuantity) || 0),
+        listingId: String(offer.listing?.listingId || "").trim(),
+        title: String(offer.listing?.title || "").trim(),
+        price: Number(offer.pricingSummary?.price?.value) || null,
+      });
+    }
+    if (batch.length < 100) break;
+    if (typeof json.total === "number" && offset + 100 >= json.total) break;
+  }
+  return rows;
+}
+
 export async function syncEbaySalesForUser(
   supabase: SupabaseClient,
   userId: string,
   accessToken: string,
 ): Promise<SalesSnapshot> {
   const syncedAt = new Date().toISOString();
-  const orders = await fetchEbayOrders(accessToken);
+  let orders: FulfillmentOrder[] = [];
+  let orderError: string | undefined;
+  try {
+    orders = await fetchEbayOrders(accessToken);
+  } catch (error) {
+    orderError =
+      error instanceof Error ? error.message : "Could not read eBay orders";
+  }
+  const offers = await fetchEbayOffers(accessToken).catch(() => []);
 
   const { data: productRows } = await supabase
     .from("products")
@@ -267,6 +377,30 @@ export async function syncEbaySalesForUser(
     });
   }
 
+  const inventory: InventoryLine[] = offers
+    .filter((o) => o.status === "PUBLISHED" || o.listingId)
+    .map((o) => {
+      const match =
+        (o.sku ? bySku.get(o.sku.toLowerCase()) : undefined) ||
+        (o.listingId ? byListing.get(o.listingId) : undefined);
+      return {
+        sku: o.sku,
+        title: o.title || match?.title || o.sku || o.listingId || "Listing",
+        qty: o.qty,
+        listingId: o.listingId,
+        status: o.status,
+        price: o.price,
+        higlouProductId: match?.id || null,
+      };
+    })
+    .sort((a, b) => a.qty - b.qty);
+
+  const liveRows = inventory.filter((r) => r.status === "PUBLISHED");
+  const inventoryLive = liveRows.length;
+  const inventoryUnits = liveRows.reduce((sum, r) => sum + r.qty, 0);
+  const inventoryLow = liveRows.filter((r) => r.qty > 0 && r.qty <= 1).length;
+  const inventoryOut = liveRows.filter((r) => r.qty <= 0).length;
+
   return {
     syncedAt,
     connected: true,
@@ -278,9 +412,16 @@ export async function syncEbaySalesForUser(
     matchedToHiglou,
     unmatchedEbaySales,
     reflectedThisSync,
+    inventoryLive,
+    inventoryUnits,
+    inventoryLow,
+    inventoryOut,
+    inventory: inventory.slice(0, 12),
     recent: recent
       .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))
       .slice(0, 8),
     opportunities: opportunities.slice(0, 8),
+    error:
+      orders.length === 0 && offers.length === 0 ? orderError : undefined,
   };
 }

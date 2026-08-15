@@ -28,18 +28,18 @@ const EASE = [0.22, 1, 0.36, 1] as const;
 const GRAVITY = [0.55, 0.05, 0.9, 0.22] as const;
 
 const STEPS = [
-  { id: "grab", ms: 1600, x: 14, y: 74, click: true, label: "Grab one photo" },
-  { id: "drag", ms: 1500, x: 9, y: 11, click: false, label: "Drop on listing" },
-  { id: "drop", ms: 700, x: 9, y: 11, click: true, label: "Photo in" },
-  { id: "photos", ms: 1100, x: 22, y: 8, click: false, label: "Higlou adds shots" },
-  { id: "title", ms: 900, x: 40, y: 8, click: false, label: "Title writes itself" },
-  { id: "desc", ms: 800, x: 40, y: 8, click: false, label: "Description" },
-  { id: "compare", ms: 1000, x: 40, y: 8, click: false, label: "Priced vs sold comps" },
-  { id: "ready", ms: 1600, x: 91, y: 8, click: false, label: "Publish" },
-  { id: "publish", ms: 1500, x: 50, y: 48, click: true, label: "Publishing" },
-  { id: "dispatch", ms: 2800, x: 50, y: 48, click: false, label: "Sending" },
-  { id: "sales", ms: 3600, x: 88, y: 93, click: false, label: "Revenue" },
-  { id: "hold", ms: 2400, x: 88, y: 93, click: false, label: "Next product" },
+  { id: "grab", ms: 1400, x: 14, y: 74, click: true, label: "Grab one photo" },
+  { id: "drag", ms: 1450, x: 9, y: 11, click: false, label: "Drop on listing" },
+  { id: "drop", ms: 820, x: 9, y: 11, click: true, label: "Photo in" },
+  { id: "photos", ms: 1000, x: 22, y: 8, click: false, label: "Higlou adds shots" },
+  { id: "title", ms: 1100, x: 40, y: 8, click: false, label: "Title writes itself" },
+  { id: "desc", ms: 850, x: 40, y: 8, click: false, label: "Description" },
+  { id: "compare", ms: 900, x: 40, y: 8, click: false, label: "Priced vs sold comps" },
+  { id: "ready", ms: 1450, x: 91, y: 8, click: false, label: "Publish" },
+  { id: "publish", ms: 1350, x: 50, y: 48, click: true, label: "Publishing" },
+  { id: "dispatch", ms: 3000, x: 50, y: 48, click: false, label: "Sending" },
+  { id: "sales", ms: 3400, x: 88, y: 93, click: false, label: "Revenue" },
+  { id: "hold", ms: 1900, x: 88, y: 93, click: false, label: "Next product" },
 ] as const;
 
 const DROP_STEPS = [
@@ -108,7 +108,7 @@ function useTyped(text: string, on: boolean, reduce: boolean) {
       i += 1;
       setOut(text.slice(0, i));
       if (i >= text.length) window.clearInterval(t);
-    }, 14);
+    }, 18);
     return () => window.clearInterval(t);
   }, [text, on, reduce]);
   return out;
@@ -221,7 +221,7 @@ function GuideCursor({
         top: `${y}%`,
         opacity: visible ? 1 : 0,
       }}
-      transition={{ type: "spring", stiffness: 260, damping: 24 }}
+      transition={{ type: "spring", stiffness: 300, damping: 28 }}
     >
       <motion.div
         key={clickKey}
@@ -384,7 +384,7 @@ function CenterLine({
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: -6 }}
-          transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
+          transition={{ duration: 0.34, ease: [0.22, 1, 0.36, 1] }}
           className="relative max-w-[440px] text-center"
         >
           {mark ? (
@@ -477,7 +477,7 @@ function CompressBundle({
           ? { left: "50%", top: "48%", scale: 0.82, opacity: 0.28 }
           : { left: "50%", top: "48%", scale: 1, opacity: 1 }
       }
-      transition={{ duration: 0.7, ease: EASE }}
+      transition={{ duration: 0.58, ease: EASE }}
     >
       {extras.slice(1, 3).map((shot, i) => (
         <motion.div
@@ -521,8 +521,8 @@ function FallPacket({
   delay: number;
   hopKey: string;
 }) {
-  const midX = 50 + (toX - 50) * 0.42;
-  const midY = Math.min(toY, 36) - 16;
+  const midX = 50 + (toX - 50) * 0.58;
+  const midY = 48 + (toY - 48) * 0.4;
 
   return (
     <motion.div
@@ -534,20 +534,20 @@ function FallPacket({
         opacity: 0,
         x: "-50%",
         y: "-50%",
-        scale: 0.42,
+        scale: 0.4,
       }}
       animate={{
         left: ["50%", `${midX}%`, `${toX}%`],
         top: ["48%", `${midY}%`, `${toY}%`],
         opacity: [0, 1, 1, 0],
-        scale: [0.42, 1, 0.22],
+        scale: [0.4, 0.96, 0.2],
       }}
       transition={{
         delay,
-        duration: 0.92,
-        times: [0, 0.3, 1],
+        duration: 1,
+        times: [0, 0.36, 1],
         ease: [EASE, GRAVITY],
-        opacity: { delay, duration: 0.92, times: [0, 0.08, 0.84, 1] },
+        opacity: { delay, duration: 1, times: [0, 0.07, 0.86, 1] },
       }}
     >
       <div className="h-[142px] w-[114px] overflow-hidden rounded-[2px] bg-white p-1 pb-4 ring-1 ring-[#e5e5e5]">
@@ -573,8 +573,8 @@ function ChannelShell({
   return (
     <motion.div
       initial={false}
-      animate={{ opacity: dim ? 0.36 : 1 }}
-      transition={{ duration: 0.45, ease: EASE }}
+      animate={{ opacity: dim ? 0.34 : 1 }}
+      transition={{ duration: 0.38, ease: EASE }}
       className={cn(
         "relative flex h-full min-h-0 flex-col overflow-hidden bg-white",
         className,
@@ -716,9 +716,9 @@ function LivePhoto({
         key={src}
         src={src}
         alt=""
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ duration: 0.45, ease: EASE }}
+        initial={{ opacity: 0, scale: 0.97 }}
+        animate={{ opacity: 1, scale: 1 }}
+        transition={{ duration: 0.4, ease: EASE }}
         className="absolute inset-0 size-full object-contain p-1.5"
       />
       {mark ? (
@@ -1213,7 +1213,7 @@ export function ListingPipeline({
       n += 1;
       setFilled(Math.min(shots.length, n));
       if (n >= shots.length) window.clearInterval(t);
-    }, 180);
+    }, 150);
     return () => window.clearInterval(t);
   }, [photoIn, photosOn, reduce, freezeDrop, shots.length, resting]);
 
@@ -1225,7 +1225,7 @@ export function ListingPipeline({
     }
     if (step.id === "dispatch") {
       setLanded(0);
-      const times = [920, 1240, 1560, 1880, 2200];
+      const times = [1000, 1300, 1600, 1900, 2200];
       const timers = times.map((ms, i) =>
         window.setTimeout(() => setLanded(i + 1), ms),
       );
@@ -1270,7 +1270,7 @@ export function ListingPipeline({
                   src={cover}
                   toX={store.x}
                   toY={store.y}
-                  delay={i * 0.32}
+                  delay={i * 0.3}
                   hopKey={`${sku}-fall-${store.name}`}
                 />
               ))
@@ -1472,7 +1472,7 @@ export function ListingPipeline({
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            transition={{ duration: 0.4, ease: EASE }}
+            transition={{ duration: 0.48, ease: EASE }}
             className="h-full min-h-0"
           >
           <AdminLivePanel

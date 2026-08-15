@@ -99,9 +99,9 @@ export function AdminLivePanel({
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 14 }}
+      initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.5, ease: EASE }}
+      transition={{ duration: 0.46, ease: EASE }}
       className="grid h-full min-h-0 grid-rows-[auto_auto_minmax(0,1fr)] bg-white"
     >
       <div className="flex shrink-0 items-center justify-between border-b border-[#e5e5e5] px-3 py-2 sm:px-4">

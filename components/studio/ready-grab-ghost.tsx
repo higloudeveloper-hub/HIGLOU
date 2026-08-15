@@ -75,8 +75,11 @@ export function ReadyGrabGhost({
             rotate: 0,
           }}
           transition={{
-            duration: phase === "drag" ? 1.05 : 0.5,
-            ease: [0.22, 1, 0.36, 1],
+            duration: phase === "drag" ? 0.98 : phase === "drop" ? 0.42 : 0.48,
+            ease:
+              phase === "drag"
+                ? [0.45, 0.05, 0.2, 1]
+                : [0.22, 1, 0.36, 1],
           }}
         >
           <div className="-translate-x-1/2 -translate-y-[108%]">

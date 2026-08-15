@@ -106,7 +106,16 @@ export const READY_LISTINGS: readonly ReadyListing[] = [
   },
 ];
 
-export const STORY_CATALOG = READY_LISTINGS.map((item) => ({
+export type StoryItem = {
+  name: string;
+  title: string;
+  description: string;
+  price: number;
+  comps: number;
+  photos: readonly string[];
+};
+
+export const STORY_CATALOG: StoryItem[] = READY_LISTINGS.map((item) => ({
   name: item.name,
   title: item.title,
   description: item.description,

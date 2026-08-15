@@ -39,13 +39,32 @@ export async function GET() {
       return Number(a.sort_order ?? 0) - Number(b.sort_order ?? 0);
     });
 
+    const photosByProduct = new Map<string, string[]>();
     coverByProduct = new Map();
     for (const img of sorted) {
       const productId = String(img.product_id);
-      const url = String(img.public_url ?? "");
-      if (!url || coverByProduct.has(productId)) continue;
-      coverByProduct.set(productId, url);
+      const url = String(img.public_url ?? "").replace(/[\r\n\t]+/g, "").trim();
+      if (!url) continue;
+      const list = photosByProduct.get(productId) ?? [];
+      if (list.length < 6) {
+        list.push(url);
+        photosByProduct.set(productId, list);
+      }
+      if (!coverByProduct.has(productId)) coverByProduct.set(productId, url);
     }
+
+    return NextResponse.json({
+      products: rows.map((row) => {
+        const product = mapProductRow(row);
+        const photos = photosByProduct.get(String(row.id)) ?? [];
+        return {
+          ...product,
+          coverUrl: coverByProduct.get(String(row.id)) ?? null,
+          photos,
+          photoCount: photos.length,
+        };
+      }),
+    });
   }
 
   return NextResponse.json({
@@ -54,6 +73,8 @@ export async function GET() {
       return {
         ...product,
         coverUrl: coverByProduct.get(String(row.id)) ?? null,
+        photos: [] as string[],
+        photoCount: 0,
       };
     }),
   });

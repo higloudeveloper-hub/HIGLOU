@@ -2,17 +2,20 @@
 
 import { useEffect, useState } from "react";
 import { MoneyMachineHome, type HomeDraft } from "@/components/studio/money-machine-home";
+import type { ReadyListing } from "@/components/studio/ready-catalog";
 
 export function ReturningHome({
   name,
   drafts,
   ebayConnected,
+  readyListings,
 }: {
   name: string | null;
   listingCount: number;
   drafts: HomeDraft[];
   exportsList: unknown[];
   ebayConnected: boolean;
+  readyListings?: ReadyListing[];
 }) {
   const [storeName, setStoreName] = useState<string | null>(null);
 
@@ -34,6 +37,7 @@ export function ReturningHome({
       name={name}
       storeName={storeName}
       drafts={drafts}
+      readyListings={readyListings}
       ebayConnected={ebayConnected}
     />
   );

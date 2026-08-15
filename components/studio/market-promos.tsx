@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 import Link from "next/link";
-import { READY_LISTINGS } from "@/components/studio/ready-catalog";
+import { READY_LISTINGS, type ReadyListing } from "@/components/studio/ready-catalog";
 import { cn } from "@/lib/utils";
 
 function money(n: number) {
@@ -13,18 +13,22 @@ function money(n: number) {
   }).format(n);
 }
 
-const OPEN_SPREAD = READY_LISTINGS.reduce(
-  (sum, item) => sum + (item.sell - item.buy),
-  0,
-);
+export function MarketPromos({
+  activeIndex = -1,
+  listings = READY_LISTINGS,
+}: {
+  activeIndex?: number;
+  listings?: readonly ReadyListing[];
+}) {
+  const lots = listings.length || 1;
+  const openSpread = listings.reduce((sum, item) => sum + (item.sell - item.buy), 0);
 
-export function MarketPromos({ activeIndex = -1 }: { activeIndex?: number }) {
   useEffect(() => {
     if (activeIndex < 0) return;
     document
-      .querySelector(`[data-ready-sku="${activeIndex % READY_LISTINGS.length}"]`)
+      .querySelector(`[data-ready-sku="${activeIndex % lots}"]`)
       ?.scrollIntoView({ block: "nearest", behavior: "smooth" });
-  }, [activeIndex]);
+  }, [activeIndex, lots]);
 
   return (
     <div>
@@ -34,26 +38,25 @@ export function MarketPromos({ activeIndex = -1 }: { activeIndex?: number }) {
             Open spread
           </p>
           <p className="mt-0.5 text-[20px] font-medium tabular-nums tracking-tight text-[#141414]">
-            {money(OPEN_SPREAD)}
+            {money(openSpread)}
           </p>
         </div>
         <p className="pb-0.5 text-right text-[12px] leading-snug text-[#707070]">
-          {READY_LISTINGS.length} lots
+          {listings.length} lots
           <br />
           after supplier cost
         </p>
       </div>
 
       <div className="grid grid-cols-2 gap-3">
-        {READY_LISTINGS.map((item, i) => {
+        {listings.map((item, i) => {
           const profit = item.sell - item.buy;
           const margin = Math.round((profit / item.sell) * 100);
           const undercut = item.comps - item.sell;
-          const active =
-            activeIndex >= 0 && i === activeIndex % READY_LISTINGS.length;
+          const active = activeIndex >= 0 && i === activeIndex % lots;
           return (
             <Link
-              key={item.title}
+              key={`${i}-${item.title}`}
               href="/listings/new"
               className={cn(
                 "group block overflow-hidden rounded-[18px] bg-white shadow-[0_1px_3px_rgba(15,17,17,0.08),0_8px_24px_-14px_rgba(15,17,17,0.18)] transition duration-200",

@@ -9,6 +9,11 @@ import { NewListingButton } from "@/components/brand/new-listing-button";
 import { HomeWallet } from "@/components/studio/home-wallet";
 import { ReadyGrabGhost } from "@/components/studio/ready-grab-ghost";
 import { formatRelativeTime } from "@/lib/format-relative-time";
+import {
+  READY_LISTINGS,
+  type ReadyListing,
+  type StoryItem,
+} from "@/components/studio/ready-catalog";
 
 export type HomeDraft = {
   id: string;
@@ -32,6 +37,7 @@ function statusLabel(status?: string) {
 export function MoneyMachineHome({
   storeName,
   drafts = [],
+  readyListings,
 }: {
   name?: string | null;
   storeName?: string | null;
@@ -39,7 +45,18 @@ export function MoneyMachineHome({
   ebayConnected?: boolean;
   setupHref?: string | null;
   drafts?: HomeDraft[];
+  readyListings?: ReadyListing[];
 }) {
+  const listings =
+    readyListings && readyListings.length > 0 ? readyListings : READY_LISTINGS;
+  const storyCatalog: StoryItem[] = listings.map((item) => ({
+    name: item.name,
+    title: item.title,
+    description: item.description,
+    price: item.sell,
+    comps: item.comps,
+    photos: item.photos,
+  }));
   const [wallet, setWallet] = useState(0);
   const [story, setStory] = useState<{
     sku: number;
@@ -67,6 +84,7 @@ export function MoneyMachineHome({
       <div className="relative grid min-h-0 flex-1 lg:grid-cols-[minmax(0,1.05fr)_minmax(420px,0.95fr)]">
         <ListingPipeline
           storeName={storeName}
+          catalogItems={storyCatalog}
           onWallet={setWallet}
           onStory={setStory}
         />
@@ -90,7 +108,7 @@ export function MoneyMachineHome({
             </Link>
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-4">
-            <MarketPromos activeIndex={story.sku} />
+            <MarketPromos activeIndex={story.sku} listings={listings} />
             {drafts.length > 0 ? (
               <div className="mt-6">
                 <div className="mb-3 flex items-center justify-between">

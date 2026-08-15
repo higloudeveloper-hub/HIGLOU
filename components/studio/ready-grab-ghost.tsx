@@ -3,7 +3,6 @@
 import { useLayoutEffect, useRef, useState } from "react";
 import { motion } from "motion/react";
 import { MousePointer2 } from "lucide-react";
-import { READY_LISTINGS } from "@/components/studio/ready-catalog";
 
 export function ReadyGrabGhost({
   sku,
@@ -24,7 +23,9 @@ export function ReadyGrabGhost({
 
     const place = () => {
       const box = overlay.getBoundingClientRect();
-      const index = ((sku % READY_LISTINGS.length) + READY_LISTINGS.length) % READY_LISTINGS.length;
+      const cards = document.querySelectorAll("[data-ready-sku]");
+      const count = cards.length || 1;
+      const index = ((sku % count) + count) % count;
       const card = document.querySelector<HTMLElement>(
         `[data-ready-sku="${index}"]`,
       );

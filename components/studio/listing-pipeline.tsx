@@ -10,7 +10,7 @@ import {
   useConnectedEbayStoreName,
 } from "@/components/studio/ebay-live-preview";
 import { cn } from "@/lib/utils";
-import { STORY_CATALOG } from "@/components/studio/ready-catalog";
+import { STORY_CATALOG, type StoryItem } from "@/components/studio/ready-catalog";
 
 const CATALOG = STORY_CATALOG;
 
@@ -1097,6 +1097,7 @@ export function ListingPipeline({
   className,
   photos,
   mode = "story",
+  catalogItems,
   onWallet,
   onStory,
 }: {
@@ -1105,6 +1106,7 @@ export function ListingPipeline({
   className?: string;
   photos?: string[] | null;
   mode?: "story" | "drop";
+  catalogItems?: StoryItem[];
   onWallet?: (available: number) => void;
   onStory?: (story: {
     sku: number;
@@ -1123,6 +1125,8 @@ export function ListingPipeline({
   const [filled, setFilled] = useState(reduce ? 4 : 0);
   const [landed, setLanded] = useState(0);
   const shop = useConnectedEbayStoreName(storeName);
+  const storyCatalog =
+    catalogItems && catalogItems.length > 0 ? catalogItems : CATALOG;
   const catalog =
     hasUserPhotos
       ? [
@@ -1135,10 +1139,10 @@ export function ListingPipeline({
             photos: (photos ?? []).slice(0, 4),
           },
         ]
-      : CATALOG;
-  const item = catalog[sku % catalog.length] ?? CATALOG[0];
+      : storyCatalog;
+  const item = catalog[sku % catalog.length] ?? storyCatalog[0] ?? CATALOG[0];
   const shots = [...item.photos];
-  const cover = shots[0] || CATALOG[0].photos[0];
+  const cover = shots[0] || storyCatalog[0]?.photos[0] || CATALOG[0].photos[0];
   const slug = item.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
   const sold = dropMode ? 0 : ordersAt(beat);
   const money = sold * item.price;
@@ -1223,8 +1227,8 @@ export function ListingPipeline({
       onStory?.({ sku: 0, phase: "gone", cover });
       return;
     }
-    onStory?.({ sku: sku % CATALOG.length, phase: dragPhase, cover });
-  }, [dropMode, sku, dragPhase, cover, onStory]);
+    onStory?.({ sku: sku % catalog.length, phase: dragPhase, cover });
+  }, [dropMode, sku, dragPhase, cover, onStory, catalog.length]);
 
   useEffect(() => {
     if (!dropMode || freezeDrop) {

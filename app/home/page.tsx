@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 import { FirstRunHome } from "@/components/studio/first-run-home";
 import { ReturningHome } from "@/components/studio/returning-home";
 import { WelcomeGate } from "@/components/studio/welcome-gate";
+import { pickBestReadyListings } from "@/lib/studio/ready-from-products";
 
 type ProductRow = {
   id: string;
@@ -15,6 +16,12 @@ type ProductRow = {
   updatedAt: string;
   coverUrl?: string | null;
   categoryName?: string | null;
+  price?: number | null;
+  descriptionSummary?: string | null;
+  descriptionHtml?: string | null;
+  itemLocation?: string | null;
+  handlingTime?: number | null;
+  photos?: string[] | null;
 };
 
 type CsvRow = {
@@ -156,6 +163,10 @@ export default function HomeWorkspacePage() {
         .slice(0, 8),
     [products],
   );
+  const readyListings = useMemo(
+    () => pickBestReadyListings(products, 5),
+    [products],
+  );
 
   const setupItems = [
     {
@@ -201,6 +212,7 @@ export default function HomeWorkspacePage() {
             name={name}
             listingCount={products.length}
             drafts={drafts}
+            readyListings={readyListings}
             exportsList={exportsList}
             ebayConnected={setup.ebayConnected}
           />

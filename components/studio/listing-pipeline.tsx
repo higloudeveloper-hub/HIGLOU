@@ -20,33 +20,6 @@ import {
 import { cn } from "@/lib/utils";
 import { STORY_CATALOG, type StoryItem } from "@/components/studio/ready-catalog";
 
-const STORY_SEEN = "higlou-home-story-seen";
-
-function storyAlreadySeen() {
-  if (typeof window === "undefined") return false;
-  try {
-    return sessionStorage.getItem(STORY_SEEN) === "1";
-  } catch {
-    return false;
-  }
-}
-
-function markStorySeen() {
-  try {
-    sessionStorage.setItem(STORY_SEEN, "1");
-  } catch {
-    /* private mode */
-  }
-}
-
-function clearStorySeen() {
-  try {
-    sessionStorage.removeItem(STORY_SEEN);
-  } catch {
-    /* private mode */
-  }
-}
-
 const CATALOG = STORY_CATALOG;
 
 const EASE = [0.22, 1, 0.36, 1] as const;
@@ -1029,12 +1002,12 @@ export function ListingPipeline({
   const hasUserPhotos = Boolean(photos && photos.length > 0);
   const freezeDrop = dropMode && hasUserPhotos;
   const timeline = dropMode ? DROP_STEPS : STEPS;
-  const [beat, setBeat] = useState(() => (storyAlreadySeen() ? stepIndex("sales") : 0));
+  const [beat, setBeat] = useState(0);
   const [sku, setSku] = useState(0);
   const [fileDrag, setFileDrag] = useState(false);
-  const [filled, setFilled] = useState(reduce || storyAlreadySeen() ? 8 : 0);
-  const [landed, setLanded] = useState(() => (storyAlreadySeen() ? 5 : 0));
-  const [resting, setResting] = useState(() => storyAlreadySeen());
+  const [filled, setFilled] = useState(0);
+  const [landed, setLanded] = useState(0);
+  const [resting, setResting] = useState(false);
   const [runId, setRunId] = useState(0);
   const skuRef = useRef(0);
   const shop = useConnectedEbayStoreName(storeName);
@@ -1182,7 +1155,6 @@ export function ListingPipeline({
       setBeat(stepIndex("sales"));
       setLanded(5);
       setResting(true);
-      markStorySeen();
     };
     const loop = () => {
       id = window.setTimeout(() => {
@@ -1252,7 +1224,6 @@ export function ListingPipeline({
   }, [dropMode, reduce, step.id, sku, resting]);
 
   const replayStory = () => {
-    clearStorySeen();
     setSku(0);
     setBeat(0);
     setLanded(0);
@@ -1420,6 +1391,15 @@ export function ListingPipeline({
             </p>
           ) : null}
         </div>
+        {!dropMode && resting ? (
+          <button
+            type="button"
+            onClick={replayStory}
+            className="shrink-0 text-[13px] font-medium text-[#3665F3]"
+          >
+            Watch again
+          </button>
+        ) : null}
         {!dropMode ? (
         <motion.div
           className={cn(

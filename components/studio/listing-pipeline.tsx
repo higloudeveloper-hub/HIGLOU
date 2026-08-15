@@ -4,7 +4,6 @@ import { useEffect, useState, type ReactNode } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { Check, Globe, Loader2 } from "lucide-react";
 import { usePrefersReducedMotion } from "@/components/listing/wizard/use-prefers-reduced-motion";
-import { LiveDot } from "@/components/ui/studio";
 import {
   EbayWordmark,
   useConnectedEbayStoreName,
@@ -20,14 +19,14 @@ const SAMPLE_PHOTOS = [
 ] as const;
 
 const BEATS = [
-  { id: "photos", ms: 1800 },
-  { id: "draft", ms: 2200 },
-  { id: "click", ms: 1000 },
-  { id: "ebay", ms: 720 },
-  { id: "amazon", ms: 720 },
-  { id: "facebook", ms: 720 },
-  { id: "web", ms: 720 },
-  { id: "hold", ms: 2400 },
+  { id: "photos", ms: 1600 },
+  { id: "draft", ms: 2000 },
+  { id: "click", ms: 900 },
+  { id: "ebay", ms: 650 },
+  { id: "amazon", ms: 650 },
+  { id: "facebook", ms: 650 },
+  { id: "web", ms: 650 },
+  { id: "hold", ms: 2600 },
 ] as const;
 
 function useTyped(text: string, on: boolean, reduce: boolean) {
@@ -47,7 +46,7 @@ function useTyped(text: string, on: boolean, reduce: boolean) {
       i += 1;
       setOut(text.slice(0, i));
       if (i >= text.length) window.clearInterval(t);
-    }, 22);
+    }, 20);
     return () => window.clearInterval(t);
   }, [text, on, reduce]);
   return out;
@@ -80,16 +79,13 @@ function ChannelShell({
     <motion.div
       initial={false}
       animate={{
-        opacity: live ? 1 : 0.38,
-        y: live ? 0 : 10,
-        scale: live ? 1 : 0.98,
+        opacity: live ? 1 : 0.42,
+        y: live ? 0 : 8,
       }}
       transition={{ type: "spring", stiffness: 280, damping: 24 }}
       className={cn(
-        "flex h-full min-h-0 flex-col overflow-hidden rounded-xl bg-white ring-1",
-        live
-          ? "shadow-[0_12px_28px_-18px_rgba(0,0,0,0.45)] ring-black/10"
-          : "ring-[#e5e5e5]",
+        "flex min-h-0 flex-col overflow-hidden bg-white",
+        live ? "shadow-[0_16px_40px_-28px_rgba(0,0,0,0.45)]" : "",
       )}
     >
       {children}
@@ -97,27 +93,27 @@ function ChannelShell({
   );
 }
 
-function ProductShot({ live, className }: { live: boolean; className?: string }) {
+function ProductShot({ live }: { live: boolean }) {
   return (
-    <div className={cn("relative bg-white", className)}>
+    <div className="relative min-h-0 flex-1 bg-white">
       <AnimatePresence mode="wait">
         {live ? (
           <motion.img
             key="in"
             src={SAMPLE_PHOTOS[0]}
             alt=""
-            initial={{ y: 18, opacity: 0, scale: 0.92 }}
-            animate={{ y: 0, opacity: 1, scale: 1 }}
+            initial={{ y: 22, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
             exit={{ opacity: 0 }}
-            transition={{ type: "spring", stiffness: 340, damping: 26 }}
-            className="absolute inset-0 size-full object-contain p-2"
+            transition={{ type: "spring", stiffness: 320, damping: 26 }}
+            className="absolute inset-0 size-full object-contain p-4"
           />
         ) : (
           <motion.div
             key="wait"
-            className="absolute inset-0 grid place-items-center bg-[#f7f7f7] text-[10px] font-medium text-[#9b9b9b]"
+            className="absolute inset-0 grid place-items-center bg-[#fafafa] text-[12px] font-medium text-[#bbb]"
           >
-            Waiting…
+            Waiting for the click
           </motion.div>
         )}
       </AnimatePresence>
@@ -129,7 +125,7 @@ function LivePill({ on, label }: { on: boolean; label: string }) {
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-semibold",
+        "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold",
         on ? "bg-emerald-50 text-emerald-800" : "bg-[#f0f0f0] text-[#9b9b9b]",
       )}
     >
@@ -181,229 +177,133 @@ export function ListingPipeline({
   return (
     <section
       className={cn(
-        "flex min-h-0 flex-1 flex-col overflow-hidden",
-        compact
-          ? "rounded-[24px] border border-[#e5e5e5] bg-white p-3.5"
-          : "h-full bg-white p-4 sm:p-5",
+        "flex min-h-0 flex-1 flex-col overflow-hidden bg-white",
+        compact && "rounded-2xl border border-[#e5e5e5]",
       )}
     >
-      <div className="flex shrink-0 items-center justify-between gap-3">
-        <p className="inline-flex items-center gap-2 text-[11px] font-semibold tracking-[0.16em] text-[#707070] uppercase">
-          <LiveDot /> One click · every store
-        </p>
-        <p className="truncate text-[12px] text-[#707070]">
-          {allLive ? "Live everywhere" : shop}
-        </p>
-      </div>
-
-      <div
-        className={cn(
-          "mt-3 grid min-h-0 flex-1 gap-3",
-          compact
-            ? "grid-cols-1"
-            : "lg:grid-cols-[minmax(220px,0.7fr)_minmax(0,1.3fr)]",
-        )}
-      >
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
-          <div className="relative overflow-hidden rounded-xl border border-[#e5e5e5] bg-[#f7f7f7] p-2.5">
-            <p className="text-[10px] font-semibold tracking-[0.14em] text-[#707070] uppercase">
-              Photos in
-            </p>
-            <div className="relative mt-2 grid grid-cols-4 gap-1.5 sm:grid-cols-2">
-              {SAMPLE_PHOTOS.map((src, i) => (
-                <motion.div
-                  key={src}
-                  initial={false}
-                  animate={{
-                    opacity: photosOn ? 1 : 0.3,
-                    y: photosOn ? 0 : 8,
-                  }}
-                  transition={{ delay: i * 0.08, duration: 0.35 }}
-                  className="relative aspect-square overflow-hidden rounded-lg bg-white"
-                >
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={src}
-                    alt=""
-                    className="absolute inset-0 size-full object-contain p-1"
-                  />
-                </motion.div>
-              ))}
-              {beat === 0 && !reduce ? (
-                <span
-                  aria-hidden
-                  className="pointer-events-none absolute inset-x-0 top-8 h-10 bg-gradient-to-b from-[#3665F3]/25 to-transparent [animation:higlou-scan_2s_ease-in-out_infinite]"
-                />
-              ) : null}
-            </div>
-          </div>
-
-          <div className="rounded-xl border border-[#e5e5e5] bg-white p-3">
-            <p className="text-[10px] font-semibold tracking-[0.14em] text-[#707070] uppercase">
-              Higlou writes
-            </p>
-            <p className="mt-2 min-h-[40px] text-[13.5px] font-semibold tracking-tight text-[#191919]">
-              {draftOn ? typing : "Waiting on photos…"}
-              {beat === 1 && typing.length < SAMPLE_TITLE.length ? (
-                <span className="ml-0.5 inline-block h-3 w-px animate-pulse bg-[#191919]" />
-              ) : null}
-            </p>
-            <div className="mt-2 flex flex-wrap items-center gap-1.5">
-              <span
-                className={cn(
-                  "rounded-md px-2 py-0.5 text-[12px] font-semibold tabular-nums",
-                  draftOn
-                    ? "bg-[#191919] text-white"
-                    : "bg-[#f0f0f0] text-[#9b9b9b]",
-                )}
-              >
-                {draftOn ? "$189.00" : "—"}
-              </span>
-              <span className="rounded-md bg-[#f0f0f0] px-2 py-0.5 text-[11px] text-[#565959]">
-                {draftOn ? "Power Tools" : "Category"}
-              </span>
-            </div>
-            <motion.button
-              type="button"
-              tabIndex={-1}
+      <div className="flex shrink-0 items-center gap-3 border-b border-[#e5e5e5] bg-white px-3 py-2.5 sm:px-4">
+        <div className="flex shrink-0 items-center gap-1">
+          {SAMPLE_PHOTOS.map((src, i) => (
+            <motion.div
+              key={src}
               initial={false}
-              animate={
-                beat === 2
-                  ? { scale: [1, 0.94, 1], boxShadow: "0 0 0 8px rgba(54,101,243,0.18)" }
-                  : { scale: 1, boxShadow: "0 0 0 0px rgba(54,101,243,0)" }
-              }
-              transition={{ duration: 0.45 }}
-              className={cn(
-                "mt-3 inline-flex h-10 w-full items-center justify-center rounded-full text-[13px] font-semibold",
-                clickOn
-                  ? "bg-[#3665F3] text-white"
-                  : "bg-[#e8e8e8] text-[#9b9b9b]",
-              )}
+              animate={{ opacity: photosOn ? 1 : 0.25, scale: photosOn ? 1 : 0.96 }}
+              transition={{ delay: i * 0.06 }}
+              className="relative size-11 overflow-hidden rounded-lg bg-[#f7f7f7] sm:size-12"
             >
-              {beat === 2 ? (
-                <span className="inline-flex items-center gap-1.5">
-                  <Loader2 className="size-3.5 animate-spin" />
-                  Publishing once…
-                </span>
-              ) : allLive || webOn ? (
-                "Published everywhere"
-              ) : (
-                "Publish once"
-              )}
-            </motion.button>
-            <p className="mt-1.5 text-center text-[11px] text-[#707070]">
-              One click → eBay, Amazon, Facebook, your site
-            </p>
-          </div>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={src} alt="" className="absolute inset-0 size-full object-contain p-0.5" />
+            </motion.div>
+          ))}
         </div>
-
-        <div
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-[13px] font-semibold tracking-tight text-[#191919] sm:text-[15px]">
+            {draftOn ? typing : "Drop photos. Higlou writes the listing."}
+            {beat === 1 && typing.length < SAMPLE_TITLE.length ? (
+              <span className="ml-0.5 inline-block h-3 w-px animate-pulse bg-[#191919]" />
+            ) : null}
+          </p>
+          <p className="mt-0.5 text-[12px] text-[#707070]">
+            {draftOn ? (
+              <span className="font-semibold tabular-nums text-[#191919]">$189.00</span>
+            ) : (
+              "Title, price, and stores fill themselves."
+            )}
+            {draftOn ? " · one listing, four stores" : null}
+          </p>
+        </div>
+        <motion.div
+          initial={false}
+          animate={
+            beat === 2
+              ? { scale: [1, 0.94, 1], boxShadow: "0 0 0 10px rgba(54,101,243,0.16)" }
+              : { scale: 1, boxShadow: "0 0 0 0px rgba(54,101,243,0)" }
+          }
+          transition={{ duration: 0.4 }}
           className={cn(
-            "grid min-h-0 gap-2",
-            compact ? "grid-cols-2" : "grid-cols-2 lg:h-full lg:grid-rows-2",
+            "inline-flex h-11 shrink-0 items-center rounded-full px-5 text-[13px] font-semibold",
+            clickOn ? "bg-[#3665F3] text-white" : "bg-[#eee] text-[#9b9b9b]",
           )}
         >
-          <ChannelShell live={ebayOn}>
-            <div className="flex items-center justify-between border-b border-[#eee] px-2.5 py-1.5">
-              <EbayWordmark className="text-[13px]" />
-              <LivePill on={ebayOn} label="Live" />
-            </div>
-            <ProductShot
-              live={ebayOn}
-              className={compact ? "h-[92px]" : "min-h-[150px] flex-1"}
-            />
-            <div className="px-2.5 py-2">
-              <p className="line-clamp-2 text-[11px] leading-snug font-medium text-[#191919]">
-                {SAMPLE_TITLE}
-              </p>
-              <p className="mt-1 text-[13px] font-semibold tabular-nums">
-                {ebayOn ? "$189.00" : "—"}
-              </p>
-              <p className="mt-0.5 text-[10px] text-[#707070]">
-                {ebayOn ? `Buy It Now · ${shop}` : "Your eBay store"}
-              </p>
-            </div>
-          </ChannelShell>
+          {beat === 2 ? (
+            <span className="inline-flex items-center gap-1.5">
+              <Loader2 className="size-3.5 animate-spin" />
+              Click
+            </span>
+          ) : allLive || webOn ? (
+            "Live everywhere"
+          ) : (
+            "Publish once"
+          )}
+        </motion.div>
+      </div>
 
-          <ChannelShell live={amazonOn}>
-            <div className="flex items-center justify-between bg-[#232F3E] px-2.5 py-1.5">
-              <AmazonMark className="text-[13px] text-white" />
-              <LivePill on={amazonOn} label="Listed" />
-            </div>
-            <ProductShot
-              live={amazonOn}
-              className={compact ? "h-[92px]" : "min-h-[150px] flex-1"}
-            />
-            <div className="px-2.5 py-2">
-              <p className="line-clamp-2 text-[11px] leading-snug font-medium text-[#0F1111]">
-                {SAMPLE_TITLE}
-              </p>
-              <p className="mt-1 text-[13px] font-semibold text-[#B12704]">
-                {amazonOn ? "$189.00" : "—"}
-              </p>
-              <div
-                className={cn(
-                  "mt-1.5 h-6 rounded-full text-center text-[10px] font-semibold leading-6",
-                  amazonOn
-                    ? "bg-[#FFD814] text-[#0F1111]"
-                    : "bg-[#eee] text-[#9b9b9b]",
-                )}
-              >
-                Add to Cart
-              </div>
-            </div>
-          </ChannelShell>
+      <div className="grid min-h-0 flex-1 grid-cols-2 grid-rows-2 divide-x divide-y divide-[#e5e5e5]">
+        <ChannelShell live={ebayOn}>
+          <div className="flex shrink-0 items-center justify-between border-b border-[#eee] px-3 py-2">
+            <EbayWordmark className="text-[16px]" />
+            <LivePill on={ebayOn} label="Live" />
+          </div>
+          <ProductShot live={ebayOn} />
+          <div className="shrink-0 px-3 py-2">
+            <p className="text-[16px] font-semibold tabular-nums">
+              {ebayOn ? "$189.00" : "—"}
+            </p>
+            <p className="truncate text-[12px] text-[#707070]">
+              {ebayOn ? `Buy It Now · ${shop}` : "eBay store"}
+            </p>
+          </div>
+        </ChannelShell>
 
-          <ChannelShell live={facebookOn}>
-            <div className="flex items-center justify-between border-b border-[#eee] px-2.5 py-1.5">
-              <span className="text-[12px] font-bold text-[#1877F2]">
-                facebook <span className="font-semibold text-[#65676B]">Marketplace</span>
-              </span>
-              <LivePill on={facebookOn} label="Posted" />
-            </div>
-            <ProductShot
-              live={facebookOn}
-              className={compact ? "h-[92px]" : "min-h-[150px] flex-1"}
-            />
-            <div className="px-2.5 py-2">
-              <p className="text-[13px] font-semibold text-[#050505]">
-                {facebookOn ? "$189" : "—"}
-              </p>
-              <p className="line-clamp-2 text-[11px] text-[#65676B]">{SAMPLE_TITLE}</p>
-              <p className="mt-1 text-[10px] text-[#65676B]">
-                {facebookOn ? "Listed just now · Local" : "In your Marketplace"}
-              </p>
-            </div>
-          </ChannelShell>
+        <ChannelShell live={amazonOn}>
+          <div className="flex shrink-0 items-center justify-between bg-[#232F3E] px-3 py-2">
+            <AmazonMark className="text-[15px] text-white" />
+            <LivePill on={amazonOn} label="Listed" />
+          </div>
+          <ProductShot live={amazonOn} />
+          <div className="shrink-0 px-3 py-2">
+            <p className="text-[16px] font-semibold text-[#B12704]">
+              {amazonOn ? "$189.00" : "—"}
+            </p>
+            <p className="truncate text-[12px] text-[#707070]">Amazon · Add to Cart</p>
+          </div>
+        </ChannelShell>
 
-          <ChannelShell live={webOn}>
-            <div className="flex items-center gap-1.5 border-b border-[#eee] bg-[#f7f7f7] px-2.5 py-1.5">
-              <span className="size-1.5 rounded-full bg-[#FF5F57]" />
-              <span className="size-1.5 rounded-full bg-[#FEBC2E]" />
-              <span className="size-1.5 rounded-full bg-[#28C840]" />
-              <span className="ml-1 flex min-w-0 flex-1 items-center gap-1 rounded-full bg-white px-2 py-0.5 text-[10px] text-[#707070]">
-                <Globe className="size-2.5 shrink-0" />
-                <span className="truncate">yoursite.com / drill</span>
-              </span>
-              <LivePill on={webOn} label="On site" />
-            </div>
-            <ProductShot
-              live={webOn}
-              className={compact ? "h-[92px]" : "min-h-[150px] flex-1"}
-            />
-            <div className="px-2.5 py-2">
-              <p className="line-clamp-2 text-[12px] font-semibold text-[#191919]">
-                {SAMPLE_TITLE}
-              </p>
-              <p className="mt-1 text-[12px] font-semibold tabular-nums">
-                {webOn ? "$189.00" : "—"}
-              </p>
-              <p className="mt-0.5 text-[10px] text-[#707070]">
-                Same photos, title, and price — your website
-              </p>
-            </div>
-          </ChannelShell>
-        </div>
+        <ChannelShell live={facebookOn}>
+          <div className="flex shrink-0 items-center justify-between border-b border-[#eee] px-3 py-2">
+            <span className="text-[13px] font-bold text-[#1877F2]">
+              facebook <span className="font-semibold text-[#65676B]">Marketplace</span>
+            </span>
+            <LivePill on={facebookOn} label="Posted" />
+          </div>
+          <ProductShot live={facebookOn} />
+          <div className="shrink-0 px-3 py-2">
+            <p className="text-[16px] font-semibold">{facebookOn ? "$189" : "—"}</p>
+            <p className="truncate text-[12px] text-[#707070]">
+              {facebookOn ? "Listed just now" : "Facebook Marketplace"}
+            </p>
+          </div>
+        </ChannelShell>
+
+        <ChannelShell live={webOn}>
+          <div className="flex shrink-0 items-center gap-1.5 border-b border-[#eee] bg-[#f7f7f7] px-3 py-2">
+            <span className="size-1.5 rounded-full bg-[#FF5F57]" />
+            <span className="size-1.5 rounded-full bg-[#FEBC2E]" />
+            <span className="size-1.5 rounded-full bg-[#28C840]" />
+            <span className="ml-1 flex min-w-0 flex-1 items-center gap-1 rounded-full bg-white px-2 py-0.5 text-[11px] text-[#707070]">
+              <Globe className="size-3 shrink-0" />
+              <span className="truncate">yoursite.com</span>
+            </span>
+            <LivePill on={webOn} label="On site" />
+          </div>
+          <ProductShot live={webOn} />
+          <div className="shrink-0 px-3 py-2">
+            <p className="text-[16px] font-semibold tabular-nums">
+              {webOn ? "$189.00" : "—"}
+            </p>
+            <p className="truncate text-[12px] text-[#707070]">Your website</p>
+          </div>
+        </ChannelShell>
       </div>
     </section>
   );

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { ListingPipeline } from "@/components/studio/listing-pipeline";
 import { ListingCard } from "@/components/studio/listing-card";
+import { MarketPromos } from "@/components/studio/market-promos";
 import { NewListingButton } from "@/components/brand/new-listing-button";
 import { formatRelativeTime } from "@/lib/format-relative-time";
 
@@ -57,21 +58,32 @@ export function MoneyMachineHome({
 
         <aside className="flex min-h-0 flex-col border-t border-[#eee] bg-[#f3f3f3] lg:border-t-0 lg:border-l">
           <div className="flex shrink-0 items-center justify-between px-4 py-3">
-            <p className="text-[15px] font-bold tracking-tight text-[#191919]">
-              Ready to list
-            </p>
-            <Link href="/listings" className="text-[13px] font-semibold text-[#3665F3]">
-              See all
-            </Link>
-          </div>
-          <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-4">
+            <div>
+              <p className="text-[15px] font-bold tracking-tight text-[#191919]">
+                {drafts.length === 0 ? "What sells now" : "Ready to list"}
+              </p>
+              {drafts.length === 0 ? (
+                <p className="mt-0.5 text-[12px] text-[#707070]">
+                  Hot on other marketplaces. Your cut if you list them.
+                </p>
+              ) : null}
+            </div>
             {drafts.length === 0 ? (
               <Link
                 href="/listings/new"
-                className="grid min-h-[200px] place-items-center rounded-[20px] bg-white text-[13px] text-[#707070] shadow-[0_1px_3px_rgba(15,17,17,0.08)]"
+                className="shrink-0 text-[13px] font-semibold text-[#3665F3]"
               >
-                Drop photos to fill this board
+                List one
               </Link>
+            ) : (
+              <Link href="/listings" className="text-[13px] font-semibold text-[#3665F3]">
+                See all
+              </Link>
+            )}
+          </div>
+          <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-4">
+            {drafts.length === 0 ? (
+              <MarketPromos />
             ) : (
               <div className="grid grid-cols-2 gap-3">
                 {drafts.map((draft, i) => {

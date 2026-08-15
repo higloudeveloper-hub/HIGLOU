@@ -63,11 +63,11 @@ const STEPS = [
   { id: "fillWeb", ms: 700, x: 76, y: 70, click: true, label: "Your site" },
   { id: "ready", ms: 1000, x: 40, y: 8, click: false, label: "All stores ready" },
   { id: "publish", ms: 1500, x: 91, y: 8, click: false, label: "Publishing" },
-  { id: "ebayLive", ms: 1100, x: 16, y: 38, click: true, label: "Live on eBay" },
-  { id: "amazonLive", ms: 1000, x: 50, y: 38, click: true, label: "Live on Amazon" },
-  { id: "facebookLive", ms: 1000, x: 84, y: 38, click: true, label: "Live on Facebook" },
-  { id: "shopifyLive", ms: 1000, x: 24, y: 70, click: true, label: "Live on Shopify" },
-  { id: "webLive", ms: 1100, x: 76, y: 70, click: true, label: "Live on your site" },
+  { id: "ebayLive", ms: 1500, x: 16, y: 38, click: true, label: "Live on eBay" },
+  { id: "amazonLive", ms: 1400, x: 50, y: 38, click: true, label: "Live on Amazon" },
+  { id: "facebookLive", ms: 1400, x: 84, y: 38, click: true, label: "Live on Facebook" },
+  { id: "shopifyLive", ms: 1400, x: 24, y: 70, click: true, label: "Live on Shopify" },
+  { id: "webLive", ms: 1500, x: 76, y: 70, click: true, label: "Live on your site" },
   { id: "sales", ms: 2200, x: 88, y: 93, click: false, label: "Sales up" },
   { id: "hold", ms: 2000, x: 88, y: 93, click: false, label: "Next product" },
 ] as const;
@@ -409,6 +409,44 @@ function LivePill({ on, label }: { on: boolean; label: string }) {
   );
 }
 
+function LivePhoto({ src, className }: { src: string; className?: string }) {
+  return (
+    <div className={cn("relative min-h-0 flex-1 overflow-hidden bg-white", className)}>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <motion.img
+        key={src}
+        src={src}
+        alt=""
+        initial={{ y: -44, opacity: 0, scale: 0.9 }}
+        animate={{ y: 0, opacity: 1, scale: 1 }}
+        transition={{ type: "spring", stiffness: 280, damping: 22 }}
+        className="absolute inset-0 size-full object-contain p-2"
+      />
+    </div>
+  );
+}
+
+function Stamp({
+  delay,
+  children,
+  className,
+}: {
+  delay: number;
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay, duration: 0.36, ease: [0.22, 1, 0.36, 1] }}
+      className={className}
+    >
+      {children}
+    </motion.div>
+  );
+}
+
 function AmazonStorefront({
   src,
   title,
@@ -432,29 +470,30 @@ function AmazonStorefront({
         </div>
         <ShoppingCart className="size-3.5 shrink-0 text-white" />
       </div>
-      <div className="relative min-h-0 flex-1 bg-white">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={src} alt="" className="absolute inset-0 size-full object-contain p-2" />
-      </div>
+      <LivePhoto src={src} />
       <div className="shrink-0 px-2.5 pb-2.5 pt-1">
-        <p className="line-clamp-2 text-[11px] leading-snug text-[#0F1111]">{title}</p>
-        <p className="mt-0.5 flex items-center gap-0.5 text-[10px] text-[#007185]">
-          {Array.from({ length: 5 }).map((_, i) => (
-            <Star
-              key={i}
-              className="size-2.5 fill-[#DE7921] text-[#DE7921]"
-            />
-          ))}
-          <span className="ml-1">1,284</span>
-        </p>
-        <p className="text-[20px] font-semibold tabular-nums text-[#0F1111]">{price}</p>
-        <p className="text-[10px] font-semibold text-[#C45500]">FREE delivery Tomorrow</p>
-        <p className="mt-1.5 grid h-7 place-items-center rounded-full bg-[#FFD814] text-[11px] font-semibold text-[#0F1111]">
-          Add to Cart
-        </p>
-        <p className="mt-1 grid h-7 place-items-center rounded-full bg-[#FFA41C] text-[11px] font-semibold text-[#0F1111]">
-          Buy Now
-        </p>
+        <Stamp delay={0.12}>
+          <p className="line-clamp-2 text-[11px] leading-snug text-[#0F1111]">{title}</p>
+          <p className="mt-0.5 flex items-center gap-0.5 text-[10px] text-[#007185]">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <Star key={i} className="size-2.5 fill-[#DE7921] text-[#DE7921]" />
+            ))}
+            <span className="ml-1">1,284</span>
+          </p>
+        </Stamp>
+        <Stamp delay={0.22}>
+          <p className="text-[20px] font-semibold tabular-nums text-[#0F1111]">{price}</p>
+          <p className="text-[10px] font-semibold text-[#C45500]">FREE delivery Tomorrow</p>
+          <p className="text-[10px] font-medium text-[#007600]">In Stock</p>
+        </Stamp>
+        <Stamp delay={0.34} className="mt-1.5 grid gap-1">
+          <p className="grid h-7 place-items-center rounded-full bg-[#FFD814] text-[11px] font-semibold text-[#0F1111]">
+            Add to Cart
+          </p>
+          <p className="grid h-7 place-items-center rounded-full bg-[#FFA41C] text-[11px] font-semibold text-[#0F1111]">
+            Buy Now
+          </p>
+        </Stamp>
       </div>
     </div>
   );
@@ -479,7 +518,7 @@ function FacebookStorefront({
         </span>
         <Search className="size-3.5 text-[#050505]" />
       </div>
-      <div className="flex shrink-0 items-center gap-2 px-2.5 py-1.5">
+      <Stamp delay={0.06} className="flex shrink-0 items-center gap-2 px-2.5 py-1.5">
         <span className="grid size-7 shrink-0 place-items-center rounded-full bg-[#E4E6EB] text-[10px] font-bold text-[#050505]">
           {seller.slice(0, 1).toUpperCase()}
         </span>
@@ -487,17 +526,18 @@ function FacebookStorefront({
           <p className="truncate text-[12px] font-semibold text-[#050505]">{seller}</p>
           <p className="text-[10px] text-[#65676B]">Listed just now · Nearby</p>
         </div>
-      </div>
-      <div className="relative min-h-0 flex-1 bg-[#F0F2F5]">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={src} alt="" className="absolute inset-0 size-full object-contain p-2" />
-      </div>
+      </Stamp>
+      <LivePhoto src={src} className="bg-[#F0F2F5]" />
       <div className="shrink-0 px-2.5 py-2">
-        <p className="text-[20px] font-bold tabular-nums text-[#050505]">{price}</p>
-        <p className="line-clamp-1 text-[12px] text-[#050505]">{title}</p>
-        <p className="mt-1.5 grid h-8 place-items-center rounded-md bg-[#E7F3FF] text-[12px] font-semibold text-[#0866FF]">
-          Message
-        </p>
+        <Stamp delay={0.2}>
+          <p className="text-[20px] font-bold tabular-nums text-[#050505]">{price}</p>
+          <p className="line-clamp-1 text-[12px] text-[#050505]">{title}</p>
+        </Stamp>
+        <Stamp delay={0.34} className="mt-1.5">
+          <p className="grid h-8 place-items-center rounded-md bg-[#E7F3FF] text-[12px] font-semibold text-[#0866FF]">
+            Message
+          </p>
+        </Stamp>
       </div>
     </div>
   );
@@ -521,22 +561,23 @@ function ShopifyStorefront({
         <span className="text-[13px] font-semibold tracking-tight">Your store</span>
         <ShoppingCart className="size-3.5" />
       </div>
-      <div className="relative min-h-0 flex-1">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={src} alt="" className="absolute inset-0 size-full object-contain p-3" />
-      </div>
+      <LivePhoto src={src} />
       <div className="shrink-0 px-3 pb-3 pt-1.5">
-        <p className="text-[10px] font-medium tracking-[0.14em] text-[#6a6a6a]">
-          HIGLOU
-        </p>
-        <p className="line-clamp-2 text-[13px] font-medium tracking-tight">{title}</p>
-        <p className="mt-1 text-[16px] tabular-nums">{price}</p>
-        <p className="mt-2 grid h-8 place-items-center rounded-md bg-[#121212] text-[12px] font-semibold text-white">
-          Add to cart
-        </p>
-        <p className="mt-1 grid h-8 place-items-center rounded-md bg-[#008060] text-[12px] font-semibold text-white">
-          Buy it now
-        </p>
+        <Stamp delay={0.14}>
+          <p className="text-[10px] font-medium tracking-[0.14em] text-[#6a6a6a]">
+            HIGLOU
+          </p>
+          <p className="line-clamp-2 text-[13px] font-medium tracking-tight">{title}</p>
+          <p className="mt-1 text-[16px] tabular-nums">{price}</p>
+        </Stamp>
+        <Stamp delay={0.32} className="mt-2 grid gap-1">
+          <p className="grid h-8 place-items-center rounded-md bg-[#121212] text-[12px] font-semibold text-white">
+            Add to cart
+          </p>
+          <p className="grid h-8 place-items-center rounded-md bg-[#008060] text-[12px] font-semibold text-white">
+            Buy it now
+          </p>
+        </Stamp>
       </div>
     </div>
   );
@@ -546,10 +587,12 @@ function SiteStorefront({
   src,
   title,
   price,
+  slug,
 }: {
   src: string;
   title: string;
   price: string;
+  slug: string;
 }) {
   return (
     <div className="flex h-full min-h-0 flex-col bg-white">
@@ -559,24 +602,32 @@ function SiteStorefront({
         <span className="size-1.5 rounded-full bg-[#28C840]" />
         <span className="ml-1 flex min-w-0 flex-1 items-center gap-1 rounded-full bg-white px-2 py-0.5 text-[11px] text-[#707070]">
           <Globe className="size-3 shrink-0" />
-          <span className="truncate">yoursite.com/products</span>
+          <motion.span
+            key={slug}
+            initial={{ opacity: 0.35 }}
+            animate={{ opacity: 1 }}
+            className="truncate"
+          >
+            yoursite.com/products/{slug}
+          </motion.span>
         </span>
       </div>
       <div className="flex shrink-0 items-center justify-between border-b border-[#eee] px-3 py-2">
         <span className="text-[13px] font-semibold tracking-tight">HIGLOU</span>
         <span className="text-[11px] text-[#707070]">Shop · About · Cart</span>
       </div>
-      <div className="relative min-h-0 flex-1">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={src} alt="" className="absolute inset-0 size-full object-contain p-3" />
-      </div>
+      <LivePhoto src={src} />
       <div className="shrink-0 px-3 pb-3 pt-1.5">
-        <p className="text-[11px] text-[#707070]">Home / Shop / {title}</p>
-        <p className="mt-0.5 line-clamp-2 text-[14px] font-semibold tracking-tight">{title}</p>
-        <p className="mt-1 text-[18px] font-semibold tabular-nums">{price}</p>
-        <p className="mt-2 grid h-9 place-items-center rounded-md bg-[#141414] text-[12px] font-semibold text-white">
-          Add to bag
-        </p>
+        <Stamp delay={0.14}>
+          <p className="text-[11px] text-[#707070]">Home / Shop / {title}</p>
+          <p className="mt-0.5 line-clamp-2 text-[14px] font-semibold tracking-tight">{title}</p>
+          <p className="mt-1 text-[18px] font-semibold tabular-nums">{price}</p>
+        </Stamp>
+        <Stamp delay={0.32} className="mt-2">
+          <p className="grid h-9 place-items-center rounded-md bg-[#141414] text-[12px] font-semibold text-white">
+            Add to bag
+          </p>
+        </Stamp>
       </div>
     </div>
   );
@@ -685,6 +736,7 @@ export function ListingPipeline({
   const item = catalog[sku % catalog.length] ?? CATALOG[0];
   const shots = [...item.photos];
   const cover = shots[0] || CATALOG[0].photos[0];
+  const slug = item.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
   const money =
     beat < 13
       ? 0
@@ -915,6 +967,7 @@ export function ListingPipeline({
         <ChannelShell live={ebayLive} focused={beat === 6 || beat === 13} className="col-span-2">
           {ebayLive ? (
             <EbayLivePreview
+              key={`ebay-${cover}`}
               photoSrc={cover}
               title={item.title}
               priceLabel={priceLabel}
@@ -945,7 +998,7 @@ export function ListingPipeline({
 
         <ChannelShell live={amazonLive} focused={beat === 7 || beat === 14} className="col-span-2">
           {amazonLive ? (
-            <AmazonStorefront src={cover} title={item.title} price={priceLabel} />
+            <AmazonStorefront key={`amz-${cover}`} src={cover} title={item.title} price={priceLabel} />
           ) : (
             <>
               <div className="flex shrink-0 items-center justify-between bg-[#232F3E] px-3 py-2">
@@ -968,6 +1021,7 @@ export function ListingPipeline({
         <ChannelShell live={facebookLive} focused={beat === 8 || beat === 15} className="col-span-2">
           {facebookLive ? (
             <FacebookStorefront
+              key={`fb-${cover}`}
               src={cover}
               title={item.title}
               price={priceLabel}
@@ -994,7 +1048,7 @@ export function ListingPipeline({
 
         <ChannelShell live={shopifyLive} focused={beat === 9 || beat === 16} className="col-span-3">
           {shopifyLive ? (
-            <ShopifyStorefront src={cover} title={item.title} price={priceLabel} />
+            <ShopifyStorefront key={`shop-${cover}`} src={cover} title={item.title} price={priceLabel} />
           ) : (
             <>
               <div className="flex shrink-0 items-center justify-between bg-[#212326] px-3 py-2">
@@ -1016,7 +1070,13 @@ export function ListingPipeline({
 
         <ChannelShell live={webLive} focused={beat === 10 || beat === 17} className="col-span-3">
           {webLive ? (
-            <SiteStorefront src={cover} title={item.title} price={priceLabel} />
+            <SiteStorefront
+              key={`web-${cover}`}
+              src={cover}
+              title={item.title}
+              price={priceLabel}
+              slug={slug}
+            />
           ) : (
             <>
               <div className="flex shrink-0 items-center gap-1.5 border-b border-[#eee] bg-[#f7f7f7] px-3 py-2">

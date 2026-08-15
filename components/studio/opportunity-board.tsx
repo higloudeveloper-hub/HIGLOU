@@ -487,48 +487,62 @@ export function LiveBanner({
   const next = deals[0];
   return (
     <div className="shrink-0 bg-[#3665F3] text-white">
-      <div className="flex items-center gap-3 px-4 py-2.5">
-        <div className="flex shrink-0 items-center gap-2">
-          <span className="relative flex size-2.5">
-            <span className="absolute inset-0 animate-ping rounded-full bg-white/80" />
-            <span className="relative size-2.5 rounded-full bg-white" />
+      <div className="flex items-center gap-4 px-5 py-3">
+        <div className="flex shrink-0 items-center gap-2.5">
+          <span className="relative flex size-2">
+            <motion.span
+              className="absolute inset-0 rounded-full bg-white/70"
+              animate={{ scale: [1, 2.4], opacity: [0.55, 0] }}
+              transition={{ duration: 2.8, repeat: Infinity, ease: "easeOut" }}
+            />
+            <span className="relative size-2 rounded-full bg-white" />
           </span>
-          <p className="text-[13px] font-bold tracking-tight">LIVE MACHINE</p>
+          <p className="text-[11px] font-semibold tracking-[0.22em] uppercase">
+            Live machine
+          </p>
         </div>
-        <p className="hidden shrink-0 text-[12px] text-white/85 lg:block">
+        <p className="hidden shrink-0 text-[12px] font-medium text-white/70 lg:block">
           {shop}
         </p>
-        <div className="min-w-0 flex-1 overflow-hidden">
+        <div
+          className="min-w-0 flex-1 overflow-hidden"
+          style={{
+            maskImage:
+              "linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent)",
+            WebkitMaskImage:
+              "linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent)",
+          }}
+        >
           {tape.length > 0 ? (
             <motion.div
-              className="flex w-max gap-10 whitespace-nowrap"
+              className="flex w-max gap-16 whitespace-nowrap"
               animate={{ x: ["0%", "-50%"] }}
-              transition={{ duration: 32, repeat: Infinity, ease: "linear" }}
+              transition={{ duration: 88, repeat: Infinity, ease: "linear" }}
             >
               {tape.map((deal, i) => (
                 <span
                   key={`${deal.listingId}-${i}`}
-                  className="text-[13px] font-medium"
+                  className="text-[13px] font-medium tracking-wide text-white/90"
                 >
                   {deal.title.slice(0, 48)}
-                  <span className="mx-2 text-white/55">·</span>
+                  <span className="mx-3 text-white/35">·</span>
                   {recommendCopy(deal).button}
-                  <span className="mx-2 text-white/55">·</span>
+                  <span className="mx-3 text-white/35">·</span>
                   {deal.chance}% chance
                 </span>
               ))}
             </motion.div>
           ) : (
-            <p className="truncate text-[13px] text-white/85">
+            <p className="truncate text-[13px] tracking-wide text-white/75">
               Scanning eBay carts, watchers, and prices…
             </p>
           )}
         </div>
-        <p className="hidden shrink-0 text-[12px] font-medium text-white/90 sm:block">
+        <p className="hidden shrink-0 text-[12px] font-medium tracking-wide text-white/75 sm:block">
           {watching} watching · {inCart} in cart
           {next ? ` · next: ${recommendCopy(next).button}` : ""}
         </p>
-        <p className="hidden shrink-0 text-[11px] text-white/70 xl:block">
+        <p className="hidden shrink-0 text-[11px] tracking-wide text-white/55 xl:block">
           {formatRelativeTime(syncedAt)}
         </p>
       </div>

@@ -229,9 +229,9 @@ function AmazonMark({ className }: { className?: string }) {
   );
 }
 
-function ShopifyMark() {
+function ShopifyMark({ dark = false }: { dark?: boolean }) {
   return (
-    <span className="inline-flex items-center gap-1.5 text-white">
+    <span className={cn("inline-flex items-center gap-1.5", dark ? "text-[#141414]" : "text-white")}>
       <svg viewBox="0 0 20 20" className="size-4" aria-hidden>
         <path
           fill="#95BF47"
@@ -246,6 +246,49 @@ function ShopifyMark() {
       </svg>
       <span className="text-[14px] font-semibold tracking-tight">Shopify</span>
     </span>
+  );
+}
+
+function StoreTargets() {
+  const stores = [
+    { key: "ebay", node: <EbayWordmark className="text-[18px]" /> },
+    { key: "amazon", node: <AmazonMark className="text-[16px] text-[#131921]" /> },
+    {
+      key: "facebook",
+      node: (
+        <span className="text-[13px] font-bold text-[#1877F2]">
+          facebook
+        </span>
+      ),
+    },
+    { key: "shopify", node: <ShopifyMark dark /> },
+    {
+      key: "site",
+      node: (
+        <span className="inline-flex items-center gap-1.5 text-[13px] font-semibold tracking-tight text-[#141414]">
+          <Globe className="size-3.5" />
+          Your site
+        </span>
+      ),
+    },
+  ] as const;
+
+  return (
+    <div className="shrink-0 border-t border-[#e5e5e5] bg-white px-4 py-3">
+      <p className="mb-2.5 text-center text-[11px] font-medium tracking-[0.16em] text-[#8a8a8a] uppercase">
+        Publishes to five stores
+      </p>
+      <div className="flex flex-wrap items-center justify-center gap-2">
+        {stores.map((store) => (
+          <div
+            key={store.key}
+            className="flex h-11 min-w-[108px] items-center justify-center rounded-lg bg-white px-3 ring-1 ring-[#e5e5e5]"
+          >
+            {store.node}
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -871,9 +914,7 @@ export function ListingPipeline({
             photos: (photos ?? []).slice(0, 4),
           },
         ]
-      : dropMode
-        ? [CATALOG[0]]
-        : CATALOG;
+      : CATALOG;
   const item = catalog[sku % catalog.length] ?? CATALOG[0];
   const shots = [...item.photos];
   const cover = shots[0] || CATALOG[0].photos[0];
@@ -980,10 +1021,6 @@ export function ListingPipeline({
         }
         i += 1;
         if (i >= timeline.length) {
-          if (dropMode) {
-            setBeat(timeline.length - 1);
-            return;
-          }
           i = 0;
           setSku((n) => n + 1);
         }
@@ -1120,9 +1157,7 @@ export function ListingPipeline({
             {dropMode
               ? freezeDrop
                 ? "Your photo"
-                : photoIn
-                  ? "That’s the move"
-                  : "New listing"
+                : item.name
               : draftOn
                 ? typing
                 : photosOn
@@ -1199,7 +1234,35 @@ export function ListingPipeline({
       />
 
       {dropMode ? (
-        <div className="relative min-h-0 flex-1 bg-[#fafafa]" />
+        <div className="relative flex min-h-0 flex-1 flex-col bg-[#f7f7f7]">
+          <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-4 px-4">
+            <div className="flex items-end justify-center gap-2 sm:gap-3">
+              {(freezeDrop ? shots.slice(0, 5) : CATALOG.map((p) => p.photos[0])).map((src, i) => {
+                const on = freezeDrop ? i === 0 : i === sku % CATALOG.length;
+                const label = freezeDrop ? `Photo ${i + 1}` : CATALOG[i]?.name;
+                return (
+                  <div key={`${label}-${src}`} className="flex flex-col items-center gap-1.5">
+                    <div
+                      className={cn(
+                        "overflow-hidden rounded-lg bg-white ring-1 ring-[#e5e5e5] transition",
+                        on
+                          ? "h-[88px] w-[72px] ring-[#141414] sm:h-[108px] sm:w-[88px]"
+                          : "h-[64px] w-[52px] opacity-45 sm:h-[76px] sm:w-[62px]",
+                      )}
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={src} alt="" className="size-full object-contain p-1" />
+                    </div>
+                    <p className={cn("text-[11px]", on ? "font-semibold text-[#141414]" : "text-[#8a8a8a]")}>
+                      {label}
+                    </p>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+          <StoreTargets />
+        </div>
       ) : (
       <div className="relative min-h-0 flex-1">
         <div className="grid h-full min-h-0 grid-cols-6 grid-rows-2 divide-x divide-y divide-[#e5e5e5]">

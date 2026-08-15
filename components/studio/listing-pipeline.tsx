@@ -72,12 +72,8 @@ const STEPS = [
   { id: "fillShopify", ms: 580, x: 24, y: 70, click: false, label: "Shopify" },
   { id: "fillWeb", ms: 640, x: 76, y: 70, click: false, label: "Your site" },
   { id: "ready", ms: 560, x: 91, y: 8, click: false, label: "Publish" },
-  { id: "publish", ms: 920, x: 91, y: 8, click: true, label: "Publishing" },
-  { id: "ebayLive", ms: 720, x: 16, y: 38, click: false, label: "Live on eBay" },
-  { id: "amazonLive", ms: 680, x: 50, y: 38, click: false, label: "Live on Amazon" },
-  { id: "facebookLive", ms: 680, x: 84, y: 38, click: false, label: "Live on Facebook" },
-  { id: "shopifyLive", ms: 680, x: 24, y: 70, click: false, label: "Live on Shopify" },
-  { id: "webLive", ms: 760, x: 76, y: 70, click: false, label: "Live on your site" },
+  { id: "publish", ms: 780, x: 91, y: 8, click: true, label: "Publishing" },
+  { id: "dispatch", ms: 1700, x: 42, y: 12, click: false, label: "Sending" },
   { id: "sales", ms: 1400, x: 88, y: 93, click: false, label: "Revenue" },
   { id: "hold", ms: 800, x: 88, y: 93, click: false, label: "Next product" },
 ] as const;
@@ -103,21 +99,13 @@ const FILL_FLY: Partial<Record<StepId, { x: number; y: number }>> = {
   fillWeb: { x: 76, y: 70 },
 };
 
-const SEND_FLY: Partial<Record<StepId, { x: number; y: number }>> = {
-  ebayLive: { x: 16, y: 38 },
-  amazonLive: { x: 50, y: 38 },
-  facebookLive: { x: 84, y: 38 },
-  shopifyLive: { x: 24, y: 70 },
-  webLive: { x: 76, y: 70 },
-};
-
-const DISPATCH_STORES = [
-  { id: "ebayLive" as StepId, name: "eBay" },
-  { id: "amazonLive" as StepId, name: "Amazon" },
-  { id: "facebookLive" as StepId, name: "Facebook" },
-  { id: "shopifyLive" as StepId, name: "Shopify" },
-  { id: "webLive" as StepId, name: "Your site" },
-];
+const FALL_TO = [
+  { x: 16, y: 38, name: "eBay" },
+  { x: 50, y: 38, name: "Amazon" },
+  { x: 84, y: 38, name: "Facebook" },
+  { x: 24, y: 70, name: "Shopify" },
+  { x: 76, y: 70, name: "Your site" },
+] as const;
 
 const SALE_TICKET = [
   "eBay",
@@ -138,11 +126,7 @@ const CURSOR_OFF: ReadonlySet<string> = new Set([
   "fillFacebook",
   "fillShopify",
   "fillWeb",
-  "ebayLive",
-  "amazonLive",
-  "facebookLive",
-  "shopifyLive",
-  "webLive",
+  "dispatch",
 ]);
 
 function ordersAt(beat: number) {
@@ -440,19 +424,11 @@ function storyCaption(
     case "fillWeb":
       return { headline: "Now your own site.", sub: "Five storefronts. One listing." };
     case "ready":
-      return { headline: "All five stores are ready.", sub: "One publish sends them live." };
+      return { headline: "All five stores are ready.", sub: "One click compresses the listing and sends it." };
     case "publish":
-      return { headline: "Higlou grabs the listing.", sub: "One packet. Sending it to five stores." };
-    case "ebayLive":
-      return { headline: "Sending to eBay.", sub: "1 of 5 — the listing is on its way." };
-    case "amazonLive":
-      return { headline: "Sending to Amazon.", sub: "2 of 5 — same listing, next store." };
-    case "facebookLive":
-      return { headline: "Sending to Facebook.", sub: "3 of 5 — Marketplace next." };
-    case "shopifyLive":
-      return { headline: "Sending to Shopify.", sub: "4 of 5 — your store is next." };
-    case "webLive":
-      return { headline: "Sending to your site.", sub: "5 of 5 — live on every store." };
+      return { headline: "Compressing the listing.", sub: "Photos, title, price — one packet." };
+    case "dispatch":
+      return { headline: "Sending to all five stores.", sub: "They fall in together. eBay, Amazon, Facebook, Shopify, your site." };
     case "sales":
       return { headline: "Sales hit the wallet.", sub: "Watch the money come in, in real time." };
     case "hold":
@@ -596,53 +572,90 @@ function FlyClone({
   );
 }
 
-function DispatchRail({
-  currentId,
-  packing,
+function CompressBundle({
+  src,
+  extras,
 }: {
-  currentId: string;
-  packing: boolean;
+  src: string;
+  extras: string[];
 }) {
-  const idx = DISPATCH_STORES.findIndex((s) => s.id === currentId);
-  const sent = packing ? 0 : idx >= 0 ? idx + 1 : DISPATCH_STORES.length;
-  const pct = packing ? 8 : (sent / DISPATCH_STORES.length) * 100;
-
   return (
-    <div className="shrink-0 border-b border-[#e5e5e5] bg-white px-4 py-2.5 sm:px-5">
-      <div className="mb-2 flex items-baseline justify-between gap-3">
-        <p className="text-[12px] text-[#707070]">
-          {packing ? "Packing the listing" : `Sending ${sent} of 5`}
-        </p>
-        <p className="text-[12px] tabular-nums text-[#141414]">{Math.round(pct)}%</p>
+    <motion.div
+      className="pointer-events-none absolute z-30"
+      initial={{ left: "18%", top: "9%", scale: 0.35, opacity: 0, x: "-50%", y: "-50%", rotate: -10 }}
+      animate={{ left: "42%", top: "11%", scale: 1, opacity: 1, rotate: -4 }}
+      transition={{ type: "spring", stiffness: 240, damping: 20 }}
+    >
+      {extras.slice(1, 3).map((shot, i) => (
+        <div
+          key={shot}
+          className="absolute overflow-hidden rounded-[3px] bg-white p-1 pb-5 shadow-[0_16px_32px_-16px_rgba(0,0,0,0.4)] ring-1 ring-black/10"
+          style={{
+            width: 92,
+            height: 112,
+            left: (i + 1) * 7,
+            top: (i + 1) * -6,
+            rotate: `${(i + 1) * 5}deg`,
+          }}
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={shot} alt="" className="size-full object-contain" />
+        </div>
+      ))}
+      <div className="relative h-[124px] w-[100px] overflow-hidden rounded-[3px] bg-white p-1.5 pb-7 shadow-[0_28px_50px_-18px_rgba(0,0,0,0.45)] ring-1 ring-black/10">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={src} alt="" className="size-full object-contain" />
       </div>
-      <div className="mb-2.5 h-[2px] overflow-hidden bg-[#eee]">
-        <motion.div
-          className="h-full bg-[#141414]"
-          initial={false}
-          animate={{ width: `${pct}%` }}
-          transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
-        />
-      </div>
-      <div className="grid grid-cols-5 gap-1">
-        {DISPATCH_STORES.map((store, i) => {
-          const done = !packing && i < sent;
-          const current = !packing && i === sent - 1;
-          return (
-            <div
-              key={store.id}
-              className={cn(
-                "flex h-8 items-center justify-center gap-1 text-[11px] font-medium",
-                done || current ? "text-[#141414]" : "text-[#b0b0b0]",
-                current && "bg-[#f3f3f3]",
-              )}
-            >
-              {done && !current ? <Check className="size-3" strokeWidth={2.4} /> : null}
-              <span className="truncate">{store.name}</span>
-            </div>
-          );
-        })}
-      </div>
-    </div>
+    </motion.div>
+  );
+}
+
+function FallPacket({
+  src,
+  toX,
+  toY,
+  delay,
+  hopKey,
+}: {
+  src: string;
+  toX: number;
+  toY: number;
+  delay: number;
+  hopKey: string;
+}) {
+  return (
+    <motion.div
+      key={hopKey}
+      className="pointer-events-none absolute z-30 overflow-hidden rounded-[3px] bg-white p-1 pb-5 shadow-[0_24px_44px_-16px_rgba(0,0,0,0.42)] ring-1 ring-black/10"
+      initial={{
+        left: "42%",
+        top: "11%",
+        width: 100,
+        height: 124,
+        opacity: 1,
+        x: "-50%",
+        y: "-50%",
+        rotate: -8,
+        scale: 1,
+      }}
+      animate={{
+        left: `${toX}%`,
+        top: `${toY}%`,
+        width: 44,
+        height: 54,
+        opacity: 0,
+        rotate: 8,
+        scale: 0.7,
+      }}
+      transition={{
+        delay,
+        duration: 0.62,
+        ease: [0.45, 0.02, 0.85, 0.2],
+      }}
+    >
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={src} alt="" className="size-full object-contain" />
+    </motion.div>
   );
 }
 
@@ -973,6 +986,7 @@ export function ListingPipeline({
   const [beat, setBeat] = useState(0);
   const [sku, setSku] = useState(0);
   const [fileDrag, setFileDrag] = useState(false);
+  const [landed, setLanded] = useState(0);
   const shop = useConnectedEbayStoreName(storeName);
   const catalog =
     hasUserPhotos
@@ -1028,14 +1042,16 @@ export function ListingPipeline({
   const shopifyIn = at("fillShopify");
   const webIn = at("fillWeb");
   const readyOn = at("ready");
-  const publishing = is("publish");
-  const ebayLive = at("ebayLive");
-  const amazonLive = at("amazonLive");
-  const facebookLive = at("facebookLive");
-  const shopifyLive = at("shopifyLive");
-  const webLive = at("webLive");
-  const liveOn = at("ebayLive");
-  const allLive = at("webLive");
+  const packing = is("publish");
+  const dispatching = is("dispatch");
+  const publishing = packing || dispatching;
+  const ebayLive = landed >= 1;
+  const amazonLive = landed >= 2;
+  const facebookLive = landed >= 3;
+  const shopifyLive = landed >= 4;
+  const webLive = landed >= 5;
+  const liveOn = at("dispatch");
+  const allLive = landed >= 5;
   const dragPhase =
     is("grab") ? "grab" : is("drag") ? "drag" : is("drop") ? "drop" : "gone";
   const priceLabel = `$${item.price.toFixed(2)}`;
@@ -1127,6 +1143,29 @@ export function ListingPipeline({
     return () => window.clearInterval(t);
   }, [photoIn, photosOn, reduce, freezeDrop, shots.length]);
 
+  useEffect(() => {
+    if (dropMode) return;
+    if (reduce) {
+      setLanded(5);
+      return;
+    }
+    if (step.id === "dispatch") {
+      setLanded(0);
+      let n = 0;
+      const t = window.setInterval(() => {
+        n += 1;
+        setLanded(Math.min(5, n));
+        if (n >= 5) window.clearInterval(t);
+      }, 140);
+      return () => window.clearInterval(t);
+    }
+    if (step.id === "sales" || step.id === "hold") {
+      setLanded(5);
+      return;
+    }
+    setLanded(0);
+  }, [dropMode, reduce, step.id, sku]);
+
   return (
     <section
       className={cn(
@@ -1148,28 +1187,21 @@ export function ListingPipeline({
               hopKey={`${sku}-${step.id}`}
             />
           ) : null}
-          {!dropMode && is("publish") ? (
-            <FlyClone
-              src={cover}
-              fromX={18}
-              fromY={8}
-              toX={91}
-              toY={8}
-              size={72}
-              hopKey={`${sku}-pack`}
-            />
+          {!dropMode && packing ? (
+            <CompressBundle src={cover} extras={shots} />
           ) : null}
-          {!dropMode && SEND_FLY[step.id] ? (
-            <FlyClone
-              src={cover}
-              fromX={91}
-              fromY={8}
-              toX={SEND_FLY[step.id]!.x}
-              toY={SEND_FLY[step.id]!.y}
-              size={56}
-              hopKey={`${sku}-send-${step.id}`}
-            />
-          ) : null}
+          {!dropMode && dispatching
+            ? FALL_TO.map((store, i) => (
+                <FallPacket
+                  key={`${sku}-fall-${store.name}`}
+                  src={cover}
+                  toX={store.x}
+                  toY={store.y}
+                  delay={i * 0.06}
+                  hopKey={`${sku}-fall-${store.name}`}
+                />
+              ))
+            : null}
           {is("drag") && !dropMode ? (
             <div className="pointer-events-none absolute inset-0 z-10 bg-white/45" />
           ) : null}
@@ -1187,13 +1219,17 @@ export function ListingPipeline({
       <div
         className={cn(
           "flex shrink-0 items-center gap-3 border-b bg-white px-3 py-2.5 sm:px-4",
-          readyOn && !liveOn ? "border-[#141414]" : "border-[#e5e5e5]",
+          readyOn && !publishing ? "border-[#141414]" : "border-[#e5e5e5]",
         )}
       >
         <motion.div
           className="relative flex shrink-0 items-center gap-1"
-          animate={publishing ? { x: 28, scale: 0.86 } : { x: 0, scale: 1 }}
-          transition={{ type: "spring", stiffness: 260, damping: 22 }}
+          animate={
+            packing
+              ? { scale: 0.62, x: 36 }
+              : { scale: 1, x: 0 }
+          }
+          transition={{ type: "spring", stiffness: 280, damping: 22 }}
         >
           {dragging || fileDrag ? (
             shots.map((_, i) => (
@@ -1213,10 +1249,10 @@ export function ListingPipeline({
                 key={`${sku}-${src}`}
                 initial={i === 0 ? false : { opacity: 0, scale: 0.45, x: -18 }}
                 animate={{
-                  opacity: i < filled ? 1 : photoIn ? 0.2 : 0,
-                  y: i < filled ? 0 : 6,
-                  scale: i < filled ? 1 : 0.92,
-                  x: i < filled ? 0 : -8,
+                  opacity: packing ? (i === 0 ? 1 : 0.35) : i < filled ? 1 : photoIn ? 0.2 : 0,
+                  y: packing ? 0 : i < filled ? 0 : 6,
+                  scale: packing ? 0.85 : i < filled ? 1 : 0.92,
+                  x: packing ? -i * 22 : i < filled ? 0 : -8,
                 }}
                 transition={{ type: "spring", stiffness: 420, damping: 20 }}
                 className={cn(
@@ -1250,7 +1286,7 @@ export function ListingPipeline({
             ))
           )}
         </motion.div>
-        <div className="min-w-0 flex-1">
+        <div className={cn("min-w-0 flex-1", packing && "pointer-events-none opacity-0")}>
           <p className="truncate text-[13px] font-semibold tracking-tight text-[#191919] sm:text-[15px]">
             {dropMode
               ? freezeDrop
@@ -1318,13 +1354,7 @@ export function ListingPipeline({
               publishing || liveOn ? "text-white" : readyOn ? "text-[#141414]" : "text-[#9b9b9b]",
             )}
           >
-            {publishing
-              ? "Sending"
-              : liveOn && !allLive
-                ? `${DISPATCH_STORES.findIndex((s) => s.id === step.id) + 1}/5`
-                : liveOn
-                  ? "Live"
-                  : "Publish"}
+            {packing ? "Packing" : dispatching ? "Sending" : liveOn ? "Live" : "Publish"}
           </span>
         </motion.div>
         ) : null}
@@ -1337,8 +1367,27 @@ export function ListingPipeline({
         compact={compact}
       />
 
-      {!dropMode && at("publish") && !at("sales") ? (
-        <DispatchRail currentId={step.id} packing={publishing} />
+      {!dropMode && publishing ? (
+        <div className="shrink-0 border-b border-[#e5e5e5] bg-white px-4 py-2">
+          <div className="grid grid-cols-5 gap-1">
+            {FALL_TO.map((store, i) => (
+              <p
+                key={store.name}
+                className={cn(
+                  "flex h-7 items-center justify-center text-[11px] font-medium",
+                  packing
+                    ? "text-[#b0b0b0]"
+                    : landed > i
+                      ? "text-[#141414]"
+                      : "text-[#b0b0b0]",
+                )}
+              >
+                {landed > i ? <Check className="mr-1 size-3" strokeWidth={2.4} /> : null}
+                {store.name}
+              </p>
+            ))}
+          </div>
+        </div>
       ) : null}
 
       {dropMode ? (
@@ -1372,9 +1421,17 @@ export function ListingPipeline({
           <StoreTargets />
         </div>
       ) : (
-      <div className="relative min-h-0 flex-1">
+      <motion.div
+        className="relative min-h-0 flex-1 origin-top"
+        animate={
+          packing
+            ? { scale: 0.88, y: 22, opacity: 0.35 }
+            : { scale: 1, y: 0, opacity: 1 }
+        }
+        transition={{ type: "spring", stiffness: 240, damping: 22 }}
+      >
         <div className="grid h-full min-h-0 grid-cols-6 grid-rows-2 divide-x divide-y divide-[#e5e5e5]">
-        <ChannelShell live={ebayLive} filled={ebayIn} focused={is("fillEbay") || is("ebayLive")} className="col-span-2">
+        <ChannelShell live={ebayLive} filled={ebayIn} focused={is("fillEbay") || (dispatching && landed === 1)} className="col-span-2">
           {ebayIn ? (
             <EbayLivePreview
               key={`ebay-${cover}`}
@@ -1402,7 +1459,7 @@ export function ListingPipeline({
           )}
         </ChannelShell>
 
-        <ChannelShell live={amazonLive} filled={amazonIn} focused={is("fillAmazon") || is("amazonLive")} className="col-span-2">
+        <ChannelShell live={amazonLive} filled={amazonIn} focused={is("fillAmazon") || (dispatching && landed === 2)} className="col-span-2">
           {amazonIn ? (
             <AmazonStorefront key={`amz-${cover}`} src={cover} title={item.title} price={priceLabel} />
           ) : (
@@ -1420,7 +1477,7 @@ export function ListingPipeline({
           )}
         </ChannelShell>
 
-        <ChannelShell live={facebookLive} filled={facebookIn} focused={is("fillFacebook") || is("facebookLive")} className="col-span-2">
+        <ChannelShell live={facebookLive} filled={facebookIn} focused={is("fillFacebook") || (dispatching && landed === 3)} className="col-span-2">
           {facebookIn ? (
             <FacebookStorefront
               key={`fb-${cover}`}
@@ -1446,7 +1503,7 @@ export function ListingPipeline({
           )}
         </ChannelShell>
 
-        <ChannelShell live={shopifyLive} filled={shopifyIn} focused={is("fillShopify") || is("shopifyLive")} className="col-span-3">
+        <ChannelShell live={shopifyLive} filled={shopifyIn} focused={is("fillShopify") || (dispatching && landed === 4)} className="col-span-3">
           {shopifyIn ? (
             <ShopifyStorefront key={`shop-${cover}`} src={cover} title={item.title} price={priceLabel} />
           ) : (
@@ -1466,7 +1523,7 @@ export function ListingPipeline({
           )}
         </ChannelShell>
 
-        <ChannelShell live={webLive} filled={webIn} focused={is("fillWeb") || is("webLive")} className="col-span-3">
+        <ChannelShell live={webLive} filled={webIn} focused={is("fillWeb") || (dispatching && landed === 5)} className="col-span-3">
           {webIn ? (
             <SiteStorefront
               key={`web-${cover}`}
@@ -1496,7 +1553,7 @@ export function ListingPipeline({
           )}
         </ChannelShell>
         </div>
-      </div>
+      </motion.div>
       )}
 
       {dropMode ? null : (

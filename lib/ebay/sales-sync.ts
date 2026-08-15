@@ -28,6 +28,7 @@ export type InventoryLine = {
   sku: string;
   title: string;
   qty: number;
+  listedQty: number;
   listingId: string;
   status: string;
   price: number | null;
@@ -35,6 +36,30 @@ export type InventoryLine = {
   watchers: number;
   soldQty: number;
   pictureUrl: string | null;
+};
+
+export type StockAlert = {
+  listingId: string;
+  title: string;
+  pictureUrl: string | null;
+  qty: number;
+  kind: "out" | "low";
+  why: string;
+  fix: string;
+  href: string;
+};
+
+export type OfferMove = {
+  listingId: string;
+  title: string;
+  pictureUrl: string | null;
+  price: number | null;
+  watchers: number;
+  suggestedPrice: number | null;
+  suggestedOffPct: number;
+  why: string;
+  href: string;
+  kind: "in_cart" | "best_offer";
 };
 
 export type SalesSnapshot = {
@@ -56,7 +81,10 @@ export type SalesSnapshot = {
   inventoryLow: number;
   inventoryOut: number;
   watchers: number;
+  inCart: number;
   inventory: InventoryLine[];
+  stockAlerts: StockAlert[];
+  offerMoves: OfferMove[];
   recent: EbaySaleLine[];
   opportunities: SalesOpportunity[];
   error?: string;
@@ -84,7 +112,10 @@ export function emptySalesSnapshot(
     inventoryLow: 0,
     inventoryOut: 0,
     watchers: 0,
+    inCart: 0,
     inventory: [],
+    stockAlerts: [],
+    offerMoves: [],
     recent: [],
     opportunities: [],
     ...partial,
@@ -178,41 +209,113 @@ async function tradingXml(
 }
 
 function xmlTag(block: string, tag: string) {
-  return block.match(new RegExp(`<${tag}[^>]*>([^<]*)</${tag}>`, "i"))?.[1]?.trim() || "";
+  return (
+    block
+      .match(new RegExp(`<${tag}[^>]*>([^<]*)</${tag}>`, "i"))?.[1]
+      ?.trim() || ""
+  );
+}
+
+function decodeXmlText(raw: string) {
+  return raw
+    .replace(/&amp;/g, "&")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">");
+}
+
+function xmlSection(xml: string, tag: string) {
+  return xml.match(new RegExp(`<${tag}>[\\s\\S]*?</${tag}>`, "i"))?.[0] || "";
+}
+
+function pictureFromItemXml(block: string) {
+  const raw =
+    xmlTag(block, "GalleryURL") ||
+    xmlTag(block, "PictureURL") ||
+    xmlTag(block, "GalleryPlusPictureURL");
+  if (!raw) return null;
+  const url = decodeXmlText(raw).replace(/^http:\/\//i, "https://");
+  return url.startsWith("https://") ? url : null;
+}
+
+function parseItemBlocks(sectionXml: string) {
+  return sectionXml.match(/<Item>([\s\S]*?)<\/Item>/gi) || [];
+}
+
+function legacyListingId(raw: string) {
+  const value = raw.trim();
+  const rest = value.match(/^v1\|(\d+)/i);
+  return rest?.[1] || value;
+}
+
+function suggestOffer(price: number | null) {
+  if (!price || price < 2) return { pct: 0, amount: null as number | null };
+  const pct = price >= 50 ? 10 : 5;
+  return {
+    pct,
+    amount: Math.round(price * (1 - pct / 100) * 100) / 100,
+  };
+}
+
+function ebayItemHref(listingId: string) {
+  return listingId ? `https://www.ebay.com/itm/${listingId}` : "";
+}
+
+function ebayBestOfferHref(listingId: string) {
+  return `https://www.ebay.com/vod/FetchBestOffers?itemid=${listingId}`;
+}
+
+type TradingRow = {
+  sku: string;
+  status: string;
+  qty: number;
+  listedQty: number;
+  listingId: string;
+  title: string;
+  price: number | null;
+  watchers: number;
+  soldQty: number;
+  pictureUrl: string | null;
+};
+
+function parseTradingItem(block: string): TradingRow | null {
+  const listingId = xmlTag(block, "ItemID");
+  if (!listingId) return null;
+  const listedQty = Number(xmlTag(block, "Quantity") || "0");
+  const soldQty = Number(xmlTag(block, "QuantitySold") || "0");
+  const availableRaw = xmlTag(block, "QuantityAvailable");
+  const qty = Math.max(
+    0,
+    availableRaw ? Number(availableRaw) : listedQty - soldQty,
+  );
+  const priceRaw =
+    block.match(
+      /<SellingStatus>[\s\S]*?<CurrentPrice[^>]*>([^<]+)<\/CurrentPrice>/i,
+    )?.[1] || xmlTag(block, "BuyItNowPrice");
+  return {
+    sku: xmlTag(block, "SKU") || xmlTag(block, "CustomLabel") || listingId,
+    status: "PUBLISHED",
+    qty: Number.isFinite(qty) ? qty : 0,
+    listedQty: Number.isFinite(listedQty) ? listedQty : 0,
+    listingId,
+    title: decodeXmlText(xmlTag(block, "Title") || listingId),
+    price: Number(priceRaw) || null,
+    watchers: Number(xmlTag(block, "WatchCount") || "0") || 0,
+    soldQty: Number.isFinite(soldQty) ? soldQty : 0,
+    pictureUrl: pictureFromItemXml(block),
+  };
 }
 
 async function fetchTradingActiveInventory(accessToken: string): Promise<{
   total: number;
-  rows: Array<{
-    sku: string;
-    status: string;
-    qty: number;
-    listingId: string;
-    title: string;
-    price: number | null;
-    watchers: number;
-    soldQty: number;
-    pictureUrl: string | null;
-  }>;
+  rows: TradingRow[];
+  bestOffers: TradingRow[];
 }> {
-  const rows: Array<{
-    sku: string;
-    status: string;
-    qty: number;
-    listingId: string;
-    title: string;
-    price: number | null;
-    watchers: number;
-    soldQty: number;
-    pictureUrl: string | null;
-  }> = [];
-  let total = 0;
-
-  for (let page = 1; page <= 1; page++) {
-    const xml = await tradingXml(
-      accessToken,
-      "GetMyeBaySelling",
-      `<?xml version="1.0" encoding="utf-8"?>
+  const xml = await tradingXml(
+    accessToken,
+    "GetMyeBaySelling",
+    `<?xml version="1.0" encoding="utf-8"?>
 <GetMyeBaySellingRequest xmlns="urn:ebay:apis:eBLBaseComponents">
   <ErrorLanguage>en_US</ErrorLanguage>
   <WarningLevel>High</WarningLevel>
@@ -223,60 +326,108 @@ async function fetchTradingActiveInventory(accessToken: string): Promise<{
     <IncludeNotes>false</IncludeNotes>
     <Pagination>
       <EntriesPerPage>200</EntriesPerPage>
-      <PageNumber>${page}</PageNumber>
+      <PageNumber>1</PageNumber>
     </Pagination>
   </ActiveList>
+  <BestOfferList>
+    <Include>true</Include>
+    <Pagination>
+      <EntriesPerPage>50</EntriesPerPage>
+      <PageNumber>1</PageNumber>
+    </Pagination>
+  </BestOfferList>
 </GetMyeBaySellingRequest>`,
-    );
-    if (/<Ack>Failure<\/Ack>/i.test(xml)) break;
-
-    total = Number(
-      xml.match(
-        /<ActiveList>[\s\S]*?<TotalNumberOfEntries>(\d+)<\/TotalNumberOfEntries>/i,
-      )?.[1] || total,
-    );
-
-    const itemBlocks = xml.match(/<Item>([\s\S]*?)<\/Item>/gi) || [];
-    for (const block of itemBlocks) {
-      const listingId = xmlTag(block, "ItemID");
-      if (!listingId) continue;
-      const quantity = Number(xmlTag(block, "Quantity") || "0");
-      const soldQty = Number(xmlTag(block, "QuantitySold") || "0");
-      const availableRaw = xmlTag(block, "QuantityAvailable");
-      const qty = Math.max(
-        0,
-        availableRaw
-          ? Number(availableRaw)
-          : quantity - soldQty,
-      );
-      const priceRaw =
-        block.match(
-          /<SellingStatus>[\s\S]*?<CurrentPrice[^>]*>([^<]+)<\/CurrentPrice>/i,
-        )?.[1] || xmlTag(block, "BuyItNowPrice");
-      const pictureUrl =
-        xmlTag(block, "GalleryURL") || xmlTag(block, "PictureURL") || null;
-      rows.push({
-        sku: xmlTag(block, "SKU") || xmlTag(block, "CustomLabel") || listingId,
-        status: "PUBLISHED",
-        qty: Number.isFinite(qty) ? qty : 0,
-        listingId,
-        title: xmlTag(block, "Title") || listingId,
-        price: Number(priceRaw) || null,
-        watchers: Number(xmlTag(block, "WatchCount") || "0") || 0,
-        soldQty: Number.isFinite(soldQty) ? soldQty : 0,
-        pictureUrl,
-      });
-    }
-
-    const pages = Number(
-      xml.match(
-        /<ActiveList>[\s\S]*?<TotalNumberOfPages>(\d+)<\/TotalNumberOfPages>/i,
-      )?.[1] || "1",
-    );
-    if (page >= pages || itemBlocks.length === 0) break;
+  );
+  if (/<Ack>Failure<\/Ack>/i.test(xml)) {
+    return { total: 0, rows: [], bestOffers: [] };
   }
 
-  return { total: total || rows.length, rows };
+  const activeXml = xmlSection(xml, "ActiveList");
+  const offerXml = xmlSection(xml, "BestOfferList");
+  const rows = parseItemBlocks(activeXml)
+    .map(parseTradingItem)
+    .filter((row): row is TradingRow => Boolean(row));
+  const bestOffers = parseItemBlocks(offerXml)
+    .map(parseTradingItem)
+    .filter((row): row is TradingRow => Boolean(row));
+  const total = Number(
+    activeXml.match(
+      /<TotalNumberOfEntries>(\d+)<\/TotalNumberOfEntries>/i,
+    )?.[1] || rows.length,
+  );
+  return { total: total || rows.length, rows, bestOffers };
+}
+
+async function fetchEligibleOfferListings(
+  accessToken: string,
+): Promise<string[]> {
+  const cfg = getEbayConfig();
+  const res = await fetch(
+    `${cfg.apiBase}/sell/negotiation/v1/find_eligible_items?limit=50`,
+    {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        Accept: "application/json",
+        "X-EBAY-C-MARKETPLACE-ID": "EBAY_US",
+      },
+      cache: "no-store",
+    },
+  );
+  const json = (await res.json().catch(() => ({}))) as {
+    eligibleItems?: Array<{ listingId?: string }>;
+  };
+  if (!res.ok) return [];
+  return (json.eligibleItems ?? [])
+    .map((row) => legacyListingId(String(row.listingId || "")))
+    .filter(Boolean);
+}
+
+async function fillMissingPictures(
+  accessToken: string,
+  rows: Array<{ listingId: string; pictureUrl: string | null }>,
+) {
+  const missing = rows.filter((row) => row.listingId && !row.pictureUrl);
+  if (missing.length === 0) return;
+  const cfg = getEbayConfig();
+  const host =
+    cfg.env === "production"
+      ? "https://open.api.ebay.com/shopping"
+      : "https://open.api.sandbox.ebay.com/shopping";
+  const chunk = missing.slice(0, 20);
+  const ids = chunk.map((row) => row.listingId).join(",");
+  const res = await fetch(
+    `${host}?callname=GetMultipleItems&responseencoding=JSON&siteid=0&version=1157&IncludeSelector=Details&ItemID=${ids}`,
+    {
+      headers: {
+        "X-EBAY-API-IAF-TOKEN": accessToken,
+        "X-EBAY-API-APP-ID": cfg.clientId,
+      },
+      cache: "no-store",
+    },
+  );
+  const json = (await res.json().catch(() => ({}))) as {
+    Item?: Array<{
+      ItemID?: string;
+      GalleryURL?: string;
+      PictureURL?: string | string[];
+    }>;
+  };
+  const items = Array.isArray(json.Item)
+    ? json.Item
+    : json.Item
+      ? [json.Item]
+      : [];
+  const byId = new Map<string, string>();
+  for (const item of items) {
+    const id = String(item.ItemID || "");
+    const pic = Array.isArray(item.PictureURL)
+      ? item.PictureURL[0]
+      : item.GalleryURL || item.PictureURL;
+    if (id && pic) byId.set(id, String(pic).replace(/^http:\/\//i, "https://"));
+  }
+  for (const row of rows) {
+    if (!row.pictureUrl) row.pictureUrl = byId.get(row.listingId) || null;
+  }
 }
 
 async function fetchEbayOffers(accessToken: string): Promise<
@@ -347,21 +498,24 @@ export async function syncEbaySalesForUser(
   accessToken: string,
 ): Promise<SalesSnapshot> {
   const syncedAt = new Date().toISOString();
-  const [ordersResult, offers, trading, storeName] = await Promise.all([
-    fetchEbayOrders(accessToken)
-      .then((rows) => ({ rows, error: undefined as string | undefined }))
-      .catch((error) => ({
-        rows: [] as FulfillmentOrder[],
-        error:
-          error instanceof Error ? error.message : "Could not read eBay orders",
+  const [ordersResult, offers, trading, storeName, eligibleIds] =
+    await Promise.all([
+      fetchEbayOrders(accessToken)
+        .then((rows) => ({ rows, error: undefined as string | undefined }))
+        .catch((error) => ({
+          rows: [] as FulfillmentOrder[],
+          error:
+            error instanceof Error ? error.message : "Could not read eBay orders",
+        })),
+      fetchEbayOffers(accessToken).catch(() => []),
+      fetchTradingActiveInventory(accessToken).catch(() => ({
+        total: 0,
+        rows: [] as TradingRow[],
+        bestOffers: [] as TradingRow[],
       })),
-    fetchEbayOffers(accessToken).catch(() => []),
-    fetchTradingActiveInventory(accessToken).catch(() => ({
-      total: 0,
-      rows: [] as Awaited<ReturnType<typeof fetchTradingActiveInventory>>["rows"],
-    })),
-    fetchEbayStoreName(accessToken).catch(() => null),
-  ]);
+      fetchEbayStoreName(accessToken).catch(() => null),
+      fetchEligibleOfferListings(accessToken).catch(() => [] as string[]),
+    ]);
   const orders = ordersResult.rows;
   const orderError = ordersResult.error;
 
@@ -379,6 +533,25 @@ export async function syncEbaySalesForUser(
     ebay_status: string | null;
     quantity: number | null;
   }>;
+  const productIds = products.map((p) => p.id);
+  const coverByProduct = new Map<string, string>();
+  if (productIds.length > 0) {
+    const { data: images } = await supabase
+      .from("product_images")
+      .select("product_id, public_url, is_primary, sort_order")
+      .in("product_id", productIds)
+      .order("sort_order", { ascending: true });
+    const sorted = [...(images ?? [])].sort((a, b) => {
+      const primary = (a.is_primary ? 0 : 1) - (b.is_primary ? 0 : 1);
+      if (primary !== 0) return primary;
+      return Number(a.sort_order ?? 0) - Number(b.sort_order ?? 0);
+    });
+    for (const img of sorted) {
+      const id = String(img.product_id);
+      const url = String(img.public_url ?? "");
+      if (url && !coverByProduct.has(id)) coverByProduct.set(id, url);
+    }
+  }
 
   const bySku = new Map(
     products
@@ -521,56 +694,150 @@ export async function syncEbaySalesForUser(
   }
 
   const byListingId = new Map<string, InventoryLine>();
-  for (const o of offers.filter((row) => row.status === "PUBLISHED" || row.listingId)) {
-    const match =
-      (o.sku ? bySku.get(o.sku.toLowerCase()) : undefined) ||
-      (o.listingId ? byListing.get(o.listingId) : undefined);
-    const key = o.listingId || o.sku;
-    if (!key) continue;
-    byListingId.set(key, {
-      sku: o.sku,
-      title: o.title || match?.title || o.sku || o.listingId || "Listing",
-      qty: o.qty,
-      listingId: o.listingId,
-      status: o.status || "PUBLISHED",
-      price: o.price,
-      higlouProductId: match?.id || null,
-      watchers: 0,
-      soldQty: 0,
-      pictureUrl: null,
-    });
-  }
   for (const o of trading.rows) {
     const match =
       (o.sku ? bySku.get(o.sku.toLowerCase()) : undefined) ||
       (o.listingId ? byListing.get(o.listingId) : undefined);
-    const prev = byListingId.get(o.listingId);
     byListingId.set(o.listingId, {
-      sku: o.sku || prev?.sku || "",
-      title: o.title || prev?.title || match?.title || o.listingId,
+      sku: o.sku,
+      title: o.title || match?.title || o.listingId,
       qty: o.qty,
+      listedQty: o.listedQty || o.qty,
       listingId: o.listingId,
       status: "PUBLISHED",
-      price: o.price ?? prev?.price ?? null,
-      higlouProductId: match?.id || prev?.higlouProductId || null,
+      price: o.price,
+      higlouProductId: match?.id || null,
       watchers: o.watchers,
       soldQty: o.soldQty,
-      pictureUrl: o.pictureUrl || prev?.pictureUrl || null,
+      pictureUrl: o.pictureUrl || (match ? coverByProduct.get(match.id) || null : null),
+    });
+  }
+  for (const o of offers.filter(
+    (row) => row.status === "PUBLISHED" && row.listingId && row.qty > 0,
+  )) {
+    if (byListingId.has(o.listingId)) continue;
+    const match =
+      (o.sku ? bySku.get(o.sku.toLowerCase()) : undefined) ||
+      byListing.get(o.listingId);
+    byListingId.set(o.listingId, {
+      sku: o.sku,
+      title: o.title || match?.title || o.sku || o.listingId || "Listing",
+      qty: o.qty,
+      listedQty: o.qty,
+      listingId: o.listingId,
+      status: "PUBLISHED",
+      price: o.price,
+      higlouProductId: match?.id || null,
+      watchers: 0,
+      soldQty: 0,
+      pictureUrl: match ? coverByProduct.get(match.id) || null : null,
     });
   }
 
-  const inventory = [...byListingId.values()].sort((a, b) => a.qty - b.qty);
+  const inventory = [...byListingId.values()].sort(
+    (a, b) => b.watchers - a.watchers || a.title.localeCompare(b.title),
+  );
   const liveRows = inventory.filter((r) => r.status === "PUBLISHED");
+  await fillMissingPictures(accessToken, liveRows).catch(() => undefined);
+
   const inventoryLive = Math.max(trading.total, liveRows.length);
   const inventoryUnits = liveRows.reduce((sum, r) => sum + r.qty, 0);
   const inventoryValue = liveRows.reduce(
     (sum, r) => sum + (r.price || 0) * r.qty,
     0,
   );
-  const inventoryLow = liveRows.filter((r) => r.qty > 0 && r.qty <= 1).length;
-  const inventoryOut = liveRows.filter((r) => r.qty <= 0).length;
+  const outRows = liveRows.filter((r) => r.qty <= 0);
+  const lowRows = liveRows.filter((r) => r.listedQty > 1 && r.qty === 1);
+  const inventoryLow = lowRows.length;
+  const inventoryOut = outRows.length;
   const watchers = liveRows.reduce((sum, r) => sum + r.watchers, 0);
   const avgOrder = orders.length ? revenue30d / orders.length : 0;
+
+  const stockAlerts: StockAlert[] = [
+    ...outRows.map((row) => ({
+      listingId: row.listingId,
+      title: row.title,
+      pictureUrl: row.pictureUrl,
+      qty: row.qty,
+      kind: "out" as const,
+      why: "Sold out — 0 left on eBay.",
+      fix: "Revise the listing and add quantity, or relist it.",
+      href: ebayItemHref(row.listingId),
+    })),
+    ...lowRows.map((row) => ({
+      listingId: row.listingId,
+      title: row.title,
+      pictureUrl: row.pictureUrl,
+      qty: row.qty,
+      kind: "low" as const,
+      why: `Only 1 left of ${row.listedQty} listed.`,
+      fix: "Add stock on eBay so the listing does not go dark.",
+      href: ebayItemHref(row.listingId),
+    })),
+  ];
+
+  const offerMoves: OfferMove[] = [];
+  const seenMoves = new Set<string>();
+  for (const listingId of eligibleIds) {
+    const row = byListingId.get(listingId);
+    if (!row || seenMoves.has(listingId)) continue;
+    seenMoves.add(listingId);
+    const offer = suggestOffer(row.price);
+    offerMoves.push({
+      listingId,
+      title: row.title,
+      pictureUrl: row.pictureUrl,
+      price: row.price,
+      watchers: row.watchers,
+      suggestedPrice: offer.amount,
+      suggestedOffPct: offer.pct,
+      why:
+        row.watchers > 0
+          ? `${row.watchers} watching — in a cart or watching. Send a discount.`
+          : "A buyer has this in a cart or is watching. Send a discount.",
+      href: ebayItemHref(listingId),
+      kind: "in_cart",
+    });
+  }
+  for (const row of trading.bestOffers) {
+    const live = byListingId.get(row.listingId);
+    if (seenMoves.has(row.listingId) && offerMoves.some((m) => m.kind === "best_offer" && m.listingId === row.listingId)) {
+      continue;
+    }
+    offerMoves.push({
+      listingId: row.listingId,
+      title: live?.title || row.title,
+      pictureUrl: live?.pictureUrl || row.pictureUrl,
+      price: live?.price ?? row.price,
+      watchers: live?.watchers || 0,
+      suggestedPrice: null,
+      suggestedOffPct: 0,
+      why: "A buyer sent a Best Offer. Accept, decline, or counter on eBay.",
+      href: ebayBestOfferHref(row.listingId),
+      kind: "best_offer",
+    });
+  }
+
+  const inCart = offerMoves.filter((m) => m.kind === "in_cart").length;
+  if (inCart === 0) {
+    for (const row of liveRows.filter((r) => r.watchers > 0).slice(0, 8)) {
+      if (seenMoves.has(row.listingId)) continue;
+      seenMoves.add(row.listingId);
+      const offer = suggestOffer(row.price);
+      offerMoves.push({
+        listingId: row.listingId,
+        title: row.title,
+        pictureUrl: row.pictureUrl,
+        price: row.price,
+        watchers: row.watchers,
+        suggestedPrice: offer.amount,
+        suggestedOffPct: offer.pct,
+        why: `${row.watchers} watching. Send a discount on eBay to close it.`,
+        href: ebayItemHref(row.listingId),
+        kind: "in_cart",
+      });
+    }
+  }
 
   return {
     syncedAt,
@@ -591,10 +858,13 @@ export async function syncEbaySalesForUser(
     inventoryLow,
     inventoryOut,
     watchers,
-    inventory: inventory.slice(0, 40),
+    inCart,
+    inventory: inventory.slice(0, 24),
+    stockAlerts: stockAlerts.slice(0, 16),
+    offerMoves: offerMoves.slice(0, 16),
     recent: recent
       .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))
-      .slice(0, 20),
+      .slice(0, 12),
     opportunities: opportunities.slice(0, 8),
     error:
       orders.length === 0 && inventory.length === 0 ? orderError : undefined,

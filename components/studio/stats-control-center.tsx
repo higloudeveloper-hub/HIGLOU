@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { motion } from "motion/react";
 import { ArrowRight, RefreshCw } from "lucide-react";
@@ -12,70 +12,46 @@ import {
   useEbaySales,
 } from "@/lib/studio/use-ebay-sales";
 import { cn } from "@/lib/utils";
-import type { InventoryLine, SalesOpportunity } from "@/lib/ebay/sales-sync";
+import type {
+  InventoryLine,
+  OfferMove,
+  StockAlert,
+} from "@/lib/ebay/sales-sync";
 
-function Metric({
-  label,
-  value,
-  hint,
-  pulse,
-}: {
-  label: string;
-  value: string;
-  hint: string;
-  pulse?: boolean;
-}) {
+type Pane = "act" | "carts" | "listings" | "orders";
+
+function Thumb({ src, title }: { src: string | null; title: string }) {
   return (
-    <div className="relative overflow-hidden rounded-xl border border-[#d5d9d9] bg-white px-4 py-3.5 shadow-[0_1px_2px_rgba(15,17,17,0.06)]">
-      {pulse ? (
-        <span
-          aria-hidden
-          className="absolute inset-x-0 top-0 h-0.5 bg-brand [animation:higlou-scan_2.4s_ease-in-out_infinite]"
-        />
-      ) : null}
-      <p className="text-[11px] font-medium tracking-[0.12em] text-[#565959] uppercase">
-        {label}
-      </p>
-      <motion.p
-        key={value}
-        initial={{ opacity: 0.45, y: 4 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="mt-1 text-[24px] font-semibold tabular-nums tracking-tight text-[#0f1111]"
-      >
-        {value}
-      </motion.p>
-      <p className="mt-0.5 text-[12px] text-[#565959]">{hint}</p>
+    <div className="relative size-12 shrink-0 overflow-hidden rounded-md border border-[#eee] bg-[#f7f7f7]">
+      {src ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={src} alt="" className="size-full object-contain p-0.5" />
+      ) : (
+        <span className="grid size-full place-items-center text-[13px] font-semibold text-[#565959]">
+          {(title.trim()[0] || "?").toUpperCase()}
+        </span>
+      )}
     </div>
   );
 }
 
-function qtyClass(qty: number) {
-  if (qty <= 0) return "text-red-600";
-  if (qty <= 1) return "text-amber-700";
-  return "text-[#0f1111]";
-}
-
-function opportunityLabel(kind: SalesOpportunity["kind"]) {
-  if (kind === "draft") return "Draft";
-  if (kind === "live_no_sales") return "No sales";
-  return "eBay only";
-}
-
 export function StatsControlCenter() {
   const { snap, loading, tick } = useEbaySales();
+  const [pane, setPane] = useState<Pane | null>(null);
 
   if (loading && !snap) {
     return (
       <div className="mx-auto max-w-[1080px]">
-        <div className="h-16 animate-pulse rounded-xl bg-[#f0f2f2]" />
-        <div className="mt-6 grid grid-cols-2 gap-3 lg:grid-cols-3">
+        <div className="h-14 animate-pulse rounded-xl bg-[#f0f2f2]" />
+        <div className="mt-4 grid grid-cols-2 gap-2 lg:grid-cols-3">
           {Array.from({ length: 6 }).map((_, i) => (
             <div
               key={i}
-              className="h-[92px] animate-pulse rounded-xl border border-[#d5d9d9] bg-white"
+              className="h-[72px] animate-pulse rounded-xl border border-[#d5d9d9] bg-white"
             />
           ))}
         </div>
+        <div className="mt-3 h-[320px] animate-pulse rounded-xl border border-[#d5d9d9] bg-white" />
       </div>
     );
   }
@@ -83,19 +59,23 @@ export function StatsControlCenter() {
 
   const live = snap.connected && !snap.error;
   const shop = snap.storeName?.trim() || "eBay store";
-  const alerts = snap.inventory.filter((row) => row.qty <= 1);
+  const alertCount = snap.inventoryLow + snap.inventoryOut;
+  const offerCount = snap.offerMoves.length;
+  const active: Pane =
+    pane ??
+    (alertCount > 0 ? "act" : offerCount > 0 ? "carts" : "listings");
 
   return (
-    <div className="mx-auto max-w-[1080px] pb-16">
-      <header className="flex flex-wrap items-end justify-between gap-4 pb-6">
+    <div className="mx-auto max-w-[1080px] pb-10">
+      <header className="flex flex-wrap items-end justify-between gap-3 pb-4">
         <div>
           <p className="inline-flex items-center gap-2 text-[11px] font-semibold tracking-[0.18em] text-muted-foreground uppercase">
             <LiveDot tone={live ? "success" : "brand"} />
             Control center
           </p>
-          <h1 className="mt-1 font-display text-4xl tracking-tight">Stats</h1>
-          <p className="mt-2 text-sm text-muted-foreground">
-            {shop} · live from eBay every {SALES_POLL_MS / 1000}s
+          <h1 className="mt-1 font-display text-3xl tracking-tight">Stats</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {shop} · tap a card · live every {SALES_POLL_MS / 1000}s
           </p>
         </div>
         <p className="inline-flex items-center gap-1.5 text-[12px] text-[#565959]">
@@ -109,7 +89,7 @@ export function StatsControlCenter() {
         </p>
       </header>
 
-      <div className="relative mb-4 h-1 overflow-hidden rounded-full bg-[#f0f2f2]">
+      <div className="relative mb-3 h-1 overflow-hidden rounded-full bg-[#f0f2f2]">
         <motion.span
           key={tick}
           className="absolute inset-y-0 w-1/3 rounded-full bg-brand"
@@ -122,72 +102,340 @@ export function StatsControlCenter() {
       {snap.error ? (
         <Link
           href="/settings#ebay-store"
-          className="mb-4 flex items-center justify-between rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-[13px] text-amber-950"
+          className="mb-3 flex items-center justify-between rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-[13px] text-amber-950"
         >
           {snap.error}
           <ArrowRight className="size-4" />
         </Link>
       ) : null}
 
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
-        <Metric
+      <div className="grid grid-cols-2 gap-2 lg:grid-cols-3">
+        <MetricCard
+          active={active === "orders"}
+          onClick={() => setPane("orders")}
           pulse
           label="Sales · 30 days"
           value={usd(snap.revenue30d)}
           hint={`${snap.orders30d} orders · ${snap.units30d} sold`}
         />
-        <Metric
+        <MetricCard
+          active={active === "orders"}
+          onClick={() => setPane("orders")}
           label="Today"
           value={`${snap.ordersToday}`}
           hint={`${usd(snap.revenueToday)} · avg ${usd(snap.avgOrder, true)}`}
         />
-        <Metric
+        <MetricCard
+          active={active === "listings"}
+          onClick={() => setPane("listings")}
           label="Live listings"
           value={String(snap.inventoryLive)}
-          hint={`${snap.inventoryUnits} units on eBay`}
+          hint={`${snap.inventoryUnits} units · ${usd(snap.inventoryValue)}`}
         />
-        <Metric
-          label="Inventory value"
-          value={usd(snap.inventoryValue)}
-          hint="Price × available qty"
+        <MetricCard
+          active={active === "carts"}
+          onClick={() => setPane("carts")}
+          label="In cart / watching"
+          value={String(snap.inCart)}
+          hint="Buyers you can send an offer"
         />
-        <Metric
+        <MetricCard
+          active={active === "carts"}
+          onClick={() => setPane("carts")}
           label="Watchers"
           value={String(snap.watchers)}
-          hint="People watching live items"
+          hint={`${offerCount} offer moves`}
         />
-        <Metric
+        <MetricCard
+          active={active === "act"}
+          onClick={() => setPane("act")}
           label="Stock alerts"
-          value={String(snap.inventoryLow + snap.inventoryOut)}
+          value={String(alertCount)}
           hint={`${snap.inventoryLow} low · ${snap.inventoryOut} out`}
+          warn={alertCount > 0}
         />
       </div>
 
-      <div className="mt-4 grid gap-3 lg:grid-cols-2">
-        <Panel
-          title="Inventory"
-          hint={`${snap.inventoryLive} live · qty from eBay`}
-          empty={
-            snap.inventory.length === 0
-              ? "No active eBay listings found yet."
-              : null
-          }
-        >
-          {snap.inventory.map((row) => (
-            <InventoryRow key={`${row.sku}-${row.listingId}`} row={row} />
-          ))}
-        </Panel>
+      <div className="mt-3 overflow-hidden rounded-xl border border-[#d5d9d9] bg-white">
+        {active === "act" ? (
+          <AlertPane alerts={snap.stockAlerts} />
+        ) : active === "carts" ? (
+          <OfferPane moves={snap.offerMoves} />
+        ) : active === "listings" ? (
+          <InventoryPane rows={snap.inventory} live={snap.inventoryLive} />
+        ) : (
+          <OrdersPane
+            rows={snap.recent}
+            empty={
+              snap.recent.length === 0
+                ? "No eBay orders in the last 30 days."
+                : null
+            }
+          />
+        )}
+      </div>
+    </div>
+  );
+}
 
-        <Panel
-          title="Orders"
-          hint="Last 30 days"
-          empty={
-            snap.recent.length === 0
-              ? "No eBay orders in the last 30 days."
-              : null
-          }
-        >
-          {snap.recent.map((row) => (
+function MetricCard({
+  label,
+  value,
+  hint,
+  pulse,
+  active,
+  warn,
+  onClick,
+}: {
+  label: string;
+  value: string;
+  hint: string;
+  pulse?: boolean;
+  active?: boolean;
+  warn?: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "relative overflow-hidden rounded-xl border bg-white px-4 py-3 text-left shadow-[0_1px_2px_rgba(15,17,17,0.06)] transition",
+        active ? "border-[#0f1111]" : "border-[#d5d9d9] hover:border-[#bbb]",
+      )}
+    >
+      {pulse ? (
+        <span
+          aria-hidden
+          className="absolute inset-x-0 top-0 h-0.5 bg-brand [animation:higlou-scan_2.4s_ease-in-out_infinite]"
+        />
+      ) : null}
+      <p className="text-[11px] font-medium tracking-[0.12em] text-[#565959] uppercase">
+        {label}
+      </p>
+      <p
+        className={cn(
+          "mt-0.5 text-[22px] font-semibold tabular-nums tracking-tight",
+          warn ? "text-amber-700" : "text-[#0f1111]",
+        )}
+      >
+        {value}
+      </p>
+      <p className="text-[12px] text-[#565959]">{hint}</p>
+    </button>
+  );
+}
+
+function PaneHead({ title, hint }: { title: string; hint: string }) {
+  return (
+    <div className="flex items-center justify-between border-b border-[#eee] px-4 py-2.5">
+      <p className="text-[13px] font-semibold text-[#0f1111]">{title}</p>
+      <p className="text-[11px] text-[#565959]">{hint}</p>
+    </div>
+  );
+}
+
+function AlertPane({ alerts }: { alerts: StockAlert[] }) {
+  if (alerts.length === 0) {
+    return (
+      <>
+        <PaneHead title="Stock alerts" hint="Only real problems" />
+        <p className="px-4 py-8 text-[13px] text-[#565959]">
+          No stock problems. Qty 1 on a one-of-one listing is normal, not an
+          alert.
+        </p>
+      </>
+    );
+  }
+  return (
+    <>
+      <PaneHead
+        title="Stock alerts"
+        hint="What it is · how to fix it"
+      />
+      <ul className="max-h-[min(52vh,380px)] divide-y divide-[#eee] overflow-y-auto">
+        {alerts.map((row) => (
+          <li key={`${row.kind}-${row.listingId}`}>
+            <a
+              href={row.href}
+              target="_blank"
+              rel="noreferrer"
+              className="flex items-start gap-3 px-4 py-2.5 hover:bg-[#f7f7f7]"
+            >
+              <Thumb src={row.pictureUrl} title={row.title} />
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-[13px] font-medium text-[#0f1111]">
+                  {row.title}
+                </p>
+                <p
+                  className={cn(
+                    "text-[12px] font-medium",
+                    row.kind === "out" ? "text-red-600" : "text-amber-700",
+                  )}
+                >
+                  {row.why}
+                </p>
+                <p className="text-[12px] text-[#565959]">Fix: {row.fix}</p>
+              </div>
+              <ArrowRight className="mt-1 size-4 shrink-0 text-[#565959]" />
+            </a>
+          </li>
+        ))}
+      </ul>
+    </>
+  );
+}
+
+function OfferPane({ moves }: { moves: OfferMove[] }) {
+  if (moves.length === 0) {
+    return (
+      <>
+        <PaneHead title="Carts & offers" hint="Live from eBay" />
+        <p className="px-4 py-8 text-[13px] text-[#565959]">
+          Nobody has these in a cart or sent a Best Offer right now. When they
+          do, Higlou shows the discount you can send.
+        </p>
+      </>
+    );
+  }
+  return (
+    <>
+      <PaneHead
+        title="Carts & offers"
+        hint="In cart, watching, or Best Offer"
+      />
+      <ul className="max-h-[min(52vh,380px)] divide-y divide-[#eee] overflow-y-auto">
+        {moves.map((row) => (
+          <li key={`${row.kind}-${row.listingId}`}>
+            <a
+              href={row.href}
+              target="_blank"
+              rel="noreferrer"
+              className="flex items-start gap-3 px-4 py-2.5 hover:bg-[#f7f7f7]"
+            >
+              <Thumb src={row.pictureUrl} title={row.title} />
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-[13px] font-medium text-[#0f1111]">
+                  {row.title}
+                </p>
+                <p className="text-[12px] text-[#565959]">{row.why}</p>
+                {row.kind === "in_cart" && row.suggestedPrice != null ? (
+                  <p className="text-[12px] font-medium text-[#0f1111]">
+                    Offer you can send: {usd(row.suggestedPrice, true)} (
+                    {row.suggestedOffPct}% off
+                    {row.price != null ? ` ${usd(row.price, true)}` : ""})
+                  </p>
+                ) : (
+                  <p className="text-[12px] font-medium text-[#0f1111]">
+                    Open eBay to accept or counter.
+                  </p>
+                )}
+              </div>
+              <ArrowRight className="mt-1 size-4 shrink-0 text-[#565959]" />
+            </a>
+          </li>
+        ))}
+      </ul>
+    </>
+  );
+}
+
+function InventoryPane({
+  rows,
+  live,
+}: {
+  rows: InventoryLine[];
+  live: number;
+}) {
+  if (rows.length === 0) {
+    return (
+      <>
+        <PaneHead title="Inventory" hint={`${live} live`} />
+        <p className="px-4 py-8 text-[13px] text-[#565959]">
+          No active eBay listings found yet.
+        </p>
+      </>
+    );
+  }
+  return (
+    <>
+      <PaneHead title="Inventory" hint={`${live} live · photos from eBay`} />
+      <ul className="max-h-[min(52vh,380px)] divide-y divide-[#eee] overflow-y-auto">
+        {rows.map((row) => (
+          <li
+            key={`${row.sku}-${row.listingId}`}
+            className="flex items-center gap-3 px-4 py-2.5"
+          >
+            <Thumb src={row.pictureUrl} title={row.title} />
+            <div className="min-w-0 flex-1">
+              {row.listingId ? (
+                <a
+                  href={`https://www.ebay.com/itm/${row.listingId}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="block truncate text-[13px] font-medium text-[#0f1111] hover:text-[#2162a1] hover:underline"
+                >
+                  {row.title}
+                </a>
+              ) : (
+                <p className="truncate text-[13px] font-medium text-[#0f1111]">
+                  {row.title}
+                </p>
+              )}
+              <p className="text-[11px] text-[#565959]">
+                {row.price != null ? usd(row.price, true) : "—"}
+                {row.watchers ? ` · ${row.watchers} watching` : ""}
+                {row.soldQty ? ` · ${row.soldQty} sold` : ""}
+              </p>
+            </div>
+            <div className="w-12 shrink-0 text-right">
+              <p className="text-[10px] font-medium tracking-wide text-[#565959] uppercase">
+                Qty
+              </p>
+              <p
+                className={cn(
+                  "text-[15px] font-semibold tabular-nums",
+                  row.qty <= 0
+                    ? "text-red-600"
+                    : row.listedQty > 1 && row.qty === 1
+                      ? "text-amber-700"
+                      : "text-[#0f1111]",
+                )}
+              >
+                {row.qty}
+              </p>
+            </div>
+          </li>
+        ))}
+      </ul>
+    </>
+  );
+}
+
+function OrdersPane({
+  rows,
+  empty,
+}: {
+  rows: Array<{
+    orderId: string;
+    listingId: string;
+    sku: string;
+    title: string;
+    qty: number;
+    createdAt: string;
+    buyer: string;
+    amount: number;
+  }>;
+  empty: string | null;
+}) {
+  return (
+    <>
+      <PaneHead title="Orders" hint="Last 30 days" />
+      {empty ? (
+        <p className="px-4 py-8 text-[13px] text-[#565959]">{empty}</p>
+      ) : (
+        <ul className="max-h-[min(52vh,380px)] divide-y divide-[#eee] overflow-y-auto">
+          {rows.map((row) => (
             <li
               key={`${row.orderId}-${row.listingId}-${row.sku}`}
               className="flex items-center justify-between gap-3 px-4 py-2.5"
@@ -218,135 +466,8 @@ export function StatsControlCenter() {
               </div>
             </li>
           ))}
-        </Panel>
-      </div>
-
-      <div className="mt-4 grid gap-3 lg:grid-cols-2">
-        <Panel
-          title="Stock alerts"
-          hint="Low or out"
-          empty={alerts.length === 0 ? "No low-stock items right now." : null}
-        >
-          {alerts.map((row) => (
-            <InventoryRow key={`alert-${row.listingId}`} row={row} />
-          ))}
-        </Panel>
-
-        <Panel
-          title="Needs a look"
-          hint="Higlou vs eBay"
-          empty={
-            snap.opportunities.length === 0
-              ? "Nothing waiting — store and drafts look aligned."
-              : null
-          }
-        >
-          {snap.opportunities.map((row) => {
-            const inner = (
-              <>
-                <div className="min-w-0">
-                  <p className="truncate text-[13px] font-medium text-[#0f1111]">
-                    {row.title}
-                  </p>
-                  <p className="text-[11px] text-[#565959]">{row.detail}</p>
-                </div>
-                <span className="shrink-0 text-[11px] font-medium text-[#565959]">
-                  {opportunityLabel(row.kind)}
-                </span>
-              </>
-            );
-            return row.href ? (
-              <li key={row.id}>
-                <Link
-                  href={row.href}
-                  className="flex items-center justify-between gap-3 px-4 py-2.5 hover:bg-[#f7f7f7]"
-                >
-                  {inner}
-                </Link>
-              </li>
-            ) : (
-              <li
-                key={row.id}
-                className="flex items-center justify-between gap-3 px-4 py-2.5"
-              >
-                {inner}
-              </li>
-            );
-          })}
-        </Panel>
-      </div>
-    </div>
-  );
-}
-
-function Panel({
-  title,
-  hint,
-  empty,
-  children,
-}: {
-  title: string;
-  hint: string;
-  empty: string | null;
-  children: ReactNode;
-}) {
-  return (
-    <div className="overflow-hidden rounded-xl border border-[#d5d9d9] bg-white">
-      <div className="flex items-center justify-between border-b border-[#eee] px-4 py-2.5">
-        <p className="text-[13px] font-semibold text-[#0f1111]">{title}</p>
-        <p className="text-[11px] text-[#565959]">{hint}</p>
-      </div>
-      {empty ? (
-        <p className="px-4 py-6 text-[13px] text-[#565959]">{empty}</p>
-      ) : (
-        <ul className="divide-y divide-[#eee]">{children}</ul>
+        </ul>
       )}
-    </div>
-  );
-}
-
-function InventoryRow({ row }: { row: InventoryLine }) {
-  return (
-    <li className="flex items-center gap-3 px-4 py-2.5">
-      <div className="relative size-11 shrink-0 overflow-hidden rounded-md border border-[#eee] bg-[#f7f7f7]">
-        {row.pictureUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={row.pictureUrl}
-            alt=""
-            className="size-full object-contain p-0.5"
-          />
-        ) : null}
-      </div>
-      <div className="min-w-0 flex-1">
-        {row.listingId ? (
-          <a
-            href={`https://www.ebay.com/itm/${row.listingId}`}
-            target="_blank"
-            rel="noreferrer"
-            className="block truncate text-[13px] font-medium text-[#0f1111] hover:text-[#2162a1] hover:underline"
-          >
-            {row.title}
-          </a>
-        ) : (
-          <p className="truncate text-[13px] font-medium text-[#0f1111]">
-            {row.title}
-          </p>
-        )}
-        <p className="text-[11px] text-[#565959]">
-          {row.price != null ? usd(row.price, true) : "—"}
-          {row.watchers ? ` · ${row.watchers} watching` : ""}
-          {row.soldQty ? ` · ${row.soldQty} sold` : ""}
-        </p>
-      </div>
-      <div className="w-12 shrink-0 text-right">
-        <p className="text-[10px] font-medium tracking-wide text-[#565959] uppercase">
-          Qty
-        </p>
-        <p className={cn("text-[15px] font-semibold tabular-nums", qtyClass(row.qty))}>
-          {row.qty}
-        </p>
-      </div>
-    </li>
+    </>
   );
 }

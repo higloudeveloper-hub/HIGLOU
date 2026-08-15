@@ -46,9 +46,9 @@ export function EbaySalesPulse() {
             hint={`${snap.orders30d} orders`}
           />
           <TeaserStat
-            label="Live"
-            value={String(snap.inventoryLive)}
-            hint={`${snap.inventoryUnits} units`}
+            label="In cart"
+            value={String(snap.inCart)}
+            hint={snap.inCart ? "send an offer" : "none waiting"}
           />
           <TeaserStat
             label="Alerts"

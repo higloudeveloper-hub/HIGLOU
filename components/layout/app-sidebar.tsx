@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
+  BarChart3,
   Download,
   Home,
   Images,
@@ -22,6 +23,13 @@ export const STUDIO_NAV = [
     hint: "Overview",
     icon: Home,
     match: (path: string) => path === "/home",
+  },
+  {
+    href: "/stats",
+    label: "Stats",
+    hint: "Live store",
+    icon: BarChart3,
+    match: (path: string) => path === "/stats" || path.startsWith("/stats/"),
   },
   {
     href: "/listings",

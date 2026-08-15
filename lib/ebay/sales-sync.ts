@@ -591,10 +591,10 @@ export async function syncEbaySalesForUser(
     inventoryLow,
     inventoryOut,
     watchers,
-    inventory: inventory.slice(0, 12),
+    inventory: inventory.slice(0, 40),
     recent: recent
       .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))
-      .slice(0, 8),
+      .slice(0, 20),
     opportunities: opportunities.slice(0, 8),
     error:
       orders.length === 0 && inventory.length === 0 ? orderError : undefined,

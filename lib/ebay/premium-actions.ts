@@ -45,46 +45,58 @@ export async function sendOfferToInterestedBuyers(
   if (ids.length === 0) throw new Error("Pick a listing to send the offer.");
   const pct = clampPct(discountPercentage);
   const cfg = getEbayConfig();
-  const res = await fetch(
-    `${cfg.apiBase}/sell/negotiation/v1/send_offer_to_interested_buyers`,
-    {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        Accept: "application/json",
-        "Content-Type": "application/json",
-        "Content-Language": "en-US",
-        "X-EBAY-C-MARKETPLACE-ID": "EBAY_US",
+  let sent = 0;
+  let lastError = "";
+
+  // eBay only accepts one listing per call, and allowCounterOffer must be false.
+  for (const listingId of ids) {
+    const res = await fetch(
+      `${cfg.apiBase}/sell/negotiation/v1/send_offer_to_interested_buyers`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          Accept: "application/json",
+          "Content-Type": "application/json",
+          "Content-Language": "en-US",
+          "X-EBAY-C-MARKETPLACE-ID": "EBAY_US",
+        },
+        body: JSON.stringify({
+          allowCounterOffer: false,
+          message:
+            "Thanks for your interest — here's a special price from the seller.",
+          offerDuration: { unit: "DAY", value: 2 },
+          offeredItems: [
+            {
+              listingId,
+              quantity: 1,
+              discountPercentage: String(pct),
+            },
+          ],
+        }),
+        cache: "no-store",
       },
-      body: JSON.stringify({
-        allowCounterOffer: true,
-        message:
-          "Thanks for your interest — here's a special price from the seller.",
-        offerDuration: { unit: "DAY", value: 2 },
-        offeredItems: ids.map((listingId) => ({
-          listingId,
-          quantity: 1,
-          discountPercentage: String(pct),
-        })),
-      }),
-      cache: "no-store",
-    },
-  );
-  const json = (await res.json().catch(() => ({}))) as {
-    errors?: Array<{ message?: string; longMessage?: string }>;
-    offers?: unknown[];
-  };
-  if (!res.ok) {
-    const first = json.errors?.[0];
-    throw new Error(
-      first?.longMessage ||
+    );
+    const json = (await res.json().catch(() => ({}))) as {
+      errors?: Array<{ message?: string; longMessage?: string }>;
+    };
+    if (!res.ok) {
+      const first = json.errors?.[0];
+      lastError =
+        first?.longMessage ||
         first?.message ||
         (res.status === 403
           ? "Reconnect eBay in Settings so Higlou can send offers."
-          : `Could not send offer (${res.status})`),
-    );
+          : `Could not send offer (${res.status})`);
+      continue;
+    }
+    sent += 1;
   }
-  return { sent: ids.length, percent: pct };
+
+  if (sent === 0) {
+    throw new Error(lastError || "Could not send offer.");
+  }
+  return { sent, percent: pct };
 }
 
 export async function reviseListingPrice(

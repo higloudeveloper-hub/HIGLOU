@@ -298,6 +298,9 @@ export function StatsControlCenter() {
                         listingId={featured.listingId}
                         price={featured.price}
                         busy={busy}
+                        canOffer={carts.some(
+                          (c) => c.listingId === featured.listingId,
+                        )}
                         onOffer={() =>
                           void act(
                             `offer-${featured.listingId}`,
@@ -511,7 +514,7 @@ function PremiumStrip({
                   {insight.detail}
                 </p>
                 <div className="mt-1.5">
-                  {insight.kind === "send_offer" || insight.kind === "hot" ? (
+                  {insight.kind === "send_offer" ? (
                     <button
                       type="button"
                       disabled={busy !== null}
@@ -522,7 +525,8 @@ function PremiumStrip({
                         ? "Sending…"
                         : `Send ${pct}% offer`}
                     </button>
-                  ) : insight.kind === "cut_price" && drop != null ? (
+                  ) : (insight.kind === "cut_price" || insight.kind === "hot") &&
+                    drop != null ? (
                     <button
                       type="button"
                       disabled={busy !== null}
@@ -557,26 +561,30 @@ function FeaturedActions({
   listingId,
   price,
   busy,
+  canOffer,
   onOffer,
   onDrop,
 }: {
   listingId: string;
   price: number | null;
   busy: string | null;
+  canOffer: boolean;
   onOffer: () => void;
   onDrop: () => void;
 }) {
   const next = suggestDrop(price).amount;
   return (
     <div className="mt-3 flex flex-wrap justify-center gap-2">
-      <button
-        type="button"
-        disabled={busy !== null}
-        onClick={onOffer}
-        className="h-8 rounded-full bg-[#3665F3] px-3.5 text-[12px] font-semibold text-white disabled:opacity-50"
-      >
-        {busy === `offer-${listingId}` ? "Sending…" : "Send 10% offer"}
-      </button>
+      {canOffer ? (
+        <button
+          type="button"
+          disabled={busy !== null}
+          onClick={onOffer}
+          className="h-8 rounded-full bg-[#3665F3] px-3.5 text-[12px] font-semibold text-white disabled:opacity-50"
+        >
+          {busy === `offer-${listingId}` ? "Sending…" : "Send 10% offer"}
+        </button>
+      ) : null}
       {next != null ? (
         <button
           type="button"
@@ -691,16 +699,18 @@ function EbayResultRow({
         ) : null}
         {row.listingId ? (
           <div className="mt-2 flex flex-wrap gap-1.5">
-            <button
-              type="button"
-              disabled={busy !== null}
-              onClick={() => onOffer(row.listingId, pct)}
-              className="h-7 rounded-full bg-[#3665F3] px-2.5 text-[11px] font-semibold text-white disabled:opacity-50"
-            >
-              {busy === `offer-${row.listingId}`
-                ? "Sending…"
-                : `Send ${pct}% offer`}
-            </button>
+            {offer?.kind === "in_cart" ? (
+              <button
+                type="button"
+                disabled={busy !== null}
+                onClick={() => onOffer(row.listingId, pct)}
+                className="h-7 rounded-full bg-[#3665F3] px-2.5 text-[11px] font-semibold text-white disabled:opacity-50"
+              >
+                {busy === `offer-${row.listingId}`
+                  ? "Sending…"
+                  : `Send ${pct}% offer`}
+              </button>
+            ) : null}
             {drop != null ? (
               <button
                 type="button"

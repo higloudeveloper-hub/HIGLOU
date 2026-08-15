@@ -1000,6 +1000,7 @@ export async function syncEbaySalesForUser(
   const hottest = [...liveRows].sort((a, b) => b.watchers - a.watchers)[0];
   if (hottest && hottest.watchers >= 3 && !seenInsight.has(hottest.listingId)) {
     seenInsight.add(hottest.listingId);
+    const offer = suggestOffer(hottest.price);
     insights.push({
       id: `hot-${hottest.listingId}`,
       kind: "hot",
@@ -1007,6 +1008,8 @@ export async function syncEbaySalesForUser(
       detail: `${hottest.watchers} people watching — hottest listing in the store.`,
       listingId: hottest.listingId,
       pictureUrl: hottest.pictureUrl,
+      suggestedPct: offer.pct,
+      suggestedPrice: offer.amount,
     });
   }
   for (const row of liveRows.filter(

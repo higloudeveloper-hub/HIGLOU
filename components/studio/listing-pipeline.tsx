@@ -67,18 +67,13 @@ const STEPS = [
   { id: "facebookLive", ms: 1400, x: 84, y: 38, click: true, label: "Live on Facebook" },
   { id: "shopifyLive", ms: 1400, x: 24, y: 70, click: true, label: "Live on Shopify" },
   { id: "webLive", ms: 1500, x: 76, y: 70, click: true, label: "Live on your site" },
-  { id: "sales", ms: 2200, x: 88, y: 93, click: false, label: "Sales up" },
+  { id: "sales", ms: 2200, x: 88, y: 93, click: false, label: "Revenue" },
   { id: "hold", ms: 2000, x: 88, y: 93, click: false, label: "Next product" },
 ] as const;
 
-const SALES_LINE =
-  "M0 36 C40 35 70 34 96 32 C130 29 150 24 176 18 C204 11 230 7 256 4 C284 1 304 1 320 1";
-
-function salesProgress(beat: number) {
-  if (beat < 13) return 0.04;
-  if (beat <= 17) return 0.18 + (beat - 13) * 0.12;
-  if (beat === 18) return 0.88;
-  return 1;
+function ordersAt(beat: number) {
+  if (beat < 13) return 0;
+  return [1, 2, 3, 4, 6, 8, 10][Math.min(6, beat - 13)];
 }
 
 function useTyped(text: string, on: boolean, reduce: boolean) {
@@ -583,74 +578,67 @@ function SiteStorefront({
   );
 }
 
+const HOUR_BARS = [11, 17, 13, 21, 16, 28, 24, 36, 31, 44, 40, 52, 58, 72];
+
+function moneyLabel(n: number) {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 0,
+  }).format(n);
+}
+
 function SalesStrip({
-  beat,
   dollars,
+  sold,
   reduce,
 }: {
-  beat: number;
   dollars: number;
+  sold: number;
   reduce: boolean;
 }) {
-  const progress = reduce ? 1 : salesProgress(beat);
-  const clicked = beat >= 12;
-  const climbing = beat >= 13;
-  const boom = beat >= 18;
-  const liveCount = beat < 13 ? 0 : Math.min(5, beat - 12);
+  const lit =
+    reduce && sold > 0
+      ? HOUR_BARS.length
+      : sold === 0
+        ? 0
+        : Math.max(2, Math.round((sold / 10) * HOUR_BARS.length));
 
   return (
-    <div
-      className={cn(
-        "flex shrink-0 items-center gap-3 border-t bg-white px-3 sm:gap-4 sm:px-4",
-        boom ? "h-[72px] border-[#141414]" : "h-[52px] border-[#e5e5e5]",
-      )}
-    >
-      <div className="flex shrink-0 items-center gap-2">
-        <span
-          className={cn(
-            "inline-flex h-6 items-center rounded-md px-2 text-[11px] font-semibold tracking-[-0.01em]",
-            clicked ? "bg-[#141414] text-white" : "bg-[#eee] text-[#9b9b9b]",
-          )}
-        >
-          1 click
-        </span>
-        <span className="hidden text-[12px] font-medium tabular-nums text-[#707070] sm:inline">
-          {liveCount}/5 live
-        </span>
+    <div className="flex h-14 shrink-0 items-center gap-3 border-t border-[#e5e5e5] bg-white px-3 sm:gap-4 sm:px-4">
+      <div className="w-[72px] shrink-0 sm:w-[84px]">
+        <p className="text-[10px] font-medium tracking-[0.14em] text-[#8a8a8a] uppercase">
+          Today
+        </p>
+        <p className="text-[12px] tabular-nums text-[#565959]">
+          {sold} {sold === 1 ? "order" : "orders"}
+        </p>
       </div>
 
-      <svg
-        viewBox="0 0 320 40"
-        className={cn("min-w-0 flex-1", boom ? "h-10" : "h-8")}
-        preserveAspectRatio="none"
-        aria-hidden
-      >
-        <path d={`${SALES_LINE} L320 40 L0 40 Z`} fill="#008060" opacity={climbing ? 0.16 : 0.06} />
-        <motion.path
-          d={SALES_LINE}
-          fill="none"
-          stroke={climbing ? "#008060" : "#141414"}
-          strokeWidth={boom ? 2.4 : 1.75}
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          initial={false}
-          animate={{ pathLength: progress }}
-          transition={{ duration: reduce ? 0 : 0.7, ease: "easeOut" }}
-        />
-      </svg>
+      <div className="flex h-8 min-w-0 flex-1 items-end gap-[3px]" aria-hidden>
+        {HOUR_BARS.map((h, i) => (
+          <div
+            key={i}
+            className="relative h-full min-w-0 flex-1 overflow-hidden rounded-[1px] bg-[#f0f0f0]"
+          >
+            <motion.div
+              className="absolute inset-x-0 bottom-0 bg-[#141414]"
+              initial={false}
+              animate={{ height: i < lit ? `${h}%` : "0%" }}
+              transition={{
+                duration: reduce ? 0 : 0.4,
+                ease: [0.22, 1, 0.36, 1],
+              }}
+            />
+          </div>
+        ))}
+      </div>
 
-      <div className={cn("shrink-0 text-right", boom ? "w-[128px] sm:w-[148px]" : "w-[92px] sm:w-[108px]")}>
-        <p
-          className={cn(
-            "font-semibold tabular-nums tracking-tight",
-            boom ? "text-[26px] text-[#008060] sm:text-[30px]" : "text-[15px] text-[#141414]",
-          )}
-        >
-          ${dollars.toLocaleString("en-US")}
+      <div className="w-[96px] shrink-0 text-right sm:w-[112px]">
+        <p className="text-[16px] font-semibold tabular-nums tracking-tight text-[#141414]">
+          {moneyLabel(dollars)}
         </p>
-        <p className={cn("text-[11px]", climbing ? "font-medium text-[#008060]" : "text-[#707070]")}>
-          {climbing ? "sales up" : "after one click"}
-        </p>
+        <p className="text-[11px] text-[#8a8a8a]">revenue</p>
       </div>
     </div>
   );
@@ -687,10 +675,8 @@ export function ListingPipeline({
   const shots = [...item.photos];
   const cover = shots[0] || CATALOG[0].photos[0];
   const slug = item.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
-  const money =
-    beat < 13
-      ? 0
-      : item.price * [2, 4, 6, 9, 12, 16, 20][Math.min(6, beat - 13)];
+  const sold = ordersAt(beat);
+  const money = sold * item.price;
   const typing = useTyped(item.title, beat >= 4, reduce);
   const price = useCountUp(item.price, beat >= 5, reduce);
   const sales = useCountToward(money, reduce);
@@ -786,7 +772,7 @@ export function ListingPipeline({
               beat === 3
                 ? `${filled} of ${shots.length} photos`
                 : beat >= 18
-                  ? `$${sales.toLocaleString("en-US")} sales up`
+                  ? moneyLabel(sales)
                   : step.label
             }
             clickKey={`${step.id}-${sku}-${beat === 3 ? filled : beat}`}
@@ -1039,8 +1025,8 @@ export function ListingPipeline({
       </div>
 
       <SalesStrip
-        beat={beat}
         dollars={sales}
+        sold={sold}
         reduce={reduce}
       />
     </section>

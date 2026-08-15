@@ -78,7 +78,7 @@ export function recommendCopy(deal: DealCard) {
   }
   return {
     button: "Keep this price",
-    hint: "It's converting — leave it unless you want volume.",
+    hint: deal.move || "Not enough data to cut the BIN.",
   };
 }
 
@@ -444,6 +444,11 @@ export function OpportunityList({
                           <p className="mt-1 line-clamp-2 text-[11px] text-[#707070]">
                             {deal.why}
                           </p>
+                          {deal.evidence ? (
+                            <p className="mt-0.5 line-clamp-1 text-[10px] text-[#9b9b9b]">
+                              {deal.evidence}
+                            </p>
+                          ) : null}
                         </button>
                         <div className="mt-2">
                           <OneClickMove

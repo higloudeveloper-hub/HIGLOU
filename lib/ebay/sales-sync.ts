@@ -36,6 +36,8 @@ export type InventoryLine = {
   watchers: number;
   soldQty: number;
   pictureUrl: string | null;
+  views: number;
+  listedAt: string | null;
 };
 
 export type StockAlert = {
@@ -94,15 +96,108 @@ export type DealCard = {
   move: string;
   vsStore: "lower" | "higher" | "even" | null;
   recommend: DealRecommend;
+  views: number;
+  marketPrice: number | null;
+  lastSoldPrice: number | null;
+  daysLive: number | null;
+  evidence: string;
 };
 
 function clampScore(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, Math.round(n)));
 }
 
+function daysLive(iso: string | null) {
+  if (!iso) return null;
+  const t = Date.parse(iso);
+  if (!Number.isFinite(t)) return null;
+  return Math.max(0, Math.round((Date.now() - t) / 86_400_000));
+}
+
+function medianOf(nums: number[]) {
+  if (!nums.length) return null;
+  const sorted = [...nums].sort((a, b) => a - b);
+  return sorted[Math.floor(sorted.length / 2)] ?? null;
+}
+
+function titleTokens(title: string) {
+  const stop = new Set([
+    "with",
+    "and",
+    "for",
+    "the",
+    "a",
+    "an",
+    "of",
+    "to",
+    "in",
+    "set",
+    "kit",
+    "new",
+    "oem",
+    "pack",
+  ]);
+  return title
+    .toLowerCase()
+    .split(/[^a-z0-9+]+/i)
+    .filter((w) => w.length > 2 && !stop.has(w));
+}
+
+function titleOverlap(a: string, b: string) {
+  const left = new Set(titleTokens(a));
+  const right = titleTokens(b);
+  if (left.size < 2 || right.length < 2) return 0;
+  return right.filter((w) => left.has(w)).length;
+}
+
+function lastSoldFor(
+  row: InventoryLine,
+  sales: Array<{ listingId: string; title: string; amount: number; qty: number }>,
+  soldHistory: Array<{ listingId: string; title: string; price: number | null }>,
+) {
+  const prices: number[] = [];
+  for (const sale of sales) {
+    if (sale.listingId === row.listingId && sale.amount > 0) {
+      prices.push(sale.amount / Math.max(1, sale.qty));
+    }
+  }
+  for (const sale of soldHistory) {
+    if (sale.listingId === row.listingId && sale.price && sale.price > 0) {
+      prices.push(sale.price);
+    }
+  }
+  if (prices.length) return medianOf(prices);
+  return medianOf(
+    sales
+      .filter((sale) => titleOverlap(row.title, sale.title) >= 3 && sale.amount > 0)
+      .map((sale) => sale.amount / Math.max(1, sale.qty)),
+  );
+}
+
+function researchedTarget(
+  price: number,
+  market: number | null,
+  lastSold: number | null,
+) {
+  const anchors = [market, lastSold].filter(
+    (n): n is number => n != null && n > 0,
+  );
+  if (!anchors.length) return null;
+  const aim = Math.min(...anchors);
+  if (aim >= price * 0.98) return null;
+  const floor = Math.round(price * 0.85 * 100) / 100;
+  const next = Math.round(Math.max(floor, aim) * 100) / 100;
+  if (next >= price - 0.5) return null;
+  const pct = Math.round((1 - next / price) * 100);
+  return { price: next, pct: Math.min(20, Math.max(5, pct)) };
+}
+
 export function scoreDeals(
   liveRows: InventoryLine[],
   cartMoves: OfferMove[],
+  sales: Array<{ listingId: string; title: string; amount: number; qty: number }> = [],
+  comps: Map<string, { median: number; count: number }> = new Map(),
+  soldHistory: Array<{ listingId: string; title: string; price: number | null }> = [],
 ): DealCard[] {
   const cartIds = new Set(
     cartMoves.filter((m) => m.kind === "in_cart").map((m) => m.listingId),
@@ -132,51 +227,115 @@ export function scoreDeals(
             ? "higher"
             : "even"
         : null;
+    const age = daysLive(row.listedAt);
+    const market = comps.get(row.listingId)?.median ?? null;
+    const marketCount = comps.get(row.listingId)?.count ?? 0;
+    const lastSold = lastSoldFor(row, sales, soldHistory);
+    const views = row.views || 0;
+    const demand = row.watchers >= 3 || views >= 40;
+    const converting = row.soldQty > 0;
 
-    let chance = 10;
-    chance += Math.min(36, row.watchers * 8);
+    const evidence = [
+      views ? `${views} views` : null,
+      row.watchers ? `${row.watchers} watching` : "0 watching",
+      `${row.soldQty} sold`,
+      age != null ? `${age}d live` : null,
+      market != null ? `market ${marketCount} @ $${market.toFixed(2)}` : null,
+      lastSold != null ? `you sold @ $${lastSold.toFixed(2)}` : null,
+    ]
+      .filter(Boolean)
+      .join(" · ");
+
+    let chance = 8;
+    chance += Math.min(28, views / 8);
+    chance += Math.min(32, row.watchers * 8);
     if (inCart) chance += 38;
     chance += Math.min(24, row.soldQty * 6);
-    if (vsStore === "lower") chance += 10;
-    if (vsStore === "higher" && row.soldQty === 0) chance -= 14;
+    if (vsStore === "lower") chance += 8;
+    if (market != null && row.price && row.price > market * 1.12) chance -= 12;
+    if (converting) chance += 10;
 
     let signal: DealCard["signal"];
     let why: string;
     let move: string;
+    let recommend: DealRecommend;
+
+    const target =
+      row.price != null ? researchedTarget(row.price, market, lastSold) : null;
 
     if (inCart) {
       signal = "close_now";
       why = "Someone has this in a cart right now.";
-      move = "Send the price you want — this one can close today.";
+      move = "Send a private offer — demand is already there.";
       chance = Math.max(chance, 80);
-    } else if (row.watchers >= 3 && row.soldQty === 0) {
-      signal = "stuck";
-      why = `${row.watchers} watching, 0 sold${
-        vsStore === "higher" ? " · priced above the store" : ""
-      }.`;
-      move = "Price is blocking the sale. Set the BIN you want.";
-      chance = clampScore(chance, 22, 58);
-    } else if (row.watchers >= 3 && row.soldQty > 0) {
-      signal = "hot";
-      why = `${row.watchers} watching · ${row.soldQty} sold${
-        vsStore === "lower" ? " · priced lower than the store" : ""
-      }.`;
-      move =
-        vsStore === "lower"
-          ? "High chance to sell again — priced to move."
-          : "This one is converting. Keep it, or send a small offer.";
-    } else if (row.soldQty > 0) {
-      signal = "priced_right";
-      why = `${row.soldQty} sold. The price is working.`;
-      move =
-        vsStore === "lower"
-          ? "Priced lower — strong chance to sell again."
-          : "Leave it unless you want more volume.";
-    } else {
+      const offer = dropBy(row.price, 10);
+      recommend = {
+        kind: "offer",
+        pct: offer.pct || 10,
+        price: offer.amount,
+        afterChance: clampScore(chance + 10, chance, 96),
+      };
+    } else if (converting && (!target || (row.price && row.price <= (market ?? row.price) * 1.08))) {
+      signal = row.watchers >= 3 ? "hot" : "priced_right";
+      why = `${row.soldQty} sold${row.watchers ? ` · ${row.watchers} watching` : ""}. Price is converting.`;
+      move = "Leave it. A drop would only cut profit.";
+      recommend = { kind: "keep", pct: 0, price: null, afterChance: chance };
+    } else if (age != null && age < 3 && row.watchers < 5 && !converting) {
       signal = "sleeping";
-      why = "Quiet right now — no watchers, no sales.";
-      move = "Drop the BIN to wake it up.";
-      chance = clampScore(chance, 4, 18);
+      why = `Only ${age} day${age === 1 ? "" : "s"} live — not enough history yet.`;
+      move = "Wait. Dropping now is guessing.";
+      chance = clampScore(chance, 8, 28);
+      recommend = { kind: "keep", pct: 0, price: null, afterChance: chance };
+    } else if (!demand && !converting) {
+      signal = "sleeping";
+      why =
+        views < 15
+          ? "Almost no views. This is a traffic problem, not a price problem."
+          : "Some views, no watchers or sales yet.";
+      move = "Don't drop. Fix photos/title before cutting the BIN.";
+      chance = clampScore(chance, 4, 22);
+      recommend = { kind: "keep", pct: 0, price: null, afterChance: chance };
+    } else if (demand && !converting && target) {
+      signal = "stuck";
+      why = `${row.watchers} watching · ${views} views · 0 sold. Buyers looked — the BIN is high vs the market.`;
+      move = `Best move: drop to $${target.price.toFixed(2)} (${target.pct}% off, toward market/sold history).`;
+      chance = clampScore(chance, 28, 62);
+      recommend = {
+        kind: "drop",
+        pct: target.pct,
+        price: target.price,
+        afterChance: clampScore(chance + 20, 8, 88),
+      };
+    } else if (demand && !converting) {
+      signal = "stuck";
+      why = `${row.watchers} watching · ${views} views · 0 sold. Demand is here; no market match to copy.`;
+      move = "Nudge 5% — only because watchers aren't converting.";
+      chance = clampScore(chance, 24, 56);
+      const drop = dropBy(row.price, 5);
+      recommend = {
+        kind: "drop",
+        pct: drop.pct || 5,
+        price: drop.amount,
+        afterChance: clampScore(chance + 14, 8, 80),
+      };
+    } else if (target && row.price && market != null && row.price > market * 1.15) {
+      signal = "stuck";
+      why = `Live price is above eBay comps (market $${market.toFixed(2)}).`;
+      move = `Best move: drop to $${target.price.toFixed(2)} to sit on the market.`;
+      chance = clampScore(chance, 20, 50);
+      recommend = {
+        kind: "drop",
+        pct: target.pct,
+        price: target.price,
+        afterChance: clampScore(chance + 16, 8, 80),
+      };
+    } else {
+      signal = converting ? "priced_right" : "sleeping";
+      why = converting
+        ? `${row.soldQty} sold. History says the price works.`
+        : "Not enough views, watchers, or sold comps to justify a drop.";
+      move = converting ? "Keep this price." : "Don't drop until the listing gets traffic.";
+      recommend = { kind: "keep", pct: 0, price: null, afterChance: chance };
     }
 
     const chanceFinal = clampScore(chance, 4, 96);
@@ -193,11 +352,17 @@ export function scoreDeals(
       why,
       move,
       vsStore,
-      recommend: recommendFor(signal, row.price, chanceFinal),
+      recommend,
+      views,
+      marketPrice: market,
+      lastSoldPrice: lastSold,
+      daysLive: age,
+      evidence,
     });
   }
 
   for (const move of cartMoves.filter((m) => m.kind === "in_cart")) {
+    const offer = dropBy(move.price, 10);
     pushCard({
       listingId: move.listingId,
       title: move.title,
@@ -209,9 +374,19 @@ export function scoreDeals(
       chance: 86,
       signal: "close_now",
       why: "Someone has this in a cart right now.",
-      move: "Send the price you want — this one can close today.",
+      move: "Send the offer — this is a real close, not a guess drop.",
       vsStore: null,
-      recommend: recommendFor("close_now", move.price, 86),
+      recommend: {
+        kind: "offer",
+        pct: offer.pct || 10,
+        price: offer.amount,
+        afterChance: 94,
+      },
+      views: 0,
+      marketPrice: null,
+      lastSoldPrice: null,
+      daysLive: null,
+      evidence: "In cart on eBay",
     });
   }
 
@@ -464,33 +639,6 @@ function dropBy(price: number | null, pct: number) {
   };
 }
 
-function recommendFor(
-  signal: DealCard["signal"],
-  price: number | null,
-  chance: number,
-): DealRecommend {
-  if (signal === "close_now") {
-    const offer = dropBy(price, 10);
-    return {
-      kind: "offer",
-      pct: offer.pct || 10,
-      price: offer.amount,
-      afterChance: clampScore(chance + 12, chance, 96),
-    };
-  }
-  if (signal === "priced_right") {
-    return { kind: "keep", pct: 0, price: null, afterChance: chance };
-  }
-  const pct = signal === "hot" ? 5 : 10;
-  const drop = dropBy(price, pct);
-  return {
-    kind: "drop",
-    pct: drop.pct,
-    price: drop.amount,
-    afterChance: clampScore(chance + (signal === "sleeping" ? 16 : 22), 8, 88),
-  };
-}
-
 function ebayItemHref(listingId: string) {
   return listingId ? `https://www.ebay.com/itm/${listingId}` : "";
 }
@@ -510,6 +658,8 @@ type TradingRow = {
   watchers: number;
   soldQty: number;
   pictureUrl: string | null;
+  views: number;
+  listedAt: string | null;
 };
 
 function parseTradingItem(block: string): TradingRow | null {
@@ -537,6 +687,8 @@ function parseTradingItem(block: string): TradingRow | null {
     watchers: Number(xmlTag(block, "WatchCount") || "0") || 0,
     soldQty: Number.isFinite(soldQty) ? soldQty : 0,
     pictureUrl: pictureFromItemXml(block),
+    views: Number(xmlTag(block, "HitCount") || "0") || 0,
+    listedAt: xmlTag(block, "StartTime") || null,
   };
 }
 
@@ -544,6 +696,7 @@ async function fetchTradingActiveInventory(accessToken: string): Promise<{
   total: number;
   rows: TradingRow[];
   bestOffers: TradingRow[];
+  soldHistory: Array<{ listingId: string; title: string; price: number | null }>;
 }> {
   const xml = await tradingXml(
     accessToken,
@@ -569,26 +722,101 @@ async function fetchTradingActiveInventory(accessToken: string): Promise<{
       <PageNumber>1</PageNumber>
     </Pagination>
   </BestOfferList>
+  <SoldList>
+    <Include>true</Include>
+    <DurationInDays>30</DurationInDays>
+    <Pagination>
+      <EntriesPerPage>100</EntriesPerPage>
+      <PageNumber>1</PageNumber>
+    </Pagination>
+  </SoldList>
 </GetMyeBaySellingRequest>`,
   );
   if (/<Ack>Failure<\/Ack>/i.test(xml)) {
-    return { total: 0, rows: [], bestOffers: [] };
+    return { total: 0, rows: [], bestOffers: [], soldHistory: [] };
   }
 
   const activeXml = xmlSection(xml, "ActiveList");
   const offerXml = xmlSection(xml, "BestOfferList");
+  const soldXml = xmlSection(xml, "SoldList");
   const rows = parseItemBlocks(activeXml)
     .map(parseTradingItem)
     .filter((row): row is TradingRow => Boolean(row));
   const bestOffers = parseItemBlocks(offerXml)
     .map(parseTradingItem)
     .filter((row): row is TradingRow => Boolean(row));
+  const soldHistory = parseItemBlocks(soldXml)
+    .map(parseTradingItem)
+    .filter((row): row is TradingRow => Boolean(row))
+    .map((row) => ({
+      listingId: row.listingId,
+      title: row.title,
+      price: row.price,
+    }));
   const total = Number(
     activeXml.match(
       /<TotalNumberOfEntries>(\d+)<\/TotalNumberOfEntries>/i,
     )?.[1] || rows.length,
   );
-  return { total: total || rows.length, rows, bestOffers };
+  return { total: total || rows.length, rows, bestOffers, soldHistory };
+}
+
+async function fetchMarketComps(
+  accessToken: string,
+  rows: InventoryLine[],
+): Promise<Map<string, { median: number; count: number }>> {
+  const cfg = getEbayConfig();
+  const map = new Map<string, { median: number; count: number }>();
+  const candidates = rows
+    .filter(
+      (row) =>
+        Boolean(row.price) &&
+        row.soldQty === 0 &&
+        (row.watchers >= 2 || row.views >= 20),
+    )
+    .slice(0, 8);
+
+  await Promise.all(
+    candidates.map(async (row) => {
+      const q = titleTokens(row.title).slice(0, 7).join(" ");
+      if (!q) return;
+      try {
+        const filter = encodeURIComponent("buyingOptions:{FIXED_PRICE}");
+        const res = await fetch(
+          `${cfg.apiBase}/buy/browse/v1/item_summary/search?q=${encodeURIComponent(q)}&limit=20&filter=${filter}`,
+          {
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+              Accept: "application/json",
+              "X-EBAY-C-MARKETPLACE-ID": "EBAY_US",
+            },
+            cache: "no-store",
+          },
+        );
+        if (!res.ok) return;
+        const json = (await res.json()) as {
+          itemSummaries?: Array<{
+            legacyItemId?: string;
+            price?: { value?: string };
+          }>;
+        };
+        const prices: number[] = [];
+        for (const item of json.itemSummaries ?? []) {
+          const id = String(item.legacyItemId || "");
+          if (id && listingKeys(id).includes(row.listingId)) continue;
+          const n = Number(item.price?.value);
+          if (Number.isFinite(n) && n > 1) prices.push(n);
+        }
+        const med = medianOf(prices);
+        if (med && prices.length >= 3) {
+          map.set(row.listingId, { median: med, count: prices.length });
+        }
+      } catch {
+        /* Browse comps are optional */
+      }
+    }),
+  );
+  return map;
 }
 
 export async function fetchEligibleOfferListings(
@@ -849,6 +1077,11 @@ export async function syncEbaySalesForUser(
         total: 0,
         rows: [] as TradingRow[],
         bestOffers: [] as TradingRow[],
+        soldHistory: [] as Array<{
+          listingId: string;
+          title: string;
+          price: number | null;
+        }>,
       })),
       fetchEbayStoreName(accessToken).catch(() => null),
       fetchEligibleOfferListings(accessToken).catch(() => ({
@@ -1055,6 +1288,8 @@ export async function syncEbaySalesForUser(
       watchers: o.watchers,
       soldQty: o.soldQty,
       pictureUrl: o.pictureUrl || (match ? coverByProduct.get(match.id) || null : null),
+      views: o.views,
+      listedAt: o.listedAt,
     });
   }
   for (const o of offers.filter(
@@ -1076,6 +1311,8 @@ export async function syncEbaySalesForUser(
       watchers: 0,
       soldQty: 0,
       pictureUrl: match ? coverByProduct.get(match.id) || null : null,
+      views: 0,
+      listedAt: null,
     });
   }
 
@@ -1088,6 +1325,9 @@ export async function syncEbaySalesForUser(
   );
   const liveRows = inventory.filter((r) => r.status === "PUBLISHED");
   await fillMissingPictures(accessToken, liveRows).catch(() => undefined);
+  const comps = await fetchMarketComps(accessToken, liveRows).catch(
+    () => new Map<string, { median: number; count: number }>(),
+  );
 
   const inventoryLive = Math.max(trading.total, liveRows.length);
   const inventoryUnits = liveRows.reduce((sum, r) => sum + r.qty, 0);
@@ -1240,7 +1480,13 @@ export async function syncEbaySalesForUser(
     });
   }
 
-  const deals = scoreDeals(liveRows, offerMoves);
+  const deals = scoreDeals(
+    liveRows,
+    offerMoves,
+    recent,
+    comps,
+    trading.soldHistory ?? [],
+  );
   const dealIds = new Set(deals.map((row) => row.listingId));
   const rankedInventory = [
     ...inventory.filter((row) => dealIds.has(row.listingId)),

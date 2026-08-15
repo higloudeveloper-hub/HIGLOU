@@ -6,8 +6,14 @@ import {
 } from "@/lib/ebay/config";
 import { buildEbayAuthorizeUrl } from "@/lib/ebay/oauth";
 
+const OAUTH_NEXT_COOKIE = "higlou_oauth_next";
+
+function safeOAuthNext(value: string | null) {
+  return value === "/home" ? "/home" : null;
+}
+
 /** Start eBay OAuth — redirects the browser to eBay consent. */
-export async function GET() {
+export async function GET(request: Request) {
   const auth = await requireUser();
   if (!auth.ok) return auth.response;
 
@@ -20,7 +26,20 @@ export async function GET() {
 
   try {
     const { url } = buildEbayAuthorizeUrl(auth.user.id);
-    return NextResponse.redirect(url);
+    const res = NextResponse.redirect(url);
+    const next = safeOAuthNext(new URL(request.url).searchParams.get("next"));
+    if (next) {
+      res.cookies.set(OAUTH_NEXT_COOKIE, next, {
+        httpOnly: true,
+        sameSite: "lax",
+        secure: process.env.NODE_ENV === "production",
+        maxAge: 600,
+        path: "/",
+      });
+    } else {
+      res.cookies.delete(OAUTH_NEXT_COOKIE);
+    }
+    return res;
   } catch (error) {
     return NextResponse.json(
       {

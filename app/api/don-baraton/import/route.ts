@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { pushEbayCsvToDonBaraton } from "@/lib/don-baraton/import-ebay-csv";
 import { getDonBaratonConfig } from "@/lib/don-baraton/config";
-import { requireUser } from "@/lib/auth/require-user";
+import { requireOwner } from "@/lib/auth/owner";
 import { isSupabaseConfigured } from "@/lib/supabase/admin";
 
 export const runtime = "nodejs";
@@ -19,12 +19,14 @@ const bodySchema = z.object({
  * Prefer the automatic sync from POST /api/generate-csv; this is for retries.
  */
 export async function POST(request: Request) {
-  if (isSupabaseConfigured()) {
-    const auth = await requireUser();
-    if (!auth.ok) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+  if (!isSupabaseConfigured()) {
+    return NextResponse.json(
+      { error: "Authentication required" },
+      { status: 503 },
+    );
   }
+  const auth = await requireOwner();
+  if (!auth.ok) return auth.response;
 
   const config = getDonBaratonConfig();
   if (!config.enabled) {

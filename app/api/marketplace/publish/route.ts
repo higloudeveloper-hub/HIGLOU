@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { publishProductToDonBaraton } from "@/lib/marketplace/publish-listing";
-import { requireUser } from "@/lib/auth/require-user";
+import { requireOwner } from "@/lib/auth/owner";
 import { isSupabaseConfigured } from "@/lib/supabase/admin";
 
 const bodySchema = z.object({
@@ -19,10 +19,8 @@ export async function POST(request: Request) {
     );
   }
 
-  const auth = await requireUser();
-  if (!auth.ok) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const auth = await requireOwner();
+  if (!auth.ok) return auth.response;
 
   let body: z.infer<typeof bodySchema>;
   try {

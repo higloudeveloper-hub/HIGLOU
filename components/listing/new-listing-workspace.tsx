@@ -267,6 +267,7 @@ export function NewListingWorkspace({
     ebayUsername: null,
     ebayStoreName: null,
   });
+  const [isOwnerAccount, setIsOwnerAccount] = useState(false);
   const brandingDirtyRef = useRef(false);
   const ebayNameLockRef = useRef(false);
   const brandingSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
@@ -392,6 +393,16 @@ export function NewListingWorkspace({
         });
         if (body.connection.connected && username) {
           applyEbayStoreName(displayNameFromEbayUsername(username), username);
+        }
+      } catch {
+        /* optional */
+      }
+      if (cancelled) return;
+      try {
+        const meRes = await fetch("/api/me");
+        if (meRes.ok) {
+          const me = (await meRes.json()) as { owner?: boolean };
+          if (!cancelled) setIsOwnerAccount(Boolean(me.owner));
         }
       } catch {
         /* optional */
@@ -1771,7 +1782,9 @@ export function NewListingWorkspace({
           exportDisabled={exportDisabled}
           exportDisabledReason={generateCsvDisabledReason}
           onExport={generateCsv}
-          onPublishToDonBaraton={() => void publishToDonBaraton()}
+          onPublishToDonBaraton={
+            isOwnerAccount ? () => void publishToDonBaraton() : undefined
+          }
           publishingDonBaraton={publishingDonBaraton}
           donBaratonPublished={donBaratonPublished}
           onBack={() => setStep("review")}

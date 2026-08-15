@@ -59,10 +59,10 @@ export function MarketPromos({
               key={`${i}-${item.title}`}
               href="/listings/new"
               className={cn(
-                "group block overflow-hidden rounded-[18px] bg-white shadow-[0_1px_3px_rgba(15,17,17,0.08),0_8px_24px_-14px_rgba(15,17,17,0.18)] transition duration-200",
+                "group block overflow-hidden rounded-[14px] bg-white ring-1 ring-[#e8e8e8] transition duration-200",
                 active
-                  ? "ring-2 ring-[#141414]"
-                  : "hover:-translate-y-0.5 hover:shadow-[0_16px_36px_-16px_rgba(15,17,17,0.28)]",
+                  ? "ring-[#141414]"
+                  : "hover:ring-[#cfcfcf]",
               )}
             >
               <div

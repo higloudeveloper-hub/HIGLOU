@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { AnimatePresence, motion } from "motion/react";
-import { Check, Globe, MapPin, MousePointer2, Search, ShoppingCart } from "lucide-react";
+import { Globe, MapPin, MousePointer2, Search, ShoppingCart } from "lucide-react";
 import { usePrefersReducedMotion } from "@/components/listing/wizard/use-prefers-reduced-motion";
 import {
   EbayLivePreview,
@@ -221,7 +221,7 @@ function FacebookLogo({ hero = false, word = false }: { hero?: boolean; word?: b
     <span className="inline-flex items-center gap-2.5">
       <svg
         viewBox="0 0 36 36"
-        className={hero ? "size-[72px] sm:size-[88px]" : "size-6"}
+        className={hero ? "size-[56px] sm:size-[64px]" : "size-6"}
         aria-label="Facebook"
       >
         <rect width="36" height="36" rx="8" fill="#1877F2" />
@@ -234,7 +234,7 @@ function FacebookLogo({ hero = false, word = false }: { hero?: boolean; word?: b
         <span
           className={cn(
             "font-bold tracking-tight text-[#1877F2]",
-            hero ? "text-[40px] sm:text-[52px]" : "text-[13px]",
+            hero ? "text-[32px] sm:text-[40px]" : "text-[13px]",
           )}
         >
           facebook
@@ -247,9 +247,11 @@ function FacebookLogo({ hero = false, word = false }: { hero?: boolean; word?: b
 function ShopifyLogo({
   hero = false,
   light = false,
+  word = true,
 }: {
   hero?: boolean;
   light?: boolean;
+  word?: boolean;
 }) {
   return (
     <span
@@ -258,41 +260,43 @@ function ShopifyLogo({
         light ? "text-white" : "text-[#141414]",
       )}
     >
-      <svg viewBox="0 0 24 24" className={hero ? "size-[72px] sm:size-[80px]" : "size-5"} aria-hidden>
+      <svg viewBox="0 0 24 24" className={hero ? "size-[56px] sm:size-[64px]" : "size-5"} aria-hidden>
         <path
           fill="#95BF47"
           d="M19.2 4.6 17.6.4c-.1-.2-.3-.3-.5-.2l-1.6.5C15.2.3 14.6 0 14.2 0 11.7 0 9.6 2.6 9 6.3L3.8 8c-.3.1-.5.4-.5.7L2 21.2c0 .3.2.6.5.6h14.4c.3 0 .5-.2.6-.5l2.2-16c.1-.3-.1-.6-.5-.7ZM14.2 2c.2 0 .4 0 .6.1l-1.2 3.7c-.8-.2-1.6-.3-2.4-.3.4-2 1.3-3.5 3-3.5Zm-2.2 5.8c.9 0 1.9.1 2.9.4L13.6 12c-1.2-.4-2.2-.5-3-.5-.2-1.3.2-2.7 1.4-3.7Z"
         />
       </svg>
-      <span
-        className={cn(
-          "font-semibold tracking-tight",
-          hero ? "text-[44px] sm:text-[56px]" : "text-[14px]",
-        )}
-      >
-        Shopify
-      </span>
+      {word ? (
+        <span
+          className={cn(
+            "font-semibold tracking-tight",
+            hero ? "text-[36px] sm:text-[44px]" : "text-[14px]",
+          )}
+        >
+          Shopify
+        </span>
+      ) : null}
     </span>
   );
 }
 
 function StoreLogo({ name, hero = false }: { name: string; hero?: boolean }) {
   if (name === "eBay") {
-    return <EbayWordmark className={hero ? "text-[72px] sm:text-[96px]" : "text-[18px]"} />;
+    return <EbayWordmark className={hero ? "text-[56px] sm:text-[72px]" : "text-[18px]"} />;
   }
   if (name === "Amazon") {
     return (
       <AmazonMark
         hero={hero}
-        className={hero ? "text-[60px] text-[#131921] sm:text-[80px]" : "text-[16px] text-[#131921]"}
+        className={hero ? "text-[48px] text-[#131921] sm:text-[64px]" : "text-[16px] text-[#131921]"}
       />
     );
   }
   if (name === "Facebook") return <FacebookLogo hero={hero} />;
   if (name === "Shopify") return <ShopifyLogo hero={hero} />;
   return (
-    <span className={cn("inline-flex items-center gap-3 font-semibold tracking-tight", hero ? "text-[40px] sm:text-[52px]" : "text-[13px]")}>
-      <Globe className={hero ? "size-14 sm:size-16" : "size-3.5"} />
+    <span className={cn("inline-flex items-center gap-3 font-semibold tracking-tight", hero ? "text-[32px] sm:text-[40px]" : "text-[13px]")}>
+      <Globe className={hero ? "size-10 sm:size-12" : "size-3.5"} />
       Your site
     </span>
   );
@@ -364,22 +368,14 @@ function GuideCursor({
       <motion.div
         key={clickKey}
         initial={false}
-        animate={click ? { scale: [1, 0.78, 1] } : { scale: 1 }}
-        transition={{ duration: 0.38, times: [0, 0.35, 1] }}
+        animate={click ? { scale: [1, 0.9, 1] } : { scale: 1 }}
+        transition={{ duration: 0.28, times: [0, 0.4, 1] }}
         className="relative -translate-x-0.5 -translate-y-0.5"
       >
-        {click ? (
-          <motion.span
-            initial={{ scale: 0.3, opacity: 0.45 }}
-            animate={{ scale: 2.4, opacity: 0 }}
-            transition={{ duration: 0.55, ease: "easeOut" }}
-            className="absolute top-0 left-0 size-7 rounded-full border-2 border-[#141414]"
-          />
-        ) : null}
         <MousePointer2
-          className="size-6 text-[#141414] drop-shadow-[0_2px_6px_rgba(0,0,0,0.28)]"
+          className="size-5 text-[#141414]"
           fill="white"
-          strokeWidth={1.75}
+          strokeWidth={1.6}
         />
       </motion.div>
       <AnimatePresence mode="wait">
@@ -391,7 +387,7 @@ function GuideCursor({
             exit={{ opacity: 0, y: -4 }}
             transition={{ duration: 0.2 }}
             className={cn(
-              "absolute top-7 max-w-[220px] rounded-md bg-[#141414] px-2 py-1 text-[12px] font-medium text-white shadow-[0_8px_20px_-10px_rgba(0,0,0,0.45)]",
+              "absolute top-6 max-w-[200px] bg-[#141414] px-2 py-1 text-[11px] font-medium text-white",
               flip ? "right-1" : "left-5",
             )}
           >
@@ -487,7 +483,7 @@ function YourTurn({ onReplay }: { onReplay: () => void }) {
         initial={{ opacity: 0, y: 14 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
-        className="w-full max-w-[400px] bg-white px-8 py-9 text-center shadow-[0_28px_64px_-28px_rgba(0,0,0,0.38)] ring-1 ring-black/10"
+        className="w-full max-w-[400px] bg-white px-8 py-9 text-center ring-1 ring-[#e5e5e5]"
       >
         <p className="text-[11px] font-medium tracking-[0.18em] text-[#8a8a8a] uppercase">
           Your turn
@@ -537,37 +533,29 @@ function CenterLine({
     <div
       className={cn(
         "pointer-events-none absolute z-[36] flex justify-center px-6",
-        stamp
-          ? "inset-0 items-center"
-          : "inset-x-0 top-[12%] items-start sm:top-[14%]",
+        "inset-0 items-center",
       )}
     >
       <AnimatePresence mode="wait">
         <motion.div
           key={stepKey}
-          initial={{ opacity: 0, y: stamp ? 22 : 10, scale: stamp ? 0.72 : 0.94 }}
-          animate={{ opacity: 1, y: 0, scale: stamp ? 1.04 : 1 }}
-          exit={{ opacity: 0, y: -10, scale: 0.98 }}
-          transition={
-            stamp
-              ? { type: "spring", stiffness: 320, damping: 18 }
-              : { duration: 0.32, ease: [0.22, 1, 0.36, 1] }
-          }
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -6 }}
+          transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
           className={cn(
-            "relative max-w-[560px] text-center",
-            stamp
-              ? ""
-              : "rounded-2xl bg-white/92 px-5 py-3 shadow-[0_18px_40px_-24px_rgba(0,0,0,0.45)] ring-1 ring-black/5 sm:px-7 sm:py-3.5",
+            "relative max-w-[520px] text-center",
+            stamp ? "" : "bg-white px-5 py-3 sm:px-6",
           )}
         >
           {mark ? (
-            <div className="mb-2 flex justify-center drop-shadow-[0_12px_28px_rgba(255,255,255,0.9)]">
+            <div className="mb-2 flex justify-center">
               {mark}
             </div>
           ) : (
             <p
               className={cn(
-                "font-semibold tracking-[-0.045em] text-[#141414] leading-[0.95]",
+                "font-medium tracking-tight text-[#141414] leading-[1.05]",
                 compact ? "text-[24px]" : "text-[28px] sm:text-[40px]",
               )}
             >
@@ -609,8 +597,8 @@ function DragGhost({
         left: `${x}%`,
         top: `${y}%`,
         opacity: phase === "gone" ? 0 : 1,
-        scale: phase === "drop" ? 0.16 : phase === "grab" ? 1 : 1.08,
-        rotate: phase === "grab" ? -4 : phase === "drag" ? -12 : 0,
+        scale: phase === "drop" ? 0.2 : 1,
+        rotate: 0,
       }}
       transition={{
         type: "spring",
@@ -622,8 +610,8 @@ function DragGhost({
         className={cn(
           "relative overflow-hidden bg-white",
           holding
-            ? "-translate-x-1/2 -translate-y-[108%] h-[148px] w-[118px] rounded-[4px] p-1.5 pb-7 shadow-[0_28px_50px_-18px_rgba(0,0,0,0.45)] ring-1 ring-black/10 sm:h-[168px] sm:w-[132px]"
-            : "-translate-x-1/2 -translate-y-1/2 size-12 rounded-md shadow-[0_10px_24px_-12px_rgba(0,0,0,0.4)] ring-1 ring-black/10",
+            ? "-translate-x-1/2 -translate-y-[108%] h-[140px] w-[112px] rounded-[2px] p-1.5 pb-6 ring-1 ring-[#e5e5e5] sm:h-[156px] sm:w-[124px]"
+            : "-translate-x-1/2 -translate-y-1/2 size-11 rounded-sm ring-1 ring-[#e5e5e5]",
         )}
       >
         {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -653,7 +641,7 @@ function FlyClone({
   return (
     <motion.div
       key={hopKey}
-      className="pointer-events-none absolute z-20 overflow-hidden rounded-md bg-white shadow-[0_24px_48px_-18px_rgba(0,0,0,0.42)] ring-1 ring-black/10"
+      className="pointer-events-none absolute z-20 overflow-hidden rounded-sm bg-white ring-1 ring-[#e5e5e5]"
       initial={{
         left: `${fromX}%`,
         top: `${fromY}%`,
@@ -662,19 +650,19 @@ function FlyClone({
         opacity: 1,
         x: "-50%",
         y: "-50%",
-        rotate: -8,
+        rotate: 0,
         scale: 1,
       }}
       animate={{
-        left: [`${fromX}%`, `${fromX + (toX - fromX) * 0.42}%`, `${toX}%`],
-        top: [`${fromY}%`, `${Math.min(fromY, toY) - 10}%`, `${toY}%`],
-        width: [size, size + 8, 36],
-        height: [size, size + 8, 36],
+        left: [`${fromX}%`, `${fromX + (toX - fromX) * 0.5}%`, `${toX}%`],
+        top: [`${fromY}%`, `${Math.min(fromY, toY) - 6}%`, `${toY}%`],
+        width: [size, size, 32],
+        height: [size, size, 32],
         opacity: [1, 1, 0],
-        rotate: [-8, 6, 0],
-        scale: [1, 1.12, 0.4],
+        rotate: 0,
+        scale: [1, 1, 0.5],
       }}
-      transition={{ duration: 0.78, times: [0, 0.32, 1], ease: [0.16, 1, 0.3, 1] }}
+      transition={{ duration: 0.7, times: [0, 0.4, 1], ease: [0.22, 1, 0.36, 1] }}
     >
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img src={src} alt="" className="size-full object-contain p-0.5" />
@@ -694,38 +682,38 @@ function CompressBundle({
   return (
     <motion.div
       className="pointer-events-none absolute z-30"
-      initial={{ left: "18%", top: "9%", scale: 0.22, opacity: 0, x: "-50%", y: "-50%", rotate: -16 }}
+      initial={{ left: "18%", top: "9%", scale: 0.28, opacity: 0, x: "-50%", y: "-50%", rotate: 0 }}
       animate={
         packed
-          ? { left: "50%", top: "50%", scale: 0.72, opacity: 0.32, rotate: 0 }
-          : { left: "50%", top: "50%", scale: 1, opacity: 1, rotate: -3 }
+          ? { left: "50%", top: "50%", scale: 0.78, opacity: 0.4, rotate: 0 }
+          : { left: "50%", top: "50%", scale: 1, opacity: 1, rotate: 0 }
       }
-      transition={{ type: "spring", stiffness: 170, damping: 15 }}
+      transition={{ type: "spring", stiffness: 200, damping: 24 }}
     >
       {extras.slice(1, 3).map((shot, i) => (
         <motion.div
           key={shot}
-          className="absolute overflow-hidden rounded-[3px] bg-white p-1 pb-5 shadow-[0_20px_40px_-14px_rgba(0,0,0,0.45)] ring-1 ring-black/10"
+          className="absolute overflow-hidden rounded-[2px] bg-white p-1 pb-4 ring-1 ring-[#e5e5e5]"
           initial={{
-            left: i === 0 ? -78 : 96,
-            top: 48,
-            rotate: i === 0 ? -22 : 22,
+            left: i === 0 ? -64 : 80,
+            top: 40,
+            rotate: 0,
             opacity: 0,
           }}
           animate={{
-            left: packed ? (i === 0 ? -6 : 26) : (i + 1) * 11,
-            top: packed ? (i + 1) * -5 : (i + 1) * -10,
-            rotate: packed ? (i === 0 ? -3 : 7) : (i + 1) * 7,
-            opacity: packed ? 0.15 : 1,
+            left: packed ? (i === 0 ? -4 : 20) : (i + 1) * 8,
+            top: packed ? (i + 1) * -4 : (i + 1) * -8,
+            rotate: 0,
+            opacity: packed ? 0.2 : 1,
           }}
-          transition={{ type: "spring", stiffness: 220, damping: 16, delay: packed ? 0 : 0.1 + i * 0.12 }}
-          style={{ width: 128, height: 156 }}
+          transition={{ type: "spring", stiffness: 240, damping: 22, delay: packed ? 0 : 0.08 + i * 0.08 }}
+          style={{ width: 120, height: 148 }}
         >
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={shot} alt="" className="size-full object-contain" />
         </motion.div>
       ))}
-      <div className="relative h-[176px] w-[142px] overflow-hidden rounded-[4px] bg-white p-2 pb-8 shadow-[0_40px_70px_-16px_rgba(0,0,0,0.55)] ring-1 ring-black/10">
+      <div className="relative h-[168px] w-[136px] overflow-hidden rounded-[2px] bg-white p-2 pb-7 ring-1 ring-[#e5e5e5]">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src={src} alt="" className="size-full object-contain" />
       </div>
@@ -746,9 +734,8 @@ function FallPacket({
   delay: number;
   hopKey: string;
 }) {
-  const midX = 50 + (toX - 50) * 0.46;
-  const midY = Math.min(toY, 38) - 22;
-  const spin = toX >= 50 ? 22 : -20;
+  const midX = 50 + (toX - 50) * 0.5;
+  const midY = Math.min(toY, 38) - 14;
 
   return (
     <motion.div
@@ -760,35 +747,25 @@ function FallPacket({
         opacity: 0,
         x: "-50%",
         y: "-50%",
-        rotate: -10,
-        scale: 0.28,
+        rotate: 0,
+        scale: 0.32,
       }}
       animate={{
         left: ["50%", `${midX}%`, `${toX}%`],
         top: ["50%", `${midY}%`, `${toY}%`],
         opacity: [0, 1, 1, 0],
-        rotate: [-10, spin * 0.4, spin],
-        scale: [0.28, 1.08, 0.18],
+        rotate: 0,
+        scale: [0.32, 1, 0.22],
       }}
       transition={{
         delay,
-        duration: 1.05,
-        times: [0, 0.24, 1],
-        ease: [
-          [0.16, 1, 0.3, 1],
-          [0.55, 0.02, 0.9, 0.28],
-        ],
-        opacity: { delay, duration: 1.05, times: [0, 0.07, 0.8, 1] },
+        duration: 0.95,
+        times: [0, 0.28, 1],
+        ease: [0.22, 1, 0.36, 1],
+        opacity: { delay, duration: 0.95, times: [0, 0.08, 0.82, 1] },
       }}
     >
-      <motion.span
-        aria-hidden
-        className="absolute top-full left-1/2 mt-2 h-2 w-[72px] -translate-x-1/2 rounded-full bg-black/30 blur-[6px]"
-        initial={{ opacity: 0, scaleX: 0.4 }}
-        animate={{ opacity: [0, 0.45, 0], scaleX: [0.4, 1.25, 0.25] }}
-        transition={{ delay, duration: 1.05, times: [0, 0.24, 1] }}
-      />
-      <div className="h-[158px] w-[128px] overflow-hidden rounded-[3px] bg-white p-1 pb-5 shadow-[0_36px_60px_-12px_rgba(0,0,0,0.52)] ring-1 ring-black/10">
+      <div className="h-[148px] w-[118px] overflow-hidden rounded-[2px] bg-white p-1 pb-4 ring-1 ring-[#e5e5e5]">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src={src} alt="" className="size-full object-contain" />
       </div>
@@ -797,71 +774,153 @@ function FallPacket({
 }
 
 function ChannelShell({
-  live,
-  filled,
   focused,
   className,
   children,
 }: {
-  live: boolean;
+  live?: boolean;
   filled?: boolean;
   focused?: boolean;
   className?: string;
   children: ReactNode;
 }) {
-  const on = live || filled;
   return (
-    <motion.div
-      initial={false}
-      animate={{
-        opacity: on ? 1 : focused ? 0.78 : 0.38,
-        filter: on ? "saturate(1)" : "saturate(0.45)",
-      }}
-      transition={{ type: "spring", stiffness: 380, damping: 28 }}
+    <div
       className={cn(
         "relative flex h-full min-h-0 flex-col overflow-hidden bg-white",
-        focused && "z-10 ring-2 ring-inset ring-[#141414]/20 shadow-[0_8px_28px_-18px_rgba(0,0,0,0.35)]",
+        focused && "z-10 ring-1 ring-inset ring-[#141414]/15",
         className,
       )}
     >
       {children}
-      <AnimatePresence>
-        {live ? (
-          <>
-            <motion.span
-              key="flash"
-              initial={{ opacity: 0.55 }}
-              animate={{ opacity: 0 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.7, ease: "easeOut" }}
-              className="pointer-events-none absolute inset-0 z-20 bg-white"
-            />
-            <motion.span
-              key="ring"
-              initial={{ scale: 0.82, opacity: 0.4 }}
-              animate={{ scale: 1.12, opacity: 0 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
-              className="pointer-events-none absolute inset-3 z-20 rounded-md ring-2 ring-[#141414]/30"
-            />
-          </>
-        ) : null}
-      </AnimatePresence>
-    </motion.div>
+    </div>
   );
 }
 
-function LivePill({ on, label }: { on: boolean; label: string }) {
+function WaitingStore({
+  header,
+  mark,
+}: {
+  header: ReactNode;
+  mark: ReactNode;
+}) {
   return (
-    <span
-      className={cn(
-        "inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium tracking-wide",
-        on ? "bg-emerald-50 text-emerald-800" : "bg-[#f3f3f3] text-[#9b9b9b]",
-      )}
-    >
-      {on ? <Check className="size-2.5" strokeWidth={3} /> : null}
-      {on ? label : "Queued"}
-    </span>
+    <div className="grid h-full min-h-0 flex-1 grid-rows-[auto_minmax(0,1fr)] bg-white">
+      {header}
+      <div className="grid min-h-0 place-items-center px-4">
+        {mark}
+      </div>
+    </div>
+  );
+}
+
+function WaitingEbay() {
+  return (
+    <WaitingStore
+      mark={<EbayWordmark className="text-[40px] leading-none sm:text-[48px]" />}
+      header={
+        <div className="flex shrink-0 items-center gap-1.5 border-b border-[#e5e5e5] bg-white px-2 py-1">
+          <EbayWordmark className="text-[14px]" />
+          <div className="flex min-w-0 flex-1 overflow-hidden rounded-sm border border-[#ccc]">
+            <span className="min-w-0 flex-1 truncate bg-white px-2 py-0.5 text-[10px] text-[#707070]">
+              Search for anything
+            </span>
+            <span className="grid w-7 shrink-0 place-items-center bg-[#3665F3] text-white">
+              <Search className="size-3" strokeWidth={2.4} />
+            </span>
+          </div>
+        </div>
+      }
+    />
+  );
+}
+
+function WaitingAmazon() {
+  return (
+    <WaitingStore
+      mark={<AmazonMark className="text-[32px] text-[#131921] sm:text-[40px]" />}
+      header={
+        <div className="flex shrink-0 items-center gap-1.5 bg-[#131921] px-2 py-1">
+          <AmazonMark className="text-[13px] text-white" />
+          <div className="flex min-w-0 flex-1 overflow-hidden rounded-sm">
+            <span className="min-w-0 flex-1 truncate bg-white px-2 py-0.5 text-[10px] text-[#888]">
+              Search Amazon
+            </span>
+            <span className="grid w-7 shrink-0 place-items-center bg-[#FEBD69] text-[#131921]">
+              <Search className="size-3" strokeWidth={2.4} />
+            </span>
+          </div>
+        </div>
+      }
+    />
+  );
+}
+
+function WaitingFacebook() {
+  return (
+    <WaitingStore
+      mark={
+        <span className="text-[28px] font-bold tracking-tight text-[#1877F2] sm:text-[34px]">
+          facebook
+        </span>
+      }
+      header={
+        <div className="flex shrink-0 items-center gap-2 border-b border-[#E4E6EB] bg-white px-2 py-1.5">
+          <FacebookLogo />
+          <span className="min-w-0 flex-1 truncate text-[12px] font-bold text-[#050505]">
+            Marketplace
+          </span>
+        </div>
+      }
+    />
+  );
+}
+
+function WaitingShopify() {
+  return (
+    <WaitingStore
+      mark={
+        <span className="text-[28px] font-semibold tracking-tight text-[#141414] sm:text-[34px]">
+          Shopify
+        </span>
+      }
+      header={
+        <div className="flex shrink-0 items-center justify-between border-b border-[#e5e5e5] bg-white px-3 py-1.5">
+          <ShopifyLogo />
+          <Search className="size-3.5 text-[#6b6b6b]" strokeWidth={1.8} />
+        </div>
+      }
+    />
+  );
+}
+
+function WaitingSite() {
+  return (
+    <WaitingStore
+      mark={
+        <span className="text-[26px] font-semibold tracking-tight text-[#141414] sm:text-[32px]">
+          Your site
+        </span>
+      }
+      header={
+        <div>
+          <div className="flex items-center gap-1.5 border-b border-[#e5e5e5] bg-[#f3f3f3] px-2 py-1">
+            <span className="size-1.5 rounded-full bg-[#FF5F57]" />
+            <span className="size-1.5 rounded-full bg-[#FEBC2E]" />
+            <span className="size-1.5 rounded-full bg-[#28C840]" />
+            <span className="ml-1 flex min-w-0 flex-1 items-center gap-1 rounded-full bg-white px-2 py-0.5 text-[11px] text-[#707070]">
+              <Globe className="size-3 shrink-0" />
+              <span className="truncate">yoursite.com</span>
+            </span>
+          </div>
+          <div className="flex items-center justify-between border-b border-[#eee] px-3 py-1 text-[11px] text-[#707070]">
+            <span className="font-medium text-[#141414]">Shop</span>
+            <span>About</span>
+            <span>Bag</span>
+          </div>
+        </div>
+      }
+    />
   );
 }
 
@@ -873,9 +932,9 @@ function LivePhoto({ src, className }: { src: string; className?: string }) {
         key={src}
         src={src}
         alt=""
-        initial={{ y: -16, opacity: 0, scale: 0.94 }}
-        animate={{ y: 0, opacity: 1, scale: 1 }}
-        transition={{ type: "spring", stiffness: 380, damping: 26 }}
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
         className="absolute inset-0 size-full object-contain p-1.5"
       />
     </div>
@@ -920,10 +979,6 @@ function AmazonStorefront({
       <LivePhoto src={src} />
       <div className="shrink-0 px-2 pb-2 pt-1">
         <p className="line-clamp-1 text-[11px] leading-snug text-[#0F1111]">{title}</p>
-        <p className="mt-0.5 flex items-center gap-1 text-[11px]">
-          <span className="tracking-tight text-[#DE7921]">★★★★★</span>
-          <span className="text-[#007185]">4.8</span>
-        </p>
         <div className="mt-0.5 flex items-start text-[#0F1111]">
           <span className="mt-[3px] text-[11px] leading-none">$</span>
           <span className="text-[22px] font-medium leading-none tabular-nums">{dollars}</span>
@@ -934,15 +989,9 @@ function AmazonStorefront({
             List: <span className="line-through">{listPrice}</span>
           </p>
         ) : null}
-        <p className="text-[10px] font-medium text-[#007600]">In Stock.</p>
-        <div className="mt-1 grid grid-cols-2 gap-1">
-          <p className="grid h-7 place-items-center rounded-full bg-[#FFD814] text-[10px] font-semibold whitespace-nowrap text-[#0F1111]">
-            Add to Cart
-          </p>
-          <p className="grid h-7 place-items-center rounded-full bg-[#FFA41C] text-[10px] font-semibold whitespace-nowrap text-[#0F1111]">
-            Buy Now
-          </p>
-        </div>
+        <p className="mt-1.5 grid h-7 place-items-center rounded-full bg-[#FFD814] text-[10px] font-semibold text-[#0F1111]">
+          Add to Cart
+        </p>
       </div>
     </div>
   );
@@ -1011,19 +1060,9 @@ function ShopifyStorefront({
       <div className="shrink-0 px-3 pb-2 pt-1.5">
         <p className="line-clamp-1 text-[13px] font-medium tracking-tight text-[#121212]">{title}</p>
         <p className="mt-0.5 text-[16px] tabular-nums text-[#121212]">{price}</p>
-        <div className="mt-1 flex h-6 w-[88px] items-center justify-between rounded-sm border border-[#c9c9c9] px-1.5 text-[11px] tabular-nums text-[#121212]">
-          <span className="text-[#8a8a8a]">−</span>
-          1
-          <span className="text-[#8a8a8a]">+</span>
-        </div>
-        <div className="mt-1.5 grid grid-cols-2 gap-1">
-          <p className="grid h-7 place-items-center rounded-sm bg-[#121212] text-[10px] font-semibold whitespace-nowrap text-white">
-            Add to cart
-          </p>
-          <p className="grid h-7 place-items-center rounded-sm bg-[#5A31F4] text-[10px] font-semibold whitespace-nowrap text-white">
-            Buy it now
-          </p>
-        </div>
+        <p className="mt-1.5 grid h-7 place-items-center rounded-sm bg-[#121212] text-[10px] font-semibold text-white">
+          Add to cart
+        </p>
       </div>
     </div>
   );
@@ -1067,8 +1106,7 @@ function SiteStorefront({
       <div className="shrink-0 px-3 pb-2 pt-1.5">
         <p className="line-clamp-1 text-[13px] font-medium tracking-tight text-[#141414]">{title}</p>
         <p className="mt-0.5 text-[16px] font-medium tabular-nums">{price}</p>
-        <p className="mt-0.5 text-[11px] text-[#8a8a8a]">Free shipping · Ships in 2–4 days</p>
-        <p className="mt-1.5 grid h-7 place-items-center rounded-none bg-[#141414] text-[11px] font-medium tracking-wide text-white">
+        <p className="mt-1.5 grid h-7 place-items-center bg-[#141414] text-[11px] font-medium text-white">
           Add to bag
         </p>
       </div>
@@ -1517,7 +1555,7 @@ export function ListingPipeline({
                 className={cn(
                   "size-11 rounded-md sm:size-12",
                   i === 0
-                    ? "border-2 border-dashed border-[#141414] bg-[#f7f7f7] shadow-[0_0_0_6px_rgba(20,20,20,0.06)]"
+                    ? "border border-dashed border-[#141414] bg-[#f7f7f7]"
                     : "border border-dashed border-[#d8d8d8] bg-[#fafafa]",
                 )}
               />
@@ -1527,14 +1565,13 @@ export function ListingPipeline({
               <motion.div
                 key={`${sku}-${src}`}
                 data-listing-slot={i === 0 ? "" : undefined}
-                initial={i === 0 ? false : { opacity: 0, scale: 0.45, x: -18 }}
+                initial={i === 0 ? false : { opacity: 0 }}
                 animate={{
-                  opacity: packing ? (i === 0 ? 1 : 0.35) : i < filled ? 1 : photoIn ? 0.2 : 0,
-                  y: packing ? 0 : i < filled ? 0 : 6,
-                  scale: packing ? 0.85 : i < filled ? 1 : 0.92,
-                  x: packing ? -i * 22 : i < filled ? 0 : -8,
+                  opacity: packing ? (i === 0 ? 1 : 0.4) : i < filled ? 1 : photoIn ? 0.2 : 0,
+                  scale: packing ? 0.9 : 1,
+                  x: packing ? -i * 16 : 0,
                 }}
-                transition={{ type: "spring", stiffness: 420, damping: 20 }}
+                transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
                 className={cn(
                   "relative size-11 overflow-hidden rounded-md bg-[#f7f7f7] sm:size-12",
                   i === filled - 1 && photosOn && filled < shots.length
@@ -1552,14 +1589,6 @@ export function ListingPipeline({
                       alt=""
                       className="absolute inset-0 size-full object-contain p-0.5"
                     />
-                    {i === 0 && is("photos") ? (
-                      <motion.span
-                        className="pointer-events-none absolute inset-x-0 h-px bg-[#141414]"
-                        initial={{ top: "8%", opacity: 0.55 }}
-                        animate={{ top: "88%", opacity: 0 }}
-                        transition={{ duration: 1.15, ease: "easeInOut" }}
-                      />
-                    ) : null}
                   </>
                 ) : null}
               </motion.div>
@@ -1710,17 +1739,7 @@ export function ListingPipeline({
               className="h-full min-h-0 rounded-none shadow-none ring-0"
             />
           ) : (
-            <>
-              <div className="flex shrink-0 items-center justify-between border-b border-[#eee] px-3 py-2">
-                <EbayWordmark className="text-[16px]" />
-                <LivePill on={false} label="Live" />
-              </div>
-              <div className="min-h-0 flex-1 bg-[#f7f7f7]" />
-              <div className="shrink-0 px-3 py-2">
-                <p className="text-[16px] font-semibold tabular-nums">—</p>
-                <p className="truncate text-[12px] text-[#707070]">eBay store</p>
-              </div>
-            </>
+            <WaitingEbay />
           )}
         </ChannelShell>
 
@@ -1734,17 +1753,7 @@ export function ListingPipeline({
               listPrice={compsLabel}
             />
           ) : (
-            <>
-              <div className="flex shrink-0 items-center justify-between bg-[#232F3E] px-3 py-2">
-                <AmazonMark className="text-[15px] text-white" />
-                <LivePill on={false} label="Listed" />
-              </div>
-              <div className="min-h-0 flex-1 bg-[#f7f7f7]" />
-              <div className="shrink-0 px-3 py-2">
-                <p className="text-[16px] font-semibold text-[#B12704]">—</p>
-                <p className="truncate text-[12px] text-[#707070]">Amazon</p>
-              </div>
-            </>
+            <WaitingAmazon />
           )}
         </ChannelShell>
 
@@ -1758,17 +1767,7 @@ export function ListingPipeline({
               seller={shop}
             />
           ) : (
-            <>
-              <div className="flex shrink-0 items-center justify-between border-b border-[#eee] px-3 py-2">
-                <FacebookLogo word />
-                <LivePill on={false} label="Posted" />
-              </div>
-              <div className="min-h-0 flex-1 bg-[#f7f7f7]" />
-              <div className="shrink-0 px-3 py-2">
-                <p className="text-[16px] font-semibold">—</p>
-                <p className="truncate text-[12px] text-[#707070]">Facebook Marketplace</p>
-              </div>
-            </>
+            <WaitingFacebook />
           )}
         </ChannelShell>
 
@@ -1776,19 +1775,7 @@ export function ListingPipeline({
           {shopifyIn ? (
             <ShopifyStorefront key={`shop-${cover}`} src={cover} title={item.title} price={priceLabel} />
           ) : (
-            <>
-              <div className="flex shrink-0 items-center justify-between border-b border-[#eee] bg-white px-3 py-2">
-                <ShopifyLogo />
-                <LivePill on={false} label="On store" />
-              </div>
-              <div className="min-h-0 flex-1 bg-[#f7f7f7]" />
-              <div className="shrink-0 px-3 py-2">
-                <p className="text-[16px] font-semibold tabular-nums">—</p>
-                <p className="mt-1.5 grid h-8 place-items-center rounded-md bg-[#eee] text-[12px] font-semibold text-[#bbb]">
-                  Add to cart
-                </p>
-              </div>
-            </>
+            <WaitingShopify />
           )}
         </ChannelShell>
 
@@ -1802,23 +1789,7 @@ export function ListingPipeline({
               slug={slug}
             />
           ) : (
-            <>
-              <div className="flex shrink-0 items-center gap-1.5 border-b border-[#eee] bg-[#f7f7f7] px-3 py-2">
-                <span className="size-1.5 rounded-full bg-[#FF5F57]" />
-                <span className="size-1.5 rounded-full bg-[#FEBC2E]" />
-                <span className="size-1.5 rounded-full bg-[#28C840]" />
-                <span className="ml-1 flex min-w-0 flex-1 items-center gap-1 rounded-full bg-white px-2 py-0.5 text-[11px] text-[#707070]">
-                  <Globe className="size-3 shrink-0" />
-                  <span className="truncate">yoursite.com/products</span>
-                </span>
-                <LivePill on={false} label="On site" />
-              </div>
-              <div className="min-h-0 flex-1 bg-[#f7f7f7]" />
-              <div className="shrink-0 px-3 py-2">
-                <p className="text-[16px] font-semibold tabular-nums">—</p>
-                <p className="truncate text-[12px] text-[#707070]">Your website</p>
-              </div>
-            </>
+            <WaitingSite />
           )}
         </ChannelShell>
         </div>

@@ -6,6 +6,10 @@ import { createClient } from "@/lib/supabase/client";
 import { FirstRunHome } from "@/components/studio/first-run-home";
 import { ReturningHome } from "@/components/studio/returning-home";
 import { WelcomeGate } from "@/components/studio/welcome-gate";
+import {
+  ConnectOnboarding,
+  onboardingAlreadyDone,
+} from "@/components/studio/connect-onboarding";
 import { pickBestReadyListings } from "@/lib/studio/ready-from-products";
 
 type ProductRow = {
@@ -33,6 +37,7 @@ type CsvRow = {
 
 type SetupState = {
   ebayConnected: boolean;
+  ebayConfigured: boolean;
   policiesReady: boolean;
   brandingReady: boolean;
 };
@@ -49,14 +54,35 @@ export default function HomeWorkspacePage() {
   const [products, setProducts] = useState<ProductRow[]>([]);
   const [exportsList, setExportsList] = useState<CsvRow[]>([]);
   const [ready, setReady] = useState(false);
+  const [account, setAccount] = useState<{ owner: boolean } | null>(null);
+  const [onboardingDone, setOnboardingDone] = useState<boolean | null>(null);
   const [setup, setSetup] = useState<SetupState>({
     ebayConnected: false,
+    ebayConfigured: true,
     policiesReady: false,
     brandingReady: false,
   });
 
   useEffect(() => {
+    setOnboardingDone(onboardingAlreadyDone());
+  }, []);
+
+  useEffect(() => {
     let cancelled = false;
+
+    void (async () => {
+      try {
+        const res = await fetch("/api/me");
+        if (!res.ok) {
+          if (!cancelled) setAccount({ owner: false });
+          return;
+        }
+        const body = (await res.json()) as { owner?: boolean };
+        if (!cancelled) setAccount({ owner: Boolean(body.owner) });
+      } catch {
+        if (!cancelled) setAccount({ owner: false });
+      }
+    })();
 
     void (async () => {
       try {
@@ -108,8 +134,9 @@ export default function HomeWorkspacePage() {
         ]);
         const conn = connRes.ok
           ? ((await connRes.json()) as {
-              connection?: { connected?: boolean };
+              connection?: { connected?: boolean; configured?: boolean };
               connected?: boolean;
+              configured?: boolean;
             })
           : null;
         const policies = policyRes.ok
@@ -132,6 +159,9 @@ export default function HomeWorkspacePage() {
         setSetup({
           ebayConnected: Boolean(
             conn?.connection?.connected || conn?.connected,
+          ),
+          ebayConfigured: Boolean(
+            conn?.connection?.configured || conn?.configured,
           ),
           policiesReady: Boolean(
             p?.shippingPolicyId?.trim() &&
@@ -189,35 +219,55 @@ export default function HomeWorkspacePage() {
     },
   ] as const;
   const setupDoneCount = setupItems.filter((i) => i.done).length;
-  const isFirstRun = ready && products.length === 0;
+  const bootReady = ready && account !== null && onboardingDone !== null;
+  const needsOnboarding = Boolean(
+    account && !account.owner && onboardingDone === false,
+  );
+  const isFirstRun = bootReady && products.length === 0;
+
+  const studio = !bootReady ? (
+    <div className="flex h-full min-h-0 flex-1 animate-pulse bg-white" />
+  ) : needsOnboarding ? (
+    <ConnectOnboarding
+      name={name}
+      ebayConnected={setup.ebayConnected}
+      ebayConfigured={setup.ebayConfigured}
+      policiesReady={setup.policiesReady}
+      brandingReady={setup.brandingReady}
+    />
+  ) : isFirstRun ? (
+    <FirstRunHome
+      name={name}
+      setupDoneCount={setupDoneCount}
+      setupItems={setupItems.map(({ done, title, body, href }) => ({
+        done,
+        title,
+        body,
+        href,
+      }))}
+    />
+  ) : (
+    <ReturningHome
+      name={name}
+      listingCount={products.length}
+      drafts={drafts}
+      readyListings={readyListings}
+      exportsList={exportsList}
+      ebayConnected={setup.ebayConnected}
+    />
+  );
+
+  if (needsOnboarding && bootReady) {
+    return (
+      <AppShell hideHeader flush>
+        {studio}
+      </AppShell>
+    );
+  }
 
   return (
     <WelcomeGate>
-      <AppShell hideHeader flush>
-        {!ready ? (
-          <div className="flex h-full min-h-0 flex-1 animate-pulse bg-white" />
-        ) : isFirstRun ? (
-          <FirstRunHome
-            name={name}
-            setupDoneCount={setupDoneCount}
-            setupItems={setupItems.map(({ done, title, body, href }) => ({
-              done,
-              title,
-              body,
-              href,
-            }))}
-          />
-        ) : (
-          <ReturningHome
-            name={name}
-            listingCount={products.length}
-            drafts={drafts}
-            readyListings={readyListings}
-            exportsList={exportsList}
-            ebayConnected={setup.ebayConnected}
-          />
-        )}
-      </AppShell>
+      <AppShell hideHeader flush>{studio}</AppShell>
     </WelcomeGate>
   );
 }

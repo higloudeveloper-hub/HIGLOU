@@ -124,10 +124,10 @@ export function EbayLivePreview({
               key={photoSrc}
               src={photoSrc}
               alt=""
-              initial={{ y: -16, opacity: 0, scale: 0.94 }}
-              animate={{ y: 0, opacity: 1, scale: 1 }}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              transition={{ type: "spring", stiffness: 280, damping: 22 }}
+              transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
               className="absolute inset-0 size-full object-contain p-3"
             />
           ) : (
@@ -144,7 +144,7 @@ export function EbayLivePreview({
             </motion.div>
           )}
         </AnimatePresence>
-        {live ? (
+        {live && !tight ? (
           <button
             type="button"
             tabIndex={-1}

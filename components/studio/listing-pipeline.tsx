@@ -42,24 +42,22 @@ function clearStorySeen() {
 
 const CATALOG = STORY_CATALOG;
 
+const EASE = [0.22, 1, 0.36, 1] as const;
+const GRAVITY = [0.55, 0.05, 0.9, 0.22] as const;
+
 const STEPS = [
-  { id: "grab", ms: 1400, x: 14, y: 74, click: true, label: "Grab one photo" },
-  { id: "drag", ms: 1600, x: 9, y: 11, click: false, label: "Drop on listing" },
-  { id: "drop", ms: 800, x: 9, y: 11, click: true, label: "Photo in" },
-  { id: "photos", ms: 1000, x: 22, y: 8, click: false, label: "Higlou adds shots" },
-  { id: "title", ms: 850, x: 40, y: 8, click: false, label: "Title writes itself" },
-  { id: "desc", ms: 750, x: 40, y: 8, click: false, label: "Description" },
-  { id: "compare", ms: 800, x: 40, y: 8, click: false, label: "Priced vs sold comps" },
-  { id: "fillEbay", ms: 1300, x: 16, y: 38, click: false, label: "eBay" },
-  { id: "fillAmazon", ms: 1300, x: 50, y: 38, click: false, label: "Amazon" },
-  { id: "fillFacebook", ms: 1300, x: 84, y: 38, click: false, label: "Facebook" },
-  { id: "fillShopify", ms: 1300, x: 24, y: 70, click: false, label: "Shopify" },
-  { id: "fillWeb", ms: 1300, x: 76, y: 70, click: false, label: "Your site" },
-  { id: "ready", ms: 1500, x: 91, y: 8, click: false, label: "Publish" },
-  { id: "publish", ms: 1600, x: 50, y: 48, click: true, label: "Publishing" },
-  { id: "dispatch", ms: 4000, x: 50, y: 48, click: false, label: "Sending" },
-  { id: "sales", ms: 1800, x: 88, y: 93, click: false, label: "Revenue" },
-  { id: "hold", ms: 2000, x: 88, y: 93, click: false, label: "Next product" },
+  { id: "grab", ms: 1600, x: 14, y: 74, click: true, label: "Grab one photo" },
+  { id: "drag", ms: 1500, x: 9, y: 11, click: false, label: "Drop on listing" },
+  { id: "drop", ms: 700, x: 9, y: 11, click: true, label: "Photo in" },
+  { id: "photos", ms: 1100, x: 22, y: 8, click: false, label: "Higlou adds shots" },
+  { id: "title", ms: 900, x: 40, y: 8, click: false, label: "Title writes itself" },
+  { id: "desc", ms: 800, x: 40, y: 8, click: false, label: "Description" },
+  { id: "compare", ms: 1000, x: 40, y: 8, click: false, label: "Priced vs sold comps" },
+  { id: "ready", ms: 1600, x: 91, y: 8, click: false, label: "Publish" },
+  { id: "publish", ms: 1500, x: 50, y: 48, click: true, label: "Publishing" },
+  { id: "dispatch", ms: 2800, x: 50, y: 48, click: false, label: "Sending" },
+  { id: "sales", ms: 2000, x: 88, y: 93, click: false, label: "Revenue" },
+  { id: "hold", ms: 1800, x: 88, y: 93, click: false, label: "Next product" },
 ] as const;
 
 const DROP_STEPS = [
@@ -74,14 +72,6 @@ type StepId = (typeof STEPS)[number]["id"];
 function stepIndex(id: StepId) {
   return STEPS.findIndex((s) => s.id === id);
 }
-
-const FILL_FLY: Partial<Record<StepId, { x: number; y: number }>> = {
-  fillEbay: { x: 16, y: 38 },
-  fillAmazon: { x: 50, y: 38 },
-  fillFacebook: { x: 84, y: 38 },
-  fillShopify: { x: 24, y: 70 },
-  fillWeb: { x: 76, y: 70 },
-};
 
 const FALL_TO = [
   { x: 16, y: 38, name: "eBay" },
@@ -105,11 +95,10 @@ const SALE_TICKET = [
 
 const CURSOR_OFF: ReadonlySet<string> = new Set([
   "drag",
-  "fillEbay",
-  "fillAmazon",
-  "fillFacebook",
-  "fillShopify",
-  "fillWeb",
+  "photos",
+  "title",
+  "desc",
+  "compare",
   "dispatch",
 ]);
 
@@ -137,7 +126,7 @@ function useTyped(text: string, on: boolean, reduce: boolean) {
       i += 1;
       setOut(text.slice(0, i));
       if (i >= text.length) window.clearInterval(t);
-    }, 10);
+    }, 14);
     return () => window.clearInterval(t);
   }, [text, on, reduce]);
   return out;
@@ -280,28 +269,6 @@ function ShopifyLogo({
   );
 }
 
-function StoreLogo({ name, hero = false }: { name: string; hero?: boolean }) {
-  if (name === "eBay") {
-    return <EbayWordmark className={hero ? "text-[56px] sm:text-[72px]" : "text-[18px]"} />;
-  }
-  if (name === "Amazon") {
-    return (
-      <AmazonMark
-        hero={hero}
-        className={hero ? "text-[48px] text-[#131921] sm:text-[64px]" : "text-[16px] text-[#131921]"}
-      />
-    );
-  }
-  if (name === "Facebook") return <FacebookLogo hero={hero} />;
-  if (name === "Shopify") return <ShopifyLogo hero={hero} />;
-  return (
-    <span className={cn("inline-flex items-center gap-3 font-semibold tracking-tight", hero ? "text-[32px] sm:text-[40px]" : "text-[13px]")}>
-      <Globe className={hero ? "size-10 sm:size-12" : "size-3.5"} />
-      Your site
-    </span>
-  );
-}
-
 function StoreTargets() {
   const stores = [
     { key: "ebay", node: <EbayWordmark className="text-[18px]" /> },
@@ -435,42 +402,26 @@ function storyCaption(
   }
   switch (id) {
     case "grab":
-      return { headline: "ONE PHOTO", sub: "Grab it from Ready to list." };
+      return { headline: "One photo.", sub: "That’s the whole start." };
     case "drag":
-      return { headline: "DROP IT", sub: "On the first listing slot." };
+      return { headline: "Drop it.", sub: "On the first slot." };
     case "drop":
-      return { headline: "PHOTO IN", sub: "Higlou takes over from here." };
+      return { headline: "", sub: "" };
     case "photos":
-      return {
-        headline: "MORE SHOTS",
-        sub: `${ctx.filled} of ${ctx.shots} from that one photo.`,
-      };
     case "title":
-      return { headline: "TITLE WRITES ITSELF", sub: "From the photo. Ready for every store." };
     case "desc":
-      return { headline: "THEN THE COPY", sub: "Buyer-ready. No typing." };
     case "compare":
-      return { headline: "PRICED TO SELL", sub: "Undercut what already sold." };
-    case "fillEbay":
-      return { headline: "", sub: "Now live." };
-    case "fillAmazon":
-      return { headline: "", sub: "Now live." };
-    case "fillFacebook":
-      return { headline: "", sub: "Now live." };
-    case "fillShopify":
-      return { headline: "", sub: "Now live." };
-    case "fillWeb":
-      return { headline: "", sub: "Now live." };
+      return { headline: "", sub: "" };
     case "ready":
-      return { headline: "ONLY ONE CLICK", sub: "Publish once. All five go live." };
+      return { headline: "One click.", sub: "Publish once. All five go live." };
     case "publish":
-      return { headline: "EVERYTHING BECOMES ONE", sub: "Photos, title, price — one packet." };
+      return { headline: "One listing.", sub: "Photos, title, price — together." };
     case "dispatch":
-      return { headline: "FLYING TO FIVE STORES", sub: "eBay · Amazon · Facebook · Shopify · your site" };
+      return { headline: "", sub: "" };
     case "sales":
-      return { headline: "MONEY IN", sub: "Watch the wallet. Real time." };
+      return { headline: "Sold.", sub: "The wallet moves in real time." };
     case "hold":
-      return { headline: "NEXT PRODUCT", sub: "The wallet keeps the money." };
+      return { headline: "", sub: "" };
     default:
       return { headline: "Watch this.", sub: "One photo becomes five live storefronts." };
   }
@@ -478,12 +429,12 @@ function storyCaption(
 
 function YourTurn({ onReplay }: { onReplay: () => void }) {
   return (
-    <div className="absolute inset-0 z-50 flex items-center justify-center bg-white/62 px-6">
+    <div className="pointer-events-none absolute inset-0 z-50 flex items-center justify-center px-6">
       <motion.div
-        initial={{ opacity: 0, y: 14 }}
+        initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
-        className="w-full max-w-[400px] bg-white px-8 py-9 text-center ring-1 ring-[#e5e5e5]"
+        transition={{ duration: 0.45, ease: EASE }}
+        className="pointer-events-auto w-full max-w-[380px] bg-white px-8 py-8 text-center ring-1 ring-[#e5e5e5]"
       >
         <p className="text-[11px] font-medium tracking-[0.18em] text-[#8a8a8a] uppercase">
           Your turn
@@ -544,8 +495,8 @@ function CenterLine({
           exit={{ opacity: 0, y: -6 }}
           transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
           className={cn(
-            "relative max-w-[520px] text-center",
-            stamp ? "" : "bg-white px-5 py-3 sm:px-6",
+            "relative max-w-[440px] text-center",
+            stamp ? "" : "bg-white/95 px-6 py-3.5",
           )}
         >
           {mark ? (
@@ -555,8 +506,8 @@ function CenterLine({
           ) : (
             <p
               className={cn(
-                "font-medium tracking-tight text-[#141414] leading-[1.05]",
-                compact ? "text-[24px]" : "text-[28px] sm:text-[40px]",
+                "font-medium tracking-tight text-[#141414] leading-[1.08]",
+                compact ? "text-[22px]" : "text-[26px] sm:text-[34px]",
               )}
             >
               {headline}
@@ -601,9 +552,8 @@ function DragGhost({
         rotate: 0,
       }}
       transition={{
-        type: "spring",
-        stiffness: phase === "drag" ? 160 : 240,
-        damping: phase === "drag" ? 20 : 22,
+        duration: phase === "drag" ? 1.05 : 0.55,
+        ease: EASE,
       }}
     >
       <div
@@ -621,55 +571,6 @@ function DragGhost({
   );
 }
 
-function FlyClone({
-  src,
-  toX,
-  toY,
-  hopKey,
-  fromX = 9,
-  fromY = 11,
-  size = 48,
-}: {
-  src: string;
-  toX: number;
-  toY: number;
-  hopKey: string;
-  fromX?: number;
-  fromY?: number;
-  size?: number;
-}) {
-  return (
-    <motion.div
-      key={hopKey}
-      className="pointer-events-none absolute z-20 overflow-hidden rounded-sm bg-white ring-1 ring-[#e5e5e5]"
-      initial={{
-        left: `${fromX}%`,
-        top: `${fromY}%`,
-        width: size,
-        height: size,
-        opacity: 1,
-        x: "-50%",
-        y: "-50%",
-        rotate: 0,
-        scale: 1,
-      }}
-      animate={{
-        left: [`${fromX}%`, `${fromX + (toX - fromX) * 0.5}%`, `${toX}%`],
-        top: [`${fromY}%`, `${Math.min(fromY, toY) - 6}%`, `${toY}%`],
-        width: [size, size, 32],
-        height: [size, size, 32],
-        opacity: [1, 1, 0],
-        rotate: 0,
-        scale: [1, 1, 0.5],
-      }}
-      transition={{ duration: 0.7, times: [0, 0.4, 1], ease: [0.22, 1, 0.36, 1] }}
-    >
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src={src} alt="" className="size-full object-contain p-0.5" />
-    </motion.div>
-  );
-}
-
 function CompressBundle({
   src,
   extras,
@@ -682,38 +583,36 @@ function CompressBundle({
   return (
     <motion.div
       className="pointer-events-none absolute z-30"
-      initial={{ left: "18%", top: "9%", scale: 0.28, opacity: 0, x: "-50%", y: "-50%", rotate: 0 }}
+      initial={{ left: "14%", top: "10%", scale: 0.4, opacity: 0, x: "-50%", y: "-50%" }}
       animate={
         packed
-          ? { left: "50%", top: "50%", scale: 0.78, opacity: 0.4, rotate: 0 }
-          : { left: "50%", top: "50%", scale: 1, opacity: 1, rotate: 0 }
+          ? { left: "50%", top: "48%", scale: 0.82, opacity: 0.28 }
+          : { left: "50%", top: "48%", scale: 1, opacity: 1 }
       }
-      transition={{ type: "spring", stiffness: 200, damping: 24 }}
+      transition={{ duration: 0.7, ease: EASE }}
     >
       {extras.slice(1, 3).map((shot, i) => (
         <motion.div
           key={shot}
-          className="absolute overflow-hidden rounded-[2px] bg-white p-1 pb-4 ring-1 ring-[#e5e5e5]"
+          className="absolute overflow-hidden rounded-[2px] bg-white p-1 pb-4 ring-1 ring-[#e8e8e8]"
           initial={{
-            left: i === 0 ? -64 : 80,
-            top: 40,
-            rotate: 0,
+            left: i === 0 ? -52 : 64,
+            top: 28,
             opacity: 0,
           }}
           animate={{
-            left: packed ? (i === 0 ? -4 : 20) : (i + 1) * 8,
-            top: packed ? (i + 1) * -4 : (i + 1) * -8,
-            rotate: 0,
-            opacity: packed ? 0.2 : 1,
+            left: packed ? 8 : (i + 1) * 7,
+            top: packed ? 6 : (i + 1) * -6,
+            opacity: packed ? 0 : 1,
           }}
-          transition={{ type: "spring", stiffness: 240, damping: 22, delay: packed ? 0 : 0.08 + i * 0.08 }}
-          style={{ width: 120, height: 148 }}
+          transition={{ duration: 0.55, ease: EASE, delay: packed ? 0 : 0.08 + i * 0.07 }}
+          style={{ width: 118, height: 144 }}
         >
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={shot} alt="" className="size-full object-contain" />
         </motion.div>
       ))}
-      <div className="relative h-[168px] w-[136px] overflow-hidden rounded-[2px] bg-white p-2 pb-7 ring-1 ring-[#e5e5e5]">
+      <div className="relative h-[164px] w-[132px] overflow-hidden rounded-[2px] bg-white p-2 pb-6 ring-1 ring-[#e5e5e5]">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src={src} alt="" className="size-full object-contain" />
       </div>
@@ -734,8 +633,8 @@ function FallPacket({
   delay: number;
   hopKey: string;
 }) {
-  const midX = 50 + (toX - 50) * 0.5;
-  const midY = Math.min(toY, 38) - 14;
+  const midX = 50 + (toX - 50) * 0.42;
+  const midY = Math.min(toY, 36) - 16;
 
   return (
     <motion.div
@@ -743,29 +642,27 @@ function FallPacket({
       className="pointer-events-none absolute z-40"
       initial={{
         left: "50%",
-        top: "50%",
+        top: "48%",
         opacity: 0,
         x: "-50%",
         y: "-50%",
-        rotate: 0,
-        scale: 0.32,
+        scale: 0.42,
       }}
       animate={{
         left: ["50%", `${midX}%`, `${toX}%`],
-        top: ["50%", `${midY}%`, `${toY}%`],
+        top: ["48%", `${midY}%`, `${toY}%`],
         opacity: [0, 1, 1, 0],
-        rotate: 0,
-        scale: [0.32, 1, 0.22],
+        scale: [0.42, 1, 0.22],
       }}
       transition={{
         delay,
-        duration: 0.95,
-        times: [0, 0.28, 1],
-        ease: [0.22, 1, 0.36, 1],
-        opacity: { delay, duration: 0.95, times: [0, 0.08, 0.82, 1] },
+        duration: 0.92,
+        times: [0, 0.3, 1],
+        ease: [EASE, GRAVITY],
+        opacity: { delay, duration: 0.92, times: [0, 0.08, 0.84, 1] },
       }}
     >
-      <div className="h-[148px] w-[118px] overflow-hidden rounded-[2px] bg-white p-1 pb-4 ring-1 ring-[#e5e5e5]">
+      <div className="h-[142px] w-[114px] overflow-hidden rounded-[2px] bg-white p-1 pb-4 ring-1 ring-[#e5e5e5]">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src={src} alt="" className="size-full object-contain" />
       </div>
@@ -774,26 +671,29 @@ function FallPacket({
 }
 
 function ChannelShell({
-  focused,
+  dim,
   className,
   children,
 }: {
   live?: boolean;
   filled?: boolean;
   focused?: boolean;
+  dim?: boolean;
   className?: string;
   children: ReactNode;
 }) {
   return (
-    <div
+    <motion.div
+      initial={false}
+      animate={{ opacity: dim ? 0.36 : 1 }}
+      transition={{ duration: 0.45, ease: EASE }}
       className={cn(
         "relative flex h-full min-h-0 flex-col overflow-hidden bg-white",
-        focused && "z-10 ring-1 ring-inset ring-[#141414]/15",
         className,
       )}
     >
       {children}
-    </div>
+    </motion.div>
   );
 }
 
@@ -817,7 +717,7 @@ function WaitingStore({
 function WaitingEbay() {
   return (
     <WaitingStore
-      mark={<EbayWordmark className="text-[40px] leading-none sm:text-[48px]" />}
+      mark={<EbayWordmark className="text-[32px] leading-none sm:text-[40px]" />}
       header={
         <div className="flex shrink-0 items-center gap-1.5 border-b border-[#e5e5e5] bg-white px-2 py-1">
           <EbayWordmark className="text-[14px]" />
@@ -838,7 +738,7 @@ function WaitingEbay() {
 function WaitingAmazon() {
   return (
     <WaitingStore
-      mark={<AmazonMark className="text-[32px] text-[#131921] sm:text-[40px]" />}
+      mark={<AmazonMark className="text-[26px] text-[#131921] sm:text-[32px]" />}
       header={
         <div className="flex shrink-0 items-center gap-1.5 bg-[#131921] px-2 py-1">
           <AmazonMark className="text-[13px] text-white" />
@@ -860,7 +760,7 @@ function WaitingFacebook() {
   return (
     <WaitingStore
       mark={
-        <span className="text-[28px] font-bold tracking-tight text-[#1877F2] sm:text-[34px]">
+        <span className="text-[22px] font-semibold tracking-tight text-[#1877F2] sm:text-[26px]">
           facebook
         </span>
       }
@@ -880,7 +780,7 @@ function WaitingShopify() {
   return (
     <WaitingStore
       mark={
-        <span className="text-[28px] font-semibold tracking-tight text-[#141414] sm:text-[34px]">
+        <span className="text-[22px] font-medium tracking-tight text-[#141414] sm:text-[26px]">
           Shopify
         </span>
       }
@@ -898,7 +798,7 @@ function WaitingSite() {
   return (
     <WaitingStore
       mark={
-        <span className="text-[26px] font-semibold tracking-tight text-[#141414] sm:text-[32px]">
+        <span className="text-[22px] font-medium tracking-tight text-[#141414] sm:text-[26px]">
           Your site
         </span>
       }
@@ -934,7 +834,7 @@ function LivePhoto({ src, className }: { src: string; className?: string }) {
         alt=""
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
-        transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
+        transition={{ duration: 0.45, ease: EASE }}
         className="absolute inset-0 size-full object-contain p-1.5"
       />
     </div>
@@ -1284,20 +1184,15 @@ export function ListingPipeline({
   const draftOn = at("photos");
   const descOn = at("title");
   const priceOn = at("desc");
-  const ebayIn = at("fillEbay");
-  const amazonIn = at("fillAmazon");
-  const facebookIn = at("fillFacebook");
-  const shopifyIn = at("fillShopify");
-  const webIn = at("fillWeb");
+  const ebayIn = landed >= 1;
+  const amazonIn = landed >= 2;
+  const facebookIn = landed >= 3;
+  const shopifyIn = landed >= 4;
+  const webIn = landed >= 5;
   const readyOn = at("ready");
   const packing = is("publish");
   const dispatching = is("dispatch");
   const publishing = packing || dispatching;
-  const ebayLive = landed >= 1;
-  const amazonLive = landed >= 2;
-  const facebookLive = landed >= 3;
-  const shopifyLive = landed >= 4;
-  const webLive = landed >= 5;
   const liveOn = at("dispatch");
   const allLive = landed >= 5;
   const dragPhase =
@@ -1311,21 +1206,8 @@ export function ListingPipeline({
     freezeDrop,
     fileDrag,
   });
-  const stampName =
-    is("fillEbay") || (dispatching && landed === 1)
-      ? "eBay"
-      : is("fillAmazon") || (dispatching && landed === 2)
-        ? "Amazon"
-        : is("fillFacebook") || (dispatching && landed === 3)
-          ? "Facebook"
-          : is("fillShopify") || (dispatching && landed === 4)
-            ? "Shopify"
-            : is("fillWeb") || (dispatching && landed === 5)
-              ? "site"
-              : null;
   const showCenter =
     dropMode ||
-    Boolean(stampName) ||
     step.id === "grab" ||
     step.id === "ready" ||
     step.id === "publish" ||
@@ -1450,7 +1332,7 @@ export function ListingPipeline({
     }
     if (step.id === "dispatch") {
       setLanded(0);
-      const times = [1050, 1600, 2150, 2700, 3250];
+      const times = [920, 1240, 1560, 1880, 2200];
       const timers = times.map((ms, i) =>
         window.setTimeout(() => setLanded(i + 1), ms),
       );
@@ -1486,14 +1368,6 @@ export function ListingPipeline({
           {dropMode && beat <= timeline.findIndex((s) => s.id === "drop") ? (
             <DragGhost src={cover} x={step.x} y={step.y} phase={dragPhase} />
           ) : null}
-          {!dropMode && FILL_FLY[step.id] ? (
-            <FlyClone
-              src={cover}
-              toX={FILL_FLY[step.id]!.x}
-              toY={FILL_FLY[step.id]!.y}
-              hopKey={`${sku}-${step.id}`}
-            />
-          ) : null}
           {!dropMode && (packing || dispatching) ? (
             <CompressBundle src={cover} extras={shots} packed={dispatching} />
           ) : null}
@@ -1504,15 +1378,15 @@ export function ListingPipeline({
                   src={cover}
                   toX={store.x}
                   toY={store.y}
-                  delay={i * 0.55}
+                  delay={i * 0.32}
                   hopKey={`${sku}-fall-${store.name}`}
                 />
               ))
             : null}
           <GuideCursor
-            x={is("photos") ? 8 + Math.max(0, filled - 1) * 5.2 : step.x}
+            x={step.x}
             y={step.y}
-            click={step.click || (is("photos") && filled > 1)}
+            click={step.click}
             visible={
               !resting &&
               !CURSOR_OFF.has(step.id) &&
@@ -1520,7 +1394,7 @@ export function ListingPipeline({
               !(!dropMode && (is("grab") || is("drag")))
             }
             label=""
-            clickKey={`${step.id}-${sku}-${is("photos") ? filled : beat}`}
+            clickKey={`${step.id}-${sku}-${beat}`}
           />
         </>
       ) : null}
@@ -1535,10 +1409,10 @@ export function ListingPipeline({
           className="relative flex shrink-0 items-center gap-1"
           animate={
             packing
-              ? { scale: 0.62, x: 36 }
+              ? { scale: 0.88, x: 24 }
               : { scale: 1, x: 0 }
           }
-          transition={{ type: "spring", stiffness: 280, damping: 22 }}
+          transition={{ duration: 0.55, ease: EASE }}
         >
           {dragging || fileDrag ? (
             shots.map((_, i) => (
@@ -1643,27 +1517,25 @@ export function ListingPipeline({
         {!dropMode ? (
         <motion.div
           className={cn(
-            "relative h-10 w-[122px] shrink-0 overflow-hidden rounded-md text-[13px] font-semibold tracking-[-0.01em]",
+            "relative h-10 w-[122px] shrink-0 overflow-hidden text-[13px] font-medium tracking-tight",
             readyOn || publishing || liveOn ? "bg-[#ececec] text-white" : "bg-[#ececec] text-[#9b9b9b]",
           )}
-          animate={{ scale: publishing ? [1, 0.96, 1] : 1 }}
-          transition={{ duration: 0.35 }}
         >
           <motion.div
-            className="absolute inset-x-0 bottom-0 bg-[#141414]"
+            className="absolute inset-y-0 left-0 bg-[#141414]"
             initial={false}
             animate={{
-              height: allLive ? "100%" : publishing || liveOn ? "85%" : "0%",
+              width: allLive ? "100%" : publishing || liveOn ? "100%" : readyOn ? "0%" : "0%",
             }}
-            transition={{ duration: publishing ? 0.62 : 0.32, ease: [0.22, 1, 0.36, 1] }}
+            transition={{ duration: publishing ? 0.7 : 0.35, ease: EASE }}
           />
           <span
             className={cn(
               "relative z-10 grid h-full place-items-center",
-              publishing || liveOn ? "text-white" : readyOn ? "text-[#141414]" : "text-[#9b9b9b]",
+              publishing || liveOn || allLive ? "text-white" : readyOn ? "text-[#141414]" : "text-[#9b9b9b]",
             )}
           >
-            {packing ? "Packing" : dispatching ? "Sending" : liveOn ? "Live" : "Publish"}
+            {allLive || liveOn ? "Live" : "Publish"}
           </span>
         </motion.div>
         ) : null}
@@ -1671,14 +1543,9 @@ export function ListingPipeline({
 
       {showCenter && !resting ? (
         <CenterLine
-          headline={stampName ? "" : caption.headline}
-          sub={stampName ? "Now live." : caption.sub}
-          mark={
-            stampName ? (
-              <StoreLogo name={stampName} hero={!compact} />
-            ) : undefined
-          }
-          stepKey={`${sku}-${step.id}-${stampName ?? beat}`}
+          headline={caption.headline}
+          sub={caption.sub}
+          stepKey={`${sku}-${step.id}`}
           compact={compact}
         />
       ) : null}
@@ -1714,17 +1581,9 @@ export function ListingPipeline({
           <StoreTargets />
         </div>
       ) : (
-      <motion.div
-        className="relative min-h-0 flex-1 origin-top"
-        animate={
-          packing
-            ? { scale: 0.86, y: 20, opacity: 0.22 }
-            : { scale: 1, y: 0, opacity: 1 }
-        }
-        transition={{ type: "spring", stiffness: 240, damping: 22 }}
-      >
+      <div className="relative min-h-0 flex-1">
         <div className="grid h-full min-h-0 grid-cols-6 grid-rows-2 divide-x divide-y divide-[#e5e5e5]">
-        <ChannelShell live={ebayLive} filled={ebayIn} focused={is("fillEbay") || (dispatching && landed === 1)} className="col-span-2">
+        <ChannelShell dim={publishing && !ebayIn} className="col-span-2">
           {ebayIn ? (
             <EbayLivePreview
               key={`ebay-${cover}`}
@@ -1743,7 +1602,7 @@ export function ListingPipeline({
           )}
         </ChannelShell>
 
-        <ChannelShell live={amazonLive} filled={amazonIn} focused={is("fillAmazon") || (dispatching && landed === 2)} className="col-span-2">
+        <ChannelShell dim={publishing && !amazonIn} className="col-span-2">
           {amazonIn ? (
             <AmazonStorefront
               key={`amz-${cover}`}
@@ -1757,7 +1616,7 @@ export function ListingPipeline({
           )}
         </ChannelShell>
 
-        <ChannelShell live={facebookLive} filled={facebookIn} focused={is("fillFacebook") || (dispatching && landed === 3)} className="col-span-2">
+        <ChannelShell dim={publishing && !facebookIn} className="col-span-2">
           {facebookIn ? (
             <FacebookStorefront
               key={`fb-${cover}`}
@@ -1771,7 +1630,7 @@ export function ListingPipeline({
           )}
         </ChannelShell>
 
-        <ChannelShell live={shopifyLive} filled={shopifyIn} focused={is("fillShopify") || (dispatching && landed === 4)} className="col-span-3">
+        <ChannelShell dim={publishing && !shopifyIn} className="col-span-3">
           {shopifyIn ? (
             <ShopifyStorefront key={`shop-${cover}`} src={cover} title={item.title} price={priceLabel} />
           ) : (
@@ -1779,7 +1638,7 @@ export function ListingPipeline({
           )}
         </ChannelShell>
 
-        <ChannelShell live={webLive} filled={webIn} focused={is("fillWeb") || (dispatching && landed === 5)} className="col-span-3">
+        <ChannelShell dim={publishing && !webIn} className="col-span-3">
           {webIn ? (
             <SiteStorefront
               key={`web-${cover}`}
@@ -1793,7 +1652,7 @@ export function ListingPipeline({
           )}
         </ChannelShell>
         </div>
-      </motion.div>
+      </div>
       )}
 
       {dropMode ? null : (

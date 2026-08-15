@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { Check, Globe, MousePointer2, Search, ShoppingCart } from "lucide-react";
+import { Check, Globe, MapPin, MousePointer2, Search, ShoppingCart } from "lucide-react";
 import { usePrefersReducedMotion } from "@/components/listing/wizard/use-prefers-reduced-motion";
 import {
   EbayLivePreview,
@@ -818,20 +818,32 @@ function LivePhoto({ src, className }: { src: string; className?: string }) {
   );
 }
 
+function moneyParts(price: string) {
+  const raw = price.replace(/[^0-9.]/g, "");
+  const [dollars, cents = "00"] = raw.split(".");
+  return { dollars, cents: (cents + "00").slice(0, 2) };
+}
+
 function AmazonStorefront({
   src,
   title,
   price,
+  listPrice,
 }: {
   src: string;
   title: string;
   price: string;
+  listPrice?: string;
 }) {
+  const { dollars, cents } = moneyParts(price);
   return (
     <div className="grid h-full min-h-0 flex-1 grid-rows-[auto_minmax(0,1fr)_auto] bg-white">
-      <div className="flex shrink-0 items-center gap-2 bg-[#131921] px-2 py-1">
+      <div className="flex shrink-0 items-center gap-1.5 bg-[#131921] px-2 py-1">
         <AmazonMark className="text-[13px] text-white" />
         <div className="flex min-w-0 flex-1 overflow-hidden rounded-sm">
+          <span className="hidden shrink-0 bg-[#232F3E] px-1.5 py-0.5 text-[9px] text-white/80 sm:block">
+            All
+          </span>
           <span className="min-w-0 flex-1 truncate bg-white px-2 py-0.5 text-[10px] text-[#888]">
             Search Amazon
           </span>
@@ -844,7 +856,21 @@ function AmazonStorefront({
       <LivePhoto src={src} />
       <div className="shrink-0 px-2 pb-2 pt-1">
         <p className="line-clamp-1 text-[11px] leading-snug text-[#0F1111]">{title}</p>
-        <p className="text-[15px] font-semibold tabular-nums text-[#0F1111]">{price}</p>
+        <p className="mt-0.5 flex items-center gap-1 text-[11px]">
+          <span className="tracking-tight text-[#DE7921]">★★★★★</span>
+          <span className="text-[#007185]">4.8</span>
+        </p>
+        <div className="mt-0.5 flex items-start text-[#0F1111]">
+          <span className="mt-[3px] text-[11px] leading-none">$</span>
+          <span className="text-[22px] font-medium leading-none tabular-nums">{dollars}</span>
+          <span className="mt-[3px] text-[11px] leading-none tabular-nums">{cents}</span>
+        </div>
+        {listPrice ? (
+          <p className="text-[10px] text-[#565959]">
+            List: <span className="line-through">{listPrice}</span>
+          </p>
+        ) : null}
+        <p className="text-[10px] font-medium text-[#007600]">In Stock.</p>
         <div className="mt-1 grid grid-cols-2 gap-1">
           <p className="grid h-7 place-items-center rounded-full bg-[#FFD814] text-[10px] font-semibold whitespace-nowrap text-[#0F1111]">
             Add to Cart
@@ -871,20 +897,22 @@ function FacebookStorefront({
 }) {
   return (
     <div className="grid h-full min-h-0 flex-1 grid-rows-[auto_minmax(0,1fr)_auto] bg-white">
-      <div className="flex shrink-0 items-center gap-2 border-b border-[#E4E6EB] px-2.5 py-1.5">
+      <div className="flex shrink-0 items-center gap-2 border-b border-[#E4E6EB] bg-white px-2 py-1.5">
         <FacebookLogo />
-        <span className="min-w-0 flex-1 truncate text-[12px] font-semibold text-[#050505]">
-          {seller}
-        </span>
-        <span className="text-[12px] font-bold tracking-tight text-[#0866FF]">
+        <span className="min-w-0 flex-1 truncate text-[12px] font-bold text-[#050505]">
           Marketplace
         </span>
+        <span className="truncate text-[11px] text-[#65676B]">{seller}</span>
       </div>
       <LivePhoto src={src} className="bg-[#F0F2F5]" />
-      <div className="shrink-0 px-2.5 py-1.5">
-        <p className="text-[15px] font-bold tabular-nums text-[#050505]">{price}</p>
-        <p className="line-clamp-1 text-[12px] text-[#050505]">{title}</p>
-        <p className="mt-1 grid h-7 place-items-center rounded-md bg-[#E7F3FF] text-[12px] font-semibold text-[#0866FF]">
+      <div className="shrink-0 bg-white px-2.5 py-1.5">
+        <p className="text-[17px] font-bold tabular-nums leading-none text-[#050505]">{price}</p>
+        <p className="mt-1 line-clamp-1 text-[12px] font-medium text-[#050505]">{title}</p>
+        <p className="mt-0.5 flex items-center gap-1 text-[11px] text-[#65676B]">
+          <MapPin className="size-3 shrink-0" strokeWidth={2} />
+          Listed just now · Ships to you
+        </p>
+        <p className="mt-1 grid h-7 place-items-center rounded-md bg-[#E7F3FF] text-[12px] font-semibold text-[#1877F2]">
           Message
         </p>
       </div>
@@ -903,19 +931,32 @@ function ShopifyStorefront({
 }) {
   return (
     <div className="grid h-full min-h-0 flex-1 grid-rows-[auto_minmax(0,1fr)_auto] bg-white">
-      <div className="flex shrink-0 items-center justify-between bg-[#121212] px-3 py-1.5">
-        <ShopifyLogo light />
-        <ShoppingCart className="size-3.5 text-white" />
+      <div className="flex shrink-0 items-center justify-between border-b border-[#e5e5e5] bg-white px-3 py-1.5">
+        <ShopifyLogo />
+        <div className="flex items-center gap-2 text-[11px] text-[#6b6b6b]">
+          <Search className="size-3.5" strokeWidth={1.8} />
+          <span className="relative">
+            <ShoppingCart className="size-3.5 text-[#141414]" />
+            <span className="absolute -top-1 -right-1 grid size-3 place-items-center rounded-full bg-[#141414] text-[8px] text-white">
+              1
+            </span>
+          </span>
+        </div>
       </div>
       <LivePhoto src={src} />
-      <div className="shrink-0 px-3 pb-2 pt-1">
-        <p className="line-clamp-1 text-[13px] font-medium tracking-tight">{title}</p>
-        <p className="mt-0.5 text-[15px] tabular-nums">{price}</p>
-        <div className="mt-1 grid grid-cols-2 gap-1">
-          <p className="grid h-7 place-items-center rounded-md bg-[#121212] text-[10px] font-semibold whitespace-nowrap text-white">
+      <div className="shrink-0 px-3 pb-2 pt-1.5">
+        <p className="line-clamp-1 text-[13px] font-medium tracking-tight text-[#121212]">{title}</p>
+        <p className="mt-0.5 text-[16px] tabular-nums text-[#121212]">{price}</p>
+        <div className="mt-1 flex h-6 w-[88px] items-center justify-between rounded-sm border border-[#c9c9c9] px-1.5 text-[11px] tabular-nums text-[#121212]">
+          <span className="text-[#8a8a8a]">−</span>
+          1
+          <span className="text-[#8a8a8a]">+</span>
+        </div>
+        <div className="mt-1.5 grid grid-cols-2 gap-1">
+          <p className="grid h-7 place-items-center rounded-sm bg-[#121212] text-[10px] font-semibold whitespace-nowrap text-white">
             Add to cart
           </p>
-          <p className="grid h-7 place-items-center rounded-md bg-[#008060] text-[10px] font-semibold whitespace-nowrap text-white">
+          <p className="grid h-7 place-items-center rounded-sm bg-[#5A31F4] text-[10px] font-semibold whitespace-nowrap text-white">
             Buy it now
           </p>
         </div>
@@ -936,7 +977,7 @@ function SiteStorefront({
   slug: string;
 }) {
   return (
-    <div className="grid h-full min-h-0 flex-1 grid-rows-[auto_minmax(0,1fr)_auto] bg-white">
+    <div className="grid h-full min-h-0 flex-1 grid-rows-[auto_auto_minmax(0,1fr)_auto] bg-white">
       <div className="flex shrink-0 items-center gap-1.5 border-b border-[#e5e5e5] bg-[#f3f3f3] px-2 py-1">
         <span className="size-1.5 rounded-full bg-[#FF5F57]" />
         <span className="size-1.5 rounded-full bg-[#FEBC2E]" />
@@ -953,11 +994,17 @@ function SiteStorefront({
           </motion.span>
         </span>
       </div>
+      <div className="flex shrink-0 items-center justify-between border-b border-[#eee] px-3 py-1 text-[11px] tracking-wide text-[#707070]">
+        <span className="font-medium text-[#141414]">Shop</span>
+        <span>About</span>
+        <span>Bag (1)</span>
+      </div>
       <LivePhoto src={src} />
-      <div className="shrink-0 px-3 pb-2 pt-1">
-        <p className="line-clamp-1 text-[13px] font-semibold tracking-tight">{title}</p>
-        <p className="mt-0.5 text-[15px] font-semibold tabular-nums">{price}</p>
-        <p className="mt-1 grid h-7 place-items-center rounded-md bg-[#141414] text-[11px] font-semibold text-white">
+      <div className="shrink-0 px-3 pb-2 pt-1.5">
+        <p className="line-clamp-1 text-[13px] font-medium tracking-tight text-[#141414]">{title}</p>
+        <p className="mt-0.5 text-[16px] font-medium tabular-nums">{price}</p>
+        <p className="mt-0.5 text-[11px] text-[#8a8a8a]">Free shipping · Ships in 2–4 days</p>
+        <p className="mt-1.5 grid h-7 place-items-center rounded-none bg-[#141414] text-[11px] font-medium tracking-wide text-white">
           Add to bag
         </p>
       </div>
@@ -1545,6 +1592,7 @@ export function ListingPipeline({
               photoSrc={cover}
               title={item.title}
               priceLabel={priceLabel}
+              compareAtLabel={compsLabel}
               storeName={shop}
               live
               compact
@@ -1568,7 +1616,13 @@ export function ListingPipeline({
 
         <ChannelShell live={amazonLive} filled={amazonIn} focused={is("fillAmazon") || (dispatching && landed === 2)} className="col-span-2">
           {amazonIn ? (
-            <AmazonStorefront key={`amz-${cover}`} src={cover} title={item.title} price={priceLabel} />
+            <AmazonStorefront
+              key={`amz-${cover}`}
+              src={cover}
+              title={item.title}
+              price={priceLabel}
+              listPrice={compsLabel}
+            />
           ) : (
             <>
               <div className="flex shrink-0 items-center justify-between bg-[#232F3E] px-3 py-2">
@@ -1613,8 +1667,8 @@ export function ListingPipeline({
             <ShopifyStorefront key={`shop-${cover}`} src={cover} title={item.title} price={priceLabel} />
           ) : (
             <>
-              <div className="flex shrink-0 items-center justify-between bg-[#212326] px-3 py-2">
-                <ShopifyLogo light />
+              <div className="flex shrink-0 items-center justify-between border-b border-[#eee] bg-white px-3 py-2">
+                <ShopifyLogo />
                 <LivePill on={false} label="On store" />
               </div>
               <div className="min-h-0 flex-1 bg-[#f7f7f7]" />

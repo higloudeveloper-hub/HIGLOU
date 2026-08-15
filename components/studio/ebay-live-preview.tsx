@@ -91,12 +91,23 @@ export function EbayLivePreview({
         className,
       )}
     >
-      <div className="flex shrink-0 items-center gap-2 border-b border-[#e5e5e5] bg-white px-2 py-1">
+      <div className="flex shrink-0 items-center gap-1.5 border-b border-[#e5e5e5] bg-white px-2 py-1">
         <EbayWordmark className={tight ? "text-[14px]" : "text-[18px]"} />
-        <div className="flex min-w-0 flex-1 items-center gap-1 rounded-full border border-[#ccc] bg-[#f7f7f7] px-2 py-0.5 text-[11px] text-[#707070]">
-          <Search className="size-3 shrink-0" strokeWidth={2} />
-          <span className="truncate">Search eBay</span>
-        </div>
+        {tight ? (
+          <div className="flex min-w-0 flex-1 overflow-hidden rounded-sm border border-[#ccc]">
+            <span className="min-w-0 flex-1 truncate bg-white px-2 py-0.5 text-[10px] text-[#707070]">
+              Search for anything
+            </span>
+            <span className="grid w-7 shrink-0 place-items-center bg-[#3665F3] text-white">
+              <Search className="size-3" strokeWidth={2.4} />
+            </span>
+          </div>
+        ) : (
+          <div className="flex min-w-0 flex-1 items-center gap-1 rounded-full border border-[#ccc] bg-[#f7f7f7] px-2 py-0.5 text-[11px] text-[#707070]">
+            <Search className="size-3 shrink-0" strokeWidth={2} />
+            <span className="truncate">Search eBay</span>
+          </div>
+        )}
         <ShoppingCart className="size-3.5 shrink-0 text-[#191919]" strokeWidth={1.8} />
       </div>
 
@@ -165,11 +176,17 @@ export function EbayLivePreview({
         >
           {live ? title : "Your listing appears here on eBay"}
         </motion.p>
-        {tight ? null : (
+        {!tight ? (
           <p className="mt-1 text-[11px] text-[#707070]">
             Condition: <span className="font-semibold text-[#191919]">New</span>
           </p>
-        )}
+        ) : live ? (
+          <p className="text-[10px] text-[#707070]">
+            Condition: <span className="font-semibold text-[#191919]">New</span>
+            <span className="mx-1 text-[#cfcfcf]">·</span>
+            Free shipping
+          </p>
+        ) : null}
         {live ? (
           <div className="mt-0.5">
             {dropping ? (

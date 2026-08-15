@@ -131,7 +131,12 @@ export function MoneyMachineHome({
           </div>
         </aside>
         {story.phase !== "gone" ? (
-          <ReadyGrabGhost sku={story.sku} phase={story.phase} src={story.cover} />
+          <ReadyGrabGhost
+            key={story.sku}
+            sku={story.sku}
+            phase={story.phase}
+            src={story.cover}
+          />
         ) : null}
       </div>
     </div>

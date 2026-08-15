@@ -29,7 +29,7 @@ const STEPS = [
   { id: "fillWeb", ms: 1300, x: 76, y: 70, click: false, label: "Your site" },
   { id: "ready", ms: 1500, x: 91, y: 8, click: false, label: "Publish" },
   { id: "publish", ms: 1600, x: 50, y: 48, click: true, label: "Publishing" },
-  { id: "dispatch", ms: 4200, x: 50, y: 48, click: false, label: "Sending" },
+  { id: "dispatch", ms: 4000, x: 50, y: 48, click: false, label: "Sending" },
   { id: "sales", ms: 1800, x: 88, y: 93, click: false, label: "Revenue" },
   { id: "hold", ms: 1200, x: 88, y: 93, click: false, label: "Next product" },
 ] as const;
@@ -465,25 +465,42 @@ function CenterLine({
   stepKey: string;
   compact?: boolean;
 }) {
+  const stamp = Boolean(mark);
+  const empty = !stamp && !headline;
+  if (empty) return null;
+
   return (
-    <div className="pointer-events-none absolute inset-0 z-[36] flex items-center justify-center px-6">
-      <div className="absolute inset-0 bg-white/30" />
+    <div
+      className={cn(
+        "pointer-events-none absolute z-[36] flex justify-center px-6",
+        stamp
+          ? "inset-0 items-center"
+          : "inset-x-0 top-[12%] items-start sm:top-[14%]",
+      )}
+    >
       <AnimatePresence mode="wait">
         <motion.div
           key={stepKey}
-          initial={{ opacity: 0, y: 18, scale: 0.92 }}
+          initial={{ opacity: 0, y: stamp ? 18 : 10, scale: 0.94 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
-          exit={{ opacity: 0, y: -14, scale: 0.98 }}
-          transition={{ duration: 0.38, ease: [0.22, 1, 0.36, 1] }}
-          className="relative max-w-[640px] text-center"
+          exit={{ opacity: 0, y: -10, scale: 0.98 }}
+          transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
+          className={cn(
+            "relative max-w-[560px] text-center",
+            stamp
+              ? ""
+              : "rounded-2xl bg-white/92 px-5 py-3 shadow-[0_18px_40px_-24px_rgba(0,0,0,0.45)] ring-1 ring-black/5 sm:px-7 sm:py-3.5",
+          )}
         >
           {mark ? (
-            <div className="mb-3 flex justify-center">{mark}</div>
+            <div className="mb-2 flex justify-center drop-shadow-[0_12px_28px_rgba(255,255,255,0.9)]">
+              {mark}
+            </div>
           ) : (
             <p
               className={cn(
                 "font-semibold tracking-[-0.045em] text-[#141414] leading-[0.95]",
-                compact ? "text-[28px]" : "text-[36px] sm:text-[52px]",
+                compact ? "text-[24px]" : "text-[28px] sm:text-[40px]",
               )}
             >
               {headline}
@@ -492,8 +509,8 @@ function CenterLine({
           <p
             className={cn(
               "font-medium text-[#565959]",
-              mark ? "mt-2" : "mt-3",
-              compact ? "text-[14px]" : "text-[16px] sm:text-[20px]",
+              mark ? "mt-1" : "mt-1.5",
+              compact ? "text-[13px]" : "text-[14px] sm:text-[16px]",
             )}
           >
             {sub}
@@ -598,15 +615,21 @@ function FlyClone({
 function CompressBundle({
   src,
   extras,
+  packed = false,
 }: {
   src: string;
   extras: string[];
+  packed?: boolean;
 }) {
   return (
     <motion.div
       className="pointer-events-none absolute z-30"
       initial={{ left: "18%", top: "9%", scale: 0.28, opacity: 0, x: "-50%", y: "-50%", rotate: -12 }}
-      animate={{ left: "50%", top: "52%", scale: 1, opacity: 1, rotate: -3 }}
+      animate={
+        packed
+          ? { left: "50%", top: "50%", scale: 0.78, opacity: 0.42, rotate: 0 }
+          : { left: "50%", top: "50%", scale: 1, opacity: 1, rotate: -3 }
+      }
       transition={{ type: "spring", stiffness: 160, damping: 18 }}
     >
       {extras.slice(1, 3).map((shot, i) => (
@@ -646,34 +669,43 @@ function FallPacket({
   delay: number;
   hopKey: string;
 }) {
+  const midX = 50 + (toX - 50) * 0.38;
+  const midY = Math.min(toY, 46) - 18;
+  const spin = toX >= 50 ? 16 : -14;
+
   return (
     <motion.div
       key={hopKey}
-      className="pointer-events-none absolute z-30 overflow-hidden rounded-[3px] bg-white p-1 pb-5 shadow-[0_24px_44px_-16px_rgba(0,0,0,0.42)] ring-1 ring-black/10"
+      className="pointer-events-none absolute z-40 overflow-hidden rounded-[3px] bg-white p-1 pb-5 shadow-[0_28px_50px_-14px_rgba(0,0,0,0.48)] ring-1 ring-black/10"
       initial={{
         left: "50%",
-        top: "52%",
-        width: 142,
-        height: 176,
-        opacity: 1,
+        top: "50%",
+        width: 128,
+        height: 158,
+        opacity: 0,
         x: "-50%",
         y: "-50%",
-        rotate: -4,
-        scale: 1,
+        rotate: -8,
+        scale: 0.35,
       }}
       animate={{
-        left: `${toX}%`,
-        top: `${toY}%`,
-        width: 48,
-        height: 58,
-        opacity: 0,
-        rotate: 6,
-        scale: 0.55,
+        left: ["50%", `${midX}%`, `${toX}%`],
+        top: ["50%", `${midY}%`, `${toY}%`],
+        width: [128, 112, 40],
+        height: [158, 138, 50],
+        opacity: [0, 1, 1, 0],
+        rotate: [-8, spin * 0.35, spin],
+        scale: [0.35, 1.04, 0.22],
       }}
       transition={{
         delay,
-        duration: 1.12,
-        ease: [0.16, 1, 0.3, 1],
+        duration: 0.98,
+        times: [0, 0.26, 1],
+        ease: [
+          [0.16, 1, 0.3, 1],
+          [0.48, 0.04, 0.88, 0.32],
+        ],
+        opacity: { delay, duration: 0.98, times: [0, 0.08, 0.78, 1] },
       }}
     >
       {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -700,8 +732,8 @@ function ChannelShell({
     <motion.div
       initial={false}
       animate={{
-        opacity: on ? 1 : focused ? 0.7 : 0.28,
-        filter: on ? "saturate(1)" : "saturate(0.35)",
+        opacity: on ? 1 : focused ? 0.78 : 0.38,
+        filter: on ? "saturate(1)" : "saturate(0.45)",
       }}
       transition={{ type: "spring", stiffness: 380, damping: 28 }}
       className={cn(
@@ -1103,13 +1135,20 @@ export function ListingPipeline({
             : is("fillWeb") || (dispatching && landed === 5)
               ? "site"
               : null;
+  const showCenter =
+    dropMode ||
+    Boolean(stampName) ||
+    step.id === "grab" ||
+    step.id === "ready" ||
+    step.id === "publish" ||
+    step.id === "sales";
 
   useEffect(() => {
     if (dropMode) {
       onStory?.({ sku: 0, phase: "gone", cover });
       return;
     }
-    onStory?.({ sku, phase: dragPhase, cover });
+    onStory?.({ sku: sku % CATALOG.length, phase: dragPhase, cover });
   }, [dropMode, sku, dragPhase, cover, onStory]);
 
   useEffect(() => {
@@ -1199,7 +1238,7 @@ export function ListingPipeline({
     }
     if (step.id === "dispatch") {
       setLanded(0);
-      const times = [1120, 1740, 2360, 2980, 3600];
+      const times = [980, 1530, 2080, 2630, 3180];
       const timers = times.map((ms, i) =>
         window.setTimeout(() => setLanded(i + 1), ms),
       );
@@ -1233,8 +1272,8 @@ export function ListingPipeline({
               hopKey={`${sku}-${step.id}`}
             />
           ) : null}
-          {!dropMode && packing ? (
-            <CompressBundle src={cover} extras={shots} />
+          {!dropMode && (packing || dispatching) ? (
+            <CompressBundle src={cover} extras={shots} packed={dispatching} />
           ) : null}
           {!dropMode && dispatching
             ? FALL_TO.map((store, i) => (
@@ -1243,14 +1282,11 @@ export function ListingPipeline({
                   src={cover}
                   toX={store.x}
                   toY={store.y}
-                  delay={i * 0.62}
+                  delay={i * 0.55}
                   hopKey={`${sku}-fall-${store.name}`}
                 />
               ))
             : null}
-          {is("drag") && !dropMode ? (
-            <div className="pointer-events-none absolute inset-0 z-10 bg-white/45" />
-          ) : null}
           <GuideCursor
             x={is("photos") ? 8 + Math.max(0, filled - 1) * 5.2 : step.x}
             y={step.y}
@@ -1412,17 +1448,19 @@ export function ListingPipeline({
         ) : null}
       </div>
 
-      <CenterLine
-        headline={stampName ? "" : caption.headline}
-        sub={stampName ? "Now live." : caption.sub}
-        mark={
-          stampName ? (
-            <StoreLogo name={stampName} hero={!compact} />
-          ) : undefined
-        }
-        stepKey={`${sku}-${step.id}-${stampName ?? (is("photos") ? filled : beat)}`}
-        compact={compact}
-      />
+      {showCenter ? (
+        <CenterLine
+          headline={stampName ? "" : caption.headline}
+          sub={stampName ? "Now live." : caption.sub}
+          mark={
+            stampName ? (
+              <StoreLogo name={stampName} hero={!compact} />
+            ) : undefined
+          }
+          stepKey={`${sku}-${step.id}-${stampName ?? beat}`}
+          compact={compact}
+        />
+      ) : null}
 
       {dropMode ? (
         <div className="relative flex min-h-0 flex-1 flex-col bg-[#f7f7f7]">

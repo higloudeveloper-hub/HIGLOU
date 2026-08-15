@@ -17,7 +17,7 @@ export function MarketPromos({ activeIndex = -1 }: { activeIndex?: number }) {
   useEffect(() => {
     if (activeIndex < 0) return;
     document
-      .querySelector(`[data-ready-sku="${activeIndex}"]`)
+      .querySelector(`[data-ready-sku="${activeIndex % READY_LISTINGS.length}"]`)
       ?.scrollIntoView({ block: "nearest", behavior: "smooth" });
   }, [activeIndex]);
 
@@ -26,7 +26,8 @@ export function MarketPromos({ activeIndex = -1 }: { activeIndex?: number }) {
       {READY_LISTINGS.map((item, i) => {
         const profit = item.sell - item.buy;
         const margin = Math.round((profit / item.sell) * 100);
-        const active = i === activeIndex;
+        const active =
+          activeIndex >= 0 && i === activeIndex % READY_LISTINGS.length;
         return (
           <Link
             key={item.title}
@@ -39,12 +40,7 @@ export function MarketPromos({ activeIndex = -1 }: { activeIndex?: number }) {
                 : "hover:-translate-y-1 hover:shadow-[0_16px_36px_-16px_rgba(15,17,17,0.28)]",
             )}
           >
-            <div
-              className={cn(
-                "relative aspect-[16/10] bg-white transition",
-                active && "opacity-40",
-              )}
-            >
+            <div className="relative aspect-[16/10] bg-white">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={item.photo}

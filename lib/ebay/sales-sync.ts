@@ -62,6 +62,17 @@ export type OfferMove = {
   kind: "in_cart" | "best_offer";
 };
 
+export type StoreInsight = {
+  id: string;
+  kind: "send_offer" | "cut_price" | "restock" | "hot";
+  title: string;
+  detail: string;
+  listingId: string;
+  pictureUrl: string | null;
+  suggestedPct?: number;
+  suggestedPrice?: number | null;
+};
+
 export type SalesSnapshot = {
   syncedAt: string;
   connected: boolean;
@@ -85,6 +96,7 @@ export type SalesSnapshot = {
   inventory: InventoryLine[];
   stockAlerts: StockAlert[];
   offerMoves: OfferMove[];
+  insights: StoreInsight[];
   recent: EbaySaleLine[];
   opportunities: SalesOpportunity[];
   cartError?: string;
@@ -117,6 +129,7 @@ export function emptySalesSnapshot(
     inventory: [],
     stockAlerts: [],
     offerMoves: [],
+    insights: [],
     recent: [],
     opportunities: [],
     ...partial,
@@ -380,7 +393,7 @@ async function fetchTradingActiveInventory(accessToken: string): Promise<{
   return { total: total || rows.length, rows, bestOffers };
 }
 
-async function fetchEligibleOfferListings(
+export async function fetchEligibleOfferListings(
   accessToken: string,
 ): Promise<{ ids: string[]; error?: string }> {
   const cfg = getEbayConfig();
@@ -967,6 +980,65 @@ export async function syncEbaySalesForUser(
 
   const inCart = offerMoves.filter((m) => m.kind === "in_cart").length;
 
+  const insights: StoreInsight[] = [];
+  const seenInsight = new Set<string>();
+  for (const move of offerMoves.filter((m) => m.kind === "in_cart")) {
+    if (insights.length >= 6) break;
+    if (seenInsight.has(move.listingId)) continue;
+    seenInsight.add(move.listingId);
+    insights.push({
+      id: `offer-${move.listingId}`,
+      kind: "send_offer",
+      title: move.title,
+      detail: "Buyers in cart or watching — send a private discount now.",
+      listingId: move.listingId,
+      pictureUrl: move.pictureUrl,
+      suggestedPct: move.suggestedOffPct || 10,
+      suggestedPrice: move.suggestedPrice,
+    });
+  }
+  const hottest = [...liveRows].sort((a, b) => b.watchers - a.watchers)[0];
+  if (hottest && hottest.watchers >= 3 && !seenInsight.has(hottest.listingId)) {
+    seenInsight.add(hottest.listingId);
+    insights.push({
+      id: `hot-${hottest.listingId}`,
+      kind: "hot",
+      title: hottest.title,
+      detail: `${hottest.watchers} people watching — hottest listing in the store.`,
+      listingId: hottest.listingId,
+      pictureUrl: hottest.pictureUrl,
+    });
+  }
+  for (const row of liveRows.filter(
+    (r) => r.watchers >= 3 && r.soldQty === 0 && (r.price || 0) >= 2,
+  )) {
+    if (seenInsight.has(row.listingId) || insights.length >= 6) continue;
+    seenInsight.add(row.listingId);
+    const offer = suggestOffer(row.price);
+    insights.push({
+      id: `cut-${row.listingId}`,
+      kind: "cut_price",
+      title: row.title,
+      detail: `${row.watchers} watching, 0 sold. Drop the BIN price to close it.`,
+      listingId: row.listingId,
+      pictureUrl: row.pictureUrl,
+      suggestedPct: offer.pct,
+      suggestedPrice: offer.amount,
+    });
+  }
+  for (const row of stockAlerts) {
+    if (seenInsight.has(row.listingId) || insights.length >= 6) continue;
+    seenInsight.add(row.listingId);
+    insights.push({
+      id: `stock-${row.listingId}`,
+      kind: "restock",
+      title: row.title,
+      detail: `${row.why} ${row.fix}`,
+      listingId: row.listingId,
+      pictureUrl: row.pictureUrl,
+    });
+  }
+
   return {
     syncedAt,
     connected: true,
@@ -990,6 +1062,7 @@ export async function syncEbaySalesForUser(
     inventory: inventory.slice(0, 24),
     stockAlerts: stockAlerts.slice(0, 16),
     offerMoves: offerMoves.slice(0, 16),
+    insights: insights.slice(0, 6),
     recent: recent
       .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))
       .slice(0, 12),

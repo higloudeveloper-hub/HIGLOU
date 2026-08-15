@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   emptySalesSnapshot,
   type SalesSnapshot,
@@ -20,31 +20,30 @@ export function useEbaySales() {
   const [loading, setLoading] = useState(true);
   const [tick, setTick] = useState(0);
 
+  const reload = useCallback(async () => {
+    try {
+      const res = await fetch("/api/ebay/sales", { cache: "no-store" });
+      const body = (await res.json()) as SalesSnapshot;
+      setSnap(body);
+      setTick((n) => n + 1);
+    } catch {
+      setSnap(emptySalesSnapshot({ error: "Could not reach eBay sales" }));
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
-    const load = async () => {
-      try {
-        const res = await fetch("/api/ebay/sales", { cache: "no-store" });
-        const body = (await res.json()) as SalesSnapshot;
-        if (!cancelled) {
-          setSnap(body);
-          setTick((n) => n + 1);
-        }
-      } catch {
-        if (!cancelled) {
-          setSnap(emptySalesSnapshot({ error: "Could not reach eBay sales" }));
-        }
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    };
-    void load();
-    const t = window.setInterval(() => void load(), SALES_POLL_MS);
+    void reload();
+    const t = window.setInterval(() => {
+      if (!cancelled) void reload();
+    }, SALES_POLL_MS);
     return () => {
       cancelled = true;
       window.clearInterval(t);
     };
-  }, []);
+  }, [reload]);
 
-  return { snap, loading, tick };
+  return { snap, loading, tick, reload };
 }

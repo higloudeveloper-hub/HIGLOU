@@ -63,7 +63,13 @@ export function StatsControlCenter() {
   const offerCount = snap.offerMoves.length;
   const active: Pane =
     pane ??
-    (alertCount > 0 ? "act" : offerCount > 0 ? "carts" : "listings");
+    (snap.inCart > 0 || (snap.cartError && !snap.error)
+      ? "carts"
+      : alertCount > 0
+        ? "act"
+        : offerCount > 0
+          ? "carts"
+          : "listings");
 
   return (
     <div className="mx-auto max-w-[1080px] pb-10">
@@ -157,10 +163,14 @@ export function StatsControlCenter() {
       </div>
 
       <div className="mt-3 overflow-hidden rounded-xl border border-[#d5d9d9] bg-white">
-        {active === "act" ? (
+          {active === "act" ? (
           <AlertPane alerts={snap.stockAlerts} />
         ) : active === "carts" ? (
-          <OfferPane moves={snap.offerMoves} />
+          <OfferPane
+            moves={snap.offerMoves}
+            cartError={snap.cartError}
+            watching={snap.inventory.filter((row) => row.watchers > 0).slice(0, 8)}
+          />
         ) : active === "listings" ? (
           <InventoryPane rows={snap.inventory} live={snap.inventoryLive} />
         ) : (
@@ -286,56 +296,131 @@ function AlertPane({ alerts }: { alerts: StockAlert[] }) {
   );
 }
 
-function OfferPane({ moves }: { moves: OfferMove[] }) {
-  if (moves.length === 0) {
-    return (
-      <>
-        <PaneHead title="Carts & offers" hint="Live from eBay" />
-        <p className="px-4 py-8 text-[13px] text-[#565959]">
-          Nobody has these in a cart or sent a Best Offer right now. When they
-          do, Higlou shows the discount you can send.
-        </p>
-      </>
-    );
-  }
+function OfferPane({
+  moves,
+  cartError,
+  watching,
+}: {
+  moves: OfferMove[];
+  cartError?: string;
+  watching: InventoryLine[];
+}) {
+  const carts = moves.filter((row) => row.kind === "in_cart");
+  const best = moves.filter((row) => row.kind === "best_offer");
+
   return (
     <>
       <PaneHead
-        title="Carts & offers"
-        hint="In cart, watching, or Best Offer"
+        title="In cart"
+        hint={
+          cartError
+            ? "eBay blocked the cart read"
+            : `${carts.length} live · send an offer`
+        }
       />
-      <ul className="max-h-[min(52vh,380px)] divide-y divide-[#eee] overflow-y-auto">
-        {moves.map((row) => (
-          <li key={`${row.kind}-${row.listingId}`}>
-            <a
-              href={row.href}
-              target="_blank"
-              rel="noreferrer"
-              className="flex items-start gap-3 px-4 py-2.5 hover:bg-[#f7f7f7]"
-            >
-              <Thumb src={row.pictureUrl} title={row.title} />
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-[13px] font-medium text-[#0f1111]">
-                  {row.title}
-                </p>
-                <p className="text-[12px] text-[#565959]">{row.why}</p>
-                {row.kind === "in_cart" && row.suggestedPrice != null ? (
-                  <p className="text-[12px] font-medium text-[#0f1111]">
-                    Offer you can send: {usd(row.suggestedPrice, true)} (
-                    {row.suggestedOffPct}% off
-                    {row.price != null ? ` ${usd(row.price, true)}` : ""})
+      {cartError ? (
+        <Link
+          href="/settings#ebay-store"
+          className="flex items-center justify-between border-b border-[#eee] px-4 py-3 text-[13px] text-amber-800 hover:bg-[#f7f7f7]"
+        >
+          {cartError}
+          <ArrowRight className="size-4" />
+        </Link>
+      ) : null}
+      {carts.length === 0 && !cartError ? (
+        <p className="px-4 py-4 text-[13px] text-[#565959]">
+          eBay has not marked any listing as in a cart right now. If Seller Hub
+          still shows carts, they may not be eligible for a seller offer yet —
+          Higlou shows them the moment eBay does.
+        </p>
+      ) : (
+        <ul className="max-h-[min(36vh,280px)] divide-y divide-[#eee] overflow-y-auto">
+          {carts.map((row) => (
+            <li key={`cart-${row.listingId}`}>
+              <a
+                href={row.href}
+                target="_blank"
+                rel="noreferrer"
+                className="flex items-start gap-3 px-4 py-2.5 hover:bg-[#f7f7f7]"
+              >
+                <Thumb src={row.pictureUrl} title={row.title} />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-[13px] font-medium text-[#0f1111]">
+                    {row.title}
                   </p>
-                ) : (
-                  <p className="text-[12px] font-medium text-[#0f1111]">
-                    Open eBay to accept or counter.
-                  </p>
-                )}
-              </div>
-              <ArrowRight className="mt-1 size-4 shrink-0 text-[#565959]" />
-            </a>
-          </li>
-        ))}
-      </ul>
+                  <p className="text-[12px] text-[#565959]">{row.why}</p>
+                  {row.suggestedPrice != null ? (
+                    <p className="text-[12px] font-medium text-[#0f1111]">
+                      Offer you can send: {usd(row.suggestedPrice, true)} (
+                      {row.suggestedOffPct}% off
+                      {row.price != null ? ` ${usd(row.price, true)}` : ""})
+                    </p>
+                  ) : null}
+                </div>
+                <ArrowRight className="mt-1 size-4 shrink-0 text-[#565959]" />
+              </a>
+            </li>
+          ))}
+        </ul>
+      )}
+      {best.length > 0 ? (
+        <>
+          <div className="border-t border-[#eee] px-4 py-2 text-[11px] font-semibold tracking-[0.12em] text-[#565959] uppercase">
+            Best Offers
+          </div>
+          <ul className="divide-y divide-[#eee]">
+            {best.map((row) => (
+              <li key={`bo-${row.listingId}`}>
+                <a
+                  href={row.href}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="flex items-start gap-3 px-4 py-2.5 hover:bg-[#f7f7f7]"
+                >
+                  <Thumb src={row.pictureUrl} title={row.title} />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-[13px] font-medium text-[#0f1111]">
+                      {row.title}
+                    </p>
+                    <p className="text-[12px] text-[#565959]">{row.why}</p>
+                  </div>
+                  <ArrowRight className="mt-1 size-4 shrink-0 text-[#565959]" />
+                </a>
+              </li>
+            ))}
+          </ul>
+        </>
+      ) : null}
+      {watching.length > 0 ? (
+        <>
+          <div className="border-t border-[#eee] px-4 py-2 text-[11px] font-semibold tracking-[0.12em] text-[#565959] uppercase">
+            Watching now
+          </div>
+          <ul className="divide-y divide-[#eee]">
+            {watching.map((row) => (
+              <li key={`watch-${row.listingId}`}>
+                <a
+                  href={`https://www.ebay.com/itm/${row.listingId}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="flex items-center gap-3 px-4 py-2.5 hover:bg-[#f7f7f7]"
+                >
+                  <Thumb src={row.pictureUrl} title={row.title} />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-[13px] font-medium text-[#0f1111]">
+                      {row.title}
+                    </p>
+                    <p className="text-[12px] text-[#565959]">
+                      {row.watchers} watching
+                      {row.price != null ? ` · ${usd(row.price, true)}` : ""}
+                    </p>
+                  </div>
+                </a>
+              </li>
+            ))}
+          </ul>
+        </>
+      ) : null}
     </>
   );
 }

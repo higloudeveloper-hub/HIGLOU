@@ -87,6 +87,7 @@ export type SalesSnapshot = {
   offerMoves: OfferMove[];
   recent: EbaySaleLine[];
   opportunities: SalesOpportunity[];
+  cartError?: string;
   error?: string;
 };
 
@@ -246,7 +247,28 @@ function parseItemBlocks(sectionXml: string) {
 function legacyListingId(raw: string) {
   const value = raw.trim();
   const rest = value.match(/^v1\|(\d+)/i);
-  return rest?.[1] || value;
+  if (rest?.[1]) return rest[1];
+  const digits = value.match(/(\d{9,})/);
+  return digits?.[1] || value;
+}
+
+function listingKeys(raw: string) {
+  const value = raw.trim();
+  if (!value) return [];
+  const keys = new Set<string>([value, legacyListingId(value)]);
+  for (const match of value.match(/\d{9,}/g) || []) keys.add(match);
+  return [...keys].filter(Boolean);
+}
+
+function findByListingId<T extends { listingId: string }>(
+  map: Map<string, T>,
+  raw: string,
+) {
+  for (const key of listingKeys(raw)) {
+    const row = map.get(key);
+    if (row) return row;
+  }
+  return undefined;
 }
 
 function suggestOffer(price: number | null) {
@@ -360,26 +382,130 @@ async function fetchTradingActiveInventory(accessToken: string): Promise<{
 
 async function fetchEligibleOfferListings(
   accessToken: string,
-): Promise<string[]> {
+): Promise<{ ids: string[]; error?: string }> {
   const cfg = getEbayConfig();
+  const ids: string[] = [];
+  let error: string | undefined;
+
+  for (let offset = 0; offset < 200; offset += 50) {
+    const res = await fetch(
+      `${cfg.apiBase}/sell/negotiation/v1/find_eligible_items?limit=50&offset=${offset}`,
+      {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          Accept: "application/json",
+          "Accept-Language": "en-US",
+          "Content-Language": "en-US",
+          "X-EBAY-C-MARKETPLACE-ID": "EBAY_US",
+        },
+        cache: "no-store",
+      },
+    );
+    if (res.status === 204) break;
+    const json = (await res.json().catch(() => ({}))) as {
+      eligibleItems?: Array<{
+        listingId?: string;
+        legacyItemId?: string;
+        itemId?: string;
+      }>;
+      total?: number;
+      errors?: Array<{ message?: string; longMessage?: string }>;
+    };
+    if (!res.ok) {
+      const first = json.errors?.[0];
+      error =
+        first?.longMessage ||
+        first?.message ||
+        (res.status === 401 || res.status === 403
+          ? "Reconnect eBay in Settings so Higlou can read items in carts."
+          : `Could not read eBay carts (${res.status})`);
+      break;
+    }
+    const batch = json.eligibleItems ?? [];
+    for (const row of batch) {
+      const id = legacyListingId(
+        String(row.listingId || row.legacyItemId || row.itemId || ""),
+      );
+      if (id) ids.push(id);
+    }
+    if (batch.length < 50) break;
+    if (typeof json.total === "number" && offset + 50 >= json.total) break;
+  }
+
+  return { ids: [...new Set(ids)], error };
+}
+
+type HydratedItem = {
+  listingId: string;
+  title: string;
+  price: number | null;
+  pictureUrl: string | null;
+};
+
+async function hydrateEbayItems(
+  accessToken: string,
+  listingIds: string[],
+): Promise<Map<string, HydratedItem>> {
+  const map = new Map<string, HydratedItem>();
+  const ids = [...new Set(listingIds.map(legacyListingId))].filter(Boolean).slice(0, 20);
+  if (ids.length === 0) return map;
+  const cfg = getEbayConfig();
+  const host =
+    cfg.env === "production"
+      ? "https://open.api.ebay.com/shopping"
+      : "https://open.api.sandbox.ebay.com/shopping";
   const res = await fetch(
-    `${cfg.apiBase}/sell/negotiation/v1/find_eligible_items?limit=50`,
+    `${host}?callname=GetMultipleItems&appid=${encodeURIComponent(cfg.clientId)}&responseencoding=JSON&siteid=0&version=1157&IncludeSelector=Details&ItemID=${ids.join(",")}`,
     {
       headers: {
-        Authorization: `Bearer ${accessToken}`,
-        Accept: "application/json",
-        "X-EBAY-C-MARKETPLACE-ID": "EBAY_US",
+        "X-EBAY-API-IAF-TOKEN": accessToken,
+        "X-EBAY-API-APP-ID": cfg.clientId,
       },
       cache: "no-store",
     },
   );
   const json = (await res.json().catch(() => ({}))) as {
-    eligibleItems?: Array<{ listingId?: string }>;
+    Item?:
+      | Array<{
+          ItemID?: string;
+          Title?: string;
+          GalleryURL?: string;
+          PictureURL?: string | string[];
+          CurrentPrice?: { Value?: number | string } | string | number;
+        }>
+      | {
+          ItemID?: string;
+          Title?: string;
+          GalleryURL?: string;
+          PictureURL?: string | string[];
+          CurrentPrice?: { Value?: number | string } | string | number;
+        };
   };
-  if (!res.ok) return [];
-  return (json.eligibleItems ?? [])
-    .map((row) => legacyListingId(String(row.listingId || "")))
-    .filter(Boolean);
+  const items = Array.isArray(json.Item)
+    ? json.Item
+    : json.Item
+      ? [json.Item]
+      : [];
+  for (const item of items) {
+    const listingId = legacyListingId(String(item.ItemID || ""));
+    if (!listingId) continue;
+    const pic = Array.isArray(item.PictureURL)
+      ? item.PictureURL[0]
+      : item.GalleryURL || item.PictureURL;
+    const priceRaw =
+      typeof item.CurrentPrice === "object"
+        ? item.CurrentPrice?.Value
+        : item.CurrentPrice;
+    map.set(listingId, {
+      listingId,
+      title: String(item.Title || listingId),
+      price: Number(priceRaw) || null,
+      pictureUrl: pic
+        ? String(pic).replace(/^http:\/\//i, "https://")
+        : null,
+    });
+  }
+  return map;
 }
 
 async function fillMissingPictures(
@@ -498,7 +624,7 @@ export async function syncEbaySalesForUser(
   accessToken: string,
 ): Promise<SalesSnapshot> {
   const syncedAt = new Date().toISOString();
-  const [ordersResult, offers, trading, storeName, eligibleIds] =
+  const [ordersResult, offers, trading, storeName, eligibleResult] =
     await Promise.all([
       fetchEbayOrders(accessToken)
         .then((rows) => ({ rows, error: undefined as string | undefined }))
@@ -514,10 +640,15 @@ export async function syncEbaySalesForUser(
         bestOffers: [] as TradingRow[],
       })),
       fetchEbayStoreName(accessToken).catch(() => null),
-      fetchEligibleOfferListings(accessToken).catch(() => [] as string[]),
+      fetchEligibleOfferListings(accessToken).catch(() => ({
+        ids: [] as string[],
+        error: "Could not read eBay carts",
+      })),
     ]);
   const orders = ordersResult.rows;
   const orderError = ordersResult.error;
+  const eligibleIds = eligibleResult.ids;
+  const cartError = eligibleResult.error;
 
   const { data: productRows } = await supabase
     .from("products")
@@ -694,11 +825,14 @@ export async function syncEbaySalesForUser(
   }
 
   const byListingId = new Map<string, InventoryLine>();
+  const indexRow = (row: InventoryLine) => {
+    for (const key of listingKeys(row.listingId)) byListingId.set(key, row);
+  };
   for (const o of trading.rows) {
     const match =
       (o.sku ? bySku.get(o.sku.toLowerCase()) : undefined) ||
       (o.listingId ? byListing.get(o.listingId) : undefined);
-    byListingId.set(o.listingId, {
+    indexRow({
       sku: o.sku,
       title: o.title || match?.title || o.listingId,
       qty: o.qty,
@@ -715,11 +849,11 @@ export async function syncEbaySalesForUser(
   for (const o of offers.filter(
     (row) => row.status === "PUBLISHED" && row.listingId && row.qty > 0,
   )) {
-    if (byListingId.has(o.listingId)) continue;
+    if (findByListingId(byListingId, o.listingId)) continue;
     const match =
       (o.sku ? bySku.get(o.sku.toLowerCase()) : undefined) ||
       byListing.get(o.listingId);
-    byListingId.set(o.listingId, {
+    indexRow({
       sku: o.sku,
       title: o.title || match?.title || o.sku || o.listingId || "Listing",
       qty: o.qty,
@@ -734,7 +868,11 @@ export async function syncEbaySalesForUser(
     });
   }
 
-  const inventory = [...byListingId.values()].sort(
+  const inventory = [
+    ...new Map(
+      [...byListingId.values()].map((row) => [row.listingId, row]),
+    ).values(),
+  ].sort(
     (a, b) => b.watchers - a.watchers || a.title.localeCompare(b.title),
   );
   const liveRows = inventory.filter((r) => r.status === "PUBLISHED");
@@ -778,32 +916,41 @@ export async function syncEbaySalesForUser(
 
   const offerMoves: OfferMove[] = [];
   const seenMoves = new Set<string>();
+  const unmatchedEligible = eligibleIds.filter(
+    (id) => !findByListingId(byListingId, id),
+  );
+  const hydrated = await hydrateEbayItems(accessToken, unmatchedEligible).catch(
+    () => new Map<string, HydratedItem>(),
+  );
+
   for (const listingId of eligibleIds) {
-    const row = byListingId.get(listingId);
-    if (!row || seenMoves.has(listingId)) continue;
-    seenMoves.add(listingId);
-    const offer = suggestOffer(row.price);
+    const canonical = legacyListingId(listingId);
+    if (!canonical || seenMoves.has(canonical)) continue;
+    seenMoves.add(canonical);
+    const row = findByListingId(byListingId, canonical);
+    const extra = hydrated.get(canonical);
+    const price = row?.price ?? extra?.price ?? null;
+    const offer = suggestOffer(price);
     offerMoves.push({
-      listingId,
-      title: row.title,
-      pictureUrl: row.pictureUrl,
-      price: row.price,
-      watchers: row.watchers,
+      listingId: row?.listingId || canonical,
+      title: row?.title || extra?.title || `eBay item ${canonical}`,
+      pictureUrl: row?.pictureUrl || extra?.pictureUrl || null,
+      price,
+      watchers: row?.watchers || 0,
       suggestedPrice: offer.amount,
       suggestedOffPct: offer.pct,
       why:
-        row.watchers > 0
-          ? `${row.watchers} watching — in a cart or watching. Send a discount.`
-          : "A buyer has this in a cart or is watching. Send a discount.",
-      href: ebayItemHref(listingId),
+        row?.watchers
+          ? `${row.watchers} watching — a buyer has this in a cart. Send a discount.`
+          : "A buyer has this in a cart (or is watching). Send a discount.",
+      href: ebayItemHref(row?.listingId || canonical),
       kind: "in_cart",
     });
   }
   for (const row of trading.bestOffers) {
-    const live = byListingId.get(row.listingId);
-    if (seenMoves.has(row.listingId) && offerMoves.some((m) => m.kind === "best_offer" && m.listingId === row.listingId)) {
-      continue;
-    }
+    const live = findByListingId(byListingId, row.listingId);
+    if (seenMoves.has(row.listingId)) continue;
+    seenMoves.add(row.listingId);
     offerMoves.push({
       listingId: row.listingId,
       title: live?.title || row.title,
@@ -819,25 +966,6 @@ export async function syncEbaySalesForUser(
   }
 
   const inCart = offerMoves.filter((m) => m.kind === "in_cart").length;
-  if (inCart === 0) {
-    for (const row of liveRows.filter((r) => r.watchers > 0).slice(0, 8)) {
-      if (seenMoves.has(row.listingId)) continue;
-      seenMoves.add(row.listingId);
-      const offer = suggestOffer(row.price);
-      offerMoves.push({
-        listingId: row.listingId,
-        title: row.title,
-        pictureUrl: row.pictureUrl,
-        price: row.price,
-        watchers: row.watchers,
-        suggestedPrice: offer.amount,
-        suggestedOffPct: offer.pct,
-        why: `${row.watchers} watching. Send a discount on eBay to close it.`,
-        href: ebayItemHref(row.listingId),
-        kind: "in_cart",
-      });
-    }
-  }
 
   return {
     syncedAt,
@@ -866,6 +994,7 @@ export async function syncEbaySalesForUser(
       .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))
       .slice(0, 12),
     opportunities: opportunities.slice(0, 8),
+    cartError,
     error:
       orders.length === 0 && inventory.length === 0 ? orderError : undefined,
   };

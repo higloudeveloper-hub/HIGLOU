@@ -10,78 +10,70 @@ import {
 } from "@/components/studio/ebay-live-preview";
 import { cn } from "@/lib/utils";
 
-const SAMPLE_TITLE = "Milwaukee M18 FUEL 1/2 in. Hammer Drill";
-const SAMPLE_PHOTOS = [
-  "/demo/m18-front.webp",
-  "/demo/m18-label.webp",
-  "/demo/m18-box.webp",
-  "/demo/m18-angle.webp",
+const CATALOG = [
+  {
+    name: "M18 drill",
+    title: "Milwaukee M18 FUEL 1/2 in. Hammer Drill",
+    price: 189,
+    photos: [
+      "/demo/m18-front.webp",
+      "/demo/m18-label.webp",
+      "/demo/m18-box.webp",
+      "/demo/m18-angle.webp",
+    ],
+  },
+  {
+    name: "Kettle",
+    title: "Pinky Up Electric Ceramic Kettle",
+    price: 28,
+    photos: ["/demo/kettle.jpg"],
+  },
+  {
+    name: "Flood light",
+    title: "LED Flood Light 5000K",
+    price: 65,
+    photos: ["/landing/floodlight.png"],
+  },
+  {
+    name: "Sneakers",
+    title: "Runner sneakers",
+    price: 120,
+    photos: ["/demo/sneakers.jpg"],
+  },
+  {
+    name: "Comforter",
+    title: "Queen comforter set",
+    price: 89,
+    photos: ["/demo/bedding.jpg"],
+  },
 ] as const;
-const PRICE = 189;
-
-const CHANNELS = {
-  ebay: {
-    src: "/demo/m18-front.webp",
-    gallery: SAMPLE_PHOTOS,
-    price: "$189.00",
-    name: "Milwaukee M18 drill",
-  },
-  amazon: {
-    src: "/landing/floodlight.png",
-    gallery: ["/landing/floodlight.png"],
-    price: "$64.99",
-    name: "LED flood light",
-  },
-  facebook: {
-    src: "/demo/kettle.jpg",
-    gallery: ["/demo/kettle.jpg"],
-    price: "$28",
-    name: "Electric kettle",
-  },
-  shopify: {
-    src: "/demo/sneakers.jpg",
-    gallery: ["/demo/sneakers.jpg"],
-    price: "$120.00",
-    name: "Runner sneakers",
-  },
-  web: {
-    src: "/demo/bedding.jpg",
-    gallery: ["/demo/bedding.jpg"],
-    price: "$89.00",
-    name: "Queen comforter",
-  },
-} as const;
 
 const STEPS = [
   { id: "grab", ms: 1000, x: 12, y: 86, click: true, label: "One photo" },
   { id: "drag", ms: 1500, x: 9, y: 11, click: false, label: "Drop here" },
   { id: "drop", ms: 800, x: 9, y: 11, click: true, label: "In" },
-  { id: "photos", ms: 1700, x: 20, y: 8, click: false, label: "Four photos" },
+  { id: "photos", ms: 1700, x: 20, y: 8, click: false, label: "Photos in" },
   { id: "title", ms: 2000, x: 40, y: 8, click: false, label: "Title written" },
-  { id: "price", ms: 900, x: 40, y: 8, click: false, label: "$189.00" },
-  { id: "ready", ms: 1000, x: 40, y: 8, click: false, label: "Ready" },
-  { id: "aim", ms: 1600, x: 91, y: 8, click: false, label: "Publishing" },
-  { id: "publish", ms: 1100, x: 91, y: 8, click: false, label: "Live" },
-  { id: "ebay", ms: 750, x: 16, y: 38, click: false, label: "Milwaukee drill" },
-  { id: "amazon", ms: 700, x: 50, y: 38, click: false, label: "Flood light" },
-  { id: "facebook", ms: 700, x: 84, y: 38, click: false, label: "Kettle" },
-  { id: "shopify", ms: 700, x: 24, y: 70, click: false, label: "Sneakers" },
-  { id: "web", ms: 750, x: 76, y: 70, click: false, label: "Comforter" },
-  { id: "sales", ms: 2800, x: 88, y: 93, click: false, label: "Sales up" },
-  { id: "hold", ms: 4000, x: 88, y: 93, click: false, label: "Try it" },
+  { id: "price", ms: 900, x: 40, y: 8, click: false, label: "Priced" },
+  { id: "ebay", ms: 700, x: 16, y: 38, click: true, label: "eBay" },
+  { id: "amazon", ms: 650, x: 50, y: 38, click: true, label: "Amazon" },
+  { id: "facebook", ms: 650, x: 84, y: 38, click: true, label: "Facebook" },
+  { id: "shopify", ms: 650, x: 24, y: 70, click: true, label: "Shopify" },
+  { id: "web", ms: 700, x: 76, y: 70, click: true, label: "Your site" },
+  { id: "ready", ms: 1100, x: 40, y: 8, click: false, label: "All stores ready" },
+  { id: "publish", ms: 1700, x: 91, y: 8, click: false, label: "Publishing" },
+  { id: "live", ms: 1400, x: 91, y: 8, click: false, label: "Live" },
+  { id: "sales", ms: 2200, x: 88, y: 93, click: false, label: "Sales up" },
+  { id: "hold", ms: 2200, x: 88, y: 93, click: false, label: "Next product" },
 ] as const;
 
-const SALES_DOLLARS = [
-  0, 0, 0, 0, 0, 0, 0, 0, 0, 189, 567, 1134, 1890, 2835, 3780, 4536,
-] as const;
 const SALES_LINE =
   "M0 36 C40 35 70 34 96 32 C130 29 150 24 176 18 C204 11 230 7 256 4 C284 1 304 1 320 1";
 
 function salesProgress(beat: number) {
-  if (beat < 8) return 0.04;
-  if (beat === 8) return 0.12;
-  if (beat <= 13) return 0.22 + (beat - 9) * 0.12;
-  if (beat === 14) return 0.92;
+  if (beat < 13) return 0.04;
+  if (beat === 13) return 0.35;
+  if (beat === 14) return 0.78;
   return 1;
 }
 
@@ -422,10 +414,10 @@ function SalesStrip({
   reduce: boolean;
 }) {
   const progress = reduce ? 1 : salesProgress(beat);
-  const clicked = beat >= 8;
-  const climbing = beat >= 9;
+  const clicked = beat >= 12;
+  const climbing = beat >= 13;
   const boom = beat >= 14;
-  const liveCount = Math.max(0, Math.min(5, beat - 8));
+  const liveCount = beat >= 13 ? 5 : Math.max(0, Math.min(5, beat - 5));
 
   return (
     <div
@@ -498,17 +490,28 @@ export function ListingPipeline({
 }) {
   const reduce = usePrefersReducedMotion();
   const [beat, setBeat] = useState(0);
+  const [sku, setSku] = useState(0);
   const [filled, setFilled] = useState(reduce ? 4 : 0);
   const shop = useConnectedEbayStoreName(storeName);
-  const typing = useTyped(SAMPLE_TITLE, beat >= 4, reduce);
-  const price = useCountUp(PRICE, beat >= 5, reduce);
-  const sales = useCountToward(
-    SALES_DOLLARS[Math.min(beat, SALES_DOLLARS.length - 1)] ?? 0,
-    reduce,
-  );
-  const shots =
-    photos && photos.length > 0 ? photos.slice(0, 4) : [...SAMPLE_PHOTOS];
-  const cover = shots[0] || SAMPLE_PHOTOS[0];
+  const catalog =
+    photos && photos.length > 0
+      ? [
+          {
+            name: "Your listing",
+            title: "Your listing",
+            price: 189,
+            photos: photos.slice(0, 4),
+          },
+        ]
+      : CATALOG;
+  const item = catalog[sku % catalog.length] ?? CATALOG[0];
+  const shots = [...item.photos];
+  const cover = shots[0] || CATALOG[0].photos[0];
+  const money =
+    beat < 13 ? 0 : beat === 13 ? item.price * 2 : beat === 14 ? item.price * 8 : item.price * 12;
+  const typing = useTyped(item.title, beat >= 4, reduce);
+  const price = useCountUp(item.price, beat >= 5, reduce);
+  const sales = useCountToward(money, reduce);
   const step = STEPS[beat] ?? STEPS[0];
 
   const photoIn = beat >= 2;
@@ -516,16 +519,17 @@ export function ListingPipeline({
   const photosOn = beat >= 3;
   const draftOn = beat >= 4;
   const priceOn = beat >= 5;
-  const readyOn = beat >= 6;
-  const clickOn = beat >= 8;
-  const ebayOn = beat >= 9;
-  const amazonOn = beat >= 10;
-  const facebookOn = beat >= 11;
-  const shopifyOn = beat >= 12;
-  const webOn = beat >= 13;
-  const allLive = beat >= 14;
+  const ebayIn = beat >= 6;
+  const amazonIn = beat >= 7;
+  const facebookIn = beat >= 8;
+  const shopifyIn = beat >= 9;
+  const webIn = beat >= 10;
+  const readyOn = beat >= 11;
+  const publishing = beat === 12;
+  const liveOn = beat >= 13;
   const dragPhase =
     beat === 0 ? "grab" : beat === 1 ? "drag" : beat === 2 ? "drop" : "gone";
+  const priceLabel = `$${item.price.toFixed(item.price % 1 ? 2 : 2)}`;
 
   useEffect(() => {
     if (reduce) {
@@ -536,7 +540,11 @@ export function ListingPipeline({
     let id = 0;
     const loop = () => {
       id = window.setTimeout(() => {
-        i = (i + 1) % STEPS.length;
+        i += 1;
+        if (i >= STEPS.length) {
+          i = 0;
+          setSku((n) => n + 1);
+        }
         setBeat(i);
         loop();
       }, STEPS[i].ms);
@@ -585,13 +593,15 @@ export function ListingPipeline({
             x={beat === 3 ? 8 + Math.max(0, filled - 1) * 5.2 : step.x}
             y={step.y}
             click={step.click || (beat === 3 && filled > 1)}
-            visible={beat <= 5}
+            visible={beat <= 10}
             label={
               beat === 3
                 ? `${filled} of ${shots.length} photos`
-                : step.label
+                : beat >= 14
+                  ? `$${sales.toLocaleString("en-US")} sales up`
+                  : step.label
             }
-            clickKey={`${step.id}-${beat === 3 ? filled : beat}`}
+            clickKey={`${step.id}-${sku}-${beat === 3 ? filled : beat}`}
           />
         </>
       ) : null}
@@ -599,7 +609,7 @@ export function ListingPipeline({
       <div
         className={cn(
           "flex shrink-0 items-center gap-3 border-b bg-white px-3 py-2.5 sm:px-4",
-          readyOn && !clickOn ? "border-[#141414]" : "border-[#e5e5e5]",
+          readyOn && !liveOn ? "border-[#141414]" : "border-[#e5e5e5]",
         )}
       >
         <div className="relative flex shrink-0 items-center gap-1">
@@ -663,7 +673,7 @@ export function ListingPipeline({
               : photosOn
                 ? "Building the listing…"
                 : "Drop a photo. Higlou writes the rest."}
-            {beat === 4 && typing.length < SAMPLE_TITLE.length ? (
+            {beat === 4 && typing.length < item.title.length ? (
               <span className="ml-0.5 inline-block h-3 w-px animate-pulse bg-[#191919]" />
             ) : null}
           </p>
@@ -683,119 +693,100 @@ export function ListingPipeline({
               "One photo. Then one click."
             )}
             {draftOn && !readyOn ? " · writing…" : null}
-            {readyOn && beat < 7 ? " · ready" : null}
-            {beat === 7 ? " · publishing…" : null}
-            {clickOn ? " · eBay · Amazon · Facebook · Shopify · site" : null}
+            {readyOn && !publishing && !liveOn ? " · all stores ready" : null}
+            {publishing ? " · publishing…" : null}
+            {liveOn ? " · live on 5 stores" : null}
           </p>
         </div>
         <div
           className={cn(
             "relative h-10 w-[122px] shrink-0 overflow-hidden rounded-md text-[13px] font-semibold tracking-[-0.01em]",
-            readyOn || clickOn ? "bg-[#ececec] text-white" : "bg-[#ececec] text-[#9b9b9b]",
+            readyOn || publishing || liveOn ? "bg-[#ececec] text-white" : "bg-[#ececec] text-[#9b9b9b]",
           )}
         >
           <motion.div
             className="absolute inset-x-0 bottom-0 bg-[#141414]"
             initial={false}
             animate={{
-              height:
-                beat < 7 ? (readyOn ? "12%" : "0%") : beat === 7 ? "70%" : "100%",
+              height: liveOn ? "100%" : publishing ? "78%" : readyOn ? "18%" : "0%",
             }}
-            transition={{ duration: beat === 7 ? 1.35 : 0.45, ease: [0.22, 1, 0.36, 1] }}
+            transition={{ duration: publishing ? 1.4 : 0.45, ease: [0.22, 1, 0.36, 1] }}
           />
           <span
             className={cn(
               "relative z-10 grid h-full place-items-center",
-              beat >= 7 || clickOn ? "text-white" : readyOn ? "text-[#141414]" : "text-[#9b9b9b]",
+              publishing || liveOn ? "text-white" : readyOn ? "text-[#141414]" : "text-[#9b9b9b]",
             )}
           >
-            {beat === 7 ? "Publishing" : allLive || webOn || beat >= 8 ? "Live" : "Publish"}
+            {publishing ? "Publishing" : liveOn ? "Live" : "Publish"}
           </span>
         </div>
       </div>
 
       <div className="relative min-h-0 flex-1">
         <div className="grid h-full min-h-0 grid-cols-6 grid-rows-2 divide-x divide-y divide-[#e5e5e5]">
-        <ChannelShell live={ebayOn} focused={beat === 9} className="col-span-2">
+        <ChannelShell live={liveOn} focused={beat === 6} className="col-span-2">
           <div className="flex shrink-0 items-center justify-between border-b border-[#eee] px-3 py-2">
             <EbayWordmark className="text-[16px]" />
-            <LivePill on={ebayOn} label="Live" />
+            <LivePill on={liveOn} label="Live" />
           </div>
-          <ProductShot
-            live={ebayOn}
-            present
-            src={photos?.length ? cover : CHANNELS.ebay.src}
-            gallery={photos?.length ? shots : [...CHANNELS.ebay.gallery]}
-          />
+          <ProductShot live={liveOn} present={ebayIn} src={cover} gallery={shots} />
           <div className="shrink-0 px-3 py-2">
             <p className="text-[16px] font-semibold tabular-nums">
-              {ebayOn ? CHANNELS.ebay.price : "—"}
+              {ebayIn ? priceLabel : "—"}
             </p>
             <p className="truncate text-[12px] text-[#707070]">
-              {ebayOn ? `Buy It Now · ${shop}` : CHANNELS.ebay.name}
+              {liveOn ? `Buy It Now · ${shop}` : ebayIn ? item.name : "eBay store"}
             </p>
           </div>
         </ChannelShell>
 
-        <ChannelShell live={amazonOn} focused={beat === 10} className="col-span-2">
+        <ChannelShell live={liveOn} focused={beat === 7} className="col-span-2">
           <div className="flex shrink-0 items-center justify-between bg-[#232F3E] px-3 py-2">
             <AmazonMark className="text-[15px] text-white" />
-            <LivePill on={amazonOn} label="Listed" />
+            <LivePill on={liveOn} label="Listed" />
           </div>
-          <ProductShot
-            live={amazonOn}
-            present
-            src={CHANNELS.amazon.src}
-            gallery={[...CHANNELS.amazon.gallery]}
-          />
+          <ProductShot live={liveOn} present={amazonIn} src={cover} gallery={shots} />
           <div className="shrink-0 px-3 py-2">
             <p className="text-[16px] font-semibold text-[#B12704]">
-              {amazonOn ? CHANNELS.amazon.price : "—"}
+              {amazonIn ? priceLabel : "—"}
             </p>
-            <p className="truncate text-[12px] text-[#707070]">{CHANNELS.amazon.name}</p>
+            <p className="truncate text-[12px] text-[#707070]">
+              {amazonIn ? item.name : "Amazon"}
+            </p>
           </div>
         </ChannelShell>
 
-        <ChannelShell live={facebookOn} focused={beat === 11} className="col-span-2">
+        <ChannelShell live={liveOn} focused={beat === 8} className="col-span-2">
           <div className="flex shrink-0 items-center justify-between border-b border-[#eee] px-3 py-2">
             <span className="text-[13px] font-bold text-[#1877F2]">
               facebook <span className="font-semibold text-[#65676B]">Marketplace</span>
             </span>
-            <LivePill on={facebookOn} label="Posted" />
+            <LivePill on={liveOn} label="Posted" />
           </div>
-          <ProductShot
-            live={facebookOn}
-            present
-            src={CHANNELS.facebook.src}
-            gallery={[...CHANNELS.facebook.gallery]}
-          />
+          <ProductShot live={liveOn} present={facebookIn} src={cover} gallery={shots} />
           <div className="shrink-0 px-3 py-2">
-            <p className="text-[16px] font-semibold">
-              {facebookOn ? CHANNELS.facebook.price : "—"}
+            <p className="text-[16px] font-semibold">{facebookIn ? priceLabel : "—"}</p>
+            <p className="truncate text-[12px] text-[#707070]">
+              {facebookIn ? item.name : "Facebook Marketplace"}
             </p>
-            <p className="truncate text-[12px] text-[#707070]">{CHANNELS.facebook.name}</p>
           </div>
         </ChannelShell>
 
-        <ChannelShell live={shopifyOn} focused={beat === 12} className="col-span-3">
+        <ChannelShell live={liveOn} focused={beat === 9} className="col-span-3">
           <div className="flex shrink-0 items-center justify-between bg-[#212326] px-3 py-2">
             <ShopifyMark />
-            <LivePill on={shopifyOn} label="On store" />
+            <LivePill on={liveOn} label="On store" />
           </div>
-          <ProductShot
-            live={shopifyOn}
-            present
-            src={CHANNELS.shopify.src}
-            gallery={[...CHANNELS.shopify.gallery]}
-          />
+          <ProductShot live={liveOn} present={shopifyIn} src={cover} gallery={shots} />
           <div className="shrink-0 px-3 py-2">
             <p className="text-[16px] font-semibold tabular-nums">
-              {shopifyOn ? CHANNELS.shopify.price : "—"}
+              {shopifyIn ? priceLabel : "—"}
             </p>
             <p
               className={cn(
                 "mt-1.5 grid h-8 place-items-center rounded-md text-[12px] font-semibold",
-                shopifyOn ? "bg-[#008060] text-white" : "bg-[#eee] text-[#bbb]",
+                liveOn ? "bg-[#008060] text-white" : "bg-[#eee] text-[#bbb]",
               )}
             >
               Add to cart
@@ -803,7 +794,7 @@ export function ListingPipeline({
           </div>
         </ChannelShell>
 
-        <ChannelShell live={webOn} focused={beat === 13} className="col-span-3">
+        <ChannelShell live={liveOn} focused={beat === 10} className="col-span-3">
           <div className="flex shrink-0 items-center gap-1.5 border-b border-[#eee] bg-[#f7f7f7] px-3 py-2">
             <span className="size-1.5 rounded-full bg-[#FF5F57]" />
             <span className="size-1.5 rounded-full bg-[#FEBC2E]" />
@@ -812,19 +803,16 @@ export function ListingPipeline({
               <Globe className="size-3 shrink-0" />
               <span className="truncate">yoursite.com</span>
             </span>
-            <LivePill on={webOn} label="On site" />
+            <LivePill on={liveOn} label="On site" />
           </div>
-          <ProductShot
-            live={webOn}
-            present
-            src={CHANNELS.web.src}
-            gallery={[...CHANNELS.web.gallery]}
-          />
+          <ProductShot live={liveOn} present={webIn} src={cover} gallery={shots} />
           <div className="shrink-0 px-3 py-2">
             <p className="text-[16px] font-semibold tabular-nums">
-              {webOn ? CHANNELS.web.price : "—"}
+              {webIn ? priceLabel : "—"}
             </p>
-            <p className="truncate text-[12px] text-[#707070]">{CHANNELS.web.name}</p>
+            <p className="truncate text-[12px] text-[#707070]">
+              {webIn ? item.name : "Your website"}
+            </p>
           </div>
         </ChannelShell>
         </div>

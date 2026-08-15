@@ -249,12 +249,54 @@
   animation: higlou-pulse-dot 1.4s ease-in-out infinite;
 }
 
+@keyframes higlou-hud-sweep {
+  0% {
+    transform: translateY(-20%);
+    opacity: 0;
+  }
+  18% {
+    opacity: 0.55;
+  }
+  100% {
+    transform: translateY(220%);
+    opacity: 0;
+  }
+}
+
+@keyframes higlou-hud-tick {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+@utility higlou-hud-shell {
+  background-color: #fff;
+  background-image:
+    linear-gradient(to right, rgb(15 17 17 / 0.045) 1px, transparent 1px),
+    linear-gradient(to bottom, rgb(15 17 17 / 0.045) 1px, transparent 1px);
+  background-size: 22px 22px;
+}
+
+@utility higlou-hud-sweep {
+  animation: higlou-hud-sweep 3.6s ease-in-out infinite;
+}
+
+@utility higlou-hud-tick {
+  animation: higlou-hud-tick 1.6s step-end infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .shimmer,
   .live-dot,
   .higlou-scan,
   .higlou-indeterminate,
-  .higlou-cta-pulse {
+  .higlou-cta-pulse,
+  .higlou-hud-sweep,
+  .higlou-hud-tick {
     animation: none !important;
   }
 }

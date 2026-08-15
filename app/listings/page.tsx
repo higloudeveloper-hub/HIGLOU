@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { Plus, Search } from "lucide-react";
 import { AppShell } from "@/components/layout/app-shell";
+import { StudioFrame } from "@/components/layout/studio-frame";
 import { formatRelativeTime } from "@/lib/format-relative-time";
 import { EmptyPanel, SkeletonBlock } from "@/components/ui/studio";
 import { ListingPipeline } from "@/components/studio/listing-pipeline";
@@ -37,6 +38,7 @@ export default function ListingsPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
+  const [filter, setFilter] = useState<"all" | "draft" | "ready">("all");
 
   useEffect(() => {
     let cancelled = false;
@@ -73,156 +75,197 @@ export default function ListingsPage() {
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return products;
     return products.filter((p) => {
+      const ready = readiness(p.status);
+      if (filter === "draft" && ready.ready) return false;
+      if (filter === "ready" && !ready.ready) return false;
+      if (!q) return true;
       const hay = [p.title, p.brand, p.sku, p.categoryName, p.status]
         .filter(Boolean)
         .join(" ")
         .toLowerCase();
       return hay.includes(q);
     });
-  }, [products, query]);
+  }, [products, query, filter]);
+
+  const draftCount = products.filter((p) => !readiness(p.status).ready).length;
+  const readyCount = products.length - draftCount;
 
   return (
-    <AppShell
-      title="Listings"
-      description="Your product library — open a draft, polish, export."
-      actions={
-        <Link
-          href="/listings/new"
-          className="inline-flex h-10 items-center justify-center gap-1.5 rounded-xl bg-foreground px-4 text-sm font-medium text-background hover:opacity-90"
-        >
-          <Plus className="size-4" />
-          New listing
-        </Link>
-      }
-    >
-      <div className="mb-8 max-w-md">
-        <label className="relative block">
-          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-zinc-400" />
-          <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search brand, title, SKU…"
-            className="h-11 w-full rounded-xl border-0 bg-surface pl-10 pr-4 text-sm text-foreground shadow-sm ring-1 ring-border placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand/40"
-          />
-        </label>
-      </div>
-
-      {loading ? (
-        <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
-          {Array.from({ length: 8 }).map((_, i) => (
-            <div
-              key={i}
-              className="overflow-hidden rounded-2xl border border-border/70 bg-surface"
-            >
-              <SkeletonBlock className="aspect-[4/3] rounded-none" />
-              <div className="space-y-2 p-4">
-                <SkeletonBlock className="h-3 w-20" />
-                <SkeletonBlock className="h-4 w-4/5" />
-                <SkeletonBlock className="h-3 w-1/2" />
-              </div>
-            </div>
-          ))}
-        </div>
-      ) : error ? (
-        <EmptyPanel
-          title="Couldn’t load listings"
-          body={error}
-          action={
-            <button
-              type="button"
-              onClick={() => window.location.reload()}
-              className="rounded-xl bg-foreground px-4 py-2.5 text-sm font-semibold text-background"
-            >
-              Retry
-            </button>
-          }
-        />
-      ) : filtered.length === 0 ? (
-        <div className="space-y-6">
-          {products.length === 0 ? <ListingPipeline compact /> : null}
-          <EmptyPanel
-          title={products.length === 0 ? "No listings yet" : "No matches"}
-          body={
-            products.length === 0
-              ? "Drop photos on New listing — Higlou drafts the eBay fields for you."
-              : "Try a different search."
-          }
-          action={
-            products.length === 0 ? (
-              <Link
-                href="/listings/new"
-                className="inline-flex h-11 items-center rounded-xl bg-foreground px-5 text-sm font-semibold text-background"
-              >
-                New listing
-              </Link>
-            ) : undefined
-          }
-        />
-        </div>
-      ) : (
-        <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
-          {filtered.map((product) => {
-            const ready = readiness(product.status);
-            return (
-              <Link
-                key={product.id}
-                href={`/listings/${product.id}`}
-                className="group flex flex-col overflow-hidden rounded-2xl border border-border/70 bg-surface transition hover:-translate-y-0.5 hover:shadow-md"
-              >
-                <div className="relative aspect-[4/3] bg-zinc-100">
-                  {product.coverUrl ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={product.coverUrl}
-                      alt=""
-                      decoding="async"
-                      loading="lazy"
-                      className="size-full object-contain p-3"
-                    />
-                  ) : (
-                    <div className="flex size-full items-center justify-center text-xs text-zinc-400">
-                      No photo yet
-                    </div>
+    <AppShell hideHeader flush>
+      <StudioFrame
+        kicker="Library"
+        title="Listings"
+        hint={`${products.length} in the store`}
+        action={
+          <Link
+            href="/listings/new"
+            className="inline-flex h-9 items-center gap-1.5 rounded-full bg-[#3665F3] px-4 text-[13px] font-semibold text-white"
+          >
+            <Plus className="size-3.5" />
+            New listing
+          </Link>
+        }
+        scroll={false}
+      >
+        <div className="grid min-h-0 flex-1 lg:grid-cols-[220px_minmax(0,1fr)]">
+          <aside className="flex shrink-0 flex-col gap-3 border-b border-[#e5e5e5] bg-[#f7f7f7] p-4 lg:border-r lg:border-b-0">
+            <label className="relative">
+              <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-[#9b9b9b]" />
+              <input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search…"
+                className="h-9 w-full rounded-full border border-[#ccc] bg-white pr-3 pl-8 text-[13px] text-[#191919] outline-none focus:border-[#3665F3]"
+              />
+            </label>
+            <div className="grid gap-1">
+              {(
+                [
+                  { id: "all" as const, label: "All", count: products.length },
+                  { id: "draft" as const, label: "Drafts", count: draftCount },
+                  { id: "ready" as const, label: "Ready", count: readyCount },
+                ] as const
+              ).map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => setFilter(item.id)}
+                  className={cn(
+                    "flex items-center justify-between rounded-full px-3 py-2 text-left text-[13px] font-medium",
+                    filter === item.id
+                      ? "bg-[#3665F3] text-white"
+                      : "text-[#565959] hover:bg-white hover:text-[#191919]",
                   )}
-                </div>
-                <div className="flex flex-1 flex-col gap-2 px-4 py-4">
-                  <div>
-                    <p className="text-xs font-medium uppercase tracking-wide text-zinc-400">
-                      {product.brand || "Brand TBD"}
-                    </p>
-                    <h3 className="mt-1 line-clamp-2 text-sm font-semibold leading-snug text-zinc-950">
-                      {product.title || "Untitled listing"}
-                    </h3>
-                  </div>
-                  {product.categoryName ? (
-                    <p className="truncate text-xs text-zinc-500">
-                      {product.categoryName}
-                    </p>
-                  ) : null}
-                  <div className="mt-auto flex items-center justify-between gap-2 pt-1">
-                    <span
-                      className={cn(
-                        "text-xs font-medium",
-                        ready.ready ? "text-emerald-700" : "text-zinc-500",
-                      )}
-                    >
-                      {ready.label}
-                    </span>
-                    <span className="text-[11px] text-zinc-400">
-                      {formatRelativeTime(product.updatedAt)}
-                    </span>
-                  </div>
-                  <span className="pt-1 text-sm font-medium text-zinc-950 underline-offset-4 group-hover:underline">
-                    Open
+                >
+                  {item.label}
+                  <span
+                    className={cn(
+                      "tabular-nums",
+                      filter === item.id ? "text-white/80" : "text-[#9b9b9b]",
+                    )}
+                  >
+                    {item.count}
                   </span>
-                </div>
-              </Link>
-            );
-          })}
+                </button>
+              ))}
+            </div>
+          </aside>
+
+          <div className="min-h-0 flex-1 overflow-y-auto bg-white p-5">
+            {loading ? (
+              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+                {Array.from({ length: 8 }).map((_, i) => (
+                  <div
+                    key={i}
+                    className="overflow-hidden rounded-xl border border-[#e5e5e5] bg-white"
+                  >
+                    <SkeletonBlock className="aspect-[4/3] rounded-none" />
+                    <div className="space-y-2 p-3">
+                      <SkeletonBlock className="h-3 w-20" />
+                      <SkeletonBlock className="h-4 w-4/5" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : error ? (
+              <div className="grid min-h-full place-items-center">
+                <EmptyPanel
+                  title="Couldn’t load listings"
+                  body={error}
+                  action={
+                    <button
+                      type="button"
+                      onClick={() => window.location.reload()}
+                      className="rounded-full bg-[#191919] px-4 py-2.5 text-sm font-semibold text-white"
+                    >
+                      Retry
+                    </button>
+                  }
+                />
+              </div>
+            ) : filtered.length === 0 ? (
+              <div className="grid min-h-full place-items-center gap-6">
+                {products.length === 0 ? <ListingPipeline compact /> : null}
+                <EmptyPanel
+                  title={products.length === 0 ? "No listings yet" : "No matches"}
+                  body={
+                    products.length === 0
+                      ? "Drop photos on New listing — Higlou drafts the eBay fields for you."
+                      : "Try a different search or filter."
+                  }
+                  action={
+                    products.length === 0 ? (
+                      <Link
+                        href="/listings/new"
+                        className="inline-flex h-10 items-center rounded-full bg-[#3665F3] px-5 text-sm font-semibold text-white"
+                      >
+                        New listing
+                      </Link>
+                    ) : undefined
+                  }
+                />
+              </div>
+            ) : (
+              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+                {filtered.map((product) => {
+                  const ready = readiness(product.status);
+                  return (
+                    <Link
+                      key={product.id}
+                      href={`/listings/${product.id}`}
+                      className="group flex flex-col overflow-hidden rounded-xl border border-[#e5e5e5] bg-white transition hover:border-[#ccc] hover:shadow-[0_8px_24px_-16px_rgba(0,0,0,0.35)]"
+                    >
+                      <div className="relative aspect-[4/3] bg-white">
+                        {product.coverUrl ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={product.coverUrl}
+                            alt=""
+                            decoding="async"
+                            loading="lazy"
+                            className="size-full object-contain p-3"
+                          />
+                        ) : (
+                          <div className="grid size-full place-items-center text-[12px] text-[#bbb]">
+                            No photo yet
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex flex-1 flex-col gap-1.5 px-3.5 py-3">
+                        <p className="text-[11px] font-medium tracking-wide text-[#707070] uppercase">
+                          {product.brand || "Brand TBD"}
+                        </p>
+                        <h3 className="line-clamp-2 text-[14px] leading-snug font-semibold text-[#191919]">
+                          {product.title || "Untitled listing"}
+                        </h3>
+                        {product.price != null ? (
+                          <p className="text-[16px] font-semibold tabular-nums text-[#191919]">
+                            ${product.price.toFixed(2)}
+                          </p>
+                        ) : null}
+                        <div className="mt-auto flex items-center justify-between gap-2 pt-1">
+                          <span
+                            className={cn(
+                              "text-[12px] font-medium",
+                              ready.ready ? "text-emerald-700" : "text-[#707070]",
+                            )}
+                          >
+                            {ready.label}
+                          </span>
+                          <span className="text-[11px] text-[#9b9b9b]">
+                            {formatRelativeTime(product.updatedAt)}
+                          </span>
+                        </div>
+                      </div>
+                    </Link>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </div>
-      )}
+      </StudioFrame>
     </AppShell>
   );
 }

@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { AppShell } from "@/components/layout/app-shell";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { StudioFrame } from "@/components/layout/studio-frame";
+import { EmptyPanel, SkeletonBlock } from "@/components/ui/studio";
+import { cn } from "@/lib/utils";
 
 type CostDashboard = {
   disclaimer: string;
@@ -36,18 +38,10 @@ type CostDashboard = {
     projectedMonthEndTotal: number;
     productsRemainingToTarget: number;
   };
-  averageProductCost: {
-    estimatedProductCost: number;
-    disclaimer: string;
-  } | null;
 };
 
 function money(n: number) {
   return `$${n.toFixed(2)}`;
-}
-
-function pct(n: number) {
-  return `${(n * 100).toFixed(0)}%`;
 }
 
 function statusLabel(status: CostDashboard["status"]) {
@@ -86,137 +80,149 @@ export default function UsageCostsPage() {
   }, []);
 
   return (
-    <AppShell
-      title="Usage & costs"
-      description="What Higlou AI spent this month — estimates only, not an invoice."
-      actions={
-        <a
-          href="/settings"
-          className="inline-flex h-9 items-center text-sm font-medium text-zinc-500 hover:text-zinc-950"
-        >
-          ← Settings
-        </a>
-      }
-    >
-      {error ? <p className="text-sm text-red-600">{error}</p> : null}
-      {!data && !error ? (
-        <p className="text-sm text-zinc-500">Loading estimated usage…</p>
-      ) : null}
-      {data ? (
-        <div className="space-y-4">
-          <p className="text-sm text-zinc-600">{data.disclaimer}</p>
-          <div className="flex flex-wrap items-center gap-2">
-            <Badge variant="secondary">{statusLabel(data.status)}</Badge>
-            <span className="text-sm text-zinc-600">
-              {data.percentOfBudgetUsed.toFixed(0)}% of $
-              {data.budget.monthlyBudgetLimitUsd} target
-            </span>
+    <AppShell hideHeader flush>
+      <StudioFrame
+        kicker="Spend"
+        title="Usage & costs"
+        hint="Estimates only — not an invoice"
+        action={
+          <Link
+            href="/settings"
+            className="inline-flex h-9 items-center rounded-full px-3 text-[13px] font-medium text-[#3665F3]"
+          >
+            Settings
+          </Link>
+        }
+        scroll={false}
+      >
+        <div className="grid min-h-0 flex-1 lg:grid-cols-[minmax(280px,0.85fr)_minmax(0,1.15fr)]">
+          <div className="flex min-h-0 flex-col gap-3 overflow-y-auto border-b border-[#e5e5e5] bg-[#f7f7f7] p-5 lg:border-r lg:border-b-0">
+            {!data && !error ? (
+              <div className="grid gap-3 sm:grid-cols-2">
+                {Array.from({ length: 6 }).map((_, i) => (
+                  <SkeletonBlock key={i} className="h-24 rounded-xl" />
+                ))}
+              </div>
+            ) : error ? (
+              <EmptyPanel title="Couldn’t load usage" body={error} />
+            ) : data ? (
+              <>
+                <div className="rounded-xl border border-[#e5e5e5] bg-white px-4 py-3">
+                  <p className="text-[11px] font-semibold tracking-[0.16em] text-[#707070] uppercase">
+                    {statusLabel(data.status)}
+                  </p>
+                  <p className="mt-1 text-[22px] font-semibold tabular-nums text-[#191919]">
+                    {data.percentOfBudgetUsed.toFixed(0)}%
+                    <span className="ml-1.5 text-[13px] font-medium text-[#707070]">
+                      of ${data.budget.monthlyBudgetLimitUsd} target
+                    </span>
+                  </p>
+                  <p className="mt-2 text-[12px] leading-relaxed text-[#707070]">
+                    {data.disclaimer}
+                  </p>
+                </div>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <Metric
+                    label="Products processed"
+                    value={`${data.snapshot.productsProcessed} / ${data.budget.monthlyProductTarget}`}
+                  />
+                  <Metric
+                    label="Products remaining"
+                    value={String(data.projection.productsRemainingToTarget)}
+                  />
+                  <Metric
+                    label="Estimated AI"
+                    value={money(data.projection.estimatedAiCostToDate)}
+                  />
+                  <Metric
+                    label="Estimated total"
+                    value={money(data.projection.estimatedTotalToDate)}
+                  />
+                  <Metric
+                    label="Avg / product"
+                    value={
+                      data.snapshot.productsProcessed > 0
+                        ? money(data.projection.averageCostPerProduct)
+                        : "—"
+                    }
+                  />
+                  <Metric
+                    label="Projected month-end"
+                    value={money(data.projection.projectedMonthEndTotal)}
+                  />
+                </div>
+              </>
+            ) : null}
           </div>
 
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-            <Metric
-              label="Products processed"
-              value={`${data.snapshot.productsProcessed} / ${data.budget.monthlyProductTarget}`}
-            />
-            <Metric
-              label="Products remaining"
-              value={String(data.projection.productsRemainingToTarget)}
-            />
-            <Metric
-              label="Estimated AI cost"
-              value={money(data.projection.estimatedAiCostToDate)}
-            />
-            <Metric
-              label="Estimated infrastructure"
-              value={money(data.projection.estimatedInfrastructure)}
-            />
-            <Metric
-              label="Estimated total"
-              value={money(data.projection.estimatedTotalToDate)}
-            />
-            <Metric
-              label="Avg cost / product"
-              value={
-                data.snapshot.productsProcessed > 0
-                  ? money(data.projection.averageCostPerProduct)
-                  : "—"
-              }
-            />
-            <Metric
-              label="Projected month-end"
-              value={money(data.projection.projectedMonthEndTotal)}
-            />
-            <Metric
-              label="Budget limit"
-              value={money(data.budget.monthlyBudgetLimitUsd)}
-            />
-          </div>
-
-          <div className="grid gap-4 md:grid-cols-2">
-            <Card className="rounded-2xl border-zinc-200 shadow-sm">
-              <CardHeader>
-                <CardTitle className="text-base">Usage this month</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-2 text-sm text-zinc-700">
-                <Row label="Images analyzed" value={data.snapshot.imagesAnalyzed} />
-                <Row label="OpenAI input tokens" value={data.snapshot.inputTokens} />
-                <Row label="OpenAI output tokens" value={data.snapshot.outputTokens} />
-                <Row
-                  label="OpenAI cached tokens"
-                  value={data.snapshot.cachedInputTokens}
-                />
-                <Row label="Google Vision OCR units" value={data.snapshot.ocrUnits} />
-                <Row label="ZXing successful scans" value={data.snapshot.zxingScans} />
-                <Row label="Cache hits" value={data.snapshot.cacheHits} />
-                <Row label="Retries" value={data.snapshot.retries} />
-              </CardContent>
-            </Card>
-
-            <Card className="rounded-2xl border-zinc-200 shadow-sm">
-              <CardHeader>
-                <CardTitle className="text-base">Cost breakdown (estimated)</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-2 text-sm text-zinc-700">
-                <Row label="OpenAI" value={money(data.snapshot.openAICost)} />
-                <Row
-                  label="Google Vision"
-                  value={money(data.snapshot.googleVisionCost)}
-                />
-                <Row
-                  label="Fixed infra (allocated)"
-                  value={money(data.projection.estimatedInfrastructure)}
-                />
-                <p className="pt-2 text-xs text-zinc-500">
-                  Infrastructure is an internal allocation estimate (Supabase + Vercel +
-                  misc). Provider rates are editable via env and provider_pricing_settings.
-                </p>
-              </CardContent>
-            </Card>
+          <div className="min-h-0 overflow-y-auto bg-white p-5">
+            {data ? (
+              <div className="grid gap-4 lg:grid-cols-2">
+                <section className="rounded-xl border border-[#e5e5e5] bg-white p-4">
+                  <h2 className="text-[14px] font-semibold text-[#191919]">
+                    Usage this month
+                  </h2>
+                  <div className="mt-3 space-y-2 text-[13px] text-[#565959]">
+                    <Row label="Images analyzed" value={data.snapshot.imagesAnalyzed} />
+                    <Row label="OpenAI input tokens" value={data.snapshot.inputTokens} />
+                    <Row label="OpenAI output tokens" value={data.snapshot.outputTokens} />
+                    <Row
+                      label="OpenAI cached tokens"
+                      value={data.snapshot.cachedInputTokens}
+                    />
+                    <Row label="Google Vision OCR units" value={data.snapshot.ocrUnits} />
+                    <Row label="ZXing successful scans" value={data.snapshot.zxingScans} />
+                    <Row label="Cache hits" value={data.snapshot.cacheHits} />
+                    <Row label="Retries" value={data.snapshot.retries} />
+                  </div>
+                </section>
+                <section className="rounded-xl border border-[#e5e5e5] bg-white p-4">
+                  <h2 className="text-[14px] font-semibold text-[#191919]">
+                    Cost breakdown
+                  </h2>
+                  <div className="mt-3 space-y-2 text-[13px] text-[#565959]">
+                    <Row label="OpenAI" value={money(data.snapshot.openAICost)} />
+                    <Row
+                      label="Google Vision"
+                      value={money(data.snapshot.googleVisionCost)}
+                    />
+                    <Row
+                      label="Fixed infra (allocated)"
+                      value={money(data.projection.estimatedInfrastructure)}
+                    />
+                    <p className="pt-2 text-[12px] leading-relaxed text-[#9b9b9b]">
+                      Infrastructure is an internal allocation estimate (Supabase +
+                      Vercel + misc).
+                    </p>
+                  </div>
+                </section>
+              </div>
+            ) : null}
           </div>
         </div>
-      ) : null}
+      </StudioFrame>
     </AppShell>
   );
 }
 
 function Metric({ label, value }: { label: string; value: string }) {
   return (
-    <Card className="rounded-2xl border-zinc-200 shadow-sm">
-      <CardHeader className="pb-2">
-        <CardTitle className="text-xs font-medium uppercase tracking-wide text-zinc-500">
-          {label}
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="text-2xl font-semibold text-zinc-900">{value}</CardContent>
-    </Card>
+    <div className="rounded-xl border border-[#e5e5e5] bg-white px-4 py-3">
+      <p className="text-[11px] font-medium tracking-wide text-[#707070] uppercase">
+        {label}
+      </p>
+      <p className="mt-1 text-[20px] font-semibold tabular-nums text-[#191919]">
+        {value}
+      </p>
+    </div>
   );
 }
 
 function Row({ label, value }: { label: string; value: string | number }) {
   return (
-    <div className="flex items-center justify-between gap-3">
+    <div className={cn("flex items-center justify-between gap-3")}>
       <span>{label}</span>
-      <span className="font-medium text-zinc-900">{value}</span>
+      <span className="font-medium tabular-nums text-[#191919]">{value}</span>
     </div>
   );
 }

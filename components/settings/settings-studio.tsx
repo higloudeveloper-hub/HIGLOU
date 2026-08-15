@@ -12,6 +12,7 @@ import { EbayStoreOrganizeForm } from "@/components/settings/ebay-store-organize
 import { EbaySetupStory } from "@/components/settings/ebay-setup-story";
 import { AiSettingsForm } from "@/components/settings/ai-settings-form";
 import { BudgetSettingsForm } from "@/components/settings/budget-settings-form";
+import { StudioFrame } from "@/components/layout/studio-frame";
 import { EXPECTED_SEED_TEMPLATE_SHA256 } from "@/types/ebay";
 import { cn } from "@/lib/utils";
 
@@ -58,48 +59,45 @@ export function SettingsStudio() {
   }
 
   return (
-    <div className="mx-auto max-w-[1100px] pb-20">
-      <header className="pt-1 pb-6">
-        <p className="text-[11px] font-semibold tracking-[0.18em] text-muted-foreground uppercase">
-          Store
-        </p>
-        <h1 className="mt-1 font-display text-3xl tracking-tight">Settings</h1>
-        <p className="mt-2 max-w-lg text-sm text-muted-foreground">
-          Connect eBay, lock policies, then Higlou can publish for you.
-        </p>
-      </header>
-
-      <div
-        role="tablist"
-        className="mb-8 grid grid-cols-3 rounded-2xl border border-border bg-surface p-1"
-      >
-        {TABS.map((item) => (
-          <button
-            key={item.id}
-            type="button"
-            role="tab"
-            aria-selected={tab === item.id}
-            onClick={() => go(item.id)}
-            className={cn(
-              "rounded-xl px-2 py-2.5 text-center transition",
-              tab === item.id
-                ? "bg-foreground text-background shadow-sm"
-                : "text-muted-foreground hover:text-foreground",
-            )}
-          >
-            <span className="block text-[13px] font-semibold">{item.label}</span>
-            <span
+    <StudioFrame
+      kicker="Store"
+      title="Settings"
+      hint="Connect eBay, lock policies, then Higlou can publish."
+      scroll
+    >
+      <div className="sticky top-0 z-10 border-b border-[#e5e5e5] bg-white px-5 py-2">
+        <div
+          role="tablist"
+          className="grid grid-cols-3 rounded-full border border-[#e5e5e5] bg-[#f7f7f7] p-1"
+        >
+          {TABS.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              role="tab"
+              aria-selected={tab === item.id}
+              onClick={() => go(item.id)}
               className={cn(
-                "mt-0.5 hidden text-[11px] sm:block",
-                tab === item.id ? "text-background/70" : "text-muted-foreground",
+                "rounded-full px-2 py-2 text-center transition",
+                tab === item.id
+                  ? "bg-[#3665F3] text-white shadow-sm"
+                  : "text-[#707070] hover:text-[#191919]",
               )}
             >
-              {item.hint}
-            </span>
-          </button>
-        ))}
+              <span className="block text-[13px] font-semibold">{item.label}</span>
+              <span
+                className={cn(
+                  "mt-0.5 hidden text-[11px] sm:block",
+                  tab === item.id ? "text-white/80" : "text-[#9b9b9b]",
+                )}
+              >
+                {item.hint}
+              </span>
+            </button>
+          ))}
+        </div>
       </div>
-
+      <div className="p-5">
       <AnimatePresence mode="wait">
         <motion.div
           key={tab}
@@ -223,6 +221,7 @@ export function SettingsStudio() {
           ) : null}
         </motion.div>
       </AnimatePresence>
-    </div>
+      </div>
+    </StudioFrame>
   );
 }

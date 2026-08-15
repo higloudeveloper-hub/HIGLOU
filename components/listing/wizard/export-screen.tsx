@@ -18,6 +18,7 @@ import { PublishCelebrate } from "@/components/listing/wizard/publish-celebrate"
 import { StoreTemplatePicker } from "@/components/listing/store-template-picker";
 import { LiveDot } from "@/components/ui/studio";
 import { resolveListingPackage } from "@/lib/ebay/package-shipping";
+import { humanizeEbayPublishError } from "@/lib/ebay/infer-voltage";
 import { displayNameFromEbayUsername } from "@/lib/ebay/store-display-name";
 import type { ProductListing } from "@/types/product";
 import type { StoreBranding } from "@/config/store-branding";
@@ -74,6 +75,9 @@ function PublishProgressOverlay({
   const failed = Boolean(error) && !running;
   const [stage, setStage] = useState(0);
   const [progress, setProgress] = useState(8);
+  const failAt =
+    failed && /item specific|25002/i.test(error || "") ? 0 : stage;
+  const friendly = error ? humanizeEbayPublishError(error) : null;
 
   useEffect(() => {
     if (done) {
@@ -181,7 +185,7 @@ function PublishProgressOverlay({
         <div className="p-5">
           <h2 className="text-[17px] font-semibold tracking-tight">
             {failed
-              ? "Couldn’t finish publish"
+              ? friendly?.headline || "Couldn’t finish publish"
               : done
                 ? mode === "live"
                   ? `Live in ${storeLabel}`
@@ -209,9 +213,9 @@ function PublishProgressOverlay({
           <ol className="mt-4 space-y-1.5">
             {stages.map((label, i) => {
               const state = failed
-                ? i < stage
+                ? i < failAt
                   ? "done"
-                  : i === stage
+                  : i === failAt
                     ? "failed"
                     : "todo"
                 : done || i < stage
@@ -257,7 +261,14 @@ function PublishProgressOverlay({
 
           {failed ? (
             <div className="mt-4 space-y-3">
-              <p className="text-[13px] text-destructive">{error}</p>
+              <p className="text-[13px] leading-relaxed text-destructive">
+                {friendly?.detail || error}
+              </p>
+              {error && friendly?.detail !== error ? (
+                <p className="text-[11px] leading-relaxed text-[#9b9b9b]">
+                  {error}
+                </p>
+              ) : null}
               <div className="flex gap-2">
                 <button
                   type="button"

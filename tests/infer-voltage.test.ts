@@ -3,8 +3,11 @@ import {
   formatEbayVoltage,
   inferVoltageFromText,
   inferBatteryTechnologyFromText,
+  inferCompatibleAspect,
   parseMissingAspectFromEbayError,
+  humanizeEbayPublishError,
   ensureInferredElectricalAspects,
+  ensureCompatibleAspects,
 } from "@/lib/ebay/infer-voltage";
 import { listingToInventoryItem } from "@/lib/ebay/listing-to-inventory";
 import { createEmptyListing } from "@/lib/demo/sample-listing";
@@ -138,5 +141,57 @@ describe("inferVoltageFromText", () => {
     expect(aspects.Voltage).toEqual(["1000 V"]);
     ensureInferredElectricalAspects(aspects, "120V");
     expect(aspects.Voltage).toEqual(["1000 V"]);
+  });
+});
+
+describe("compatible aspects (eBay 25002 Compatible Model)", () => {
+  it("parses Compatible Model from eBay 25002 text", () => {
+    expect(
+      parseMissingAspectFromEbayError(
+        "A user error has occurred. The item specific Compatible Model is missing. Add Compatible Model to this listing, enter a valid value, and then try again.",
+      ),
+    ).toBe("Compatible Model");
+  });
+
+  it("uses Does Not Apply for a finished kettle", () => {
+    expect(
+      inferCompatibleAspect("Compatible Model", {
+        title: "Pinky Up Noelle Ceramic Electric Tea Kettle 50 oz",
+        brand: "Pinky Up",
+        model: "Noelle",
+        productType: "Electric Kettle",
+      }),
+    ).toBe("Does Not Apply");
+  });
+
+  it("uses the model for replacement parts", () => {
+    expect(
+      inferCompatibleAspect("Compatible Model", {
+        title: "Replacement filter for Noelle kettle",
+        brand: "Pinky Up",
+        model: "Noelle",
+        productType: "Filter",
+      }),
+    ).toBe("Noelle");
+  });
+
+  it("fills required Compatible Model before Inventory PUT", () => {
+    const aspects: Record<string, string[]> = { Brand: ["Pinky Up"] };
+    ensureCompatibleAspects(aspects, ["Compatible Model", "Color"], {
+      title: "Pinky Up Noelle Ceramic Electric Tea Kettle",
+      brand: "Pinky Up",
+      model: "Noelle",
+      productType: "Electric Kettle",
+    });
+    expect(aspects["Compatible Model"]).toEqual(["Does Not Apply"]);
+    expect(aspects.Color).toBeUndefined();
+  });
+
+  it("humanizes the 25002 Compatible Model error", () => {
+    const msg = humanizeEbayPublishError(
+      "A user error has occurred. The item specific Compatible Model is missing. Add Compatible Model to this listing.",
+    );
+    expect(msg.headline).toContain("Compatible Model");
+    expect(msg.detail.toLowerCase()).toContain("try again");
   });
 });

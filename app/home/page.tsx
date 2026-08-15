@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { AppShell } from "@/components/layout/app-shell";
 import { createClient } from "@/lib/supabase/client";
-import { SkeletonBlock } from "@/components/ui/studio";
 import { FirstRunHome } from "@/components/studio/first-run-home";
 import { ReturningHome } from "@/components/studio/returning-home";
 import { WelcomeGate } from "@/components/studio/welcome-gate";
@@ -183,15 +182,9 @@ export default function HomeWorkspacePage() {
 
   return (
     <WelcomeGate>
-      <AppShell hideHeader>
+      <AppShell hideHeader flush>
         {!ready ? (
-          <div className="mx-auto max-w-3xl space-y-3 pt-6">
-            <SkeletonBlock className="h-8 w-32" />
-            <SkeletonBlock className="h-12 w-48" />
-            <SkeletonBlock className="h-16 rounded-2xl" />
-            <SkeletonBlock className="h-14 rounded-2xl" />
-            <SkeletonBlock className="h-14 rounded-2xl" />
-          </div>
+          <div className="flex h-full min-h-0 flex-1 animate-pulse bg-white" />
         ) : isFirstRun ? (
           <FirstRunHome
             name={name}

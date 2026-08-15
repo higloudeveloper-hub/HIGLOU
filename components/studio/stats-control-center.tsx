@@ -29,6 +29,13 @@ import type {
   OfferMove,
   StockAlert,
 } from "@/lib/ebay/sales-sync";
+import {
+  LiveConfirm,
+  offerAllConfirm,
+  offerConfirm,
+  priceConfirm,
+  type LiveConfirmOp,
+} from "@/components/studio/live-confirm";
 
 type Pane = "opps" | "act" | "carts" | "listings" | "orders";
 
@@ -61,6 +68,7 @@ export function StatsControlCenter() {
   const [pane, setPane] = useState<Pane | null>(null);
   const [pickedId, setPickedId] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const [pending, setPending] = useState<LiveConfirmOp | null>(null);
   const lastOrdersRef = useRef<number | null>(null);
 
   const watching = useMemo(
@@ -98,15 +106,16 @@ export function StatsControlCenter() {
     lastOrdersRef.current = snap.orders30d;
   }, [snap]);
 
-  const act = async (
-    key: string,
-    body: Parameters<typeof runPremium>[0],
-    ok: string,
-  ) => {
-    setBusy(key);
+  const locked = busy !== null || pending !== null;
+
+  const runConfirmed = async () => {
+    if (!pending || busy) return;
+    const op = pending;
+    setBusy(op.key);
     try {
-      await runPremium(body);
-      toast.success(ok);
+      await runPremium(op.body);
+      toast.success(op.ok);
+      setPending(null);
       await reload();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Action failed");
@@ -149,32 +158,32 @@ export function StatsControlCenter() {
   const runRecommend = (deal: DealCard) => {
     setPickedId(deal.listingId);
     if (deal.recommend.kind === "offer") {
-      void act(
-        `offer-${deal.listingId}`,
-        {
-          action: "offer",
+      setPending(
+        offerConfirm({
           listingId: deal.listingId,
-          discountPercentage: deal.recommend.pct || 10,
-        },
-        recommendCopy(deal).button + " sent",
+          title: deal.title,
+          bin: deal.price,
+          pct: deal.recommend.pct || 10,
+          ok: recommendCopy(deal).button + " sent",
+        }),
       );
       return;
     }
     if (deal.recommend.kind === "drop" && deal.recommend.price != null) {
-      void act(
-        `price-${deal.listingId}`,
-        {
-          action: "price",
+      setPending(
+        priceConfirm({
           listingId: deal.listingId,
-          price: deal.recommend.price,
-        },
-        `BIN dropped to ${usd(deal.recommend.price, true)}`,
+          title: deal.title,
+          from: deal.price,
+          to: deal.recommend.price,
+          ok: `BIN dropped to ${usd(deal.recommend.price, true)}`,
+        }),
       );
     }
   };
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col bg-white md:h-full">
+    <div className="relative flex min-h-0 flex-1 flex-col bg-white md:h-full">
       <LiveBanner
         shop={shop}
         deals={deals}
@@ -317,7 +326,7 @@ export function StatsControlCenter() {
                           <div className="mt-2">
                             <OneClickMove
                               deal={pickedDeal}
-                              busy={busy}
+                              busy={locked ? busy ?? "pending" : null}
                               onGo={runRecommend}
                               large
                             />
@@ -328,27 +337,27 @@ export function StatsControlCenter() {
                             listingId={featuredId}
                             price={featuredPrice}
                             canOffer={canOffer}
-                            busy={busy}
+                            busy={locked ? busy ?? "pending" : null}
                             onOffer={(pct, label) =>
-                              void act(
-                                `offer-${featuredId}`,
-                                {
-                                  action: "offer",
+                              setPending(
+                                offerConfirm({
                                   listingId: featuredId,
-                                  discountPercentage: pct,
-                                },
-                                label,
+                                  title: featuredTitle,
+                                  bin: featuredPrice,
+                                  pct,
+                                  ok: label,
+                                }),
                               )
                             }
                             onDrop={(price) =>
-                              void act(
-                                `price-${featuredId}`,
-                                {
-                                  action: "price",
+                              setPending(
+                                priceConfirm({
                                   listingId: featuredId,
-                                  price,
-                                },
-                                `BIN set to ${usd(price, true)}`,
+                                  title: featuredTitle,
+                                  from: featuredPrice,
+                                  to: price,
+                                  ok: `BIN set to ${usd(price, true)}`,
+                                }),
                               )
                             }
                           />
@@ -360,27 +369,27 @@ export function StatsControlCenter() {
                           listingId={featuredId}
                           price={featuredPrice}
                           canOffer={canOffer}
-                          busy={busy}
+                          busy={locked ? busy ?? "pending" : null}
                           onOffer={(pct, label) =>
-                            void act(
-                              `offer-${featuredId}`,
-                              {
-                                action: "offer",
+                            setPending(
+                              offerConfirm({
                                 listingId: featuredId,
-                                discountPercentage: pct,
-                              },
-                              label,
+                                title: featuredTitle,
+                                bin: featuredPrice,
+                                pct,
+                                ok: label,
+                              }),
                             )
                           }
                           onDrop={(price) =>
-                            void act(
-                              `price-${featuredId}`,
-                              {
-                                action: "price",
+                            setPending(
+                              priceConfirm({
                                 listingId: featuredId,
-                                price,
-                              },
-                              `BIN set to ${usd(price, true)}`,
+                                title: featuredTitle,
+                                from: featuredPrice,
+                                to: price,
+                                ok: `BIN set to ${usd(price, true)}`,
+                              }),
                             )
                           }
                         />
@@ -418,16 +427,15 @@ export function StatsControlCenter() {
                 {active === "opps" && carts.length > 1 ? (
                   <button
                     type="button"
-                    disabled={busy !== null}
+                    disabled={locked}
                     onClick={() =>
-                      void act(
-                        "offer-all",
-                        {
-                          action: "offer_all",
+                      setPending(
+                        offerAllConfirm({
                           listingIds: carts.map((m) => m.listingId),
-                          discountPercentage: 10,
-                        },
-                        "Offers sent to interested buyers",
+                          titles: carts.map((m) => m.title),
+                          pct: 10,
+                          ok: "Offers sent to interested buyers",
+                        }),
                       )
                     }
                     className="h-7 rounded-full bg-[#3665F3] px-3 text-[11px] font-semibold text-white disabled:opacity-50"
@@ -441,7 +449,7 @@ export function StatsControlCenter() {
                   <OpportunityList
                     deals={deals}
                     selectedId={featuredId || null}
-                    busy={busy}
+                    busy={locked ? busy ?? "pending" : null}
                     onPick={setPickedId}
                     onGo={runRecommend}
                   />
@@ -474,6 +482,18 @@ export function StatsControlCenter() {
           </div>
         )}
       </div>
+      {pending ? (
+        <LiveConfirm
+          op={pending}
+          busy={busy !== null}
+          onCancel={() => {
+            if (!busy) setPending(null);
+          }}
+          onAccept={() => {
+            void runConfirmed();
+          }}
+        />
+      ) : null}
     </div>
   );
 }

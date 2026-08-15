@@ -105,20 +105,28 @@ type TaxonomyAspect = {
   localizedAspectName?: string;
   aspectConstraint?: {
     itemToAspectCardinality?: string;
+    aspectRequired?: boolean;
+    aspectUsage?: string;
   };
 };
 
+export type CategoryAspectMeta = {
+  cardinality: Map<string, AspectCardinality>;
+  /** Original-cased names eBay marked required for this category. */
+  required: string[];
+};
+
 /**
- * Load SINGLE/MULTI cardinality from Taxonomy getItemAspectsForCategory.
- * Falls back to empty map on failure (caller uses defaults).
+ * Load SINGLE/MULTI cardinality + required aspect names from Taxonomy.
  */
-export async function fetchAspectCardinalityMap(
+export async function fetchCategoryAspectMeta(
   accessToken: string,
   categoryId: string,
-): Promise<Map<string, AspectCardinality>> {
-  const map = new Map<string, AspectCardinality>();
+): Promise<CategoryAspectMeta> {
+  const cardinality = new Map<string, AspectCardinality>();
+  const required: string[] = [];
   const id = String(categoryId || "").trim();
-  if (!id) return map;
+  if (!id) return { cardinality, required };
 
   const cfg = getEbayConfig();
   try {
@@ -133,7 +141,7 @@ export async function fetchAspectCardinalityMap(
         },
       },
     );
-    if (!res.ok) return map;
+    if (!res.ok) return { cardinality, required };
     const json = (await res.json()) as {
       aspects?: TaxonomyAspect[];
     };
@@ -143,11 +151,29 @@ export async function fetchAspectCardinalityMap(
       const card = String(
         aspect.aspectConstraint?.itemToAspectCardinality || "",
       ).toUpperCase();
-      if (card === "MULTI") map.set(name.toLowerCase(), "MULTI");
-      else if (card === "SINGLE") map.set(name.toLowerCase(), "SINGLE");
+      if (card === "MULTI") cardinality.set(name.toLowerCase(), "MULTI");
+      else if (card === "SINGLE") cardinality.set(name.toLowerCase(), "SINGLE");
+      const usage = String(
+        aspect.aspectConstraint?.aspectUsage || "",
+      ).toUpperCase();
+      if (aspect.aspectConstraint?.aspectRequired || usage === "REQUIRED") {
+        required.push(name);
+      }
     }
   } catch {
     // Non-fatal — sanitize with defaults.
   }
-  return map;
+  return { cardinality, required };
+}
+
+/**
+ * Load SINGLE/MULTI cardinality from Taxonomy getItemAspectsForCategory.
+ * Falls back to empty map on failure (caller uses defaults).
+ */
+export async function fetchAspectCardinalityMap(
+  accessToken: string,
+  categoryId: string,
+): Promise<Map<string, AspectCardinality>> {
+  const meta = await fetchCategoryAspectMeta(accessToken, categoryId);
+  return meta.cardinality;
 }

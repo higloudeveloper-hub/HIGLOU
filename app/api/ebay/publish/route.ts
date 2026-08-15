@@ -27,8 +27,9 @@ import {
 } from "@/lib/ebay/account-policies";
 import { loadSellerDraftDefaults } from "@/lib/ebay/draft-defaults";
 import { ensureListableEbayCategory } from "@/lib/ebay/taxonomy-categories";
-import { fetchAspectCardinalityMap } from "@/lib/ebay/sanitize-aspects";
+import { fetchCategoryAspectMeta } from "@/lib/ebay/sanitize-aspects";
 import {
+  ensureCompatibleAspects,
   ensureInferredElectricalAspects,
   formatEbayVoltage,
   inferAspectValueFromText,
@@ -490,9 +491,22 @@ export async function POST(request: Request) {
       );
     }
 
-    const aspectCardinality = await fetchAspectCardinalityMap(
+    const aspectMeta = await fetchCategoryAspectMeta(
       accessToken,
       listing.categoryId,
+    );
+    const aspectCardinality = aspectMeta.cardinality;
+    const compatibleExtras = {
+      title: listing.title,
+      brand: listing.brand,
+      model: listing.model,
+      productType: listing.productType || listing.type,
+    };
+    if (!inventory.aspects) inventory.aspects = {};
+    ensureCompatibleAspects(
+      inventory.aspects,
+      aspectMeta.required,
+      compatibleExtras,
     );
 
     // Drop bad OCR UPCs before Inventory PUT (invalid checksum → eBay 25002).
@@ -536,7 +550,12 @@ export async function POST(request: Request) {
               /\b(nacs|ccs|ev\s*charger|ev\s*adapter)\b/i.test(hay) ? 1000 : 0,
             );
         } else {
-          filled = inferAspectValueFromText(missingAspect, hay) || "";
+          filled =
+            inferAspectValueFromText(missingAspect, hay, {
+              brand: listing.brand,
+              model: listing.model,
+              productType: listing.productType || listing.type,
+            }) || "";
         }
 
         if (filled) {

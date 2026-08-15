@@ -9,12 +9,12 @@ import { usd, useEbaySales } from "@/lib/studio/use-ebay-sales";
 import { cn } from "@/lib/utils";
 
 /** Compact Home teaser — full live board lives on /stats. */
-export function EbaySalesPulse() {
+export function EbaySalesPulse({ className }: { className?: string }) {
   const { snap, loading, tick } = useEbaySales();
 
   if (loading && !snap) {
     return (
-      <div className="mb-8 h-[76px] animate-pulse rounded-xl border border-[#d5d9d9] bg-white" />
+      <div className="h-[76px] animate-pulse rounded-xl border border-[#d5d9d9] bg-white" />
     );
   }
   if (!snap) return null;
@@ -26,7 +26,10 @@ export function EbaySalesPulse() {
   return (
     <Link
       href="/stats"
-      className="group mb-8 block overflow-hidden rounded-xl border border-[#d5d9d9] bg-white shadow-[0_1px_2px_rgba(15,17,17,0.06)] transition hover:border-[#bbb]"
+      className={cn(
+        "group block overflow-hidden rounded-xl border border-[#d5d9d9] bg-white shadow-[0_1px_2px_rgba(15,17,17,0.06)] transition hover:border-[#bbb]",
+        className,
+      )}
     >
       <div className="flex min-h-[72px] items-center gap-4 px-4 py-3">
         <div className="min-w-0 flex-1">

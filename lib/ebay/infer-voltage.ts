@@ -151,6 +151,7 @@ export function inferBatteryTechnologyFromText(text: string): string | null {
 export function inferAspectValueFromText(
   aspectName: string,
   text: string,
+  extras?: { brand?: string; model?: string; productType?: string },
 ): string | null {
   const name = String(aspectName || "").trim().toLowerCase();
   if (!name) return null;
@@ -162,7 +163,86 @@ export function inferAspectValueFromText(
   ) {
     return inferBatteryTechnologyFromText(text);
   }
+  const compatible = inferCompatibleAspect(aspectName, {
+    title: text,
+    brand: extras?.brand,
+    model: extras?.model,
+    productType: extras?.productType,
+  });
+  if (compatible) return compatible;
   return inferItemDimensionAspect(aspectName, text);
+}
+
+/**
+ * Compatibility aspects (Compatible Model / Brand / Product) are required in
+ * some kitchen/parts categories. A finished product uses "Does Not Apply".
+ */
+export function inferCompatibleAspect(
+  aspectName: string,
+  opts: {
+    title?: string;
+    brand?: string;
+    model?: string;
+    productType?: string;
+  },
+): string | null {
+  const name = String(aspectName || "").trim().toLowerCase();
+  if (!name.startsWith("compatible")) return null;
+
+  const model = String(opts.model || "").trim();
+  const brand = String(opts.brand || "").trim();
+  const type = String(opts.productType || "").trim();
+  const hay = [opts.title, brand, model, type].filter(Boolean).join(" ");
+  const isPart = /\b(part|parts|filter|fits|compatible with|replacement)\b/i.test(
+    hay,
+  );
+
+  if (name === "compatible model" || name === "compatible models") {
+    if (isPart && model.length >= 2 && !/^n\/?a$/i.test(model)) return model;
+    return "Does Not Apply";
+  }
+  if (name === "compatible brand" || name === "compatible brands") {
+    if (
+      isPart &&
+      brand.length >= 2 &&
+      !/^(unbranded|generic|does\s*not\s*apply|n\/?a)$/i.test(brand)
+    ) {
+      return brand;
+    }
+    return "Does Not Apply";
+  }
+  if (
+    name === "compatible product" ||
+    name === "compatible products" ||
+    name === "compatible with"
+  ) {
+    if (isPart && type.length >= 2) return type;
+    return "Does Not Apply";
+  }
+  return "Does Not Apply";
+}
+
+export function ensureCompatibleAspects(
+  aspects: Record<string, string[]>,
+  requiredNames: string[],
+  extras: {
+    title?: string;
+    brand?: string;
+    model?: string;
+    productType?: string;
+  },
+): string[] {
+  const added: string[] = [];
+  for (const name of requiredNames) {
+    const trimmed = String(name || "").trim();
+    if (!trimmed || !/^compatible/i.test(trimmed)) continue;
+    if (listingHasAspect(aspects, trimmed)) continue;
+    const value = inferCompatibleAspect(trimmed, extras);
+    if (!value) continue;
+    aspects[trimmed] = [value];
+    added.push(trimmed);
+  }
+  return added;
 }
 
 export function listingHasAspect(
@@ -209,4 +289,21 @@ export function parseMissingAspectFromEbayError(message: string): string | null 
     /item specific\s+([A-Za-z0-9 /_-]+)\s+is missing/i,
   );
   return m?.[1]?.trim() || null;
+}
+
+export function humanizeEbayPublishError(raw: string): {
+  headline: string;
+  detail: string;
+} {
+  const aspect = parseMissingAspectFromEbayError(raw);
+  if (aspect) {
+    return {
+      headline: `eBay needs “${aspect}”`,
+      detail: `This category requires ${aspect} before the listing can go live. Try again — Higlou fills it from the product (or Does Not Apply).`,
+    };
+  }
+  return {
+    headline: "Couldn’t finish publish",
+    detail: String(raw || "eBay rejected the listing.").trim(),
+  };
 }

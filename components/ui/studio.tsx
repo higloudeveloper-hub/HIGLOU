@@ -45,21 +45,19 @@ export function EmptyPanel({
   action?: ReactNode;
 }) {
   return (
-    <div className="relative overflow-hidden rounded-3xl border border-dashed border-border bg-surface px-6 py-12 text-center">
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-x-10 top-0 h-24 bg-[radial-gradient(circle_at_top,rgba(255,199,44,0.18),transparent_70%)]"
-      />
-      <p className="text-[11px] font-semibold tracking-[0.2em] text-muted-foreground uppercase">
-        Higlou
-      </p>
-      <h3 className="mt-3 font-display text-2xl tracking-tight text-foreground">
-        {title}
-      </h3>
-      <p className="mx-auto mt-2 max-w-sm text-sm text-muted-foreground">
-        {body}
-      </p>
-      {action ? <div className="mt-6 flex justify-center">{action}</div> : null}
+    <div className="grid min-h-[280px] place-items-center rounded-xl border border-[#e5e5e5] bg-white px-6 py-16 text-center">
+      <div>
+        <p className="text-[11px] font-semibold tracking-[0.2em] text-[#707070] uppercase">
+          Higlou
+        </p>
+        <h3 className="mt-3 text-[20px] font-semibold tracking-tight text-[#191919]">
+          {title}
+        </h3>
+        <p className="mx-auto mt-2 max-w-sm text-[13px] leading-relaxed text-[#707070]">
+          {body}
+        </p>
+        {action ? <div className="mt-6 flex justify-center">{action}</div> : null}
+      </div>
     </div>
   );
 }

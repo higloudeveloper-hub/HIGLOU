@@ -2,9 +2,10 @@
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { Check, Globe, MousePointer2 } from "lucide-react";
+import { Check, Globe, MousePointer2, Search, ShoppingCart, Star } from "lucide-react";
 import { usePrefersReducedMotion } from "@/components/listing/wizard/use-prefers-reduced-motion";
 import {
+  EbayLivePreview,
   EbayWordmark,
   useConnectedEbayStoreName,
 } from "@/components/studio/ebay-live-preview";
@@ -408,6 +409,179 @@ function LivePill({ on, label }: { on: boolean; label: string }) {
   );
 }
 
+function AmazonStorefront({
+  src,
+  title,
+  price,
+}: {
+  src: string;
+  title: string;
+  price: string;
+}) {
+  return (
+    <div className="flex h-full min-h-0 flex-col bg-white">
+      <div className="flex shrink-0 items-center gap-2 bg-[#131921] px-2 py-1.5">
+        <AmazonMark className="text-[13px] text-white" />
+        <div className="flex min-w-0 flex-1 overflow-hidden rounded-sm">
+          <span className="min-w-0 flex-1 truncate bg-white px-2 py-1 text-[10px] text-[#888]">
+            Search Amazon
+          </span>
+          <span className="grid w-7 shrink-0 place-items-center bg-[#FEBD69] text-[#131921]">
+            <Search className="size-3" strokeWidth={2.4} />
+          </span>
+        </div>
+        <ShoppingCart className="size-3.5 shrink-0 text-white" />
+      </div>
+      <div className="relative min-h-0 flex-1 bg-white">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={src} alt="" className="absolute inset-0 size-full object-contain p-2" />
+      </div>
+      <div className="shrink-0 px-2.5 pb-2.5 pt-1">
+        <p className="line-clamp-2 text-[11px] leading-snug text-[#0F1111]">{title}</p>
+        <p className="mt-0.5 flex items-center gap-0.5 text-[10px] text-[#007185]">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <Star
+              key={i}
+              className="size-2.5 fill-[#DE7921] text-[#DE7921]"
+            />
+          ))}
+          <span className="ml-1">1,284</span>
+        </p>
+        <p className="text-[20px] font-semibold tabular-nums text-[#0F1111]">{price}</p>
+        <p className="text-[10px] font-semibold text-[#C45500]">FREE delivery Tomorrow</p>
+        <p className="mt-1.5 grid h-7 place-items-center rounded-full bg-[#FFD814] text-[11px] font-semibold text-[#0F1111]">
+          Add to Cart
+        </p>
+        <p className="mt-1 grid h-7 place-items-center rounded-full bg-[#FFA41C] text-[11px] font-semibold text-[#0F1111]">
+          Buy Now
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function FacebookStorefront({
+  src,
+  title,
+  price,
+  seller,
+}: {
+  src: string;
+  title: string;
+  price: string;
+  seller: string;
+}) {
+  return (
+    <div className="flex h-full min-h-0 flex-col bg-white">
+      <div className="flex shrink-0 items-center justify-between border-b border-[#E4E6EB] px-2.5 py-2">
+        <span className="text-[13px] font-bold tracking-tight text-[#0866FF]">
+          marketplace
+        </span>
+        <Search className="size-3.5 text-[#050505]" />
+      </div>
+      <div className="flex shrink-0 items-center gap-2 px-2.5 py-1.5">
+        <span className="grid size-7 shrink-0 place-items-center rounded-full bg-[#E4E6EB] text-[10px] font-bold text-[#050505]">
+          {seller.slice(0, 1).toUpperCase()}
+        </span>
+        <div className="min-w-0">
+          <p className="truncate text-[12px] font-semibold text-[#050505]">{seller}</p>
+          <p className="text-[10px] text-[#65676B]">Listed just now · Nearby</p>
+        </div>
+      </div>
+      <div className="relative min-h-0 flex-1 bg-[#F0F2F5]">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={src} alt="" className="absolute inset-0 size-full object-contain p-2" />
+      </div>
+      <div className="shrink-0 px-2.5 py-2">
+        <p className="text-[20px] font-bold tabular-nums text-[#050505]">{price}</p>
+        <p className="line-clamp-1 text-[12px] text-[#050505]">{title}</p>
+        <p className="mt-1.5 grid h-8 place-items-center rounded-md bg-[#E7F3FF] text-[12px] font-semibold text-[#0866FF]">
+          Message
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function ShopifyStorefront({
+  src,
+  title,
+  price,
+}: {
+  src: string;
+  title: string;
+  price: string;
+}) {
+  return (
+    <div className="flex h-full min-h-0 flex-col bg-white">
+      <p className="shrink-0 bg-[#121212] py-1 text-center text-[10px] font-medium tracking-wide text-white">
+        Free shipping over $50
+      </p>
+      <div className="flex shrink-0 items-center justify-between border-b border-[#e5e5e5] px-3 py-2">
+        <span className="text-[13px] font-semibold tracking-tight">Your store</span>
+        <ShoppingCart className="size-3.5" />
+      </div>
+      <div className="relative min-h-0 flex-1">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={src} alt="" className="absolute inset-0 size-full object-contain p-3" />
+      </div>
+      <div className="shrink-0 px-3 pb-3 pt-1.5">
+        <p className="text-[10px] font-medium tracking-[0.14em] text-[#6a6a6a]">
+          HIGLOU
+        </p>
+        <p className="line-clamp-2 text-[13px] font-medium tracking-tight">{title}</p>
+        <p className="mt-1 text-[16px] tabular-nums">{price}</p>
+        <p className="mt-2 grid h-8 place-items-center rounded-md bg-[#121212] text-[12px] font-semibold text-white">
+          Add to cart
+        </p>
+        <p className="mt-1 grid h-8 place-items-center rounded-md bg-[#008060] text-[12px] font-semibold text-white">
+          Buy it now
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function SiteStorefront({
+  src,
+  title,
+  price,
+}: {
+  src: string;
+  title: string;
+  price: string;
+}) {
+  return (
+    <div className="flex h-full min-h-0 flex-col bg-white">
+      <div className="flex shrink-0 items-center gap-1.5 border-b border-[#e5e5e5] bg-[#f3f3f3] px-2 py-1.5">
+        <span className="size-1.5 rounded-full bg-[#FF5F57]" />
+        <span className="size-1.5 rounded-full bg-[#FEBC2E]" />
+        <span className="size-1.5 rounded-full bg-[#28C840]" />
+        <span className="ml-1 flex min-w-0 flex-1 items-center gap-1 rounded-full bg-white px-2 py-0.5 text-[11px] text-[#707070]">
+          <Globe className="size-3 shrink-0" />
+          <span className="truncate">yoursite.com/products</span>
+        </span>
+      </div>
+      <div className="flex shrink-0 items-center justify-between border-b border-[#eee] px-3 py-2">
+        <span className="text-[13px] font-semibold tracking-tight">HIGLOU</span>
+        <span className="text-[11px] text-[#707070]">Shop · About · Cart</span>
+      </div>
+      <div className="relative min-h-0 flex-1">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={src} alt="" className="absolute inset-0 size-full object-contain p-3" />
+      </div>
+      <div className="shrink-0 px-3 pb-3 pt-1.5">
+        <p className="text-[11px] text-[#707070]">Home / Shop / {title}</p>
+        <p className="mt-0.5 line-clamp-2 text-[14px] font-semibold tracking-tight">{title}</p>
+        <p className="mt-1 text-[18px] font-semibold tabular-nums">{price}</p>
+        <p className="mt-2 grid h-9 place-items-center rounded-md bg-[#141414] text-[12px] font-semibold text-white">
+          Add to bag
+        </p>
+      </div>
+    </div>
+  );
+}
+
 function SalesStrip({
   beat,
   dollars,
@@ -739,133 +913,133 @@ export function ListingPipeline({
       <div className="relative min-h-0 flex-1">
         <div className="grid h-full min-h-0 grid-cols-6 grid-rows-2 divide-x divide-y divide-[#e5e5e5]">
         <ChannelShell live={ebayLive} focused={beat === 6 || beat === 13} className="col-span-2">
-          <div className="flex shrink-0 items-center justify-between border-b border-[#eee] px-3 py-2">
-            <EbayWordmark className="text-[16px]" />
-            <LivePill on={ebayLive} label="Live" />
-          </div>
-          <ProductShot live={ebayLive} present={ebayIn} src={cover} gallery={shots} />
-          <div className="shrink-0 px-3 pb-3 pt-1.5">
-            <p className="truncate text-[12px] font-medium text-[#191919]">
-              {ebayIn ? item.title : "eBay store"}
-            </p>
-            <p className="text-[18px] font-semibold tabular-nums text-[#191919]">
-              {ebayIn ? `US ${priceLabel}` : "—"}
-            </p>
-            {ebayLive ? (
-              <>
-                <p className="mt-1.5 grid h-8 place-items-center rounded-full bg-[#3665F3] text-[12px] font-semibold text-white">
-                  Buy It Now
+          {ebayLive ? (
+            <EbayLivePreview
+              photoSrc={cover}
+              title={item.title}
+              priceLabel={priceLabel}
+              storeName={shop}
+              live
+              compact
+              fill
+              className="h-full min-h-0 rounded-none shadow-none ring-0"
+            />
+          ) : (
+            <>
+              <div className="flex shrink-0 items-center justify-between border-b border-[#eee] px-3 py-2">
+                <EbayWordmark className="text-[16px]" />
+                <LivePill on={false} label="Live" />
+              </div>
+              <ProductShot live={false} present={ebayIn} src={cover} gallery={shots} />
+              <div className="shrink-0 px-3 py-2">
+                <p className="text-[16px] font-semibold tabular-nums">
+                  {ebayIn ? `US ${priceLabel}` : "—"}
                 </p>
-                <p className="mt-1 truncate text-center text-[11px] text-[#707070]">{shop}</p>
-              </>
-            ) : (
-              <p className="text-[12px] text-[#707070]">{ebayIn ? item.name : "Queued"}</p>
-            )}
-          </div>
+                <p className="truncate text-[12px] text-[#707070]">
+                  {ebayIn ? item.name : "eBay store"}
+                </p>
+              </div>
+            </>
+          )}
         </ChannelShell>
 
         <ChannelShell live={amazonLive} focused={beat === 7 || beat === 14} className="col-span-2">
-          <div className="flex shrink-0 items-center justify-between bg-[#232F3E] px-3 py-2">
-            <AmazonMark className="text-[15px] text-white" />
-            <LivePill on={amazonLive} label="Listed" />
-          </div>
-          <ProductShot live={amazonLive} present={amazonIn} src={cover} gallery={shots} />
-          <div className="shrink-0 px-3 pb-3 pt-1.5">
-            <p className="truncate text-[12px] text-[#0F1111]">
-              {amazonIn ? item.title : "Amazon"}
-            </p>
-            <p className="text-[18px] font-semibold text-[#B12704]">
-              {amazonIn ? priceLabel : "—"}
-            </p>
-            {amazonLive ? (
-              <>
-                <p className="text-[11px] text-[#007600]">In Stock</p>
-                <p className="mt-1.5 grid h-8 place-items-center rounded-full bg-[#FFD814] text-[12px] font-semibold text-[#0F1111]">
-                  Add to Cart
+          {amazonLive ? (
+            <AmazonStorefront src={cover} title={item.title} price={priceLabel} />
+          ) : (
+            <>
+              <div className="flex shrink-0 items-center justify-between bg-[#232F3E] px-3 py-2">
+                <AmazonMark className="text-[15px] text-white" />
+                <LivePill on={false} label="Listed" />
+              </div>
+              <ProductShot live={false} present={amazonIn} src={cover} gallery={shots} />
+              <div className="shrink-0 px-3 py-2">
+                <p className="text-[16px] font-semibold text-[#B12704]">
+                  {amazonIn ? priceLabel : "—"}
                 </p>
-              </>
-            ) : (
-              <p className="text-[12px] text-[#707070]">{amazonIn ? item.name : "Queued"}</p>
-            )}
-          </div>
+                <p className="truncate text-[12px] text-[#707070]">
+                  {amazonIn ? item.name : "Amazon"}
+                </p>
+              </div>
+            </>
+          )}
         </ChannelShell>
 
         <ChannelShell live={facebookLive} focused={beat === 8 || beat === 15} className="col-span-2">
-          <div className="flex shrink-0 items-center justify-between border-b border-[#eee] px-3 py-2">
-            <span className="text-[13px] font-bold text-[#1877F2]">
-              facebook <span className="font-semibold text-[#65676B]">Marketplace</span>
-            </span>
-            <LivePill on={facebookLive} label="Posted" />
-          </div>
-          <ProductShot live={facebookLive} present={facebookIn} src={cover} gallery={shots} />
-          <div className="shrink-0 px-3 pb-3 pt-1.5">
-            <p className="text-[16px] font-semibold">{facebookIn ? priceLabel : "—"}</p>
-            <p className="truncate text-[12px] text-[#65676B]">
-              {facebookLive
-                ? "Listed just now · Nearby"
-                : facebookIn
-                  ? item.name
-                  : "Facebook Marketplace"}
-            </p>
-            {facebookLive ? (
-              <p className="mt-1.5 grid h-8 place-items-center rounded-md bg-[#E7F3FF] text-[12px] font-semibold text-[#1877F2]">
-                Message seller
-              </p>
-            ) : null}
-          </div>
+          {facebookLive ? (
+            <FacebookStorefront
+              src={cover}
+              title={item.title}
+              price={priceLabel}
+              seller={shop}
+            />
+          ) : (
+            <>
+              <div className="flex shrink-0 items-center justify-between border-b border-[#eee] px-3 py-2">
+                <span className="text-[13px] font-bold text-[#1877F2]">
+                  facebook <span className="font-semibold text-[#65676B]">Marketplace</span>
+                </span>
+                <LivePill on={false} label="Posted" />
+              </div>
+              <ProductShot live={false} present={facebookIn} src={cover} gallery={shots} />
+              <div className="shrink-0 px-3 py-2">
+                <p className="text-[16px] font-semibold">{facebookIn ? priceLabel : "—"}</p>
+                <p className="truncate text-[12px] text-[#707070]">
+                  {facebookIn ? item.name : "Facebook Marketplace"}
+                </p>
+              </div>
+            </>
+          )}
         </ChannelShell>
 
         <ChannelShell live={shopifyLive} focused={beat === 9 || beat === 16} className="col-span-3">
-          <div className="flex shrink-0 items-center justify-between bg-[#212326] px-3 py-2">
-            <ShopifyMark />
-            <LivePill on={shopifyLive} label="On store" />
-          </div>
-          <ProductShot live={shopifyLive} present={shopifyIn} src={cover} gallery={shots} />
-          <div className="shrink-0 px-3 pb-3 pt-1.5">
-            <p className="truncate text-[12px] font-medium text-[#191919]">
-              {shopifyIn ? item.title : "Shopify"}
-            </p>
-            <p className="text-[16px] font-semibold tabular-nums">
-              {shopifyIn ? priceLabel : "—"}
-            </p>
-            <p
-              className={cn(
-                "mt-1.5 grid h-8 place-items-center rounded-md text-[12px] font-semibold",
-                shopifyLive ? "bg-[#008060] text-white" : "bg-[#eee] text-[#bbb]",
-              )}
-            >
-              {shopifyLive ? "Buy it now" : "Add to cart"}
-            </p>
-          </div>
+          {shopifyLive ? (
+            <ShopifyStorefront src={cover} title={item.title} price={priceLabel} />
+          ) : (
+            <>
+              <div className="flex shrink-0 items-center justify-between bg-[#212326] px-3 py-2">
+                <ShopifyMark />
+                <LivePill on={false} label="On store" />
+              </div>
+              <ProductShot live={false} present={shopifyIn} src={cover} gallery={shots} />
+              <div className="shrink-0 px-3 py-2">
+                <p className="text-[16px] font-semibold tabular-nums">
+                  {shopifyIn ? priceLabel : "—"}
+                </p>
+                <p className="mt-1.5 grid h-8 place-items-center rounded-md bg-[#eee] text-[12px] font-semibold text-[#bbb]">
+                  Add to cart
+                </p>
+              </div>
+            </>
+          )}
         </ChannelShell>
 
         <ChannelShell live={webLive} focused={beat === 10 || beat === 17} className="col-span-3">
-          <div className="flex shrink-0 items-center gap-1.5 border-b border-[#eee] bg-[#f7f7f7] px-3 py-2">
-            <span className="size-1.5 rounded-full bg-[#FF5F57]" />
-            <span className="size-1.5 rounded-full bg-[#FEBC2E]" />
-            <span className="size-1.5 rounded-full bg-[#28C840]" />
-            <span className="ml-1 flex min-w-0 flex-1 items-center gap-1 rounded-full bg-white px-2 py-0.5 text-[11px] text-[#707070]">
-              <Globe className="size-3 shrink-0" />
-              <span className="truncate">yoursite.com/products</span>
-            </span>
-            <LivePill on={webLive} label="On site" />
-          </div>
-          <ProductShot live={webLive} present={webIn} src={cover} gallery={shots} />
-          <div className="shrink-0 px-3 pb-3 pt-1.5">
-            <p className="truncate text-[12px] font-medium">
-              {webIn ? item.title : "Your website"}
-            </p>
-            <p className="text-[16px] font-semibold tabular-nums">
-              {webIn ? priceLabel : "—"}
-            </p>
-            {webLive ? (
-              <p className="mt-1.5 grid h-8 place-items-center rounded-md bg-[#141414] text-[12px] font-semibold text-white">
-                Add to bag
-              </p>
-            ) : (
-              <p className="text-[12px] text-[#707070]">{webIn ? item.name : "Queued"}</p>
-            )}
-          </div>
+          {webLive ? (
+            <SiteStorefront src={cover} title={item.title} price={priceLabel} />
+          ) : (
+            <>
+              <div className="flex shrink-0 items-center gap-1.5 border-b border-[#eee] bg-[#f7f7f7] px-3 py-2">
+                <span className="size-1.5 rounded-full bg-[#FF5F57]" />
+                <span className="size-1.5 rounded-full bg-[#FEBC2E]" />
+                <span className="size-1.5 rounded-full bg-[#28C840]" />
+                <span className="ml-1 flex min-w-0 flex-1 items-center gap-1 rounded-full bg-white px-2 py-0.5 text-[11px] text-[#707070]">
+                  <Globe className="size-3 shrink-0" />
+                  <span className="truncate">yoursite.com/products</span>
+                </span>
+                <LivePill on={false} label="On site" />
+              </div>
+              <ProductShot live={false} present={webIn} src={cover} gallery={shots} />
+              <div className="shrink-0 px-3 py-2">
+                <p className="text-[16px] font-semibold tabular-nums">
+                  {webIn ? priceLabel : "—"}
+                </p>
+                <p className="truncate text-[12px] text-[#707070]">
+                  {webIn ? item.name : "Your website"}
+                </p>
+              </div>
+            </>
+          )}
         </ChannelShell>
         </div>
       </div>

@@ -21,8 +21,8 @@ const PRICE = 189;
 
 const STEPS = [
   { id: "grab", ms: 1100, x: 12, y: 86, click: true, line: "One photo.", sub: "Pick it up." },
-  { id: "drag", ms: 1700, x: 50, y: 48, click: false, line: "Drop it.", sub: "Higlou builds the listing." },
-  { id: "drop", ms: 900, x: 50, y: 48, click: true, line: "In.", sub: "Now watch it fill." },
+  { id: "drag", ms: 1700, x: 9, y: 11, click: false, line: "Drop it.", sub: "On your listing." },
+  { id: "drop", ms: 900, x: 9, y: 11, click: true, line: "In.", sub: "Now watch it fill." },
   { id: "photos", ms: 2000, x: 20, y: 8, click: false, line: "Four photos.", sub: "Front. Label. Box. Angle." },
   { id: "title", ms: 2400, x: 40, y: 8, click: false, line: "Title written.", sub: "For every store." },
   { id: "price", ms: 1200, x: 40, y: 8, click: false, line: "Priced.", sub: "$189.00" },
@@ -283,15 +283,15 @@ function DragGhost({
         left: `${x}%`,
         top: `${y}%`,
         opacity: phase === "gone" ? 0 : 1,
-        scale: phase === "drop" ? 0.28 : phase === "grab" ? 1 : 1.04,
-        rotate: phase === "drag" ? -8 : 0,
+        scale: phase === "drop" ? 0.22 : phase === "grab" ? 1 : 1.06,
+        rotate: phase === "drag" ? -7 : 0,
       }}
-      transition={{ type: "spring", stiffness: 160, damping: 20 }}
+      transition={{ type: "spring", stiffness: 150, damping: 18 }}
     >
       <div
         className={cn(
-          "relative -translate-x-1/2 -translate-y-[110%] overflow-hidden rounded-xl bg-white shadow-[0_18px_40px_-16px_rgba(0,0,0,0.45)] ring-1 ring-black/10",
-          holding ? "size-28 sm:size-32" : "size-24",
+          "relative overflow-hidden rounded-xl bg-white shadow-[0_18px_40px_-16px_rgba(0,0,0,0.45)] ring-1 ring-black/10",
+          holding ? "-translate-x-1/2 -translate-y-[110%] size-28 sm:size-32" : "-translate-x-1/2 -translate-y-1/2 size-14",
         )}
       >
         {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -593,7 +593,24 @@ export function ListingPipeline({
       >
         <div className="relative flex shrink-0 items-center gap-1">
           {dragging ? (
-            <div className="size-12 rounded-md border-2 border-dashed border-[#141414]/40 bg-[#f7f7f7] sm:size-14" />
+            shots.map((_, i) => (
+              <motion.div
+                key={`slot-${i}`}
+                initial={false}
+                animate={
+                  i === 0
+                    ? { scale: [1, 1.06, 1], borderColor: "rgba(20,20,20,0.7)" }
+                    : { scale: 1 }
+                }
+                transition={i === 0 ? { duration: 1.1, repeat: Infinity } : undefined}
+                className={cn(
+                  "size-11 rounded-md sm:size-12",
+                  i === 0
+                    ? "border-2 border-dashed border-[#141414] bg-[#f7f7f7]"
+                    : "border border-dashed border-[#d8d8d8] bg-[#fafafa]",
+                )}
+              />
+            ))
           ) : (
             shots.map((src, i) => (
               <motion.div
@@ -685,9 +702,6 @@ export function ListingPipeline({
       </div>
 
       <div className="relative min-h-0 flex-1">
-        {dragging ? (
-          <div className="pointer-events-none absolute inset-3 z-10 rounded-xl border-2 border-dashed border-[#141414]/25" />
-        ) : null}
         <div className="grid h-full min-h-0 grid-cols-6 grid-rows-2 divide-x divide-y divide-[#e5e5e5]">
         <ChannelShell live={ebayOn} focused={beat === 9} className="col-span-2">
           <div className="flex shrink-0 items-center justify-between border-b border-[#eee] px-3 py-2">

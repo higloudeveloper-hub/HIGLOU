@@ -1,9 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { motion } from "motion/react";
-import { ArrowRight } from "lucide-react";
+import { AnimatePresence, motion } from "motion/react";
+import { ArrowRight, Heart } from "lucide-react";
 import { formatRelativeTime } from "@/lib/format-relative-time";
 import {
   SALES_POLL_MS,
@@ -11,6 +11,10 @@ import {
   useEbaySales,
 } from "@/lib/studio/use-ebay-sales";
 import { cn } from "@/lib/utils";
+import {
+  EbayLivePreview,
+  EbayWordmark,
+} from "@/components/studio/ebay-live-preview";
 import type {
   InventoryLine,
   OfferMove,
@@ -19,47 +23,55 @@ import type {
 
 type Pane = "act" | "carts" | "listings" | "orders";
 
-function Photo({
-  src,
-  title,
-  className,
-}: {
-  src: string | null;
-  title: string;
-  className?: string;
-}) {
-  return (
-    <div className={cn("relative overflow-hidden bg-white", className)}>
-      {src ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={src}
-          alt=""
-          className="size-full object-contain p-6"
-        />
-      ) : (
-        <span className="grid size-full place-items-center text-[28px] font-semibold text-zinc-300">
-          {(title.trim()[0] || "?").toUpperCase()}
-        </span>
-      )}
-    </div>
-  );
+function hiRes(url: string | null | undefined) {
+  if (!url) return "";
+  return url
+    .replace(/s-l\d+/gi, "s-l500")
+    .replace(/\$_\d+/g, "$_57")
+    .replace(/^http:\/\//i, "https://");
 }
 
 export function StatsControlCenter() {
   const { snap, loading } = useEbaySales();
   const [pane, setPane] = useState<Pane | null>(null);
+  const [hero, setHero] = useState(0);
+
+  const watching = useMemo(
+    () => (snap?.inventory ?? []).filter((row) => row.watchers > 0),
+    [snap],
+  );
+  const carts = useMemo(
+    () => (snap?.offerMoves ?? []).filter((row) => row.kind === "in_cart"),
+    [snap],
+  );
+  const feed = useMemo(() => {
+    if (!snap) return [] as InventoryLine[];
+    if (pane === "act") {
+      const ids = new Set(snap.stockAlerts.map((a) => a.listingId));
+      return snap.inventory.filter((row) => ids.has(row.listingId));
+    }
+    if (pane === "carts" && carts.length > 0) {
+      const ids = new Set(carts.map((c) => c.listingId));
+      const fromInv = snap.inventory.filter((row) => ids.has(row.listingId));
+      if (fromInv.length) return fromInv;
+    }
+    if (watching.length) return watching;
+    return snap.inventory;
+  }, [snap, pane, carts, watching]);
+
+  useEffect(() => {
+    if (feed.length < 2) return;
+    const t = window.setInterval(
+      () => setHero((n) => (n + 1) % Math.min(feed.length, 6)),
+      4200,
+    );
+    return () => window.clearInterval(t);
+  }, [feed.length]);
 
   if (loading && !snap) {
     return (
-      <div className="mx-auto max-w-5xl space-y-6 pt-4">
-        <div className="h-16 w-48 animate-pulse rounded-2xl bg-zinc-100" />
-        <div className="h-44 animate-pulse rounded-[28px] bg-zinc-100" />
-        <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-          {Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} className="h-32 animate-pulse rounded-[28px] bg-zinc-100" />
-          ))}
-        </div>
+      <div className="mx-auto max-w-[1100px]">
+        <div className="h-[640px] animate-pulse rounded-xl bg-white ring-1 ring-black/10" />
       </div>
     );
   }
@@ -67,143 +79,177 @@ export function StatsControlCenter() {
 
   const shop = snap.storeName?.trim() || "eBay store";
   const alertCount = snap.inventoryLow + snap.inventoryOut;
-  const watching = snap.inventory.filter((row) => row.watchers > 0).slice(0, 9);
   const active: Pane =
     pane ??
-    (snap.inCart > 0 || Boolean(snap.cartError)
+    (snap.inCart > 0
       ? "carts"
       : alertCount > 0
         ? "act"
-        : watching.length > 0
+        : watching.length
           ? "carts"
           : "listings");
 
-  const detailTitle =
-    active === "orders"
-      ? "Orders"
-      : active === "listings"
-        ? "Live listings"
-        : active === "act"
-          ? "Stock alerts"
-          : snap.inCart > 0
-            ? "In cart"
-            : "Watching";
+  const featured = feed[hero % Math.max(feed.length, 1)];
+  const rest = feed.filter((row) => row.listingId !== featured?.listingId);
 
   return (
-    <div className="mx-auto max-w-5xl pb-16">
-      <header className="flex flex-wrap items-end justify-between gap-4 pt-2 pb-10">
-        <div>
-          <p className="text-[13px] font-medium text-zinc-500">
-            {shop}
-            <span className="mx-2 text-zinc-300">·</span>
-            Live every {SALES_POLL_MS / 1000}s
-          </p>
-          <h1 className="mt-1 font-display text-[52px] leading-none tracking-tight text-zinc-950">
-            Stats
-          </h1>
+    <div className="mx-auto max-w-[1100px] pb-16">
+      <div className="overflow-hidden rounded-xl bg-white shadow-[0_12px_32px_-18px_rgba(0,0,0,0.45)] ring-1 ring-black/10">
+        <div className="flex items-center gap-3 border-b border-[#e5e5e5] px-4 py-2.5">
+          <EbayWordmark className="text-[22px]" />
+          <div className="min-w-0 flex-1 rounded-full border border-[#ccc] bg-[#f7f7f7] px-3 py-1.5 text-[12px] text-[#707070]">
+            {shop} · live store
+          </div>
+          <span className="hidden text-[12px] font-medium text-[#191919] sm:inline">
+            Updated {formatRelativeTime(snap.syncedAt)}
+          </span>
         </div>
-        <p className="text-[13px] text-zinc-500">
-          {snap.error ? snap.error : `Updated ${formatRelativeTime(snap.syncedAt)}`}
-        </p>
-      </header>
 
-      {snap.error ? (
-        <Link
-          href="/settings#ebay-store"
-          className="mb-8 flex items-center justify-between rounded-2xl bg-amber-50 px-5 py-4 text-[15px] text-amber-950"
-        >
-          {snap.error}
-          <ArrowRight className="size-4" />
-        </Link>
-      ) : null}
+        {snap.error ? (
+          <Link
+            href="/settings#ebay-store"
+            className="flex items-center justify-between border-b border-amber-200 bg-amber-50 px-4 py-3 text-[13px] text-amber-950"
+          >
+            {snap.error}
+            <ArrowRight className="size-4" />
+          </Link>
+        ) : null}
 
-      <button
-        type="button"
-        onClick={() => setPane("orders")}
-        className={cn(
-          "mb-4 w-full rounded-[32px] bg-white px-8 py-8 text-left shadow-[0_1px_2px_rgba(0,0,0,0.04),0_12px_40px_rgba(0,0,0,0.06)] transition",
-          active === "orders" && "ring-2 ring-zinc-950/10",
+        <div className="grid grid-cols-2 divide-x divide-[#eee] border-b border-[#e5e5e5] lg:grid-cols-6">
+          <StatCell
+            active={active === "orders"}
+            onClick={() => setPane("orders")}
+            label="Sold · 30 days"
+            value={usd(snap.revenue30d)}
+            hint={`${snap.orders30d} orders`}
+          />
+          <StatCell
+            active={active === "orders"}
+            onClick={() => setPane("orders")}
+            label="Today"
+            value={`${snap.ordersToday}`}
+            hint={usd(snap.revenueToday)}
+          />
+          <StatCell
+            active={active === "listings"}
+            onClick={() => setPane("listings")}
+            label="Live listings"
+            value={String(snap.inventoryLive)}
+            hint={`${snap.inventoryUnits} units`}
+          />
+          <StatCell
+            active={active === "carts"}
+            onClick={() => setPane("carts")}
+            label="In cart"
+            value={String(snap.inCart)}
+            hint="Send an offer"
+          />
+          <StatCell
+            active={active === "carts"}
+            onClick={() => setPane("carts")}
+            label="Watching"
+            value={String(snap.watchers)}
+            hint={`${watching.length} listings`}
+          />
+          <StatCell
+            active={active === "act"}
+            onClick={() => setPane("act")}
+            label="Alerts"
+            value={String(alertCount)}
+            hint={alertCount ? "Needs a look" : "All clear"}
+            warn={alertCount > 0}
+          />
+        </div>
+
+        {active === "orders" ? (
+          <OrdersBoard rows={snap.recent} />
+        ) : (
+          <div className="grid gap-0 lg:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)]">
+            <div className="border-b border-[#e5e5e5] bg-[#f7f7f7] p-4 lg:border-r lg:border-b-0">
+              {featured ? (
+                <AnimatePresence mode="wait">
+                  <motion.div
+                    key={featured.listingId}
+                    initial={{ opacity: 0, y: 12 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -8 }}
+                    transition={{ duration: 0.35 }}
+                  >
+                    <EbayLivePreview
+                      photoSrc={hiRes(featured.pictureUrl)}
+                      title={featured.title}
+                      priceLabel={
+                        featured.price != null
+                          ? `US ${usd(featured.price, true)}`
+                          : "US —"
+                      }
+                      storeName={shop}
+                      live
+                    />
+                    <p className="mt-3 text-center text-[12px] text-[#707070]">
+                      {featured.watchers
+                        ? `${featured.watchers} people watching this right now`
+                        : "Live on eBay"}
+                      {featured.soldQty ? ` · ${featured.soldQty} sold` : ""}
+                      <span className="mx-1">·</span>
+                      refreshes every {SALES_POLL_MS / 1000}s
+                    </p>
+                  </motion.div>
+                </AnimatePresence>
+              ) : (
+                <p className="grid min-h-[420px] place-items-center text-[14px] text-[#707070]">
+                  No live listings yet.
+                </p>
+              )}
+            </div>
+
+            <div className="max-h-[720px] overflow-y-auto bg-white">
+              {snap.cartError ? (
+                <Link
+                  href="/settings#ebay-store"
+                  className="flex items-center justify-between border-b border-amber-200 bg-amber-50 px-4 py-3 text-[13px] text-amber-950"
+                >
+                  {snap.cartError}
+                  <ArrowRight className="size-4" />
+                </Link>
+              ) : null}
+              <p className="border-b border-[#eee] px-4 py-2.5 text-[13px] font-semibold text-[#191919]">
+                {active === "act"
+                  ? "Stock alerts"
+                  : snap.inCart > 0 && active === "carts"
+                    ? "In cart — send an offer"
+                    : "Watching now · like eBay search"}
+              </p>
+              {rest.length === 0 && !featured ? (
+                <p className="px-4 py-10 text-[14px] text-[#707070]">
+                  Nothing in this view yet.
+                </p>
+              ) : (
+                <ul>
+                  {(featured ? [featured, ...rest] : rest)
+                    .slice(0, 12)
+                    .map((row, i) => (
+                      <EbayResultRow
+                        key={row.listingId || row.sku}
+                        row={row}
+                        offer={carts.find((c) => c.listingId === row.listingId)}
+                        alert={snap.stockAlerts.find(
+                          (a) => a.listingId === row.listingId,
+                        )}
+                        delay={i * 0.04}
+                      />
+                    ))}
+                </ul>
+              )}
+            </div>
+          </div>
         )}
-      >
-        <p className="text-[13px] font-medium text-zinc-500">Sales · 30 days</p>
-        <motion.p
-          key={snap.revenue30d}
-          initial={{ opacity: 0.7, y: 6 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="mt-3 font-display text-[64px] leading-none tracking-tight text-zinc-950"
-        >
-          {usd(snap.revenue30d)}
-        </motion.p>
-        <p className="mt-4 text-[15px] text-zinc-500">
-          {snap.orders30d} orders · {snap.units30d} sold · avg{" "}
-          {usd(snap.avgOrder, true)}
-        </p>
-      </button>
-
-      <div className="mb-10 grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <Metric
-          active={active === "orders"}
-          onClick={() => setPane("orders")}
-          label="Today"
-          value={`${snap.ordersToday}`}
-          hint={`${usd(snap.revenueToday)} today`}
-        />
-        <Metric
-          active={active === "listings"}
-          onClick={() => setPane("listings")}
-          label="Live"
-          value={String(snap.inventoryLive)}
-          hint={`${snap.inventoryUnits} units · ${usd(snap.inventoryValue)}`}
-        />
-        <Metric
-          active={active === "carts"}
-          onClick={() => setPane("carts")}
-          label="In cart"
-          value={String(snap.inCart)}
-          hint={`${snap.watchers} watching`}
-        />
-        <Metric
-          active={active === "act"}
-          onClick={() => setPane("act")}
-          label="Alerts"
-          value={String(alertCount)}
-          hint={alertCount ? "Needs a look" : "All clear"}
-          warn={alertCount > 0}
-        />
       </div>
-
-      <div className="mb-5 flex items-end justify-between">
-        <h2 className="text-[22px] font-semibold tracking-tight text-zinc-950">
-          {detailTitle}
-        </h2>
-        <p className="text-[13px] text-zinc-500">Tap a number above</p>
-      </div>
-
-      {active === "act" ? (
-        <AlertPane alerts={snap.stockAlerts} />
-      ) : active === "carts" ? (
-        <OfferPane
-          moves={snap.offerMoves}
-          cartError={snap.cartError}
-          watching={watching}
-        />
-      ) : active === "listings" ? (
-        <InventoryPane rows={snap.inventory} />
-      ) : (
-        <OrdersPane
-          rows={snap.recent}
-          empty={
-            snap.recent.length === 0
-              ? "No eBay orders in the last 30 days."
-              : null
-          }
-        />
-      )}
     </div>
   );
 }
 
-function Metric({
+function StatCell({
   label,
   value,
   hint,
@@ -223,164 +269,103 @@ function Metric({
       type="button"
       onClick={onClick}
       className={cn(
-        "rounded-[28px] bg-white px-6 py-6 text-left shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.05)] transition",
-        active && "ring-2 ring-zinc-950/10",
+        "px-3 py-3 text-left transition",
+        active ? "bg-[#eef4ff]" : "hover:bg-[#f7f7f7]",
       )}
     >
-      <p className="text-[13px] font-medium text-zinc-500">{label}</p>
+      <p className="text-[11px] font-medium text-[#707070]">{label}</p>
       <p
         className={cn(
-          "mt-2 text-[36px] font-semibold tracking-tight",
-          warn ? "text-amber-600" : "text-zinc-950",
+          "mt-0.5 text-[22px] font-semibold tabular-nums tracking-tight",
+          warn ? "text-[#c41e3a]" : "text-[#191919]",
         )}
       >
         {value}
       </p>
-      <p className="mt-2 text-[13px] text-zinc-500">{hint}</p>
+      <p className="text-[11px] text-[#707070]">{hint}</p>
     </button>
   );
 }
 
-function ProductGrid({
-  items,
+function EbayResultRow({
+  row,
+  offer,
+  alert,
+  delay,
 }: {
-  items: Array<{
-    key: string;
-    href: string;
-    title: string;
-    pictureUrl: string | null;
-    meta: string;
-  }>;
+  row: InventoryLine;
+  offer?: OfferMove;
+  alert?: StockAlert;
+  delay: number;
 }) {
+  const href = row.listingId
+    ? `https://www.ebay.com/itm/${row.listingId}`
+    : "#";
   return (
-    <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
-      {items.map((item) => (
-        <a
-          key={item.key}
-          href={item.href}
-          target="_blank"
-          rel="noreferrer"
-          className="group overflow-hidden rounded-[28px] bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04),0_10px_28px_rgba(0,0,0,0.05)] transition hover:-translate-y-0.5"
-        >
-          <Photo
-            src={item.pictureUrl}
-            title={item.title}
-            className="aspect-square w-full"
-          />
-          <div className="px-5 pb-5 pt-1">
-            <p className="line-clamp-2 text-[15px] font-medium leading-snug text-zinc-950">
-              {item.title}
+    <motion.li
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay, duration: 0.3 }}
+    >
+      <a
+        href={href}
+        target="_blank"
+        rel="noreferrer"
+        className="flex gap-3 border-b border-[#eee] px-4 py-3 hover:bg-[#f7f7f7]"
+      >
+        <div className="relative size-[108px] shrink-0 overflow-hidden rounded-md bg-white ring-1 ring-[#e5e5e5]">
+          {hiRes(row.pictureUrl) ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={hiRes(row.pictureUrl)}
+              alt=""
+              className="size-full object-contain p-1.5"
+            />
+          ) : (
+            <span className="grid size-full place-items-center text-[18px] font-semibold text-[#bbb]">
+              {(row.title[0] || "?").toUpperCase()}
+            </span>
+          )}
+          <Heart className="absolute top-1.5 right-1.5 size-3.5 text-[#191919]" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="line-clamp-2 text-[14px] leading-snug text-[#191919] group-hover:text-[#3665F3]">
+            {row.title}
+          </p>
+          {row.price != null ? (
+            <p className="mt-1 text-[20px] font-semibold tabular-nums text-[#191919]">
+              <span className="text-[12px] font-semibold">US </span>
+              {usd(row.price, true)}
             </p>
-            <p className="mt-1.5 text-[13px] text-zinc-500">{item.meta}</p>
-          </div>
-        </a>
-      ))}
-    </div>
+          ) : null}
+          <p className="mt-0.5 text-[12px] text-[#707070]">
+            {row.watchers ? `${row.watchers} watching` : "Live"}
+            {row.soldQty ? ` · ${row.soldQty} sold` : ""}
+            {row.qty != null ? ` · ${row.qty} available` : ""}
+          </p>
+          {offer?.suggestedPrice != null ? (
+            <p className="mt-1 text-[12px] font-semibold text-[#3665F3]">
+              Offer you can send: {usd(offer.suggestedPrice, true)} (
+              {offer.suggestedOffPct}% off)
+            </p>
+          ) : (
+            <p className="mt-1 text-[12px] font-bold text-[#3665F3]">
+              Buy It Now
+            </p>
+          )}
+          {alert ? (
+            <p className="mt-1 text-[12px] font-medium text-[#c41e3a]">
+              {alert.why} {alert.fix}
+            </p>
+          ) : null}
+        </div>
+      </a>
+    </motion.li>
   );
 }
 
-function EmptyNote({ children }: { children: string }) {
-  return (
-    <div className="rounded-[28px] bg-white px-8 py-16 text-center text-[15px] text-zinc-500 shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
-      {children}
-    </div>
-  );
-}
-
-function AlertPane({ alerts }: { alerts: StockAlert[] }) {
-  if (alerts.length === 0) {
-    return (
-      <EmptyNote>
-        No stock problems. Qty 1 on a one-of-one listing is normal.
-      </EmptyNote>
-    );
-  }
-  return (
-    <ProductGrid
-      items={alerts.map((row) => ({
-        key: `${row.kind}-${row.listingId}`,
-        href: row.href,
-        title: row.title,
-        pictureUrl: row.pictureUrl,
-        meta: `${row.why} ${row.fix}`,
-      }))}
-    />
-  );
-}
-
-function OfferPane({
-  moves,
-  cartError,
-  watching,
-}: {
-  moves: OfferMove[];
-  cartError?: string;
-  watching: InventoryLine[];
-}) {
-  const carts = moves.filter((row) => row.kind === "in_cart");
-  const items =
-    carts.length > 0
-      ? carts.map((row) => ({
-          key: `cart-${row.listingId}`,
-          href: row.href,
-          title: row.title,
-          pictureUrl: row.pictureUrl,
-          meta:
-            row.suggestedPrice != null
-              ? `Offer ${usd(row.suggestedPrice, true)} · ${row.suggestedOffPct}% off`
-              : row.why,
-        }))
-      : watching.map((row) => ({
-          key: `watch-${row.listingId}`,
-          href: `https://www.ebay.com/itm/${row.listingId}`,
-          title: row.title,
-          pictureUrl: row.pictureUrl,
-          meta: `${row.watchers} watching${row.price != null ? ` · ${usd(row.price, true)}` : ""}`,
-        }));
-
-  return (
-    <div className="space-y-4">
-      {cartError ? (
-        <Link
-          href="/settings#ebay-store"
-          className="flex items-center justify-between rounded-2xl bg-amber-50 px-5 py-4 text-[15px] text-amber-950"
-        >
-          {cartError}
-          <ArrowRight className="size-4" />
-        </Link>
-      ) : null}
-      {items.length === 0 ? (
-        <EmptyNote>
-          No one has these in a cart right now. Watching will show here as soon
-          as buyers touch a listing.
-        </EmptyNote>
-      ) : (
-        <ProductGrid items={items} />
-      )}
-    </div>
-  );
-}
-
-function InventoryPane({ rows }: { rows: InventoryLine[] }) {
-  if (rows.length === 0) {
-    return <EmptyNote>No active eBay listings found yet.</EmptyNote>;
-  }
-  return (
-    <ProductGrid
-      items={rows.map((row) => ({
-        key: `${row.sku}-${row.listingId}`,
-        href: row.listingId ? `https://www.ebay.com/itm/${row.listingId}` : "#",
-        title: row.title,
-        pictureUrl: row.pictureUrl,
-        meta: `${row.qty} in stock${row.price != null ? ` · ${usd(row.price, true)}` : ""}${row.watchers ? ` · ${row.watchers} watching` : ""}`,
-      }))}
-    />
-  );
-}
-
-function OrdersPane({
+function OrdersBoard({
   rows,
-  empty,
 }: {
   rows: Array<{
     orderId: string;
@@ -392,30 +377,35 @@ function OrdersPane({
     buyer: string;
     amount: number;
   }>;
-  empty: string | null;
 }) {
-  if (empty) return <EmptyNote>{empty}</EmptyNote>;
+  if (rows.length === 0) {
+    return (
+      <p className="px-6 py-16 text-center text-[14px] text-[#707070]">
+        No eBay orders in the last 30 days.
+      </p>
+    );
+  }
   return (
-    <div className="overflow-hidden rounded-[28px] bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04),0_10px_28px_rgba(0,0,0,0.05)]">
+    <ul>
       {rows.map((row) => (
-        <div
+        <li
           key={`${row.orderId}-${row.listingId}-${row.sku}`}
-          className="flex items-center justify-between gap-4 border-b border-zinc-100 px-6 py-4 last:border-b-0"
+          className="flex items-center justify-between gap-4 border-b border-[#eee] px-5 py-4"
         >
           <div className="min-w-0">
-            <p className="truncate text-[15px] font-medium text-zinc-950">
+            <p className="truncate text-[14px] font-medium text-[#191919]">
               {row.title}
             </p>
-            <p className="mt-0.5 text-[13px] text-zinc-500">
+            <p className="mt-0.5 text-[12px] text-[#707070]">
               {row.qty} sold · {formatRelativeTime(row.createdAt)}
               {row.buyer ? ` · ${row.buyer}` : ""}
             </p>
           </div>
-          <p className="shrink-0 text-[17px] font-semibold tabular-nums text-zinc-950">
+          <p className="shrink-0 text-[18px] font-semibold tabular-nums text-[#191919]">
             {usd(row.amount, true)}
           </p>
-        </div>
+        </li>
       ))}
-    </div>
+    </ul>
   );
 }

@@ -6,7 +6,7 @@ import { Heart, Search, ShoppingCart, Star } from "lucide-react";
 import { displayNameFromEbayUsername } from "@/lib/ebay/store-display-name";
 import { cn } from "@/lib/utils";
 
-function EbayWordmark({ className }: { className?: string }) {
+export function EbayWordmark({ className }: { className?: string }) {
   return (
     <span
       className={cn("select-none font-bold tracking-tight", className)}

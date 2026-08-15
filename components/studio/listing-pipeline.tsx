@@ -23,10 +23,10 @@ const STEPS = [
   { id: "grab", ms: 1100, x: 12, y: 86, click: true, line: "One photo.", sub: "Pick it up." },
   { id: "drag", ms: 1800, x: 50, y: 48, click: false, line: "Drop it.", sub: "Higlou does the rest." },
   { id: "drop", ms: 1000, x: 50, y: 48, click: true, line: "In.", sub: "That’s the hard part." },
-  { id: "write", ms: 2600, x: 38, y: 8, click: false, line: "Written for you.", sub: "Title. Price. Listing." },
+  { id: "write", ms: 2800, x: 38, y: 8, click: false, line: "Full listing.", sub: "4 photos. Title. Price." },
   { id: "aim", ms: 1200, x: 91, y: 8, click: false, line: "Only one click.", sub: "Publish to every store." },
   { id: "publish", ms: 1600, x: 91, y: 8, click: true, line: "Only one click.", sub: "Watch it go live." },
-  { id: "ebay", ms: 1100, x: 16, y: 38, click: true, line: "Live on eBay.", sub: "1 of 5 stores" },
+  { id: "ebay", ms: 1300, x: 16, y: 38, click: true, line: "Live on eBay.", sub: "Complete listing. 4 photos." },
   { id: "amazon", ms: 1000, x: 50, y: 38, click: true, line: "Now Amazon.", sub: "2 of 5 stores" },
   { id: "facebook", ms: 1000, x: 84, y: 38, click: true, line: "Now Facebook.", sub: "3 of 5 stores" },
   { id: "shopify", ms: 1000, x: 24, y: 70, click: true, line: "Now Shopify.", sub: "4 of 5 stores" },
@@ -349,25 +349,49 @@ function ProductShot({
   live,
   present,
   src,
+  gallery,
 }: {
   live: boolean;
   present?: boolean;
   src: string;
+  gallery?: string[];
 }) {
+  const thumbs = live && gallery && gallery.length > 1 ? gallery : null;
   return (
-    <div className="relative min-h-0 flex-1 bg-white">
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <motion.img
-        src={src}
-        alt=""
-        initial={false}
-        animate={{
-          opacity: live ? 1 : present ? 0.38 : 0,
-          scale: live || present ? 1 : 0.97,
-        }}
-        transition={{ duration: 0.4 }}
-        className="absolute inset-0 size-full object-contain p-3"
-      />
+    <div className="relative flex min-h-0 flex-1 flex-col bg-white">
+      <div className="relative min-h-0 flex-1">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <motion.img
+          src={src}
+          alt=""
+          initial={false}
+          animate={{
+            opacity: live ? 1 : present ? 0.38 : 0,
+            scale: live || present ? 1 : 0.97,
+          }}
+          transition={{ duration: 0.4 }}
+          className="absolute inset-0 size-full object-contain p-2"
+        />
+      </div>
+      {thumbs ? (
+        <div className="flex shrink-0 gap-1 px-2 pb-2">
+          {thumbs.map((shot, i) => (
+            <motion.div
+              key={shot}
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: i * 0.07, duration: 0.28 }}
+              className={cn(
+                "relative h-8 min-w-0 flex-1 overflow-hidden rounded-sm bg-[#f7f7f7]",
+                i === 0 ? "ring-1 ring-[#141414]" : "ring-1 ring-[#e5e5e5]",
+              )}
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={shot} alt="" className="absolute inset-0 size-full object-contain p-0.5" />
+            </motion.div>
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -461,6 +485,7 @@ export function ListingPipeline({
 }) {
   const reduce = usePrefersReducedMotion();
   const [beat, setBeat] = useState(0);
+  const [filled, setFilled] = useState(reduce ? 4 : 0);
   const shop = useConnectedEbayStoreName(storeName);
   const typing = useTyped(SAMPLE_TITLE, beat >= 3, reduce);
   const price = useCountUp(PRICE, beat >= 3, reduce);
@@ -504,6 +529,29 @@ export function ListingPipeline({
     return () => window.clearTimeout(id);
   }, [reduce]);
 
+  useEffect(() => {
+    if (reduce) {
+      setFilled(shots.length);
+      return;
+    }
+    if (!photoIn) {
+      setFilled(0);
+      return;
+    }
+    if (!draftOn) {
+      setFilled(1);
+      return;
+    }
+    setFilled(1);
+    let n = 1;
+    const t = window.setInterval(() => {
+      n += 1;
+      setFilled(Math.min(shots.length, n));
+      if (n >= shots.length) window.clearInterval(t);
+    }, 340);
+    return () => window.clearInterval(t);
+  }, [photoIn, draftOn, reduce, shots.length]);
+
   return (
     <section
       className={cn(
@@ -530,25 +578,35 @@ export function ListingPipeline({
       ) : null}
 
       <div className="flex shrink-0 items-center gap-3 border-b border-[#e5e5e5] bg-white px-3 py-2.5 sm:px-4">
-        <div
-          className={cn(
-            "relative size-12 shrink-0 overflow-hidden rounded-md bg-[#f7f7f7] sm:size-14",
-            dragging && "border-2 border-dashed border-[#141414]/40",
+        <div className="relative flex shrink-0 items-center gap-1">
+          {dragging ? (
+            <div className="size-12 rounded-md border-2 border-dashed border-[#141414]/40 bg-[#f7f7f7] sm:size-14" />
+          ) : (
+            shots.map((src, i) => (
+              <motion.div
+                key={src}
+                initial={false}
+                animate={{
+                  opacity: i < filled ? 1 : photoIn ? 0.22 : 0,
+                  y: i < filled ? 0 : 6,
+                  scale: i < filled ? 1 : 0.94,
+                }}
+                transition={{ type: "spring", stiffness: 320, damping: 24 }}
+                className="relative size-11 overflow-hidden rounded-md bg-[#f7f7f7] sm:size-12"
+              >
+                {i < filled ? (
+                  <>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={src}
+                      alt=""
+                      className="absolute inset-0 size-full object-contain p-0.5"
+                    />
+                  </>
+                ) : null}
+              </motion.div>
+            ))
           )}
-        >
-          <AnimatePresence>
-            {photoIn ? (
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <motion.img
-                key="in"
-                src={cover}
-                alt=""
-                initial={{ opacity: 0, scale: 0.7, y: 12 }}
-                animate={{ opacity: 1, scale: 1, y: 0 }}
-                className="absolute inset-0 size-full object-contain p-0.5"
-              />
-            ) : null}
-          </AnimatePresence>
         </div>
         <div className="min-w-0 flex-1">
           <p className="truncate text-[13px] font-semibold tracking-tight text-[#191919] sm:text-[15px]">
@@ -565,7 +623,7 @@ export function ListingPipeline({
             ) : (
               "One photo. Then one click."
             )}
-            {draftOn && beat < 5 ? " · writing…" : null}
+            {draftOn && beat < 5 ? ` · ${filled} photos · writing…` : null}
             {clickOn ? " · eBay · Amazon · Facebook · Shopify · site" : null}
           </p>
         </div>
@@ -602,7 +660,7 @@ export function ListingPipeline({
             <EbayWordmark className="text-[16px]" />
             <LivePill on={ebayOn} label="Live" />
           </div>
-          <ProductShot live={ebayOn} present={photoIn} src={cover} />
+          <ProductShot live={ebayOn} present={photoIn} src={cover} gallery={shots} />
           <div className="shrink-0 px-3 py-2">
             <p className="text-[16px] font-semibold tabular-nums">
               {ebayOn ? "$189.00" : "—"}
@@ -618,7 +676,7 @@ export function ListingPipeline({
             <AmazonMark className="text-[15px] text-white" />
             <LivePill on={amazonOn} label="Listed" />
           </div>
-          <ProductShot live={amazonOn} present={photoIn} src={cover} />
+          <ProductShot live={amazonOn} present={photoIn} src={cover} gallery={shots} />
           <div className="shrink-0 px-3 py-2">
             <p className="text-[16px] font-semibold text-[#B12704]">
               {amazonOn ? "$189.00" : "—"}
@@ -634,7 +692,7 @@ export function ListingPipeline({
             </span>
             <LivePill on={facebookOn} label="Posted" />
           </div>
-          <ProductShot live={facebookOn} present={photoIn} src={cover} />
+          <ProductShot live={facebookOn} present={photoIn} src={cover} gallery={shots} />
           <div className="shrink-0 px-3 py-2">
             <p className="text-[16px] font-semibold">{facebookOn ? "$189" : "—"}</p>
             <p className="truncate text-[12px] text-[#707070]">
@@ -648,7 +706,7 @@ export function ListingPipeline({
             <ShopifyMark />
             <LivePill on={shopifyOn} label="On store" />
           </div>
-          <ProductShot live={shopifyOn} present={photoIn} src={cover} />
+          <ProductShot live={shopifyOn} present={photoIn} src={cover} gallery={shots} />
           <div className="shrink-0 px-3 py-2">
             <p className="text-[16px] font-semibold tabular-nums">
               {shopifyOn ? "$189.00" : "—"}
@@ -675,7 +733,7 @@ export function ListingPipeline({
             </span>
             <LivePill on={webOn} label="On site" />
           </div>
-          <ProductShot live={webOn} present={photoIn} src={cover} />
+          <ProductShot live={webOn} present={photoIn} src={cover} gallery={shots} />
           <div className="shrink-0 px-3 py-2">
             <p className="text-[16px] font-semibold tabular-nums">
               {webOn ? "$189.00" : "—"}

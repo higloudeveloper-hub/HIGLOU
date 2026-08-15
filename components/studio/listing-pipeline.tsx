@@ -72,12 +72,12 @@ const STEPS = [
   { id: "fillShopify", ms: 580, x: 24, y: 70, click: false, label: "Shopify" },
   { id: "fillWeb", ms: 640, x: 76, y: 70, click: false, label: "Your site" },
   { id: "ready", ms: 560, x: 91, y: 8, click: false, label: "Publish" },
-  { id: "publish", ms: 760, x: 91, y: 8, click: true, label: "Publishing" },
-  { id: "ebayLive", ms: 580, x: 16, y: 38, click: false, label: "Live on eBay" },
-  { id: "amazonLive", ms: 540, x: 50, y: 38, click: false, label: "Live on Amazon" },
-  { id: "facebookLive", ms: 540, x: 84, y: 38, click: false, label: "Live on Facebook" },
-  { id: "shopifyLive", ms: 540, x: 24, y: 70, click: false, label: "Live on Shopify" },
-  { id: "webLive", ms: 640, x: 76, y: 70, click: false, label: "Live on your site" },
+  { id: "publish", ms: 920, x: 91, y: 8, click: true, label: "Publishing" },
+  { id: "ebayLive", ms: 720, x: 16, y: 38, click: false, label: "Live on eBay" },
+  { id: "amazonLive", ms: 680, x: 50, y: 38, click: false, label: "Live on Amazon" },
+  { id: "facebookLive", ms: 680, x: 84, y: 38, click: false, label: "Live on Facebook" },
+  { id: "shopifyLive", ms: 680, x: 24, y: 70, click: false, label: "Live on Shopify" },
+  { id: "webLive", ms: 760, x: 76, y: 70, click: false, label: "Live on your site" },
   { id: "sales", ms: 1400, x: 88, y: 93, click: false, label: "Revenue" },
   { id: "hold", ms: 800, x: 88, y: 93, click: false, label: "Next product" },
 ] as const;
@@ -102,6 +102,22 @@ const FILL_FLY: Partial<Record<StepId, { x: number; y: number }>> = {
   fillShopify: { x: 24, y: 70 },
   fillWeb: { x: 76, y: 70 },
 };
+
+const SEND_FLY: Partial<Record<StepId, { x: number; y: number }>> = {
+  ebayLive: { x: 16, y: 38 },
+  amazonLive: { x: 50, y: 38 },
+  facebookLive: { x: 84, y: 38 },
+  shopifyLive: { x: 24, y: 70 },
+  webLive: { x: 76, y: 70 },
+};
+
+const DISPATCH_STORES = [
+  { id: "ebayLive" as StepId, name: "eBay" },
+  { id: "amazonLive" as StepId, name: "Amazon" },
+  { id: "facebookLive" as StepId, name: "Facebook" },
+  { id: "shopifyLive" as StepId, name: "Shopify" },
+  { id: "webLive" as StepId, name: "Your site" },
+];
 
 const SALE_TICKET = [
   "eBay",
@@ -426,17 +442,17 @@ function storyCaption(
     case "ready":
       return { headline: "All five stores are ready.", sub: "One publish sends them live." };
     case "publish":
-      return { headline: "Publishing.", sub: "One click. Every store at once." };
+      return { headline: "Higlou grabs the listing.", sub: "One packet. Sending it to five stores." };
     case "ebayLive":
-      return { headline: "Live on eBay.", sub: "Shoppers can buy it now." };
+      return { headline: "Sending to eBay.", sub: "1 of 5 — the listing is on its way." };
     case "amazonLive":
-      return { headline: "Live on Amazon.", sub: "Same listing. New storefront." };
+      return { headline: "Sending to Amazon.", sub: "2 of 5 — same listing, next store." };
     case "facebookLive":
-      return { headline: "Live on Facebook.", sub: "Marketplace is selling it too." };
+      return { headline: "Sending to Facebook.", sub: "3 of 5 — Marketplace next." };
     case "shopifyLive":
-      return { headline: "Live on Shopify.", sub: "Your store is open." };
+      return { headline: "Sending to Shopify.", sub: "4 of 5 — your store is next." };
     case "webLive":
-      return { headline: "Live on your site.", sub: "Five stores. One product. Live." };
+      return { headline: "Sending to your site.", sub: "5 of 5 — live on every store." };
     case "sales":
       return { headline: "Sales hit the wallet.", sub: "Watch the money come in, in real time." };
     case "hold":
@@ -538,21 +554,27 @@ function FlyClone({
   toX,
   toY,
   hopKey,
+  fromX = 9,
+  fromY = 11,
+  size = 48,
 }: {
   src: string;
   toX: number;
   toY: number;
   hopKey: string;
+  fromX?: number;
+  fromY?: number;
+  size?: number;
 }) {
   return (
     <motion.div
       key={hopKey}
       className="pointer-events-none absolute z-20 overflow-hidden rounded-md bg-white shadow-[0_24px_48px_-18px_rgba(0,0,0,0.42)] ring-1 ring-black/10"
       initial={{
-        left: "9%",
-        top: "11%",
-        width: 48,
-        height: 48,
+        left: `${fromX}%`,
+        top: `${fromY}%`,
+        width: size,
+        height: size,
         opacity: 1,
         x: "-50%",
         y: "-50%",
@@ -566,11 +588,61 @@ function FlyClone({
         opacity: 0,
         rotate: 0,
       }}
-      transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
+      transition={{ duration: 0.42, ease: [0.16, 1, 0.3, 1] }}
     >
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img src={src} alt="" className="size-full object-contain p-0.5" />
     </motion.div>
+  );
+}
+
+function DispatchRail({
+  currentId,
+  packing,
+}: {
+  currentId: string;
+  packing: boolean;
+}) {
+  const idx = DISPATCH_STORES.findIndex((s) => s.id === currentId);
+  const sent = packing ? 0 : idx >= 0 ? idx + 1 : DISPATCH_STORES.length;
+  const pct = packing ? 8 : (sent / DISPATCH_STORES.length) * 100;
+
+  return (
+    <div className="shrink-0 border-b border-[#e5e5e5] bg-white px-4 py-2.5 sm:px-5">
+      <div className="mb-2 flex items-baseline justify-between gap-3">
+        <p className="text-[12px] text-[#707070]">
+          {packing ? "Packing the listing" : `Sending ${sent} of 5`}
+        </p>
+        <p className="text-[12px] tabular-nums text-[#141414]">{Math.round(pct)}%</p>
+      </div>
+      <div className="mb-2.5 h-[2px] overflow-hidden bg-[#eee]">
+        <motion.div
+          className="h-full bg-[#141414]"
+          initial={false}
+          animate={{ width: `${pct}%` }}
+          transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
+        />
+      </div>
+      <div className="grid grid-cols-5 gap-1">
+        {DISPATCH_STORES.map((store, i) => {
+          const done = !packing && i < sent;
+          const current = !packing && i === sent - 1;
+          return (
+            <div
+              key={store.id}
+              className={cn(
+                "flex h-8 items-center justify-center gap-1 text-[11px] font-medium",
+                done || current ? "text-[#141414]" : "text-[#b0b0b0]",
+                current && "bg-[#f3f3f3]",
+              )}
+            >
+              {done && !current ? <Check className="size-3" strokeWidth={2.4} /> : null}
+              <span className="truncate">{store.name}</span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 
@@ -1076,6 +1148,28 @@ export function ListingPipeline({
               hopKey={`${sku}-${step.id}`}
             />
           ) : null}
+          {!dropMode && is("publish") ? (
+            <FlyClone
+              src={cover}
+              fromX={18}
+              fromY={8}
+              toX={91}
+              toY={8}
+              size={72}
+              hopKey={`${sku}-pack`}
+            />
+          ) : null}
+          {!dropMode && SEND_FLY[step.id] ? (
+            <FlyClone
+              src={cover}
+              fromX={91}
+              fromY={8}
+              toX={SEND_FLY[step.id]!.x}
+              toY={SEND_FLY[step.id]!.y}
+              size={56}
+              hopKey={`${sku}-send-${step.id}`}
+            />
+          ) : null}
           {is("drag") && !dropMode ? (
             <div className="pointer-events-none absolute inset-0 z-10 bg-white/45" />
           ) : null}
@@ -1096,7 +1190,11 @@ export function ListingPipeline({
           readyOn && !liveOn ? "border-[#141414]" : "border-[#e5e5e5]",
         )}
       >
-        <div className="relative flex shrink-0 items-center gap-1">
+        <motion.div
+          className="relative flex shrink-0 items-center gap-1"
+          animate={publishing ? { x: 28, scale: 0.86 } : { x: 0, scale: 1 }}
+          transition={{ type: "spring", stiffness: 260, damping: 22 }}
+        >
           {dragging || fileDrag ? (
             shots.map((_, i) => (
               <div
@@ -1151,7 +1249,7 @@ export function ListingPipeline({
               </motion.div>
             ))
           )}
-        </div>
+        </motion.div>
         <div className="min-w-0 flex-1">
           <p className="truncate text-[13px] font-semibold tracking-tight text-[#191919] sm:text-[15px]">
             {dropMode
@@ -1220,7 +1318,13 @@ export function ListingPipeline({
               publishing || liveOn ? "text-white" : readyOn ? "text-[#141414]" : "text-[#9b9b9b]",
             )}
           >
-            {publishing ? "Publishing" : liveOn ? "Live" : "Publish"}
+            {publishing
+              ? "Sending"
+              : liveOn && !allLive
+                ? `${DISPATCH_STORES.findIndex((s) => s.id === step.id) + 1}/5`
+                : liveOn
+                  ? "Live"
+                  : "Publish"}
           </span>
         </motion.div>
         ) : null}
@@ -1232,6 +1336,10 @@ export function ListingPipeline({
         stepKey={`${sku}-${step.id}-${is("photos") ? filled : beat}`}
         compact={compact}
       />
+
+      {!dropMode && at("publish") && !at("sales") ? (
+        <DispatchRail currentId={step.id} packing={publishing} />
+      ) : null}
 
       {dropMode ? (
         <div className="relative flex min-h-0 flex-1 flex-col bg-[#f7f7f7]">

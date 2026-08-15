@@ -20,22 +20,22 @@ const SAMPLE_PHOTOS = [
 const PRICE = 189;
 
 const STEPS = [
-  { id: "grab", ms: 1000, x: 12, y: 86, click: true, line: "One photo.", sub: "That’s the work." },
-  { id: "drag", ms: 1500, x: 9, y: 11, click: false, line: "Drop it.", sub: "Higlou does the rest." },
-  { id: "drop", ms: 800, x: 9, y: 11, click: true, line: "In.", sub: "Listing starts itself." },
-  { id: "photos", ms: 1700, x: 20, y: 8, click: false, line: "Four photos.", sub: "No extra work." },
-  { id: "title", ms: 2000, x: 40, y: 8, click: false, line: "Written for you.", sub: "Title. Ready." },
-  { id: "price", ms: 900, x: 40, y: 8, click: false, line: "Priced.", sub: "$189.00" },
-  { id: "ready", ms: 1200, x: 40, y: 8, click: false, line: "Ready.", sub: "One button left." },
-  { id: "aim", ms: 900, x: 91, y: 8, click: false, line: "One click.", sub: "Publish." },
-  { id: "publish", ms: 1300, x: 91, y: 8, click: true, line: "Push.", sub: "Everything goes live." },
-  { id: "ebay", ms: 420, x: 16, y: 38, click: false, line: "Push.", sub: "eBay" },
-  { id: "amazon", ms: 420, x: 50, y: 38, click: false, line: "Push.", sub: "Amazon" },
-  { id: "facebook", ms: 420, x: 84, y: 38, click: false, line: "Push.", sub: "Facebook" },
-  { id: "shopify", ms: 420, x: 24, y: 70, click: false, line: "Push.", sub: "Shopify" },
-  { id: "web", ms: 500, x: 76, y: 70, click: false, line: "Push.", sub: "Your site" },
-  { id: "sales", ms: 2800, x: 58, y: 93, click: false, line: "Sales up.", sub: "One click. Easy money." },
-  { id: "hold", ms: 4000, x: 58, y: 93, click: false, line: "One click. Sales up.", sub: "Try it." },
+  { id: "grab", ms: 1000, x: 12, y: 86, click: true, label: "One photo" },
+  { id: "drag", ms: 1500, x: 9, y: 11, click: false, label: "Drop here" },
+  { id: "drop", ms: 800, x: 9, y: 11, click: true, label: "In" },
+  { id: "photos", ms: 1700, x: 20, y: 8, click: false, label: "Four photos" },
+  { id: "title", ms: 2000, x: 40, y: 8, click: false, label: "Title written" },
+  { id: "price", ms: 900, x: 40, y: 8, click: false, label: "$189.00" },
+  { id: "ready", ms: 1200, x: 40, y: 8, click: false, label: "Ready" },
+  { id: "aim", ms: 900, x: 91, y: 8, click: false, label: "One click" },
+  { id: "publish", ms: 1300, x: 91, y: 8, click: true, label: "Push" },
+  { id: "ebay", ms: 750, x: 16, y: 38, click: true, label: "Live on eBay" },
+  { id: "amazon", ms: 700, x: 50, y: 38, click: true, label: "Amazon" },
+  { id: "facebook", ms: 700, x: 84, y: 38, click: true, label: "Facebook" },
+  { id: "shopify", ms: 700, x: 24, y: 70, click: true, label: "Shopify" },
+  { id: "web", ms: 750, x: 76, y: 70, click: true, label: "Your site" },
+  { id: "sales", ms: 2800, x: 88, y: 93, click: false, label: "Sales up" },
+  { id: "hold", ms: 4000, x: 88, y: 93, click: false, label: "Try it" },
 ] as const;
 
 const SALES_DOLLARS = [
@@ -171,13 +171,16 @@ function GuideCursor({
   click,
   visible,
   clickKey,
+  label,
 }: {
   x: number;
   y: number;
   click: boolean;
   visible: boolean;
   clickKey: string;
+  label: string;
 }) {
+  const flip = x > 70;
   return (
     <motion.div
       className="pointer-events-none absolute z-30"
@@ -210,59 +213,22 @@ function GuideCursor({
           strokeWidth={1.75}
         />
       </motion.div>
+      <AnimatePresence mode="wait">
+        <motion.span
+          key={clickKey}
+          initial={{ opacity: 0, y: 6, x: flip ? 8 : -8 }}
+          animate={{ opacity: 1, y: 0, x: 0 }}
+          exit={{ opacity: 0, y: -4 }}
+          transition={{ duration: 0.2 }}
+          className={cn(
+            "absolute top-7 whitespace-nowrap rounded-md bg-[#141414] px-2 py-1 text-[12px] font-medium text-white shadow-[0_8px_20px_-10px_rgba(0,0,0,0.45)]",
+            flip ? "right-1" : "left-5",
+          )}
+        >
+          {label}
+        </motion.span>
+      </AnimatePresence>
     </motion.div>
-  );
-}
-
-function StoryBanner({
-  line,
-  sub,
-  punch,
-  compact,
-  bannerKey,
-}: {
-  line: string;
-  sub: string;
-  punch: boolean;
-  compact: boolean;
-  bannerKey: string;
-}) {
-  return (
-    <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20">
-      <div className="h-28 bg-gradient-to-t from-white via-white/92 to-transparent sm:h-32" />
-      <div className="absolute inset-x-0 bottom-3 px-4 text-center sm:bottom-4">
-        <AnimatePresence mode="wait">
-          <motion.div
-            key={bannerKey}
-            initial={{ opacity: 0, y: 14, filter: "blur(4px)" }}
-            animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
-            exit={{ opacity: 0, y: -8, filter: "blur(4px)" }}
-            transition={{ duration: 0.38, ease: [0.22, 1, 0.36, 1] }}
-          >
-            <p
-              className={cn(
-                "font-semibold tracking-[-0.05em] text-[#141414]",
-                compact
-                  ? "text-[18px]"
-                  : punch
-                    ? "text-[30px] sm:text-[42px]"
-                    : "text-[24px] sm:text-[34px]",
-              )}
-            >
-              {line}
-            </p>
-            <p
-              className={cn(
-                "mt-1 font-medium tracking-[-0.01em] text-[#707070]",
-                compact ? "text-[11px]" : "text-[13px] sm:text-[15px]",
-              )}
-            >
-              {sub}
-            </p>
-          </motion.div>
-        </AnimatePresence>
-      </div>
-    </div>
   );
 }
 
@@ -299,13 +265,6 @@ function DragGhost({
       >
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src={src} alt="" className="size-full object-contain p-2" />
-        {holding ? (
-          <MousePointer2
-            className="absolute right-1 bottom-1 size-5 text-[#141414] drop-shadow-[0_2px_6px_rgba(0,0,0,0.28)]"
-            fill="white"
-            strokeWidth={1.75}
-          />
-        ) : null}
       </div>
     </motion.div>
   );
@@ -588,15 +547,20 @@ export function ListingPipeline({
           {beat <= 2 ? (
             <DragGhost src={cover} x={step.x} y={step.y} phase={dragPhase} />
           ) : null}
-          {beat >= 3 && beat <= 8 ? (
-            <GuideCursor
-              x={step.x}
-              y={step.y}
-              click={step.click}
-              visible
-              clickKey={`${step.id}-${beat}`}
-            />
-          ) : null}
+          <GuideCursor
+            x={beat === 3 ? 8 + Math.max(0, filled - 1) * 5.2 : step.x}
+            y={step.y}
+            click={step.click || (beat === 3 && filled > 1)}
+            visible
+            label={
+              beat === 3
+                ? `${filled} of ${shots.length} photos`
+                : beat >= 14
+                  ? `$${sales.toLocaleString("en-US")} sales up`
+                  : step.label
+            }
+            clickKey={`${step.id}-${beat === 3 ? filled : beat}`}
+          />
         </>
       ) : null}
 
@@ -805,33 +769,6 @@ export function ListingPipeline({
           </div>
         </ChannelShell>
         </div>
-        {!reduce ? (
-          <StoryBanner
-            bannerKey={beat >= 14 ? "money" : beat >= 8 ? "push" : step.id}
-            line={
-              beat >= 14
-                ? `$${sales.toLocaleString("en-US")}`
-                : step.line
-            }
-            sub={
-              beat >= 14
-                ? "Sales up. One click."
-                : beat >= 8 && beat < 14
-                  ? "Five stores. Generating."
-                  : step.sub
-            }
-            punch={beat >= 8}
-            compact={compact}
-          />
-        ) : (
-          <StoryBanner
-            bannerKey="done"
-            line="One click. Sales up."
-            sub="Try it."
-            punch
-            compact={compact}
-          />
-        )}
       </div>
 
       <SalesStrip

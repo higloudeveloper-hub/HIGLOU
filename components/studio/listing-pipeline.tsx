@@ -22,14 +22,14 @@ const STEPS = [
   { id: "title", ms: 1500, x: 40, y: 8, click: false, label: "Title writes itself" },
   { id: "desc", ms: 1300, x: 40, y: 8, click: false, label: "Description" },
   { id: "compare", ms: 1400, x: 40, y: 8, click: false, label: "Priced vs sold comps" },
-  { id: "fillEbay", ms: 1100, x: 16, y: 38, click: false, label: "eBay" },
-  { id: "fillAmazon", ms: 1000, x: 50, y: 38, click: false, label: "Amazon" },
-  { id: "fillFacebook", ms: 1000, x: 84, y: 38, click: false, label: "Facebook" },
-  { id: "fillShopify", ms: 1000, x: 24, y: 70, click: false, label: "Shopify" },
-  { id: "fillWeb", ms: 1100, x: 76, y: 70, click: false, label: "Your site" },
+  { id: "fillEbay", ms: 1300, x: 16, y: 38, click: false, label: "eBay" },
+  { id: "fillAmazon", ms: 1300, x: 50, y: 38, click: false, label: "Amazon" },
+  { id: "fillFacebook", ms: 1300, x: 84, y: 38, click: false, label: "Facebook" },
+  { id: "fillShopify", ms: 1300, x: 24, y: 70, click: false, label: "Shopify" },
+  { id: "fillWeb", ms: 1300, x: 76, y: 70, click: false, label: "Your site" },
   { id: "ready", ms: 1500, x: 91, y: 8, click: false, label: "Publish" },
   { id: "publish", ms: 1600, x: 50, y: 48, click: true, label: "Publishing" },
-  { id: "dispatch", ms: 2800, x: 50, y: 48, click: false, label: "Sending" },
+  { id: "dispatch", ms: 4200, x: 50, y: 48, click: false, label: "Sending" },
   { id: "sales", ms: 1800, x: 88, y: 93, click: false, label: "Revenue" },
   { id: "hold", ms: 1200, x: 88, y: 93, click: false, label: "Next product" },
 ] as const;
@@ -169,13 +169,16 @@ function useCountToward(target: number, reduce: boolean) {
   return n;
 }
 
-function AmazonMark({ className }: { className?: string }) {
+function AmazonMark({ className, hero = false }: { className?: string; hero?: boolean }) {
   return (
     <span className={cn("relative inline-block font-semibold tracking-tight", className)}>
       amazon
       <span
         aria-hidden
-        className="absolute right-0 -bottom-1 left-[18%] h-[5px] rounded-full"
+        className={cn(
+          "absolute right-0 left-[18%] rounded-full",
+          hero ? "-bottom-2 h-3" : "-bottom-1 h-[5px]",
+        )}
         style={{
           background:
             "radial-gradient(120% 120% at 50% -20%, transparent 42%, #FF9900 43%, #FF9900 70%, transparent 71%)",
@@ -185,22 +188,84 @@ function AmazonMark({ className }: { className?: string }) {
   );
 }
 
-function ShopifyMark({ dark = false }: { dark?: boolean }) {
+function FacebookLogo({ hero = false, word = false }: { hero?: boolean; word?: boolean }) {
   return (
-    <span className={cn("inline-flex items-center gap-1.5", dark ? "text-[#141414]" : "text-white")}>
-      <svg viewBox="0 0 20 20" className="size-4" aria-hidden>
+    <span className="inline-flex items-center gap-2.5">
+      <svg
+        viewBox="0 0 36 36"
+        className={hero ? "size-[72px] sm:size-[88px]" : "size-6"}
+        aria-label="Facebook"
+      >
+        <rect width="36" height="36" rx="8" fill="#1877F2" />
         <path
-          fill="#95BF47"
-          d="M5.4 6.4 6.5 17.2c.08.7.68 1.2 1.38 1.2h6.04c.7 0 1.3-.5 1.38-1.2l1.1-10.8H5.4Z"
-        />
-        <path
-          fill="none"
-          stroke="#95BF47"
-          strokeWidth="1.5"
-          d="M7.4 6.4V5.2a2.6 2.6 0 0 1 5.2 0v1.2"
+          fill="#fff"
+          d="M25.2 18.6h-4.3V32h-5.4V18.6H12v-4.5h3.5v-2.8c0-3.6 1.6-5.6 5.7-5.6H25v4.6h-2.3c-1.7 0-2.2.8-2.2 2.1v1.7h4.4l-.7 4.5Z"
         />
       </svg>
-      <span className="text-[14px] font-semibold tracking-tight">Shopify</span>
+      {hero || word ? (
+        <span
+          className={cn(
+            "font-bold tracking-tight text-[#1877F2]",
+            hero ? "text-[40px] sm:text-[52px]" : "text-[13px]",
+          )}
+        >
+          facebook
+        </span>
+      ) : null}
+    </span>
+  );
+}
+
+function ShopifyLogo({
+  hero = false,
+  light = false,
+}: {
+  hero?: boolean;
+  light?: boolean;
+}) {
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-2",
+        light ? "text-white" : "text-[#141414]",
+      )}
+    >
+      <svg viewBox="0 0 24 24" className={hero ? "size-[72px] sm:size-[80px]" : "size-5"} aria-hidden>
+        <path
+          fill="#95BF47"
+          d="M19.2 4.6 17.6.4c-.1-.2-.3-.3-.5-.2l-1.6.5C15.2.3 14.6 0 14.2 0 11.7 0 9.6 2.6 9 6.3L3.8 8c-.3.1-.5.4-.5.7L2 21.2c0 .3.2.6.5.6h14.4c.3 0 .5-.2.6-.5l2.2-16c.1-.3-.1-.6-.5-.7ZM14.2 2c.2 0 .4 0 .6.1l-1.2 3.7c-.8-.2-1.6-.3-2.4-.3.4-2 1.3-3.5 3-3.5Zm-2.2 5.8c.9 0 1.9.1 2.9.4L13.6 12c-1.2-.4-2.2-.5-3-.5-.2-1.3.2-2.7 1.4-3.7Z"
+        />
+      </svg>
+      <span
+        className={cn(
+          "font-semibold tracking-tight",
+          hero ? "text-[44px] sm:text-[56px]" : "text-[14px]",
+        )}
+      >
+        Shopify
+      </span>
+    </span>
+  );
+}
+
+function StoreLogo({ name, hero = false }: { name: string; hero?: boolean }) {
+  if (name === "eBay") {
+    return <EbayWordmark className={hero ? "text-[72px] sm:text-[96px]" : "text-[18px]"} />;
+  }
+  if (name === "Amazon") {
+    return (
+      <AmazonMark
+        hero={hero}
+        className={hero ? "text-[60px] text-[#131921] sm:text-[80px]" : "text-[16px] text-[#131921]"}
+      />
+    );
+  }
+  if (name === "Facebook") return <FacebookLogo hero={hero} />;
+  if (name === "Shopify") return <ShopifyLogo hero={hero} />;
+  return (
+    <span className={cn("inline-flex items-center gap-3 font-semibold tracking-tight", hero ? "text-[40px] sm:text-[52px]" : "text-[13px]")}>
+      <Globe className={hero ? "size-14 sm:size-16" : "size-3.5"} />
+      Your site
     </span>
   );
 }
@@ -209,15 +274,8 @@ function StoreTargets() {
   const stores = [
     { key: "ebay", node: <EbayWordmark className="text-[18px]" /> },
     { key: "amazon", node: <AmazonMark className="text-[16px] text-[#131921]" /> },
-    {
-      key: "facebook",
-      node: (
-        <span className="text-[13px] font-bold text-[#1877F2]">
-          facebook
-        </span>
-      ),
-    },
-    { key: "shopify", node: <ShopifyMark dark /> },
+    { key: "facebook", node: <FacebookLogo word /> },
+    { key: "shopify", node: <ShopifyLogo /> },
     {
       key: "site",
       node: (
@@ -370,15 +428,15 @@ function storyCaption(
     case "compare":
       return { headline: "PRICED TO SELL", sub: "Undercut what already sold." };
     case "fillEbay":
-      return { headline: "ONE LISTING", sub: "The same product fills eBay." };
+      return { headline: "", sub: "Now live." };
     case "fillAmazon":
-      return { headline: "ONE LISTING", sub: "Now Amazon." };
+      return { headline: "", sub: "Now live." };
     case "fillFacebook":
-      return { headline: "ONE LISTING", sub: "Now Facebook Marketplace." };
+      return { headline: "", sub: "Now live." };
     case "fillShopify":
-      return { headline: "ONE LISTING", sub: "Now your Shopify store." };
+      return { headline: "", sub: "Now live." };
     case "fillWeb":
-      return { headline: "FIVE STORES", sub: "And your own site." };
+      return { headline: "", sub: "Now live." };
     case "ready":
       return { headline: "ONLY ONE CLICK", sub: "Publish once. All five go live." };
     case "publish":
@@ -397,11 +455,13 @@ function storyCaption(
 function CenterLine({
   headline,
   sub,
+  mark,
   stepKey,
   compact,
 }: {
   headline: string;
   sub: string;
+  mark?: ReactNode;
   stepKey: string;
   compact?: boolean;
 }) {
@@ -411,23 +471,28 @@ function CenterLine({
       <AnimatePresence mode="wait">
         <motion.div
           key={stepKey}
-          initial={{ opacity: 0, y: 18, scale: 0.96 }}
+          initial={{ opacity: 0, y: 18, scale: 0.92 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
           exit={{ opacity: 0, y: -14, scale: 0.98 }}
           transition={{ duration: 0.38, ease: [0.22, 1, 0.36, 1] }}
-          className="relative max-w-[560px] text-center"
+          className="relative max-w-[640px] text-center"
         >
+          {mark ? (
+            <div className="mb-3 flex justify-center">{mark}</div>
+          ) : (
+            <p
+              className={cn(
+                "font-semibold tracking-[-0.045em] text-[#141414] leading-[0.95]",
+                compact ? "text-[28px]" : "text-[36px] sm:text-[52px]",
+              )}
+            >
+              {headline}
+            </p>
+          )}
           <p
             className={cn(
-              "font-semibold tracking-[-0.045em] text-[#141414] leading-[0.95]",
-              compact ? "text-[28px]" : "text-[36px] sm:text-[52px]",
-            )}
-          >
-            {headline}
-          </p>
-          <p
-            className={cn(
-              "mt-3 font-medium text-[#565959]",
+              "font-medium text-[#565959]",
+              mark ? "mt-2" : "mt-3",
               compact ? "text-[14px]" : "text-[16px] sm:text-[20px]",
             )}
           >
@@ -607,7 +672,7 @@ function FallPacket({
       }}
       transition={{
         delay,
-        duration: 1.05,
+        duration: 1.12,
         ease: [0.16, 1, 0.3, 1],
       }}
     >
@@ -747,14 +812,12 @@ function FacebookStorefront({
   return (
     <div className="grid h-full min-h-0 flex-1 grid-rows-[auto_minmax(0,1fr)_auto] bg-white">
       <div className="flex shrink-0 items-center gap-2 border-b border-[#E4E6EB] px-2.5 py-1.5">
-        <span className="grid size-6 shrink-0 place-items-center rounded-full bg-[#E4E6EB] text-[10px] font-bold text-[#050505]">
-          {seller.slice(0, 1).toUpperCase()}
-        </span>
+        <FacebookLogo />
         <span className="min-w-0 flex-1 truncate text-[12px] font-semibold text-[#050505]">
           {seller}
         </span>
         <span className="text-[12px] font-bold tracking-tight text-[#0866FF]">
-          marketplace
+          Marketplace
         </span>
       </div>
       <LivePhoto src={src} className="bg-[#F0F2F5]" />
@@ -781,7 +844,7 @@ function ShopifyStorefront({
   return (
     <div className="grid h-full min-h-0 flex-1 grid-rows-[auto_minmax(0,1fr)_auto] bg-white">
       <div className="flex shrink-0 items-center justify-between bg-[#121212] px-3 py-1.5">
-        <span className="text-[12px] font-semibold tracking-tight text-white">Your store</span>
+        <ShopifyLogo light />
         <ShoppingCart className="size-3.5 text-white" />
       </div>
       <LivePhoto src={src} />
@@ -1028,6 +1091,18 @@ export function ListingPipeline({
     freezeDrop,
     fileDrag,
   });
+  const stampName =
+    is("fillEbay") || (dispatching && landed === 1)
+      ? "eBay"
+      : is("fillAmazon") || (dispatching && landed === 2)
+        ? "Amazon"
+        : is("fillFacebook") || (dispatching && landed === 3)
+          ? "Facebook"
+          : is("fillShopify") || (dispatching && landed === 4)
+            ? "Shopify"
+            : is("fillWeb") || (dispatching && landed === 5)
+              ? "site"
+              : null;
 
   useEffect(() => {
     if (dropMode) {
@@ -1124,7 +1199,7 @@ export function ListingPipeline({
     }
     if (step.id === "dispatch") {
       setLanded(0);
-      const times = [1080, 1260, 1440, 1620, 1800];
+      const times = [1120, 1740, 2360, 2980, 3600];
       const timers = times.map((ms, i) =>
         window.setTimeout(() => setLanded(i + 1), ms),
       );
@@ -1168,7 +1243,7 @@ export function ListingPipeline({
                   src={cover}
                   toX={store.x}
                   toY={store.y}
-                  delay={i * 0.18}
+                  delay={i * 0.62}
                   hopKey={`${sku}-fall-${store.name}`}
                 />
               ))
@@ -1338,9 +1413,14 @@ export function ListingPipeline({
       </div>
 
       <CenterLine
-        headline={caption.headline}
-        sub={caption.sub}
-        stepKey={`${sku}-${step.id}-${is("photos") ? filled : beat}`}
+        headline={stampName ? "" : caption.headline}
+        sub={stampName ? "Now live." : caption.sub}
+        mark={
+          stampName ? (
+            <StoreLogo name={stampName} hero={!compact} />
+          ) : undefined
+        }
+        stepKey={`${sku}-${step.id}-${stampName ?? (is("photos") ? filled : beat)}`}
         compact={compact}
       />
 
@@ -1443,9 +1523,7 @@ export function ListingPipeline({
           ) : (
             <>
               <div className="flex shrink-0 items-center justify-between border-b border-[#eee] px-3 py-2">
-                <span className="text-[13px] font-bold text-[#1877F2]">
-                  facebook <span className="font-semibold text-[#65676B]">Marketplace</span>
-                </span>
+                <FacebookLogo word />
                 <LivePill on={false} label="Posted" />
               </div>
               <div className="min-h-0 flex-1 bg-[#f7f7f7]" />
@@ -1463,7 +1541,7 @@ export function ListingPipeline({
           ) : (
             <>
               <div className="flex shrink-0 items-center justify-between bg-[#212326] px-3 py-2">
-                <ShopifyMark />
+                <ShopifyLogo light />
                 <LivePill on={false} label="On store" />
               </div>
               <div className="min-h-0 flex-1 bg-[#f7f7f7]" />

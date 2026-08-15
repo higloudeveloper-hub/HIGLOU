@@ -206,7 +206,7 @@ export function ReturningHome({
         </Link>
       </motion.header>
 
-      {ebayConnected ? <EbaySalesPulse /> : null}
+      <EbaySalesPulse />
 
       <div className="mb-8">
         <ListingPipeline compact storeName={ebayStoreName} />

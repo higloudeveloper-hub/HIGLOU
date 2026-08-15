@@ -101,7 +101,10 @@ export default function HomeWorkspacePage() {
           fetch("/api/settings/branding"),
         ]);
         const conn = connRes.ok
-          ? ((await connRes.json()) as { connected?: boolean })
+          ? ((await connRes.json()) as {
+              connection?: { connected?: boolean };
+              connected?: boolean;
+            })
           : null;
         const policies = policyRes.ok
           ? ((await policyRes.json()) as {
@@ -121,7 +124,9 @@ export default function HomeWorkspacePage() {
         if (cancelled) return;
         const p = policies?.policies;
         setSetup({
-          ebayConnected: Boolean(conn?.connected),
+          ebayConnected: Boolean(
+            conn?.connection?.connected || conn?.connected,
+          ),
           policiesReady: Boolean(
             p?.shippingPolicyId?.trim() &&
               p?.returnPolicyId?.trim() &&

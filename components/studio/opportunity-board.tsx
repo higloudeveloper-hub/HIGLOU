@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { toast } from "sonner";
+import { formatRelativeTime } from "@/lib/format-relative-time";
 import { usd } from "@/lib/studio/use-ebay-sales";
 import { cn } from "@/lib/utils";
 import type { DealCard } from "@/lib/ebay/sales-sync";
@@ -460,6 +461,72 @@ export function OpportunityList({
           </section>
         );
       })}
+    </div>
+  );
+}
+
+export function LiveBanner({
+  shop,
+  deals,
+  watching,
+  inCart,
+  syncedAt,
+}: {
+  shop: string;
+  deals: DealCard[];
+  watching: number;
+  inCart: number;
+  syncedAt: string;
+}) {
+  const tape = deals.length > 0 ? [...deals, ...deals] : [];
+  const next = deals[0];
+  return (
+    <div className="shrink-0 bg-[#3665F3] text-white">
+      <div className="flex items-center gap-3 px-4 py-2.5">
+        <div className="flex shrink-0 items-center gap-2">
+          <span className="relative flex size-2.5">
+            <span className="absolute inset-0 animate-ping rounded-full bg-white/80" />
+            <span className="relative size-2.5 rounded-full bg-white" />
+          </span>
+          <p className="text-[13px] font-bold tracking-tight">LIVE MACHINE</p>
+        </div>
+        <p className="hidden shrink-0 text-[12px] text-white/85 lg:block">
+          {shop}
+        </p>
+        <div className="min-w-0 flex-1 overflow-hidden">
+          {tape.length > 0 ? (
+            <motion.div
+              className="flex w-max gap-10 whitespace-nowrap"
+              animate={{ x: ["0%", "-50%"] }}
+              transition={{ duration: 32, repeat: Infinity, ease: "linear" }}
+            >
+              {tape.map((deal, i) => (
+                <span
+                  key={`${deal.listingId}-${i}`}
+                  className="text-[13px] font-medium"
+                >
+                  {deal.title.slice(0, 48)}
+                  <span className="mx-2 text-white/55">·</span>
+                  {recommendCopy(deal).button}
+                  <span className="mx-2 text-white/55">·</span>
+                  {deal.chance}% chance
+                </span>
+              ))}
+            </motion.div>
+          ) : (
+            <p className="truncate text-[13px] text-white/85">
+              Scanning eBay carts, watchers, and prices…
+            </p>
+          )}
+        </div>
+        <p className="hidden shrink-0 text-[12px] font-medium text-white/90 sm:block">
+          {watching} watching · {inCart} in cart
+          {next ? ` · next: ${recommendCopy(next).button}` : ""}
+        </p>
+        <p className="hidden shrink-0 text-[11px] text-white/70 xl:block">
+          {formatRelativeTime(syncedAt)}
+        </p>
+      </div>
     </div>
   );
 }

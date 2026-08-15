@@ -228,8 +228,8 @@ export function scoreDeals(
       b.chance - a.chance ||
       b.watchers - a.watchers,
   );
-  const live = sorted.filter((row) => row.signal !== "sleeping").slice(0, 9);
-  const quiet = sorted.filter((row) => row.signal === "sleeping").slice(0, 3);
+  const live = sorted.filter((row) => row.signal !== "sleeping").slice(0, 16);
+  const quiet = sorted.filter((row) => row.signal === "sleeping").slice(0, 12);
   return [...live, ...quiet];
 }
 

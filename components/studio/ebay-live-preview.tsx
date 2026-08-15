@@ -61,6 +61,7 @@ export function EbayLivePreview({
   storeName,
   live,
   compact = false,
+  fill = false,
   className,
   compareAtLabel,
 }: {
@@ -70,6 +71,7 @@ export function EbayLivePreview({
   storeName: string;
   live: boolean;
   compact?: boolean;
+  fill?: boolean;
   className?: string;
   compareAtLabel?: string | null;
 }) {
@@ -82,7 +84,7 @@ export function EbayLivePreview({
     <div
       className={cn(
         "flex min-h-0 flex-col overflow-hidden rounded-xl bg-white font-sans text-[#191919] shadow-[0_12px_32px_-18px_rgba(0,0,0,0.5)] ring-1 ring-black/10",
-        compact && "h-full",
+        (compact || fill) && "h-full",
         className,
       )}
     >
@@ -104,7 +106,7 @@ export function EbayLivePreview({
       <div
         className={cn(
           "relative bg-white",
-          compact ? "min-h-[132px] flex-1" : "aspect-square",
+          compact || fill ? "min-h-[160px] flex-1" : "aspect-square",
         )}
       >
         <AnimatePresence mode="wait">
@@ -147,7 +149,7 @@ export function EbayLivePreview({
       </div>
 
       <div className={cn("shrink-0", compact ? "p-2.5" : "p-3")}>
-        {!compact ? (
+        {!compact && !fill ? (
           <p className="mb-1 text-[10px] text-[#707070]">
             Home › Business & Industrial › Power Tools
           </p>

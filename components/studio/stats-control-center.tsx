@@ -18,6 +18,7 @@ import {
 import {
   ChanceMeter,
   DealDesk,
+  LiveBanner,
   OneClickMove,
   OpportunityList,
   recommendCopy,
@@ -116,9 +117,7 @@ export function StatsControlCenter() {
 
   if (loading && !snap) {
     return (
-      <div className="mx-auto max-w-[1100px]">
-        <div className="h-[640px] animate-pulse rounded-xl bg-white ring-1 ring-black/10" />
-      </div>
+      <div className="flex h-full min-h-[520px] flex-1 animate-pulse bg-white" />
     );
   }
   if (!snap) return null;
@@ -175,9 +174,16 @@ export function StatsControlCenter() {
   };
 
   return (
-    <div className="mx-auto max-w-[1100px] pb-16">
-      <div className="overflow-hidden rounded-xl bg-white shadow-[0_12px_32px_-18px_rgba(0,0,0,0.45)] ring-1 ring-black/10">
-        <div className="flex items-center gap-3 border-b border-[#e5e5e5] px-4 py-2.5">
+    <div className="flex min-h-0 flex-1 flex-col bg-white md:h-full">
+      <LiveBanner
+        shop={shop}
+        deals={deals}
+        watching={snap.watchers}
+        inCart={snap.inCart}
+        syncedAt={snap.syncedAt}
+      />
+      <div className="flex min-h-0 flex-1 flex-col">
+        <div className="flex shrink-0 items-center gap-3 border-b border-[#e5e5e5] px-4 py-2">
           <button type="button" onClick={() => setPane("opps")}>
             <EbayWordmark className="text-[22px]" />
           </button>
@@ -186,24 +192,24 @@ export function StatsControlCenter() {
             onClick={() => setPane("opps")}
             className="min-w-0 flex-1 rounded-full border border-[#ccc] bg-[#f7f7f7] px-3 py-1.5 text-left text-[12px] text-[#707070]"
           >
-            {shop} · opportunity center
+            {shop} · opportunity machine
           </button>
           <span className="hidden text-[12px] font-medium text-[#191919] sm:inline">
-            Live · {formatRelativeTime(snap.syncedAt)}
+            Scanning every 12s · {formatRelativeTime(snap.syncedAt)}
           </span>
         </div>
 
         {snap.error ? (
           <Link
             href="/settings#ebay-store"
-            className="flex items-center justify-between border-b border-amber-200 bg-amber-50 px-4 py-3 text-[13px] text-amber-950"
+            className="flex shrink-0 items-center justify-between border-b border-amber-200 bg-amber-50 px-4 py-3 text-[13px] text-amber-950"
           >
             {snap.error}
             <ArrowRight className="size-4" />
           </Link>
         ) : null}
 
-        <div className="grid grid-cols-2 divide-x divide-[#eee] border-b border-[#e5e5e5] lg:grid-cols-6">
+        <div className="grid shrink-0 grid-cols-2 divide-x divide-[#eee] border-b border-[#e5e5e5] lg:grid-cols-6">
           <StatCell
             active={active === "opps"}
             onClick={() => setPane("opps")}
@@ -250,18 +256,21 @@ export function StatsControlCenter() {
         </div>
 
         {active === "orders" ? (
-          <OrdersBoard rows={snap.recent} />
+          <div className="min-h-0 flex-1 overflow-y-auto">
+            <OrdersBoard rows={snap.recent} />
+          </div>
         ) : (
-          <div className="grid gap-0 lg:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)]">
-            <div className="border-b border-[#e5e5e5] bg-[#f7f7f7] p-4 lg:border-r lg:border-b-0">
+          <div className="grid min-h-0 flex-1 lg:grid-cols-[minmax(380px,0.9fr)_minmax(0,1.2fr)]">
+            <div className="flex min-h-0 flex-col border-b border-[#e5e5e5] bg-[#f7f7f7] p-3 lg:border-r lg:border-b-0">
               {featuredTitle ? (
                 <AnimatePresence mode="wait">
                   <motion.div
                     key={featuredId || featuredTitle}
-                    initial={{ opacity: 0, y: 12 }}
+                    initial={{ opacity: 0, y: 8 }}
                     animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -8 }}
-                    transition={{ duration: 0.35 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.28 }}
+                    className="flex min-h-0 flex-1 flex-col"
                   >
                     <EbayLivePreview
                       photoSrc={hiRes(featuredPhoto)}
@@ -280,9 +289,11 @@ export function StatsControlCenter() {
                       }
                       storeName={shop}
                       live
+                      fill
+                      className="min-h-0 flex-1"
                     />
                     {pickedDeal ? (
-                      <div className="mt-3 space-y-3">
+                      <div className="mt-3 shrink-0 space-y-2">
                         <div className="rounded-xl bg-white p-3 ring-1 ring-[#e5e5e5]">
                           <ChanceMeter
                             chance={pickedDeal.chance}
@@ -291,26 +302,11 @@ export function StatsControlCenter() {
                                 ? undefined
                                 : pickedDeal.recommend.afterChance
                             }
-                            big
                           />
-                          <p className="mt-2 text-[13px] font-medium text-[#191919]">
+                          <p className="mt-1.5 text-[12px] font-medium text-[#191919]">
                             {pickedDeal.why}
                           </p>
-                          <p className="mt-1 text-[12px] text-[#707070]">
-                            {pickedDeal.move}
-                          </p>
-                          {pickedDeal.vsStore === "lower" ? (
-                            <p className="mt-1 text-[12px] font-semibold text-[#86B817]">
-                              Priced lower than the rest of the store.
-                            </p>
-                          ) : null}
-                          {pickedDeal.vsStore === "higher" &&
-                          pickedDeal.signal === "stuck" ? (
-                            <p className="mt-1 text-[12px] font-semibold text-[#c41e3a]">
-                              Priced high vs the store — watching, not buying.
-                            </p>
-                          ) : null}
-                          <div className="mt-3">
+                          <div className="mt-2">
                             <OneClickMove
                               deal={pickedDeal}
                               busy={busy}
@@ -351,7 +347,7 @@ export function StatsControlCenter() {
                         ) : null}
                       </div>
                     ) : featuredId ? (
-                      <div className="mt-3">
+                      <div className="mt-3 shrink-0">
                         <DealDesk
                           listingId={featuredId}
                           price={featuredPrice}
@@ -385,26 +381,26 @@ export function StatsControlCenter() {
                   </motion.div>
                 </AnimatePresence>
               ) : (
-                <p className="grid min-h-[420px] place-items-center text-[14px] text-[#707070]">
+                <p className="grid min-h-0 flex-1 place-items-center text-[14px] text-[#707070]">
                   No live listings yet.
                 </p>
               )}
             </div>
 
-            <div className="max-h-[820px] overflow-y-auto bg-white">
+            <div className="flex min-h-0 flex-col bg-white">
               {snap.cartError ? (
                 <Link
                   href="/settings#ebay-store"
-                  className="flex items-center justify-between border-b border-amber-200 bg-amber-50 px-4 py-3 text-[13px] text-amber-950"
+                  className="flex shrink-0 items-center justify-between border-b border-amber-200 bg-amber-50 px-4 py-3 text-[13px] text-amber-950"
                 >
                   {snap.cartError}
                   <ArrowRight className="size-4" />
                 </Link>
               ) : null}
-              <div className="flex items-center justify-between border-b border-[#eee] px-4 py-2.5">
+              <div className="flex shrink-0 items-center justify-between border-b border-[#eee] px-4 py-2">
                 <p className="text-[13px] font-semibold text-[#191919]">
                   {active === "opps"
-                    ? "Opportunity center · live"
+                    ? "Opportunity machine · live"
                     : active === "act"
                       ? "Stock alerts"
                       : snap.inCart > 0 && active === "carts"
@@ -432,38 +428,40 @@ export function StatsControlCenter() {
                   </button>
                 ) : null}
               </div>
-              {active === "opps" ? (
-                <OpportunityList
-                  deals={deals}
-                  selectedId={featuredId || null}
-                  busy={busy}
-                  onPick={setPickedId}
-                  onGo={runRecommend}
-                />
-              ) : feed.length === 0 ? (
-                <p className="px-4 py-10 text-[14px] text-[#707070]">
-                  Nothing in this view yet.
-                </p>
-              ) : (
-                <ul>
-                  {feed.slice(0, 12).map((row, i) => (
-                    <EbayResultRow
-                      key={row.listingId || row.sku}
-                      row={row}
-                      offer={carts.find((c) => c.listingId === row.listingId)}
-                      alert={snap.stockAlerts.find(
-                        (a) => a.listingId === row.listingId,
-                      )}
-                      deal={deals.find((d) => d.listingId === row.listingId)}
-                      delay={i * 0.04}
-                      onWork={() => {
-                        setPickedId(row.listingId);
-                        setPane("opps");
-                      }}
-                    />
-                  ))}
-                </ul>
-              )}
+              <div className="min-h-0 flex-1 overflow-y-auto">
+                {active === "opps" ? (
+                  <OpportunityList
+                    deals={deals}
+                    selectedId={featuredId || null}
+                    busy={busy}
+                    onPick={setPickedId}
+                    onGo={runRecommend}
+                  />
+                ) : feed.length === 0 ? (
+                  <p className="px-4 py-10 text-[14px] text-[#707070]">
+                    Nothing in this view yet.
+                  </p>
+                ) : (
+                  <ul>
+                    {feed.slice(0, 16).map((row, i) => (
+                      <EbayResultRow
+                        key={row.listingId || row.sku}
+                        row={row}
+                        offer={carts.find((c) => c.listingId === row.listingId)}
+                        alert={snap.stockAlerts.find(
+                          (a) => a.listingId === row.listingId,
+                        )}
+                        deal={deals.find((d) => d.listingId === row.listingId)}
+                        delay={i * 0.04}
+                        onWork={() => {
+                          setPickedId(row.listingId);
+                          setPane("opps");
+                        }}
+                      />
+                    ))}
+                  </ul>
+                )}
+              </div>
             </div>
           </div>
         )}
@@ -492,7 +490,7 @@ function StatCell({
       type="button"
       onClick={onClick}
       className={cn(
-        "px-3 py-3 text-left transition",
+        "px-3 py-2.5 text-left transition",
         active ? "bg-[#eef4ff]" : "hover:bg-[#f7f7f7]",
       )}
     >

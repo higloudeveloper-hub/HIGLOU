@@ -15,7 +15,9 @@ const CATALOG = [
   {
     name: "Watch",
     title: "Automatic Stainless Chronograph — Unworn",
+    description: "Unworn steel chronograph. Black sunburst dial, oyster bracelet, box ready.",
     price: 1895,
+    comps: 2290,
     photos: [
       "/demo/wow-watch.webp",
       "/demo/wow-watch-dial.webp",
@@ -25,25 +27,33 @@ const CATALOG = [
   {
     name: "Headphones",
     title: "Wireless Noise Cancelling Headphones",
+    description: "Wireless ANC, 30-hour battery, champagne metal yoke, unmarked.",
     price: 349,
+    comps: 429,
     photos: ["/demo/wow-headphones.webp", "/demo/wow-headphones-side.webp", "/demo/wow-headphones-cup.webp"],
   },
   {
     name: "Sneakers",
     title: "Premium Leather Court Sneakers — White",
+    description: "Full-grain leather court sneaker. Clean white, unworn pair.",
     price: 220,
+    comps: 279,
     photos: ["/demo/wow-sneakers.webp", "/demo/wow-sneakers-pair.webp", "/demo/wow-sneakers-top.webp"],
   },
   {
     name: "Gold",
     title: "14K Gold Cuban Link Bracelet",
+    description: "Solid 14K yellow gold Cuban link. Stamped, heavy, ready to ship.",
     price: 2450,
+    comps: 2890,
     photos: ["/demo/wow-gold.webp", "/demo/wow-gold-line.webp", "/demo/wow-gold-links.webp"],
   },
   {
     name: "Camera",
     title: "Full-Frame Mirrorless Camera + 50mm",
+    description: "Full-frame body with 50mm prime. Low shutter, clean sensor.",
     price: 1799,
+    comps: 2199,
     photos: ["/demo/wow-camera.webp", "/demo/wow-camera-back.webp", "/demo/wow-camera-lens.webp"],
   },
 ] as const;
@@ -53,27 +63,49 @@ const STEPS = [
   { id: "drag", ms: 2100, x: 9, y: 11, click: false, label: "Drop on listing" },
   { id: "drop", ms: 1100, x: 9, y: 11, click: true, label: "Photo in" },
   { id: "photos", ms: 2400, x: 22, y: 8, click: false, label: "Higlou adds shots" },
-  { id: "title", ms: 2600, x: 40, y: 8, click: false, label: "Title writes itself" },
-  { id: "price", ms: 1300, x: 40, y: 8, click: false, label: "Price set" },
-  { id: "fillEbay", ms: 1200, x: 16, y: 38, click: true, label: "eBay" },
-  { id: "fillAmazon", ms: 1100, x: 50, y: 38, click: true, label: "Amazon" },
-  { id: "fillFacebook", ms: 1100, x: 84, y: 38, click: true, label: "Facebook" },
-  { id: "fillShopify", ms: 1100, x: 24, y: 70, click: true, label: "Shopify" },
-  { id: "fillWeb", ms: 1200, x: 76, y: 70, click: true, label: "Your site" },
-  { id: "ready", ms: 2200, x: 40, y: 8, click: false, label: "All stores ready" },
-  { id: "publish", ms: 1600, x: 91, y: 8, click: false, label: "Publishing" },
-  { id: "ebayLive", ms: 1500, x: 16, y: 38, click: true, label: "Live on eBay" },
-  { id: "amazonLive", ms: 1400, x: 50, y: 38, click: true, label: "Live on Amazon" },
-  { id: "facebookLive", ms: 1400, x: 84, y: 38, click: true, label: "Live on Facebook" },
-  { id: "shopifyLive", ms: 1400, x: 24, y: 70, click: true, label: "Live on Shopify" },
-  { id: "webLive", ms: 1500, x: 76, y: 70, click: true, label: "Live on your site" },
+  { id: "title", ms: 2400, x: 40, y: 8, click: false, label: "Title writes itself" },
+  { id: "desc", ms: 2000, x: 40, y: 8, click: false, label: "Description" },
+  { id: "compare", ms: 1800, x: 40, y: 8, click: false, label: "Priced vs sold comps" },
+  { id: "fillEbay", ms: 1200, x: 16, y: 38, click: false, label: "eBay" },
+  { id: "fillAmazon", ms: 1100, x: 50, y: 38, click: false, label: "Amazon" },
+  { id: "fillFacebook", ms: 1100, x: 84, y: 38, click: false, label: "Facebook" },
+  { id: "fillShopify", ms: 1100, x: 24, y: 70, click: false, label: "Shopify" },
+  { id: "fillWeb", ms: 1200, x: 76, y: 70, click: false, label: "Your site" },
+  { id: "ready", ms: 1100, x: 91, y: 8, click: false, label: "Publish" },
+  { id: "publish", ms: 1800, x: 91, y: 8, click: true, label: "Publishing" },
+  { id: "ebayLive", ms: 1200, x: 16, y: 38, click: false, label: "Live on eBay" },
+  { id: "amazonLive", ms: 1100, x: 50, y: 38, click: false, label: "Live on Amazon" },
+  { id: "facebookLive", ms: 1100, x: 84, y: 38, click: false, label: "Live on Facebook" },
+  { id: "shopifyLive", ms: 1100, x: 24, y: 70, click: false, label: "Live on Shopify" },
+  { id: "webLive", ms: 1200, x: 76, y: 70, click: false, label: "Live on your site" },
   { id: "sales", ms: 2600, x: 88, y: 93, click: false, label: "Revenue" },
   { id: "hold", ms: 2200, x: 88, y: 93, click: false, label: "Next product" },
 ] as const;
 
+type StepId = (typeof STEPS)[number]["id"];
+
+function stepIndex(id: StepId) {
+  return STEPS.findIndex((s) => s.id === id);
+}
+
+const CURSOR_OFF: ReadonlySet<string> = new Set([
+  "drag",
+  "fillEbay",
+  "fillAmazon",
+  "fillFacebook",
+  "fillShopify",
+  "fillWeb",
+  "ebayLive",
+  "amazonLive",
+  "facebookLive",
+  "shopifyLive",
+  "webLive",
+]);
+
 function ordersAt(beat: number) {
-  if (beat < 18) return 0;
-  if (beat === 18) return 4;
+  const sales = stepIndex("sales");
+  if (beat < sales) return 0;
+  if (beat === sales) return 4;
   return 9;
 }
 
@@ -673,7 +705,9 @@ export function ListingPipeline({
           {
             name: "Your listing",
             title: "Your listing",
+            description: "Higlou writes the description from your photo.",
             price: 189,
+            comps: 240,
             photos: photos.slice(0, 4),
           },
         ]
@@ -684,33 +718,38 @@ export function ListingPipeline({
   const slug = item.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
   const sold = ordersAt(beat);
   const money = sold * item.price;
-  const typing = useTyped(item.title, beat >= 4, reduce);
-  const price = useCountUp(item.price, beat >= 5, reduce);
-  const sales = useCountToward(money, reduce);
   const step = STEPS[beat] ?? STEPS[0];
+  const at = (id: StepId) => beat >= stepIndex(id);
+  const is = (id: StepId) => step.id === id;
+  const typing = useTyped(item.title, at("title"), reduce);
+  const descTyping = useTyped(item.description, at("desc"), reduce);
+  const price = useCountUp(item.price, at("compare"), reduce);
+  const sales = useCountToward(money, reduce);
 
-  const photoIn = beat >= 2;
-  const dragging = beat <= 1;
-  const photosOn = beat >= 3;
-  const draftOn = beat >= 4;
-  const priceOn = beat >= 5;
-  const ebayIn = beat >= 6;
-  const amazonIn = beat >= 7;
-  const facebookIn = beat >= 8;
-  const shopifyIn = beat >= 9;
-  const webIn = beat >= 10;
-  const readyOn = beat >= 11;
-  const publishing = beat === 12;
-  const ebayLive = beat >= 13;
-  const amazonLive = beat >= 14;
-  const facebookLive = beat >= 15;
-  const shopifyLive = beat >= 16;
-  const webLive = beat >= 17;
-  const liveOn = beat >= 13;
-  const allLive = beat >= 17;
+  const photoIn = at("drop");
+  const dragging = beat <= stepIndex("drag");
+  const photosOn = at("photos");
+  const draftOn = at("title");
+  const descOn = at("desc");
+  const priceOn = at("compare");
+  const ebayIn = at("fillEbay");
+  const amazonIn = at("fillAmazon");
+  const facebookIn = at("fillFacebook");
+  const shopifyIn = at("fillShopify");
+  const webIn = at("fillWeb");
+  const readyOn = at("ready");
+  const publishing = is("publish");
+  const ebayLive = at("ebayLive");
+  const amazonLive = at("amazonLive");
+  const facebookLive = at("facebookLive");
+  const shopifyLive = at("shopifyLive");
+  const webLive = at("webLive");
+  const liveOn = at("ebayLive");
+  const allLive = at("webLive");
   const dragPhase =
-    beat === 0 ? "grab" : beat === 1 ? "drag" : beat === 2 ? "drop" : "gone";
+    is("grab") ? "grab" : is("drag") ? "drag" : is("drop") ? "drop" : "gone";
   const priceLabel = `$${item.price.toFixed(2)}`;
+  const compsLabel = `$${item.comps.toLocaleString("en-US")}`;
 
   useEffect(() => {
     if (reduce) {
@@ -767,22 +806,22 @@ export function ListingPipeline({
     >
       {!reduce ? (
         <>
-          {beat <= 2 ? (
+          {beat <= stepIndex("drop") ? (
             <DragGhost src={cover} x={step.x} y={step.y} phase={dragPhase} />
           ) : null}
           <GuideCursor
-            x={beat === 3 ? 8 + Math.max(0, filled - 1) * 5.2 : step.x}
+            x={is("photos") ? 8 + Math.max(0, filled - 1) * 5.2 : step.x}
             y={step.y}
-            click={step.click || (beat === 3 && filled > 1)}
-            visible={beat !== 12 && beat !== 1}
+            click={step.click || (is("photos") && filled > 1)}
+            visible={!CURSOR_OFF.has(step.id)}
             label={
-              beat === 3
+              is("photos")
                 ? `${filled} of ${shots.length} photos`
-                : beat >= 18
+                : at("sales")
                   ? moneyLabel(sales)
                   : step.label
             }
-            clickKey={`${step.id}-${sku}-${beat === 3 ? filled : beat}`}
+            clickKey={`${step.id}-${sku}-${is("photos") ? filled : beat}`}
           />
         </>
       ) : null}
@@ -802,12 +841,12 @@ export function ListingPipeline({
                 animate={
                   i === 0
                     ? {
-                        scale: beat === 1 ? [1, 1.12, 1] : [1, 1.05, 1],
-                        borderColor: beat === 1 ? "rgba(20,20,20,1)" : "rgba(20,20,20,0.7)",
+                        scale: is("drag") ? [1, 1.12, 1] : [1, 1.05, 1],
+                        borderColor: is("drag") ? "rgba(20,20,20,1)" : "rgba(20,20,20,0.7)",
                       }
                     : { scale: 1 }
                 }
-                transition={i === 0 ? { duration: beat === 1 ? 0.7 : 1.1, repeat: Infinity } : undefined}
+                transition={i === 0 ? { duration: is("drag") ? 0.7 : 1.1, repeat: Infinity } : undefined}
                 className={cn(
                   "size-11 rounded-md sm:size-12",
                   i === 0
@@ -860,19 +899,29 @@ export function ListingPipeline({
                 : photoIn
                   ? "One photo in. Watch this."
                   : "Drop one photo. Higlou writes the rest."}
-            {beat === 4 && typing.length < item.title.length ? (
+            {is("title") && typing.length < item.title.length ? (
               <span className="ml-0.5 inline-block h-3 w-px animate-pulse bg-[#191919]" />
             ) : null}
           </p>
+          {descOn ? (
+            <p className="mt-0.5 truncate text-[12px] text-[#707070]">
+              {descTyping}
+              {is("desc") && descTyping.length < item.description.length ? (
+                <span className="ml-0.5 inline-block h-3 w-px animate-pulse bg-[#707070]" />
+              ) : null}
+            </p>
+          ) : null}
           <p className="mt-0.5 text-[12px] text-[#707070]">
             {priceOn ? (
               <motion.span
                 key="price"
                 initial={{ opacity: 0, y: 5 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="inline-block font-semibold tabular-nums text-[#191919]"
+                className="inline-flex items-center gap-1.5 font-semibold tabular-nums text-[#191919]"
               >
-                ${price.toFixed(2)}
+                <span className="font-medium text-[#9b9b9b] line-through">{compsLabel}</span>
+                <span>${price.toFixed(2)}</span>
+                <span className="font-medium text-[#707070]">under sold comps</span>
               </motion.span>
             ) : photosOn ? (
               `${filled} of ${shots.length} photos`
@@ -881,8 +930,10 @@ export function ListingPipeline({
             ) : (
               "Grab one photo. Drop it on the listing."
             )}
-            {draftOn && !priceOn ? " · writing the title…" : null}
-            {priceOn && !readyOn ? " · priced" : null}
+            {draftOn && !descOn ? " · writing the title…" : null}
+            {descOn && !priceOn ? " · writing the description…" : null}
+            {priceOn && !ebayIn ? " · priced" : null}
+            {ebayIn && !readyOn ? " · filling stores…" : null}
             {readyOn && !publishing && !liveOn ? " · all stores ready" : null}
             {publishing ? " · publishing…" : null}
             {liveOn && !allLive ? " · going live, store by store" : null}
@@ -916,7 +967,7 @@ export function ListingPipeline({
 
       <div className="relative min-h-0 flex-1">
         <div className="grid h-full min-h-0 grid-cols-6 grid-rows-2 divide-x divide-y divide-[#e5e5e5]">
-        <ChannelShell live={ebayLive} filled={ebayIn} focused={beat === 6 || beat === 13} className="col-span-2">
+        <ChannelShell live={ebayLive} filled={ebayIn} focused={is("fillEbay") || is("ebayLive")} className="col-span-2">
           {ebayIn ? (
             <EbayLivePreview
               key={`ebay-${cover}`}
@@ -944,7 +995,7 @@ export function ListingPipeline({
           )}
         </ChannelShell>
 
-        <ChannelShell live={amazonLive} filled={amazonIn} focused={beat === 7 || beat === 14} className="col-span-2">
+        <ChannelShell live={amazonLive} filled={amazonIn} focused={is("fillAmazon") || is("amazonLive")} className="col-span-2">
           {amazonIn ? (
             <AmazonStorefront key={`amz-${cover}`} src={cover} title={item.title} price={priceLabel} />
           ) : (
@@ -962,7 +1013,7 @@ export function ListingPipeline({
           )}
         </ChannelShell>
 
-        <ChannelShell live={facebookLive} filled={facebookIn} focused={beat === 8 || beat === 15} className="col-span-2">
+        <ChannelShell live={facebookLive} filled={facebookIn} focused={is("fillFacebook") || is("facebookLive")} className="col-span-2">
           {facebookIn ? (
             <FacebookStorefront
               key={`fb-${cover}`}
@@ -988,7 +1039,7 @@ export function ListingPipeline({
           )}
         </ChannelShell>
 
-        <ChannelShell live={shopifyLive} filled={shopifyIn} focused={beat === 9 || beat === 16} className="col-span-3">
+        <ChannelShell live={shopifyLive} filled={shopifyIn} focused={is("fillShopify") || is("shopifyLive")} className="col-span-3">
           {shopifyIn ? (
             <ShopifyStorefront key={`shop-${cover}`} src={cover} title={item.title} price={priceLabel} />
           ) : (
@@ -1008,7 +1059,7 @@ export function ListingPipeline({
           )}
         </ChannelShell>
 
-        <ChannelShell live={webLive} filled={webIn} focused={beat === 10 || beat === 17} className="col-span-3">
+        <ChannelShell live={webLive} filled={webIn} focused={is("fillWeb") || is("webLive")} className="col-span-3">
           {webIn ? (
             <SiteStorefront
               key={`web-${cover}`}

@@ -38,12 +38,16 @@ export function MoneyMachineHome({
   storeName,
   drafts = [],
   readyListings,
+  connectHref = null,
+  showRestCta = false,
 }: {
   name?: string | null;
   storeName?: string | null;
   nextDraft?: { id: string; title: string } | null;
   ebayConnected?: boolean;
   setupHref?: string | null;
+  connectHref?: string | null;
+  showRestCta?: boolean;
   drafts?: HomeDraft[];
   readyListings?: ReadyListing[];
 }) {
@@ -75,6 +79,14 @@ export function MoneyMachineHome({
         <p className="hidden min-w-0 flex-1 truncate text-[13px] text-white/85 sm:block">
           One photo. Five live storefronts.
         </p>
+        {connectHref ? (
+          <a
+            href={connectHref}
+            className="shrink-0 text-[13px] font-medium text-white/90 underline-offset-2 hover:underline"
+          >
+            Connect eBay
+          </a>
+        ) : null}
         <HomeWallet available={wallet} compact />
         <NewListingButton tone="on-blue" size="sm" className="shrink-0" />
       </div>
@@ -86,6 +98,7 @@ export function MoneyMachineHome({
           onWallet={setWallet}
           onStory={setStory}
           onRest={setResting}
+          showRestCta={showRestCta}
         />
 
         <aside className="flex min-h-0 flex-col border-t border-[#eee] bg-[#f3f3f3] lg:border-t-0 lg:border-l">

@@ -3,13 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { AppShell } from "@/components/layout/app-shell";
 import { createClient } from "@/lib/supabase/client";
-import { FirstRunHome } from "@/components/studio/first-run-home";
 import { ReturningHome } from "@/components/studio/returning-home";
-import { WelcomeGate } from "@/components/studio/welcome-gate";
-import {
-  ConnectOnboarding,
-  onboardingAlreadyDone,
-} from "@/components/studio/connect-onboarding";
 import { pickBestReadyListings } from "@/lib/studio/ready-from-products";
 
 type ProductRow = {
@@ -35,13 +29,6 @@ type CsvRow = {
   productId?: string | null;
 };
 
-type SetupState = {
-  ebayConnected: boolean;
-  ebayConfigured: boolean;
-  policiesReady: boolean;
-  brandingReady: boolean;
-};
-
 function firstNameFromEmail(email: string | null | undefined) {
   if (!email) return null;
   const local = email.split("@")[0]?.trim();
@@ -54,18 +41,8 @@ export default function HomeWorkspacePage() {
   const [products, setProducts] = useState<ProductRow[]>([]);
   const [exportsList, setExportsList] = useState<CsvRow[]>([]);
   const [ready, setReady] = useState(false);
-  const [account, setAccount] = useState<{ owner: boolean } | null>(null);
-  const [onboardingDone, setOnboardingDone] = useState<boolean | null>(null);
-  const [setup, setSetup] = useState<SetupState>({
-    ebayConnected: false,
-    ebayConfigured: true,
-    policiesReady: false,
-    brandingReady: false,
-  });
-
-  useEffect(() => {
-    setOnboardingDone(onboardingAlreadyDone());
-  }, []);
+  const [owner, setOwner] = useState(false);
+  const [ebayConnected, setEbayConnected] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -73,14 +50,11 @@ export default function HomeWorkspacePage() {
     void (async () => {
       try {
         const res = await fetch("/api/me");
-        if (!res.ok) {
-          if (!cancelled) setAccount({ owner: false });
-          return;
-        }
+        if (!res.ok) return;
         const body = (await res.json()) as { owner?: boolean };
-        if (!cancelled) setAccount({ owner: Boolean(body.owner) });
+        if (!cancelled) setOwner(Boolean(body.owner));
       } catch {
-        if (!cancelled) setAccount({ owner: false });
+        /* guest */
       }
     })();
 
@@ -127,52 +101,15 @@ export default function HomeWorkspacePage() {
 
     void (async () => {
       try {
-        const [connRes, policyRes, brandRes] = await Promise.all([
-          fetch("/api/ebay/connection"),
-          fetch("/api/settings/policies"),
-          fetch("/api/settings/branding"),
-        ]);
-        const conn = connRes.ok
-          ? ((await connRes.json()) as {
-              connection?: { connected?: boolean; configured?: boolean };
-              connected?: boolean;
-              configured?: boolean;
-            })
-          : null;
-        const policies = policyRes.ok
-          ? ((await policyRes.json()) as {
-              policies?: {
-                shippingPolicyId?: string;
-                returnPolicyId?: string;
-                paymentPolicyId?: string;
-              };
-            })
-          : null;
-        const branding = brandRes.ok
-          ? ((await brandRes.json()) as {
-              branding?: { storeName?: string };
-              storeName?: string;
-            })
-          : null;
-        if (cancelled) return;
-        const p = policies?.policies;
-        setSetup({
-          ebayConnected: Boolean(
-            conn?.connection?.connected || conn?.connected,
-          ),
-          ebayConfigured: Boolean(
-            conn?.connection?.configured || conn?.configured,
-          ),
-          policiesReady: Boolean(
-            p?.shippingPolicyId?.trim() &&
-              p?.returnPolicyId?.trim() &&
-              p?.paymentPolicyId?.trim(),
-          ),
-          brandingReady: Boolean(
-            branding?.branding?.storeName?.trim() ||
-              branding?.storeName?.trim(),
-          ),
-        });
+        const res = await fetch("/api/ebay/connection");
+        if (!res.ok) return;
+        const conn = (await res.json()) as {
+          connection?: { connected?: boolean };
+          connected?: boolean;
+        };
+        if (!cancelled) {
+          setEbayConnected(Boolean(conn.connection?.connected || conn.connected));
+        }
       } catch {
         /* degrade gracefully */
       }
@@ -197,77 +134,26 @@ export default function HomeWorkspacePage() {
     () => pickBestReadyListings(products, 5),
     [products],
   );
-
-  const setupItems = [
-    {
-      done: setup.ebayConnected,
-      title: "Connect eBay",
-      body: "Link your seller account",
-      href: "/settings#ebay-store",
-    },
-    {
-      done: setup.policiesReady,
-      title: "Shipping & returns",
-      body: "Create or import the 3 policies",
-      href: "/settings#policies",
-    },
-    {
-      done: setup.brandingReady,
-      title: "Store branding",
-      body: "Name and listing look",
-      href: "/settings#branding",
-    },
-  ] as const;
-  const setupDoneCount = setupItems.filter((i) => i.done).length;
-  const bootReady = ready && account !== null && onboardingDone !== null;
-  const needsOnboarding = Boolean(
-    account && !account.owner && onboardingDone === false,
-  );
-  const isFirstRun = bootReady && products.length === 0;
-
-  const studio = !bootReady ? (
-    <div className="flex h-full min-h-0 flex-1 animate-pulse bg-white" />
-  ) : needsOnboarding ? (
-    <ConnectOnboarding
-      name={name}
-      ebayConnected={setup.ebayConnected}
-      ebayConfigured={setup.ebayConfigured}
-      policiesReady={setup.policiesReady}
-      brandingReady={setup.brandingReady}
-    />
-  ) : isFirstRun ? (
-    <FirstRunHome
-      name={name}
-      setupDoneCount={setupDoneCount}
-      setupItems={setupItems.map(({ done, title, body, href }) => ({
-        done,
-        title,
-        body,
-        href,
-      }))}
-    />
-  ) : (
-    <ReturningHome
-      name={name}
-      listingCount={products.length}
-      drafts={drafts}
-      readyListings={readyListings}
-      exportsList={exportsList}
-      ebayConnected={setup.ebayConnected}
-    />
-  );
-
-  if (needsOnboarding && bootReady) {
-    return (
-      <AppShell hideHeader flush>
-        {studio}
-      </AppShell>
-    );
-  }
+  const hasInventory = products.length > 0;
+  const connectHref =
+    !owner && !ebayConnected ? "/api/ebay/oauth/start?next=/home" : null;
 
   return (
-    <WelcomeGate>
-      <AppShell hideHeader flush>{studio}</AppShell>
-    </WelcomeGate>
+    <AppShell hideHeader flush>
+      {!ready ? (
+        <div className="flex h-full min-h-0 flex-1 animate-pulse bg-white" />
+      ) : (
+        <ReturningHome
+          name={name}
+          listingCount={products.length}
+          drafts={drafts}
+          readyListings={readyListings}
+          exportsList={exportsList}
+          ebayConnected={ebayConnected}
+          connectHref={connectHref}
+          showRestCta={!hasInventory}
+        />
+      )}
+    </AppShell>
   );
 }

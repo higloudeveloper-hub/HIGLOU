@@ -1103,6 +1103,7 @@ export function ListingPipeline({
   onWallet,
   onStory,
   onRest,
+  showRestCta = false,
 }: {
   storeName?: string | null;
   compact?: boolean;
@@ -1117,6 +1118,7 @@ export function ListingPipeline({
     cover: string;
   }) => void;
   onRest?: (resting: boolean) => void;
+  showRestCta?: boolean;
 }) {
   const reduce = usePrefersReducedMotion();
   const dropMode = mode === "drop";
@@ -1663,7 +1665,9 @@ export function ListingPipeline({
         reduce={reduce}
       />
       )}
-      {!dropMode && resting ? <YourTurn onReplay={replayStory} /> : null}
+      {!dropMode && resting && showRestCta ? (
+        <YourTurn onReplay={replayStory} />
+      ) : null}
     </section>
   );
 }

@@ -9,6 +9,8 @@ export function ReturningHome({
   drafts,
   ebayConnected,
   readyListings,
+  connectHref = null,
+  showRestCta = false,
 }: {
   name: string | null;
   listingCount: number;
@@ -16,6 +18,8 @@ export function ReturningHome({
   exportsList: unknown[];
   ebayConnected: boolean;
   readyListings?: ReadyListing[];
+  connectHref?: string | null;
+  showRestCta?: boolean;
 }) {
   const [storeName, setStoreName] = useState<string | null>(null);
 
@@ -39,6 +43,8 @@ export function ReturningHome({
       drafts={drafts}
       readyListings={readyListings}
       ebayConnected={ebayConnected}
+      connectHref={connectHref}
+      showRestCta={showRestCta}
     />
   );
 }

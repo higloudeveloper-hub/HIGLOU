@@ -316,25 +316,7 @@ export function ImageUploader({
             (disabled || busy) && "pointer-events-none opacity-60",
           )}
         >
-          <div className="relative min-h-0 flex-1">
-            {images.length === 0 ? (
-              <div className="pointer-events-none absolute inset-x-0 bottom-4 flex justify-center">
-                <p className="rounded-md bg-white/95 px-3 py-1.5 text-[13px] text-[#565959] shadow-sm ring-1 ring-[#e5e5e5]">
-                  Drop photos anywhere to list on five stores
-                </p>
-              </div>
-            ) : null}
-            <div
-              className={cn(
-                "pointer-events-none absolute inset-5 flex items-center justify-center rounded-xl border-2 border-dashed border-[#141414] bg-white/90 text-center transition-opacity",
-                dragging ? "opacity-100" : "opacity-0",
-              )}
-            >
-              <p className="px-6 text-[15px] font-semibold tracking-tight text-[#141414]">
-                Drop — eBay · Amazon · Facebook · Shopify · your site
-              </p>
-            </div>
-          </div>
+          <div className="relative min-h-0 flex-1" />
           {fileInput}
         </div>
         {images.length > 0 ? (

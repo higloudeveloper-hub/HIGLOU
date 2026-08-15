@@ -19,6 +19,7 @@ import {
 } from "@/components/brand/store-marks";
 import { cn } from "@/lib/utils";
 import { AdminLivePanel } from "@/components/studio/admin-live-panel";
+import { DropStage } from "@/components/studio/drop-stage";
 import { STORY_CATALOG, type StoryItem } from "@/components/studio/ready-catalog";
 
 const CATALOG = STORY_CATALOG;
@@ -42,10 +43,10 @@ const STEPS = [
 ] as const;
 
 const DROP_STEPS = [
-  { id: "grab", ms: 1200, x: 14, y: 74, click: true, label: "Grab one photo" },
-  { id: "drag", ms: 1400, x: 9, y: 11, click: false, label: "Drop on listing" },
-  { id: "drop", ms: 900, x: 9, y: 11, click: true, label: "Photo in" },
-  { id: "hold", ms: 1400, x: 9, y: 11, click: false, label: "Your turn" },
+  { id: "grab", ms: 1200, x: 50, y: 78, click: true, label: "Grab one photo" },
+  { id: "drag", ms: 1400, x: 50, y: 42, click: false, label: "Drop on listing" },
+  { id: "drop", ms: 900, x: 50, y: 42, click: true, label: "Photo in" },
+  { id: "hold", ms: 1400, x: 50, y: 42, click: false, label: "Your turn" },
 ] as const;
 
 type StepId = (typeof STEPS)[number]["id"];
@@ -1102,10 +1103,8 @@ export function ListingPipeline({
     fileDrag,
   });
   const showCenter =
-    dropMode ||
-    step.id === "grab" ||
-    step.id === "ready" ||
-    step.id === "publish";
+    !dropMode &&
+    (step.id === "grab" || step.id === "ready" || step.id === "publish");
   const showAdmin = !dropMode && (at("sales") || resting);
 
   useEffect(() => {
@@ -1307,7 +1306,7 @@ export function ListingPipeline({
           }
           transition={{ duration: 0.55, ease: EASE }}
         >
-          {dragging || fileDrag ? (
+          {dropMode && !freezeDrop ? null : dragging || fileDrag ? (
             shots.map((_, i) => (
               <motion.div
                 key={`slot-${i}`}
@@ -1367,7 +1366,7 @@ export function ListingPipeline({
             {dropMode
               ? freezeDrop
                 ? "Your photo"
-                : item.name
+                : "New listing"
               : draftOn
                 ? typing
                 : photosOn
@@ -1453,35 +1452,17 @@ export function ListingPipeline({
       ) : null}
 
       {dropMode ? (
-        <div className="relative flex min-h-0 flex-1 flex-col bg-[#f7f7f7]">
-          <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-4 px-4">
-            <div className="flex items-end justify-center gap-2 sm:gap-3">
-              {(freezeDrop ? shots.slice(0, 5) : CATALOG.map((p) => p.photos[0])).map((src, i) => {
-                const on = freezeDrop ? i === 0 : i === sku % CATALOG.length;
-                const label = freezeDrop ? `Photo ${i + 1}` : CATALOG[i]?.name;
-                return (
-                  <div key={`${label}-${src}`} className="flex flex-col items-center gap-1.5">
-                    <div
-                      className={cn(
-                        "overflow-hidden rounded-lg bg-white ring-1 ring-[#e5e5e5] transition",
-                        on
-                          ? "h-[88px] w-[72px] ring-[#141414] sm:h-[108px] sm:w-[88px]"
-                          : "h-[64px] w-[52px] opacity-45 sm:h-[76px] sm:w-[62px]",
-                      )}
-                    >
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={src} alt="" className="size-full object-contain p-1" />
-                    </div>
-                    <p className={cn("text-[11px]", on ? "font-semibold text-[#141414]" : "text-[#8a8a8a]")}>
-                      {label}
-                    </p>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
+        <>
+          <DropStage
+            fileDrag={fileDrag}
+            freezeDrop={freezeDrop}
+            shots={shots}
+            catalog={catalog}
+            sku={sku}
+            compact={compact}
+          />
           <StoreTargets />
-        </div>
+        </>
       ) : (
       <div className="relative min-h-0 flex-1">
         <AnimatePresence mode="wait">

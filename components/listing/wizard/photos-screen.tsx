@@ -107,7 +107,7 @@ export function PhotosScreen({
         <span className="min-w-0 flex-1 truncate text-[12px] text-[#707070]">
           {images.length
             ? `${images.length} photo${images.length === 1 ? "" : "s"}`
-            : "Drop photos to continue"}
+            : "Drop a photo on the pad to continue"}
         </span>
         <button
           type="button"

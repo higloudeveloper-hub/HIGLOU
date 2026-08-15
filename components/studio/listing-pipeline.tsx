@@ -15,30 +15,30 @@ import { STORY_CATALOG } from "@/components/studio/ready-catalog";
 const CATALOG = STORY_CATALOG;
 
 const STEPS = [
-  { id: "grab", ms: 700, x: 14, y: 74, click: true, label: "Grab one photo" },
-  { id: "drag", ms: 900, x: 9, y: 11, click: false, label: "Drop on listing" },
-  { id: "drop", ms: 560, x: 9, y: 11, click: true, label: "Photo in" },
-  { id: "photos", ms: 900, x: 22, y: 8, click: false, label: "Higlou adds shots" },
-  { id: "title", ms: 860, x: 40, y: 8, click: false, label: "Title writes itself" },
-  { id: "desc", ms: 720, x: 40, y: 8, click: false, label: "Description" },
-  { id: "compare", ms: 800, x: 40, y: 8, click: false, label: "Priced vs sold comps" },
-  { id: "fillEbay", ms: 640, x: 16, y: 38, click: false, label: "eBay" },
-  { id: "fillAmazon", ms: 580, x: 50, y: 38, click: false, label: "Amazon" },
-  { id: "fillFacebook", ms: 580, x: 84, y: 38, click: false, label: "Facebook" },
-  { id: "fillShopify", ms: 580, x: 24, y: 70, click: false, label: "Shopify" },
-  { id: "fillWeb", ms: 640, x: 76, y: 70, click: false, label: "Your site" },
-  { id: "ready", ms: 560, x: 91, y: 8, click: false, label: "Publish" },
-  { id: "publish", ms: 780, x: 91, y: 8, click: true, label: "Publishing" },
-  { id: "dispatch", ms: 1700, x: 42, y: 12, click: false, label: "Sending" },
-  { id: "sales", ms: 1400, x: 88, y: 93, click: false, label: "Revenue" },
-  { id: "hold", ms: 800, x: 88, y: 93, click: false, label: "Next product" },
+  { id: "grab", ms: 1400, x: 14, y: 74, click: true, label: "Grab one photo" },
+  { id: "drag", ms: 1600, x: 9, y: 11, click: false, label: "Drop on listing" },
+  { id: "drop", ms: 1000, x: 9, y: 11, click: true, label: "Photo in" },
+  { id: "photos", ms: 1600, x: 22, y: 8, click: false, label: "Higlou adds shots" },
+  { id: "title", ms: 1500, x: 40, y: 8, click: false, label: "Title writes itself" },
+  { id: "desc", ms: 1300, x: 40, y: 8, click: false, label: "Description" },
+  { id: "compare", ms: 1400, x: 40, y: 8, click: false, label: "Priced vs sold comps" },
+  { id: "fillEbay", ms: 1100, x: 16, y: 38, click: false, label: "eBay" },
+  { id: "fillAmazon", ms: 1000, x: 50, y: 38, click: false, label: "Amazon" },
+  { id: "fillFacebook", ms: 1000, x: 84, y: 38, click: false, label: "Facebook" },
+  { id: "fillShopify", ms: 1000, x: 24, y: 70, click: false, label: "Shopify" },
+  { id: "fillWeb", ms: 1100, x: 76, y: 70, click: false, label: "Your site" },
+  { id: "ready", ms: 1500, x: 91, y: 8, click: false, label: "Publish" },
+  { id: "publish", ms: 1600, x: 50, y: 48, click: true, label: "Publishing" },
+  { id: "dispatch", ms: 2800, x: 50, y: 48, click: false, label: "Sending" },
+  { id: "sales", ms: 1800, x: 88, y: 93, click: false, label: "Revenue" },
+  { id: "hold", ms: 1200, x: 88, y: 93, click: false, label: "Next product" },
 ] as const;
 
 const DROP_STEPS = [
-  { id: "grab", ms: 700, x: 14, y: 74, click: true, label: "Grab one photo" },
-  { id: "drag", ms: 900, x: 9, y: 11, click: false, label: "Drop on listing" },
-  { id: "drop", ms: 560, x: 9, y: 11, click: true, label: "Photo in" },
-  { id: "hold", ms: 1100, x: 9, y: 11, click: false, label: "Your turn" },
+  { id: "grab", ms: 1200, x: 14, y: 74, click: true, label: "Grab one photo" },
+  { id: "drag", ms: 1400, x: 9, y: 11, click: false, label: "Drop on listing" },
+  { id: "drop", ms: 900, x: 9, y: 11, click: true, label: "Photo in" },
+  { id: "hold", ms: 1400, x: 9, y: 11, click: false, label: "Your turn" },
 ] as const;
 
 type StepId = (typeof STEPS)[number]["id"];
@@ -109,7 +109,7 @@ function useTyped(text: string, on: boolean, reduce: boolean) {
       i += 1;
       setOut(text.slice(0, i));
       if (i >= text.length) window.clearInterval(t);
-    }, 11);
+    }, 16);
     return () => window.clearInterval(t);
   }, [text, on, reduce]);
   return out;
@@ -353,58 +353,48 @@ function storyCaption(
   }
   switch (id) {
     case "grab":
-      return {
-        headline: ctx.dropMode ? "Grab one photo." : "Grab a product from Ready to list.",
-        sub: ctx.dropMode
-          ? "Drop it on the first listing slot."
-          : "The stock on the right is what Higlou lists.",
-      };
+      return { headline: "ONE PHOTO", sub: "Grab it from Ready to list." };
     case "drag":
-      return {
-        headline: "Drop it on the listing.",
-        sub: ctx.dropMode
-          ? "The first slot is the listing. Higlou does the rest."
-          : "Same product from the right. One photo starts it.",
-      };
+      return { headline: "DROP IT", sub: "On the first listing slot." };
     case "drop":
-      return { headline: "Photo in.", sub: "Higlou takes over from here." };
+      return { headline: "PHOTO IN", sub: "Higlou takes over from here." };
     case "photos":
       return {
-        headline: "Higlou adds extra shots.",
-        sub: `${ctx.filled} of ${ctx.shots} photos — pulled from that one image.`,
+        headline: "MORE SHOTS",
+        sub: `${ctx.filled} of ${ctx.shots} from that one photo.`,
       };
     case "title":
-      return { headline: "The title writes itself.", sub: "From the photo. Ready for every store." };
+      return { headline: "TITLE WRITES ITSELF", sub: "From the photo. Ready for every store." };
     case "desc":
-      return { headline: "Then the description.", sub: "Buyer-ready copy. No typing." };
+      return { headline: "THEN THE COPY", sub: "Buyer-ready. No typing." };
     case "compare":
-      return { headline: "Priced against sold comps.", sub: "You come in under what already sold." };
+      return { headline: "PRICED TO SELL", sub: "Undercut what already sold." };
     case "fillEbay":
-      return { headline: "Same product fills eBay.", sub: "No second listing. The photo flies in." };
+      return { headline: "ONE LISTING", sub: "The same product fills eBay." };
     case "fillAmazon":
-      return { headline: "Now Amazon.", sub: "Same title. Same price. Same photos." };
+      return { headline: "ONE LISTING", sub: "Now Amazon." };
     case "fillFacebook":
-      return { headline: "Now Facebook Marketplace.", sub: "Still the same product." };
+      return { headline: "ONE LISTING", sub: "Now Facebook Marketplace." };
     case "fillShopify":
-      return { headline: "Now your Shopify store.", sub: "Your storefront, already filled." };
+      return { headline: "ONE LISTING", sub: "Now your Shopify store." };
     case "fillWeb":
-      return { headline: "Now your own site.", sub: "Five storefronts. One listing." };
+      return { headline: "FIVE STORES", sub: "And your own site." };
     case "ready":
-      return { headline: "All five stores are ready.", sub: "One click compresses the listing and sends it." };
+      return { headline: "ONLY ONE CLICK", sub: "Publish once. All five go live." };
     case "publish":
-      return { headline: "Compressing the listing.", sub: "Photos, title, price — one packet." };
+      return { headline: "EVERYTHING BECOMES ONE", sub: "Photos, title, price — one packet." };
     case "dispatch":
-      return { headline: "Sending to all five stores.", sub: "They fall in together. eBay, Amazon, Facebook, Shopify, your site." };
+      return { headline: "FLYING TO FIVE STORES", sub: "eBay · Amazon · Facebook · Shopify · your site" };
     case "sales":
-      return { headline: "Sales hit the wallet.", sub: "Watch the money come in, in real time." };
+      return { headline: "MONEY IN", sub: "Watch the wallet. Real time." };
     case "hold":
-      return { headline: "Next product.", sub: "The wallet keeps the money. The machine starts again." };
+      return { headline: "NEXT PRODUCT", sub: "The wallet keeps the money." };
     default:
       return { headline: "Watch this.", sub: "One photo becomes five live storefronts." };
   }
 }
 
-function StoryCaption({
+function CenterLine({
   headline,
   sub,
   stepKey,
@@ -416,27 +406,29 @@ function StoryCaption({
   compact?: boolean;
 }) {
   return (
-    <div className="shrink-0 border-b border-[#eee] bg-white px-4 py-3 sm:px-5">
+    <div className="pointer-events-none absolute inset-0 z-[36] flex items-center justify-center px-6">
+      <div className="absolute inset-0 bg-white/30" />
       <AnimatePresence mode="wait">
         <motion.div
           key={stepKey}
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: -8 }}
-          transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
+          initial={{ opacity: 0, y: 18, scale: 0.96 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          exit={{ opacity: 0, y: -14, scale: 0.98 }}
+          transition={{ duration: 0.38, ease: [0.22, 1, 0.36, 1] }}
+          className="relative max-w-[560px] text-center"
         >
           <p
             className={cn(
-              "font-semibold tracking-tight text-[#141414] leading-[1.15]",
-              compact ? "text-[18px]" : "text-[22px] sm:text-[28px]",
+              "font-semibold tracking-[-0.045em] text-[#141414] leading-[0.95]",
+              compact ? "text-[28px]" : "text-[36px] sm:text-[52px]",
             )}
           >
             {headline}
           </p>
           <p
             className={cn(
-              "mt-1 leading-snug text-[#565959]",
-              compact ? "text-[13px]" : "text-[15px] sm:text-[17px]",
+              "mt-3 font-medium text-[#565959]",
+              compact ? "text-[14px]" : "text-[16px] sm:text-[20px]",
             )}
           >
             {sub}
@@ -530,7 +522,7 @@ function FlyClone({
         opacity: 0,
         rotate: 0,
       }}
-      transition={{ duration: 0.42, ease: [0.16, 1, 0.3, 1] }}
+      transition={{ duration: 0.72, ease: [0.16, 1, 0.3, 1] }}
     >
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img src={src} alt="" className="size-full object-contain p-0.5" />
@@ -548,27 +540,27 @@ function CompressBundle({
   return (
     <motion.div
       className="pointer-events-none absolute z-30"
-      initial={{ left: "18%", top: "9%", scale: 0.35, opacity: 0, x: "-50%", y: "-50%", rotate: -10 }}
-      animate={{ left: "42%", top: "11%", scale: 1, opacity: 1, rotate: -4 }}
-      transition={{ type: "spring", stiffness: 240, damping: 20 }}
+      initial={{ left: "18%", top: "9%", scale: 0.28, opacity: 0, x: "-50%", y: "-50%", rotate: -12 }}
+      animate={{ left: "50%", top: "52%", scale: 1, opacity: 1, rotate: -3 }}
+      transition={{ type: "spring", stiffness: 160, damping: 18 }}
     >
       {extras.slice(1, 3).map((shot, i) => (
         <div
           key={shot}
           className="absolute overflow-hidden rounded-[3px] bg-white p-1 pb-5 shadow-[0_16px_32px_-16px_rgba(0,0,0,0.4)] ring-1 ring-black/10"
           style={{
-            width: 92,
-            height: 112,
-            left: (i + 1) * 7,
-            top: (i + 1) * -6,
-            rotate: `${(i + 1) * 5}deg`,
+            width: 128,
+            height: 156,
+            left: (i + 1) * 10,
+            top: (i + 1) * -8,
+            rotate: `${(i + 1) * 6}deg`,
           }}
         >
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={shot} alt="" className="size-full object-contain" />
         </div>
       ))}
-      <div className="relative h-[124px] w-[100px] overflow-hidden rounded-[3px] bg-white p-1.5 pb-7 shadow-[0_28px_50px_-18px_rgba(0,0,0,0.45)] ring-1 ring-black/10">
+      <div className="relative h-[176px] w-[142px] overflow-hidden rounded-[4px] bg-white p-2 pb-8 shadow-[0_32px_60px_-18px_rgba(0,0,0,0.5)] ring-1 ring-black/10">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src={src} alt="" className="size-full object-contain" />
       </div>
@@ -594,29 +586,29 @@ function FallPacket({
       key={hopKey}
       className="pointer-events-none absolute z-30 overflow-hidden rounded-[3px] bg-white p-1 pb-5 shadow-[0_24px_44px_-16px_rgba(0,0,0,0.42)] ring-1 ring-black/10"
       initial={{
-        left: "42%",
-        top: "11%",
-        width: 100,
-        height: 124,
+        left: "50%",
+        top: "52%",
+        width: 142,
+        height: 176,
         opacity: 1,
         x: "-50%",
         y: "-50%",
-        rotate: -8,
+        rotate: -4,
         scale: 1,
       }}
       animate={{
         left: `${toX}%`,
         top: `${toY}%`,
-        width: 44,
-        height: 54,
+        width: 48,
+        height: 58,
         opacity: 0,
-        rotate: 8,
-        scale: 0.7,
+        rotate: 6,
+        scale: 0.55,
       }}
       transition={{
         delay,
-        duration: 0.62,
-        ease: [0.45, 0.02, 0.85, 0.2],
+        duration: 1.05,
+        ease: [0.16, 1, 0.3, 1],
       }}
     >
       {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -1120,7 +1112,7 @@ export function ListingPipeline({
       n += 1;
       setFilled(Math.min(shots.length, n));
       if (n >= shots.length) window.clearInterval(t);
-    }, 200);
+    }, 320);
     return () => window.clearInterval(t);
   }, [photoIn, photosOn, reduce, freezeDrop, shots.length]);
 
@@ -1132,13 +1124,11 @@ export function ListingPipeline({
     }
     if (step.id === "dispatch") {
       setLanded(0);
-      let n = 0;
-      const t = window.setInterval(() => {
-        n += 1;
-        setLanded(Math.min(5, n));
-        if (n >= 5) window.clearInterval(t);
-      }, 140);
-      return () => window.clearInterval(t);
+      const times = [1080, 1260, 1440, 1620, 1800];
+      const timers = times.map((ms, i) =>
+        window.setTimeout(() => setLanded(i + 1), ms),
+      );
+      return () => timers.forEach((id) => window.clearTimeout(id));
     }
     if (step.id === "sales" || step.id === "hold") {
       setLanded(5);
@@ -1178,7 +1168,7 @@ export function ListingPipeline({
                   src={cover}
                   toX={store.x}
                   toY={store.y}
-                  delay={i * 0.06}
+                  delay={i * 0.18}
                   hopKey={`${sku}-fall-${store.name}`}
                 />
               ))
@@ -1347,35 +1337,12 @@ export function ListingPipeline({
         ) : null}
       </div>
 
-      <StoryCaption
+      <CenterLine
         headline={caption.headline}
         sub={caption.sub}
         stepKey={`${sku}-${step.id}-${is("photos") ? filled : beat}`}
         compact={compact}
       />
-
-      {!dropMode && publishing ? (
-        <div className="shrink-0 border-b border-[#e5e5e5] bg-white px-4 py-2">
-          <div className="grid grid-cols-5 gap-1">
-            {FALL_TO.map((store, i) => (
-              <p
-                key={store.name}
-                className={cn(
-                  "flex h-7 items-center justify-center text-[11px] font-medium",
-                  packing
-                    ? "text-[#b0b0b0]"
-                    : landed > i
-                      ? "text-[#141414]"
-                      : "text-[#b0b0b0]",
-                )}
-              >
-                {landed > i ? <Check className="mr-1 size-3" strokeWidth={2.4} /> : null}
-                {store.name}
-              </p>
-            ))}
-          </div>
-        </div>
-      ) : null}
 
       {dropMode ? (
         <div className="relative flex min-h-0 flex-1 flex-col bg-[#f7f7f7]">
@@ -1412,7 +1379,7 @@ export function ListingPipeline({
         className="relative min-h-0 flex-1 origin-top"
         animate={
           packing
-            ? { scale: 0.88, y: 22, opacity: 0.35 }
+            ? { scale: 0.9, y: 16, opacity: 0.28 }
             : { scale: 1, y: 0, opacity: 1 }
         }
         transition={{ type: "spring", stiffness: 240, damping: 22 }}

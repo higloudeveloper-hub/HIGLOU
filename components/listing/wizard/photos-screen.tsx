@@ -43,7 +43,7 @@ export function PhotosScreen({
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-white">
       <div className="relative min-h-0 flex-1">
-        <ListingPipeline storeName={storeName} photos={shots} />
+        <ListingPipeline storeName={storeName} photos={shots} mode="drop" />
         <ImageUploader
           images={images}
           onChange={onImagesChange}

@@ -82,6 +82,13 @@ const STEPS = [
   { id: "hold", ms: 2200, x: 88, y: 93, click: false, label: "Next product" },
 ] as const;
 
+const DROP_STEPS = [
+  { id: "grab", ms: 1400, x: 14, y: 74, click: true, label: "Grab one photo" },
+  { id: "drag", ms: 2100, x: 9, y: 11, click: false, label: "Drop on listing" },
+  { id: "drop", ms: 1100, x: 9, y: 11, click: true, label: "Photo in" },
+  { id: "hold", ms: 2000, x: 9, y: 11, click: false, label: "Your turn" },
+] as const;
+
 type StepId = (typeof STEPS)[number]["id"];
 
 function stepIndex(id: StepId) {
@@ -688,19 +695,25 @@ export function ListingPipeline({
   compact = false,
   className,
   photos,
+  mode = "story",
 }: {
   storeName?: string | null;
   compact?: boolean;
   className?: string;
   photos?: string[] | null;
+  mode?: "story" | "drop";
 }) {
   const reduce = usePrefersReducedMotion();
+  const dropMode = mode === "drop";
+  const hasUserPhotos = Boolean(photos && photos.length > 0);
+  const freezeDrop = dropMode && hasUserPhotos;
+  const timeline = dropMode ? DROP_STEPS : STEPS;
   const [beat, setBeat] = useState(0);
   const [sku, setSku] = useState(0);
   const [filled, setFilled] = useState(reduce ? 4 : 0);
   const shop = useConnectedEbayStoreName(storeName);
   const catalog =
-    photos && photos.length > 0
+    hasUserPhotos
       ? [
           {
             name: "Your listing",
@@ -708,26 +721,31 @@ export function ListingPipeline({
             description: "Higlou writes the description from your photo.",
             price: 189,
             comps: 240,
-            photos: photos.slice(0, 4),
+            photos: (photos ?? []).slice(0, 4),
           },
         ]
-      : CATALOG;
+      : dropMode
+        ? [CATALOG[0]]
+        : CATALOG;
   const item = catalog[sku % catalog.length] ?? CATALOG[0];
   const shots = [...item.photos];
   const cover = shots[0] || CATALOG[0].photos[0];
   const slug = item.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
-  const sold = ordersAt(beat);
+  const sold = dropMode ? 0 : ordersAt(beat);
   const money = sold * item.price;
-  const step = STEPS[beat] ?? STEPS[0];
-  const at = (id: StepId) => beat >= stepIndex(id);
+  const step = timeline[Math.min(beat, timeline.length - 1)] ?? timeline[0];
+  const at = (id: StepId) => {
+    const i = timeline.findIndex((s) => s.id === id);
+    return i >= 0 && beat >= i;
+  };
   const is = (id: StepId) => step.id === id;
   const typing = useTyped(item.title, at("title"), reduce);
   const descTyping = useTyped(item.description, at("desc"), reduce);
   const price = useCountUp(item.price, at("compare"), reduce);
   const sales = useCountToward(money, reduce);
 
-  const photoIn = at("drop");
-  const dragging = beat <= stepIndex("drag");
+  const photoIn = freezeDrop || at("drop");
+  const dragging = !freezeDrop && beat <= timeline.findIndex((s) => s.id === "drag");
   const photosOn = at("photos");
   const draftOn = at("title");
   const descOn = at("desc");
@@ -752,8 +770,12 @@ export function ListingPipeline({
   const compsLabel = `$${item.comps.toLocaleString("en-US")}`;
 
   useEffect(() => {
+    if (freezeDrop) {
+      setBeat(timeline.length - 1);
+      return;
+    }
     if (reduce) {
-      setBeat(STEPS.length - 1);
+      setBeat(timeline.length - 1);
       return;
     }
     let i = 0;
@@ -761,20 +783,20 @@ export function ListingPipeline({
     const loop = () => {
       id = window.setTimeout(() => {
         i += 1;
-        if (i >= STEPS.length) {
+        if (i >= timeline.length) {
           i = 0;
-          setSku((n) => n + 1);
+          if (!dropMode) setSku((n) => n + 1);
         }
         setBeat(i);
         loop();
-      }, STEPS[i].ms);
+      }, timeline[i].ms);
     };
     loop();
     return () => window.clearTimeout(id);
-  }, [reduce]);
+  }, [reduce, dropMode, freezeDrop, timeline]);
 
   useEffect(() => {
-    if (reduce) {
+    if (reduce || freezeDrop) {
       setFilled(shots.length);
       return;
     }
@@ -794,7 +816,7 @@ export function ListingPipeline({
       if (n >= shots.length) window.clearInterval(t);
     }, 560);
     return () => window.clearInterval(t);
-  }, [photoIn, photosOn, reduce, shots.length]);
+  }, [photoIn, photosOn, reduce, freezeDrop, shots.length]);
 
   return (
     <section
@@ -804,16 +826,16 @@ export function ListingPipeline({
         className,
       )}
     >
-      {!reduce ? (
+      {!reduce && !freezeDrop ? (
         <>
-          {beat <= stepIndex("drop") ? (
+          {beat <= timeline.findIndex((s) => s.id === "drop") ? (
             <DragGhost src={cover} x={step.x} y={step.y} phase={dragPhase} />
           ) : null}
           <GuideCursor
             x={is("photos") ? 8 + Math.max(0, filled - 1) * 5.2 : step.x}
             y={step.y}
             click={step.click || (is("photos") && filled > 1)}
-            visible={!CURSOR_OFF.has(step.id)}
+            visible={!CURSOR_OFF.has(step.id) && !(dropMode && is("hold"))}
             label={
               is("photos")
                 ? `${filled} of ${shots.length} photos`
@@ -892,14 +914,20 @@ export function ListingPipeline({
         </div>
         <div className="min-w-0 flex-1">
           <p className="truncate text-[13px] font-semibold tracking-tight text-[#191919] sm:text-[15px]">
-            {draftOn
-              ? typing
-              : photosOn
-                ? "Higlou pulls more shots from that photo…"
+            {dropMode
+              ? freezeDrop
+                ? "Photo in. Continue when you’re ready."
                 : photoIn
-                  ? "One photo in. Watch this."
-                  : "Drop one photo. Higlou writes the rest."}
-            {is("title") && typing.length < item.title.length ? (
+                  ? "That’s the move. Drop yours the same way."
+                  : "Drop one photo to start the listing."
+              : draftOn
+                ? typing
+                : photosOn
+                  ? "Higlou pulls more shots from that photo…"
+                  : photoIn
+                    ? "One photo in. Watch this."
+                    : "Drop one photo. Higlou writes the rest."}
+            {!dropMode && is("title") && typing.length < item.title.length ? (
               <span className="ml-0.5 inline-block h-3 w-px animate-pulse bg-[#191919]" />
             ) : null}
           </p>
@@ -912,7 +940,11 @@ export function ListingPipeline({
             </p>
           ) : null}
           <p className="mt-0.5 text-[12px] text-[#707070]">
-            {priceOn ? (
+            {dropMode
+              ? freezeDrop
+                ? `${shots.length} photo${shots.length === 1 ? "" : "s"}`
+                : "Grab one photo. Drop it on the first slot."
+              : priceOn ? (
               <motion.span
                 key="price"
                 initial={{ opacity: 0, y: 5 }}
@@ -930,16 +962,17 @@ export function ListingPipeline({
             ) : (
               "Grab one photo. Drop it on the listing."
             )}
-            {draftOn && !descOn ? " · writing the title…" : null}
-            {descOn && !priceOn ? " · writing the description…" : null}
-            {priceOn && !ebayIn ? " · priced" : null}
-            {ebayIn && !readyOn ? " · filling stores…" : null}
-            {readyOn && !publishing && !liveOn ? " · all stores ready" : null}
-            {publishing ? " · publishing…" : null}
-            {liveOn && !allLive ? " · going live, store by store" : null}
-            {allLive ? " · live on 5 stores" : null}
+            {!dropMode && draftOn && !descOn ? " · writing the title…" : null}
+            {!dropMode && descOn && !priceOn ? " · writing the description…" : null}
+            {!dropMode && priceOn && !ebayIn ? " · priced" : null}
+            {!dropMode && ebayIn && !readyOn ? " · filling stores…" : null}
+            {!dropMode && readyOn && !publishing && !liveOn ? " · all stores ready" : null}
+            {!dropMode && publishing ? " · publishing…" : null}
+            {!dropMode && liveOn && !allLive ? " · going live, store by store" : null}
+            {!dropMode && allLive ? " · live on 5 stores" : null}
           </p>
         </div>
+        {!dropMode ? (
         <div
           className={cn(
             "relative h-10 w-[122px] shrink-0 overflow-hidden rounded-md text-[13px] font-semibold tracking-[-0.01em]",
@@ -963,8 +996,12 @@ export function ListingPipeline({
             {publishing ? "Publishing" : liveOn ? "Live" : "Publish"}
           </span>
         </div>
+        ) : null}
       </div>
 
+      {dropMode ? (
+        <div className="relative min-h-0 flex-1 bg-[#fafafa]" />
+      ) : (
       <div className="relative min-h-0 flex-1">
         <div className="grid h-full min-h-0 grid-cols-6 grid-rows-2 divide-x divide-y divide-[#e5e5e5]">
         <ChannelShell live={ebayLive} filled={ebayIn} focused={is("fillEbay") || is("ebayLive")} className="col-span-2">
@@ -1090,12 +1127,15 @@ export function ListingPipeline({
         </ChannelShell>
         </div>
       </div>
+      )}
 
+      {dropMode ? null : (
       <SalesStrip
         dollars={sales}
         sold={sold}
         reduce={reduce}
       />
+      )}
     </section>
   );
 }

@@ -24,6 +24,7 @@ export function EditPromoStrip({
         <ListingPipeline
           storeName={storeName}
           photos={photoSrc ? [photoSrc] : undefined}
+          mode="drop"
         />
       </div>
       <div className="flex items-center justify-between border-t border-[#e5e5e5] px-4 py-3">

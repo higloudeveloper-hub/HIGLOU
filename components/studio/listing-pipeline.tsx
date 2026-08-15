@@ -55,16 +55,20 @@ const STEPS = [
   { id: "photos", ms: 1700, x: 20, y: 8, click: false, label: "Photos in" },
   { id: "title", ms: 2000, x: 40, y: 8, click: false, label: "Title written" },
   { id: "price", ms: 900, x: 40, y: 8, click: false, label: "Priced" },
-  { id: "ebay", ms: 700, x: 16, y: 38, click: true, label: "eBay" },
-  { id: "amazon", ms: 650, x: 50, y: 38, click: true, label: "Amazon" },
-  { id: "facebook", ms: 650, x: 84, y: 38, click: true, label: "Facebook" },
-  { id: "shopify", ms: 650, x: 24, y: 70, click: true, label: "Shopify" },
-  { id: "web", ms: 700, x: 76, y: 70, click: true, label: "Your site" },
-  { id: "ready", ms: 1100, x: 40, y: 8, click: false, label: "All stores ready" },
-  { id: "publish", ms: 1700, x: 91, y: 8, click: false, label: "Publishing" },
-  { id: "live", ms: 1400, x: 91, y: 8, click: false, label: "Live" },
+  { id: "fillEbay", ms: 700, x: 16, y: 38, click: true, label: "eBay" },
+  { id: "fillAmazon", ms: 650, x: 50, y: 38, click: true, label: "Amazon" },
+  { id: "fillFacebook", ms: 650, x: 84, y: 38, click: true, label: "Facebook" },
+  { id: "fillShopify", ms: 650, x: 24, y: 70, click: true, label: "Shopify" },
+  { id: "fillWeb", ms: 700, x: 76, y: 70, click: true, label: "Your site" },
+  { id: "ready", ms: 1000, x: 40, y: 8, click: false, label: "All stores ready" },
+  { id: "publish", ms: 1500, x: 91, y: 8, click: false, label: "Publishing" },
+  { id: "ebayLive", ms: 1100, x: 16, y: 38, click: true, label: "Live on eBay" },
+  { id: "amazonLive", ms: 1000, x: 50, y: 38, click: true, label: "Live on Amazon" },
+  { id: "facebookLive", ms: 1000, x: 84, y: 38, click: true, label: "Live on Facebook" },
+  { id: "shopifyLive", ms: 1000, x: 24, y: 70, click: true, label: "Live on Shopify" },
+  { id: "webLive", ms: 1100, x: 76, y: 70, click: true, label: "Live on your site" },
   { id: "sales", ms: 2200, x: 88, y: 93, click: false, label: "Sales up" },
-  { id: "hold", ms: 2200, x: 88, y: 93, click: false, label: "Next product" },
+  { id: "hold", ms: 2000, x: 88, y: 93, click: false, label: "Next product" },
 ] as const;
 
 const SALES_LINE =
@@ -72,8 +76,8 @@ const SALES_LINE =
 
 function salesProgress(beat: number) {
   if (beat < 13) return 0.04;
-  if (beat === 13) return 0.35;
-  if (beat === 14) return 0.78;
+  if (beat <= 17) return 0.18 + (beat - 13) * 0.12;
+  if (beat === 18) return 0.88;
   return 1;
 }
 
@@ -416,8 +420,8 @@ function SalesStrip({
   const progress = reduce ? 1 : salesProgress(beat);
   const clicked = beat >= 12;
   const climbing = beat >= 13;
-  const boom = beat >= 14;
-  const liveCount = beat >= 13 ? 5 : Math.max(0, Math.min(5, beat - 5));
+  const boom = beat >= 18;
+  const liveCount = beat < 13 ? 0 : Math.min(5, beat - 12);
 
   return (
     <div
@@ -508,7 +512,9 @@ export function ListingPipeline({
   const shots = [...item.photos];
   const cover = shots[0] || CATALOG[0].photos[0];
   const money =
-    beat < 13 ? 0 : beat === 13 ? item.price * 2 : beat === 14 ? item.price * 8 : item.price * 12;
+    beat < 13
+      ? 0
+      : item.price * [2, 4, 6, 9, 12, 16, 20][Math.min(6, beat - 13)];
   const typing = useTyped(item.title, beat >= 4, reduce);
   const price = useCountUp(item.price, beat >= 5, reduce);
   const sales = useCountToward(money, reduce);
@@ -526,10 +532,16 @@ export function ListingPipeline({
   const webIn = beat >= 10;
   const readyOn = beat >= 11;
   const publishing = beat === 12;
+  const ebayLive = beat >= 13;
+  const amazonLive = beat >= 14;
+  const facebookLive = beat >= 15;
+  const shopifyLive = beat >= 16;
+  const webLive = beat >= 17;
   const liveOn = beat >= 13;
+  const allLive = beat >= 17;
   const dragPhase =
     beat === 0 ? "grab" : beat === 1 ? "drag" : beat === 2 ? "drop" : "gone";
-  const priceLabel = `$${item.price.toFixed(item.price % 1 ? 2 : 2)}`;
+  const priceLabel = `$${item.price.toFixed(2)}`;
 
   useEffect(() => {
     if (reduce) {
@@ -593,11 +605,11 @@ export function ListingPipeline({
             x={beat === 3 ? 8 + Math.max(0, filled - 1) * 5.2 : step.x}
             y={step.y}
             click={step.click || (beat === 3 && filled > 1)}
-            visible={beat <= 10}
+            visible={beat !== 12}
             label={
               beat === 3
                 ? `${filled} of ${shots.length} photos`
-                : beat >= 14
+                : beat >= 18
                   ? `$${sales.toLocaleString("en-US")} sales up`
                   : step.label
             }
@@ -695,7 +707,8 @@ export function ListingPipeline({
             {draftOn && !readyOn ? " · writing…" : null}
             {readyOn && !publishing && !liveOn ? " · all stores ready" : null}
             {publishing ? " · publishing…" : null}
-            {liveOn ? " · live on 5 stores" : null}
+            {liveOn && !allLive ? " · going live, store by store" : null}
+            {allLive ? " · live on 5 stores" : null}
           </p>
         </div>
         <div
@@ -708,7 +721,7 @@ export function ListingPipeline({
             className="absolute inset-x-0 bottom-0 bg-[#141414]"
             initial={false}
             animate={{
-              height: liveOn ? "100%" : publishing ? "78%" : readyOn ? "18%" : "0%",
+              height: allLive ? "100%" : publishing || liveOn ? "85%" : readyOn ? "18%" : "0%",
             }}
             transition={{ duration: publishing ? 1.4 : 0.45, ease: [0.22, 1, 0.36, 1] }}
           />
@@ -725,94 +738,133 @@ export function ListingPipeline({
 
       <div className="relative min-h-0 flex-1">
         <div className="grid h-full min-h-0 grid-cols-6 grid-rows-2 divide-x divide-y divide-[#e5e5e5]">
-        <ChannelShell live={liveOn} focused={beat === 6} className="col-span-2">
+        <ChannelShell live={ebayLive} focused={beat === 6 || beat === 13} className="col-span-2">
           <div className="flex shrink-0 items-center justify-between border-b border-[#eee] px-3 py-2">
             <EbayWordmark className="text-[16px]" />
-            <LivePill on={liveOn} label="Live" />
+            <LivePill on={ebayLive} label="Live" />
           </div>
-          <ProductShot live={liveOn} present={ebayIn} src={cover} gallery={shots} />
-          <div className="shrink-0 px-3 py-2">
-            <p className="text-[16px] font-semibold tabular-nums">
-              {ebayIn ? priceLabel : "—"}
+          <ProductShot live={ebayLive} present={ebayIn} src={cover} gallery={shots} />
+          <div className="shrink-0 px-3 pb-3 pt-1.5">
+            <p className="truncate text-[12px] font-medium text-[#191919]">
+              {ebayIn ? item.title : "eBay store"}
             </p>
-            <p className="truncate text-[12px] text-[#707070]">
-              {liveOn ? `Buy It Now · ${shop}` : ebayIn ? item.name : "eBay store"}
+            <p className="text-[18px] font-semibold tabular-nums text-[#191919]">
+              {ebayIn ? `US ${priceLabel}` : "—"}
             </p>
+            {ebayLive ? (
+              <>
+                <p className="mt-1.5 grid h-8 place-items-center rounded-full bg-[#3665F3] text-[12px] font-semibold text-white">
+                  Buy It Now
+                </p>
+                <p className="mt-1 truncate text-center text-[11px] text-[#707070]">{shop}</p>
+              </>
+            ) : (
+              <p className="text-[12px] text-[#707070]">{ebayIn ? item.name : "Queued"}</p>
+            )}
           </div>
         </ChannelShell>
 
-        <ChannelShell live={liveOn} focused={beat === 7} className="col-span-2">
+        <ChannelShell live={amazonLive} focused={beat === 7 || beat === 14} className="col-span-2">
           <div className="flex shrink-0 items-center justify-between bg-[#232F3E] px-3 py-2">
             <AmazonMark className="text-[15px] text-white" />
-            <LivePill on={liveOn} label="Listed" />
+            <LivePill on={amazonLive} label="Listed" />
           </div>
-          <ProductShot live={liveOn} present={amazonIn} src={cover} gallery={shots} />
-          <div className="shrink-0 px-3 py-2">
-            <p className="text-[16px] font-semibold text-[#B12704]">
+          <ProductShot live={amazonLive} present={amazonIn} src={cover} gallery={shots} />
+          <div className="shrink-0 px-3 pb-3 pt-1.5">
+            <p className="truncate text-[12px] text-[#0F1111]">
+              {amazonIn ? item.title : "Amazon"}
+            </p>
+            <p className="text-[18px] font-semibold text-[#B12704]">
               {amazonIn ? priceLabel : "—"}
             </p>
-            <p className="truncate text-[12px] text-[#707070]">
-              {amazonIn ? item.name : "Amazon"}
-            </p>
+            {amazonLive ? (
+              <>
+                <p className="text-[11px] text-[#007600]">In Stock</p>
+                <p className="mt-1.5 grid h-8 place-items-center rounded-full bg-[#FFD814] text-[12px] font-semibold text-[#0F1111]">
+                  Add to Cart
+                </p>
+              </>
+            ) : (
+              <p className="text-[12px] text-[#707070]">{amazonIn ? item.name : "Queued"}</p>
+            )}
           </div>
         </ChannelShell>
 
-        <ChannelShell live={liveOn} focused={beat === 8} className="col-span-2">
+        <ChannelShell live={facebookLive} focused={beat === 8 || beat === 15} className="col-span-2">
           <div className="flex shrink-0 items-center justify-between border-b border-[#eee] px-3 py-2">
             <span className="text-[13px] font-bold text-[#1877F2]">
               facebook <span className="font-semibold text-[#65676B]">Marketplace</span>
             </span>
-            <LivePill on={liveOn} label="Posted" />
+            <LivePill on={facebookLive} label="Posted" />
           </div>
-          <ProductShot live={liveOn} present={facebookIn} src={cover} gallery={shots} />
-          <div className="shrink-0 px-3 py-2">
+          <ProductShot live={facebookLive} present={facebookIn} src={cover} gallery={shots} />
+          <div className="shrink-0 px-3 pb-3 pt-1.5">
             <p className="text-[16px] font-semibold">{facebookIn ? priceLabel : "—"}</p>
-            <p className="truncate text-[12px] text-[#707070]">
-              {facebookIn ? item.name : "Facebook Marketplace"}
+            <p className="truncate text-[12px] text-[#65676B]">
+              {facebookLive
+                ? "Listed just now · Nearby"
+                : facebookIn
+                  ? item.name
+                  : "Facebook Marketplace"}
             </p>
+            {facebookLive ? (
+              <p className="mt-1.5 grid h-8 place-items-center rounded-md bg-[#E7F3FF] text-[12px] font-semibold text-[#1877F2]">
+                Message seller
+              </p>
+            ) : null}
           </div>
         </ChannelShell>
 
-        <ChannelShell live={liveOn} focused={beat === 9} className="col-span-3">
+        <ChannelShell live={shopifyLive} focused={beat === 9 || beat === 16} className="col-span-3">
           <div className="flex shrink-0 items-center justify-between bg-[#212326] px-3 py-2">
             <ShopifyMark />
-            <LivePill on={liveOn} label="On store" />
+            <LivePill on={shopifyLive} label="On store" />
           </div>
-          <ProductShot live={liveOn} present={shopifyIn} src={cover} gallery={shots} />
-          <div className="shrink-0 px-3 py-2">
+          <ProductShot live={shopifyLive} present={shopifyIn} src={cover} gallery={shots} />
+          <div className="shrink-0 px-3 pb-3 pt-1.5">
+            <p className="truncate text-[12px] font-medium text-[#191919]">
+              {shopifyIn ? item.title : "Shopify"}
+            </p>
             <p className="text-[16px] font-semibold tabular-nums">
               {shopifyIn ? priceLabel : "—"}
             </p>
             <p
               className={cn(
                 "mt-1.5 grid h-8 place-items-center rounded-md text-[12px] font-semibold",
-                liveOn ? "bg-[#008060] text-white" : "bg-[#eee] text-[#bbb]",
+                shopifyLive ? "bg-[#008060] text-white" : "bg-[#eee] text-[#bbb]",
               )}
             >
-              Add to cart
+              {shopifyLive ? "Buy it now" : "Add to cart"}
             </p>
           </div>
         </ChannelShell>
 
-        <ChannelShell live={liveOn} focused={beat === 10} className="col-span-3">
+        <ChannelShell live={webLive} focused={beat === 10 || beat === 17} className="col-span-3">
           <div className="flex shrink-0 items-center gap-1.5 border-b border-[#eee] bg-[#f7f7f7] px-3 py-2">
             <span className="size-1.5 rounded-full bg-[#FF5F57]" />
             <span className="size-1.5 rounded-full bg-[#FEBC2E]" />
             <span className="size-1.5 rounded-full bg-[#28C840]" />
             <span className="ml-1 flex min-w-0 flex-1 items-center gap-1 rounded-full bg-white px-2 py-0.5 text-[11px] text-[#707070]">
               <Globe className="size-3 shrink-0" />
-              <span className="truncate">yoursite.com</span>
+              <span className="truncate">yoursite.com/products</span>
             </span>
-            <LivePill on={liveOn} label="On site" />
+            <LivePill on={webLive} label="On site" />
           </div>
-          <ProductShot live={liveOn} present={webIn} src={cover} gallery={shots} />
-          <div className="shrink-0 px-3 py-2">
+          <ProductShot live={webLive} present={webIn} src={cover} gallery={shots} />
+          <div className="shrink-0 px-3 pb-3 pt-1.5">
+            <p className="truncate text-[12px] font-medium">
+              {webIn ? item.title : "Your website"}
+            </p>
             <p className="text-[16px] font-semibold tabular-nums">
               {webIn ? priceLabel : "—"}
             </p>
-            <p className="truncate text-[12px] text-[#707070]">
-              {webIn ? item.name : "Your website"}
-            </p>
+            {webLive ? (
+              <p className="mt-1.5 grid h-8 place-items-center rounded-md bg-[#141414] text-[12px] font-semibold text-white">
+                Add to bag
+              </p>
+            ) : (
+              <p className="text-[12px] text-[#707070]">{webIn ? item.name : "Queued"}</p>
+            )}
           </div>
         </ChannelShell>
         </div>

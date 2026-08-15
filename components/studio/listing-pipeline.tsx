@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, type ReactNode } from "react";
-import { AnimatePresence, motion } from "motion/react";
+import { motion } from "motion/react";
 import { Check, Globe, Loader2 } from "lucide-react";
 import { usePrefersReducedMotion } from "@/components/listing/wizard/use-prefers-reduced-motion";
 import {
@@ -96,27 +96,19 @@ function ChannelShell({
 function ProductShot({ live }: { live: boolean }) {
   return (
     <div className="relative min-h-0 flex-1 bg-white">
-      <AnimatePresence mode="wait">
-        {live ? (
-          <motion.img
-            key="in"
-            src={SAMPLE_PHOTOS[0]}
-            alt=""
-            initial={{ y: 22, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ type: "spring", stiffness: 320, damping: 26 }}
-            className="absolute inset-0 size-full object-contain p-4"
-          />
-        ) : (
-          <motion.div
-            key="wait"
-            className="absolute inset-0 grid place-items-center bg-[#fafafa] text-[12px] font-medium text-[#bbb]"
-          >
-            Waiting for the click
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <motion.img
+        src={SAMPLE_PHOTOS[0]}
+        alt=""
+        initial={false}
+        animate={{
+          opacity: live ? 1 : 0.14,
+          scale: live ? 1 : 0.96,
+          y: live ? 0 : 8,
+        }}
+        transition={{ type: "spring", stiffness: 320, damping: 26 }}
+        className="absolute inset-0 size-full object-contain p-4"
+      />
     </div>
   );
 }
@@ -138,9 +130,11 @@ function LivePill({ on, label }: { on: boolean; label: string }) {
 export function ListingPipeline({
   storeName,
   compact = false,
+  className,
 }: {
   storeName?: string | null;
   compact?: boolean;
+  className?: string;
 }) {
   const reduce = usePrefersReducedMotion();
   const [beat, setBeat] = useState(0);
@@ -177,8 +171,9 @@ export function ListingPipeline({
   return (
     <section
       className={cn(
-        "flex min-h-0 flex-1 flex-col overflow-hidden bg-white",
+        "flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-white",
         compact && "rounded-2xl border border-[#e5e5e5]",
+        className,
       )}
     >
       <div className="flex shrink-0 items-center gap-3 border-b border-[#e5e5e5] bg-white px-3 py-2.5 sm:px-4">

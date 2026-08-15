@@ -39,12 +39,8 @@ export function PhotosScreen({
 }) {
   return (
     <div className="flex min-h-0 flex-1 flex-col pb-28">
-      <div className="mx-auto flex w-full max-w-[1040px] flex-1 flex-col px-4 py-4 sm:px-6">
-        <PhotosWowStrip
-          images={images}
-          storeName={storeName}
-          price={price}
-        />
+      <div className="mx-auto flex w-full max-w-[1200px] flex-1 flex-col px-4 py-4 sm:px-6">
+        <PhotosWowStrip storeName={storeName} />
 
         <section className="mt-5 rounded-3xl border border-border/80 bg-surface p-5 shadow-[0_24px_60px_-48px_rgba(20,16,8,0.45)] sm:p-6">
           <p className="mb-3 text-[13px] font-semibold">Now drop your photos</p>
@@ -145,7 +141,7 @@ export function PhotosScreen({
             type="button"
             disabled={!canContinue}
             onClick={onContinue}
-            className="inline-flex items-center gap-2 rounded-xl bg-foreground px-5 py-3 text-[14px] font-semibold text-background shadow-sm transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+            className="inline-flex items-center gap-2 rounded-full bg-[#3665F3] px-5 py-3 text-[14px] font-semibold text-white shadow-sm transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
           >
             Continue
             <ArrowRight className="h-4 w-4" />

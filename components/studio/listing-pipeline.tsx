@@ -196,27 +196,35 @@ function ChannelShell({
   );
 }
 
-function ProductShot({ live }: { live: boolean }) {
+function ProductShot({
+  live,
+  shots,
+}: {
+  live: boolean;
+  shots: readonly string[];
+}) {
   const [idx, setIdx] = useState(0);
 
   useEffect(() => {
-    if (!live) {
+    if (!live || shots.length <= 1) {
       setIdx(0);
       return;
     }
     const t = window.setInterval(
-      () => setIdx((i) => (i + 1) % SAMPLE_PHOTOS.length),
+      () => setIdx((i) => (i + 1) % shots.length),
       1600,
     );
     return () => window.clearInterval(t);
-  }, [live]);
+  }, [live, shots]);
+
+  const src = shots[Math.min(idx, shots.length - 1)] || SAMPLE_PHOTOS[0];
 
   return (
     <div className="relative min-h-0 flex-1 bg-white">
       <AnimatePresence mode="wait">
         <motion.img
-          key={live ? SAMPLE_PHOTOS[idx] : "dim"}
-          src={SAMPLE_PHOTOS[live ? idx : 0]}
+          key={live ? src : `dim-${src}`}
+          src={src}
           alt=""
           initial={{ opacity: 0, scale: 0.97 }}
           animate={{ opacity: live ? 1 : 0.12, scale: live ? 1 : 0.97 }}
@@ -316,10 +324,12 @@ export function ListingPipeline({
   storeName,
   compact = false,
   className,
+  photos,
 }: {
   storeName?: string | null;
   compact?: boolean;
   className?: string;
+  photos?: string[] | null;
 }) {
   const reduce = usePrefersReducedMotion();
   const [beat, setBeat] = useState(0);
@@ -330,6 +340,8 @@ export function ListingPipeline({
     SALES_DOLLARS[Math.min(beat, SALES_DOLLARS.length - 1)] ?? 0,
     reduce,
   );
+  const shots =
+    photos && photos.length > 0 ? photos.slice(0, 4) : [...SAMPLE_PHOTOS];
 
   const photosOn = beat >= 0;
   const draftOn = beat >= 1;
@@ -369,7 +381,7 @@ export function ListingPipeline({
     >
       <div className="flex shrink-0 items-center gap-3 border-b border-[#e5e5e5] bg-white px-3 py-2.5 sm:px-4">
         <div className="relative flex shrink-0 items-center gap-1">
-          {SAMPLE_PHOTOS.map((src, i) => (
+          {shots.map((src, i) => (
             <motion.div
               key={src}
               initial={false}
@@ -447,7 +459,7 @@ export function ListingPipeline({
             <EbayWordmark className="text-[16px]" />
             <LivePill on={ebayOn} label="Live" />
           </div>
-          <ProductShot live={ebayOn} />
+          <ProductShot live={ebayOn} shots={shots} />
           <div className="shrink-0 px-3 py-2">
             <p className="text-[16px] font-semibold tabular-nums">
               {ebayOn ? "$189.00" : "—"}
@@ -463,7 +475,7 @@ export function ListingPipeline({
             <AmazonMark className="text-[15px] text-white" />
             <LivePill on={amazonOn} label="Listed" />
           </div>
-          <ProductShot live={amazonOn} />
+          <ProductShot live={amazonOn} shots={shots} />
           <div className="shrink-0 px-3 py-2">
             <p className="text-[16px] font-semibold text-[#B12704]">
               {amazonOn ? "$189.00" : "—"}
@@ -479,7 +491,7 @@ export function ListingPipeline({
             </span>
             <LivePill on={facebookOn} label="Posted" />
           </div>
-          <ProductShot live={facebookOn} />
+          <ProductShot live={facebookOn} shots={shots} />
           <div className="shrink-0 px-3 py-2">
             <p className="text-[16px] font-semibold">{facebookOn ? "$189" : "—"}</p>
             <p className="truncate text-[12px] text-[#707070]">
@@ -493,7 +505,7 @@ export function ListingPipeline({
             <ShopifyMark />
             <LivePill on={shopifyOn} label="On store" />
           </div>
-          <ProductShot live={shopifyOn} />
+          <ProductShot live={shopifyOn} shots={shots} />
           <div className="shrink-0 px-3 py-2">
             <p className="text-[16px] font-semibold tabular-nums">
               {shopifyOn ? "$189.00" : "—"}
@@ -520,7 +532,7 @@ export function ListingPipeline({
             </span>
             <LivePill on={webOn} label="On site" />
           </div>
-          <ProductShot live={webOn} />
+          <ProductShot live={webOn} shots={shots} />
           <div className="shrink-0 px-3 py-2">
             <p className="text-[16px] font-semibold tabular-nums">
               {webOn ? "$189.00" : "—"}

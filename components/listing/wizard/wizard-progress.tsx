@@ -26,9 +26,9 @@ export function WizardProgress({
   return (
     <div className={cn("w-full min-w-0", className)}>
       <nav aria-label="Listing steps" className="relative mx-auto max-w-xl">
-        <div className="absolute top-4 right-8 left-8 hidden h-[2px] overflow-hidden rounded-full bg-muted sm:block">
+        <div className="absolute top-4 right-8 left-8 hidden h-[2px] overflow-hidden rounded-full bg-[#eee] sm:block">
           <div
-            className="h-full rounded-full bg-brand-gradient transition-[width] duration-500 ease-out"
+            className="h-full rounded-full bg-[#141414] transition-[width] duration-500 ease-out"
             style={{ width: `${Math.min(100, Math.max(6, pct))}%` }}
           />
         </div>
@@ -61,11 +61,11 @@ export function WizardProgress({
                     className={cn(
                       "relative z-10 grid size-8 place-items-center rounded-full text-[12px] font-semibold shadow-sm transition-colors duration-300",
                       resolved === "done" &&
-                        "bg-foreground text-background",
+                        "bg-[#141414] text-white",
                       resolved === "active" &&
-                        "bg-brand text-brand-foreground ring-4 ring-brand/20",
+                        "bg-[#141414] text-white",
                       resolved === "todo" &&
-                        "border border-border bg-surface text-muted-foreground",
+                        "border border-[#e5e5e5] bg-white text-[#9b9b9b]",
                     )}
                   >
                     {resolved === "done" ? (

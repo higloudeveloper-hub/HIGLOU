@@ -32,8 +32,8 @@ interface ImageUploaderProps {
   disabled?: boolean;
   productId?: string;
   compact?: boolean;
-  /** `wizard` = Step 1 Add Photos mockup layout */
-  variant?: "default" | "wizard";
+  /** `wizard` = dashed box. `stage` = full-area drop over the live storefronts. */
+  variant?: "default" | "wizard" | "stage";
 }
 
 type UploadApiImage = {
@@ -273,6 +273,92 @@ export function ImageUploader({
       }}
     />
   );
+
+  if (variant === "stage") {
+    return (
+      <div className="pointer-events-none absolute inset-0 z-10 flex flex-col">
+        <div
+          role={images.length === 0 ? "button" : undefined}
+          tabIndex={images.length === 0 ? 0 : undefined}
+          onKeyDown={(e) => {
+            if (images.length > 0) return;
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              openFilePicker();
+            }
+          }}
+          onDragOver={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            setDragging(true);
+          }}
+          onDragLeave={() => setDragging(false)}
+          onDrop={onDrop}
+          onClick={() => {
+            if (images.length === 0) openFilePicker();
+          }}
+          className={cn(
+            "pointer-events-auto flex min-h-0 flex-1 flex-col",
+            images.length === 0 && "cursor-pointer",
+            (disabled || busy) && "pointer-events-none opacity-60",
+          )}
+        >
+          {dragging ? (
+            <div className="m-5 flex flex-1 items-center justify-center rounded-xl border-2 border-dashed border-[#141414] bg-white/90 text-center">
+              <p className="px-6 text-[15px] font-semibold tracking-tight text-[#141414]">
+                Drop — eBay · Amazon · Facebook · Shopify · your site
+              </p>
+            </div>
+          ) : images.length === 0 ? (
+            <div className="mt-auto flex justify-center pb-4">
+              <p className="rounded-md bg-white/95 px-3 py-1.5 text-[13px] text-[#565959] shadow-sm ring-1 ring-[#e5e5e5]">
+                Drop photos anywhere to list on five stores
+              </p>
+            </div>
+          ) : null}
+          {fileInput}
+        </div>
+        {images.length > 0 ? (
+          <div className="pointer-events-auto flex shrink-0 items-center gap-2 border-t border-[#e5e5e5] bg-white px-3 py-2">
+            <div className="flex min-w-0 flex-1 gap-1.5 overflow-x-auto">
+              {images.map((image) => (
+                <div
+                  key={image.id}
+                  className="relative size-12 shrink-0 overflow-hidden rounded-md bg-[#f7f7f7] ring-1 ring-[#e5e5e5]"
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={image.previewUrl || image.url}
+                    alt=""
+                    className="size-full object-contain p-0.5"
+                  />
+                  <button
+                    type="button"
+                    aria-label="Remove photo"
+                    className="absolute top-0.5 right-0.5 grid size-4 place-items-center rounded-sm bg-white/90 text-[#141414]"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      removeImage(image.id);
+                    }}
+                  >
+                    <X className="size-3" />
+                  </button>
+                </div>
+              ))}
+            </div>
+            <button
+              type="button"
+              onClick={openFilePicker}
+              className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md border border-[#d8d8d8] bg-white px-2.5 text-[12px] font-semibold text-[#141414]"
+            >
+              <ImagePlus className="size-3.5" />
+              Add
+            </button>
+          </div>
+        ) : null}
+      </div>
+    );
+  }
 
   if (variant === "wizard") {
     return (

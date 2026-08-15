@@ -81,7 +81,7 @@ export function EbayLivePreview({
       )}
     >
       <div className="flex shrink-0 items-center gap-1.5 border-b border-[#e5e5e5] bg-white px-2 py-1">
-        <EbayMark className={tight ? "h-3.5" : "h-4"} />
+        <EbayMark className={tight ? "h-4" : "h-5"} />
         {tight ? (
           <div className="flex min-w-0 flex-1 overflow-hidden rounded-sm border border-[#ccc]">
             <span className="min-w-0 flex-1 truncate bg-white px-2 py-0.5 text-[10px] text-[#707070]">
@@ -133,6 +133,11 @@ export function EbayLivePreview({
             </motion.div>
           )}
         </AnimatePresence>
+        {live ? (
+          <div className="pointer-events-none absolute bottom-1.5 left-1.5">
+            <EbayMark className="h-4" />
+          </div>
+        ) : null}
         {live && !tight ? (
           <button
             type="button"

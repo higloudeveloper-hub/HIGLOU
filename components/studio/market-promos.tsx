@@ -2,6 +2,13 @@
 
 import { useEffect } from "react";
 import Link from "next/link";
+import {
+  AmazonMark,
+  EbayMark,
+  FacebookFMark,
+  ShopifyMark,
+  SiteMark,
+} from "@/components/brand/store-marks";
 import { READY_LISTINGS, type ReadyListing } from "@/components/studio/ready-catalog";
 import { cn } from "@/lib/utils";
 
@@ -11,6 +18,18 @@ function money(n: number) {
     currency: "USD",
     maximumFractionDigits: 0,
   }).format(n);
+}
+
+function LiveOnMarks() {
+  return (
+    <div className="flex items-center gap-2" aria-label="Lists to five stores">
+      <EbayMark className="h-3" />
+      <AmazonMark className="h-2.5" />
+      <FacebookFMark className="h-3.5" />
+      <ShopifyMark className="h-3.5" />
+      <SiteMark className="h-3.5" />
+    </div>
+  );
 }
 
 export function MarketPromos({
@@ -37,18 +56,18 @@ export function MarketPromos({
           <p className="text-[11px] font-medium tracking-[0.14em] text-[#8a8a8a] uppercase">
             Open spread
           </p>
-          <p className="mt-0.5 text-[20px] font-medium tabular-nums tracking-tight text-[#141414]">
+          <p className="mt-0.5 text-[22px] font-medium tabular-nums tracking-tight text-[#141414]">
             {money(openSpread)}
           </p>
         </div>
         <p className="pb-0.5 text-right text-[12px] leading-snug text-[#707070]">
-          {listings.length} lots
+          {listings.length} ready
           <br />
           after supplier cost
         </p>
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className="flex flex-col gap-3">
         {listings.map((item, i) => {
           const profit = item.sell - item.buy;
           const margin = Math.round((profit / item.sell) * 100);
@@ -58,57 +77,59 @@ export function MarketPromos({
             <Link
               key={`${i}-${item.title}`}
               href="/listings/new"
+              data-ready-sku={i}
               className={cn(
-                "group block overflow-hidden rounded-[14px] bg-white ring-1 ring-[#e8e8e8] transition duration-200",
-                active
-                  ? "ring-[#141414]"
-                  : "hover:ring-[#cfcfcf]",
+                "group block bg-white ring-1 ring-[#e8e8e8] transition duration-200",
+                active ? "ring-[#141414]" : "hover:ring-[#cfcfcf]",
               )}
             >
-              <div
-                data-ready-sku={i}
-                className="relative aspect-[16/10] bg-white"
-              >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={item.photo}
-                  alt=""
-                  decoding="async"
-                  loading={i < 2 ? "eager" : "lazy"}
-                  className="absolute inset-0 size-full object-contain p-3"
-                />
-                <span className="absolute bottom-2 left-2 bg-white/95 px-1.5 py-0.5 text-[10px] font-medium tracking-wide text-[#141414] ring-1 ring-black/10">
-                  {active ? "Listing this" : "In stock"}
-                </span>
-              </div>
+              <div className="grid grid-cols-[132px_minmax(0,1fr)] sm:grid-cols-[156px_minmax(0,1fr)]">
+                <div className="relative aspect-square bg-white">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={item.photo}
+                    alt=""
+                    decoding="async"
+                    loading={i < 2 ? "eager" : "lazy"}
+                    className="absolute inset-0 size-full object-contain p-3"
+                  />
+                </div>
 
-              <div className="px-3 pb-3 pt-2.5">
-                <p className="line-clamp-2 min-h-[36px] text-[13px] leading-snug font-medium tracking-tight text-[#191919]">
-                  {item.title}
-                </p>
-                <p className="mt-1 truncate text-[11px] text-[#8a8a8a]">
-                  {item.supplier} · {item.ships}
-                </p>
+                <div className="flex min-w-0 flex-col justify-between border-l border-[#f0f0f0] px-3 py-2.5 sm:px-3.5">
+                  <div>
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-[11px] text-[#8a8a8a]">
+                        In stock · {item.supplier}
+                      </p>
+                      {active ? (
+                        <span className="text-[11px] font-medium text-[#3665F3]">
+                          Listing this
+                        </span>
+                      ) : null}
+                    </div>
+                    <p className="mt-1 line-clamp-2 text-[14px] leading-snug font-medium tracking-tight text-[#191919]">
+                      {item.title}
+                    </p>
+                    <p className="mt-1 text-[11px] text-[#8a8a8a]">{item.ships}</p>
+                  </div>
 
-                <div className="mt-2.5 border-t border-[#eee] pt-2.5">
-                  <div className="flex items-baseline justify-between gap-2 text-[11px] tabular-nums">
-                    <span className="text-[#8a8a8a]">Cost → list</span>
-                    <span className="text-[#565959]">
-                      {money(item.buy)}
-                      <span className="mx-1 text-[#c5c5c5]">→</span>
-                      {money(item.sell)}
-                    </span>
+                  <div className="mt-2.5">
+                    <LiveOnMarks />
+                    <div className="mt-2 flex items-baseline justify-between gap-2 text-[12px] tabular-nums">
+                      <span className="text-[#8a8a8a]">
+                        {money(item.buy)}
+                        <span className="mx-1 text-[#c5c5c5]">→</span>
+                        {money(item.sell)}
+                      </span>
+                      <span className="text-[15px] font-medium tracking-tight text-[#141414]">
+                        You keep +{money(profit)}
+                      </span>
+                    </div>
+                    <p className="mt-0.5 text-[11px] text-[#8a8a8a]">
+                      {margin}% after cost
+                      {undercut > 0 ? ` · ${money(undercut)} under sold` : ""}
+                    </p>
                   </div>
-                  <div className="mt-1 flex items-baseline justify-between gap-2">
-                    <span className="text-[12px] text-[#707070]">You keep</span>
-                    <span className="text-[16px] font-medium tabular-nums tracking-tight text-[#141414]">
-                      +{money(profit)}
-                    </span>
-                  </div>
-                  <p className="mt-1 text-[11px] leading-snug text-[#8a8a8a]">
-                    {margin}% after cost
-                    {undercut > 0 ? ` · ${money(undercut)} under sold` : ""}
-                  </p>
                 </div>
               </div>
             </Link>

@@ -18,6 +18,7 @@ import {
   SiteMark,
 } from "@/components/brand/store-marks";
 import { cn } from "@/lib/utils";
+import { AdminLivePanel } from "@/components/studio/admin-live-panel";
 import { STORY_CATALOG, type StoryItem } from "@/components/studio/ready-catalog";
 
 const CATALOG = STORY_CATALOG;
@@ -36,8 +37,8 @@ const STEPS = [
   { id: "ready", ms: 1600, x: 91, y: 8, click: false, label: "Publish" },
   { id: "publish", ms: 1500, x: 50, y: 48, click: true, label: "Publishing" },
   { id: "dispatch", ms: 2800, x: 50, y: 48, click: false, label: "Sending" },
-  { id: "sales", ms: 2000, x: 88, y: 93, click: false, label: "Revenue" },
-  { id: "hold", ms: 1800, x: 88, y: 93, click: false, label: "Next product" },
+  { id: "sales", ms: 3200, x: 88, y: 93, click: false, label: "Revenue" },
+  { id: "hold", ms: 2200, x: 88, y: 93, click: false, label: "Next product" },
 ] as const;
 
 const DROP_STEPS = [
@@ -383,10 +384,7 @@ function CenterLine({
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: -6 }}
           transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
-          className={cn(
-            "relative max-w-[440px] text-center",
-            stamp ? "" : "bg-white/95 px-6 py-3.5",
-          )}
+          className="relative max-w-[440px] text-center"
         >
           {mark ? (
             <div className="mb-2 flex justify-center">
@@ -395,7 +393,7 @@ function CenterLine({
           ) : (
             <p
               className={cn(
-                "font-medium tracking-tight text-[#141414] leading-[1.08]",
+                "font-medium tracking-tight text-[#141414] leading-[1.08] [text-shadow:0_0_12px_#fff,0_0_4px_#fff]",
                 compact ? "text-[22px]" : "text-[26px] sm:text-[34px]",
               )}
             >
@@ -404,7 +402,7 @@ function CenterLine({
           )}
           <p
             className={cn(
-              "font-medium text-[#565959]",
+              "font-medium text-[#565959] [text-shadow:0_0_10px_#fff,0_0_4px_#fff]",
               mark ? "mt-1" : "mt-1.5",
               compact ? "text-[13px]" : "text-[14px] sm:text-[16px]",
             )}
@@ -701,7 +699,15 @@ function WaitingSite() {
   );
 }
 
-function LivePhoto({ src, className }: { src: string; className?: string }) {
+function LivePhoto({
+  src,
+  className,
+  mark,
+}: {
+  src: string;
+  className?: string;
+  mark?: ReactNode;
+}) {
   return (
     <div className={cn("relative h-full min-h-0 overflow-hidden bg-white", className)}>
       {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -714,6 +720,11 @@ function LivePhoto({ src, className }: { src: string; className?: string }) {
         transition={{ duration: 0.45, ease: EASE }}
         className="absolute inset-0 size-full object-contain p-1.5"
       />
+      {mark ? (
+        <div className="pointer-events-none absolute bottom-1.5 left-1.5">
+          {mark}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -739,7 +750,7 @@ function AmazonStorefront({
   return (
     <div className="grid h-full min-h-0 flex-1 grid-rows-[auto_minmax(0,1fr)_auto] bg-white">
       <div className="flex shrink-0 items-center gap-1.5 bg-[#131921] px-2 py-1">
-        <AmazonMark invert className="h-4" />
+        <AmazonMark invert className="h-5" />
         <div className="flex min-w-0 flex-1 overflow-hidden rounded-sm">
           <span className="hidden shrink-0 bg-[#232F3E] px-1.5 py-0.5 text-[9px] text-white/80 sm:block">
             All
@@ -753,7 +764,7 @@ function AmazonStorefront({
         </div>
         <ShoppingCart className="size-3.5 shrink-0 text-white" />
       </div>
-      <LivePhoto src={src} />
+      <LivePhoto src={src} mark={<AmazonMark className="h-4" />} />
       <div className="shrink-0 px-2 pb-2 pt-1">
         <p className="line-clamp-1 text-[11px] leading-snug text-[#0F1111]">{title}</p>
         <div className="mt-0.5 flex items-start text-[#0F1111]">
@@ -788,13 +799,17 @@ function FacebookStorefront({
   return (
     <div className="grid h-full min-h-0 flex-1 grid-rows-[auto_minmax(0,1fr)_auto] bg-white">
       <div className="flex shrink-0 items-center gap-2 border-b border-[#E4E6EB] bg-white px-2 py-1.5">
-        <FacebookFMark className="h-5" />
+        <FacebookMark className="h-3.5" />
         <span className="min-w-0 flex-1 truncate text-[12px] font-bold text-[#050505]">
           Marketplace
         </span>
         <span className="truncate text-[11px] text-[#65676B]">{seller}</span>
       </div>
-      <LivePhoto src={src} className="bg-[#F0F2F5]" />
+      <LivePhoto
+        src={src}
+        className="bg-[#F0F2F5]"
+        mark={<FacebookFMark className="h-5" />}
+      />
       <div className="shrink-0 bg-white px-2.5 py-1.5">
         <p className="text-[17px] font-bold tabular-nums leading-none text-[#050505]">{price}</p>
         <p className="mt-1 line-clamp-1 text-[12px] font-medium text-[#050505]">{title}</p>
@@ -822,7 +837,7 @@ function ShopifyStorefront({
   return (
     <div className="grid h-full min-h-0 flex-1 grid-rows-[auto_minmax(0,1fr)_auto] bg-white">
       <div className="flex shrink-0 items-center justify-between border-b border-[#e5e5e5] bg-white px-3 py-1.5">
-        <ShopifyMark className="h-5" />
+        <ShopifyMark className="h-6" />
         <div className="flex items-center gap-2 text-[11px] text-[#6b6b6b]">
           <Search className="size-3.5" strokeWidth={1.8} />
           <span className="relative">
@@ -833,7 +848,7 @@ function ShopifyStorefront({
           </span>
         </div>
       </div>
-      <LivePhoto src={src} />
+      <LivePhoto src={src} mark={<ShopifyMark className="h-5" />} />
       <div className="shrink-0 px-3 pb-2 pt-1.5">
         <p className="line-clamp-1 text-[13px] font-medium tracking-tight text-[#121212]">{title}</p>
         <p className="mt-0.5 text-[16px] tabular-nums text-[#121212]">{price}</p>
@@ -862,6 +877,7 @@ function SiteStorefront({
         <span className="size-1.5 rounded-full bg-[#FF5F57]" />
         <span className="size-1.5 rounded-full bg-[#FEBC2E]" />
         <span className="size-1.5 rounded-full bg-[#28C840]" />
+        <SiteMark className="h-3.5 shrink-0" />
         <span className="ml-1 flex min-w-0 flex-1 items-center gap-1 rounded-full bg-white px-2 py-0.5 text-[11px] text-[#707070]">
           <Globe className="size-3 shrink-0" />
           <motion.span
@@ -879,7 +895,7 @@ function SiteStorefront({
         <span>About</span>
         <span>Bag (1)</span>
       </div>
-      <LivePhoto src={src} />
+      <LivePhoto src={src} mark={<SiteMark className="h-5" />} />
       <div className="shrink-0 px-3 pb-2 pt-1.5">
         <p className="line-clamp-1 text-[13px] font-medium tracking-tight text-[#141414]">{title}</p>
         <p className="mt-0.5 text-[16px] font-medium tabular-nums">{price}</p>
@@ -1089,8 +1105,8 @@ export function ListingPipeline({
     dropMode ||
     step.id === "grab" ||
     step.id === "ready" ||
-    step.id === "publish" ||
-    step.id === "sales";
+    step.id === "publish";
+  const showAdmin = !dropMode && (at("sales") || resting);
 
   useEffect(() => {
     if (dropMode) {
@@ -1468,6 +1484,16 @@ export function ListingPipeline({
         </div>
       ) : (
       <div className="relative min-h-0 flex-1">
+        {showAdmin ? (
+          <AdminLivePanel
+            title={item.title}
+            cover={cover}
+            price={priceLabel}
+            available={sales}
+            sold={sold}
+            storeName={shop}
+          />
+        ) : (
         <div className="grid h-full min-h-0 grid-cols-6 grid-rows-2 divide-x divide-y divide-[#e5e5e5]">
         <ChannelShell dim={publishing && !ebayIn} className="col-span-2">
           {ebayIn ? (
@@ -1538,6 +1564,7 @@ export function ListingPipeline({
           )}
         </ChannelShell>
         </div>
+        )}
       </div>
       )}
 

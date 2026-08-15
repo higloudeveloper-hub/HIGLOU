@@ -59,34 +59,34 @@ const CATALOG = [
 ] as const;
 
 const STEPS = [
-  { id: "grab", ms: 520, x: 14, y: 74, click: true, label: "Grab one photo" },
-  { id: "drag", ms: 780, x: 9, y: 11, click: false, label: "Drop on listing" },
-  { id: "drop", ms: 420, x: 9, y: 11, click: true, label: "Photo in" },
-  { id: "photos", ms: 780, x: 22, y: 8, click: false, label: "Higlou adds shots" },
-  { id: "title", ms: 720, x: 40, y: 8, click: false, label: "Title writes itself" },
-  { id: "desc", ms: 560, x: 40, y: 8, click: false, label: "Description" },
-  { id: "compare", ms: 620, x: 40, y: 8, click: false, label: "Priced vs sold comps" },
-  { id: "fillEbay", ms: 480, x: 16, y: 38, click: false, label: "eBay" },
-  { id: "fillAmazon", ms: 420, x: 50, y: 38, click: false, label: "Amazon" },
-  { id: "fillFacebook", ms: 420, x: 84, y: 38, click: false, label: "Facebook" },
-  { id: "fillShopify", ms: 420, x: 24, y: 70, click: false, label: "Shopify" },
-  { id: "fillWeb", ms: 480, x: 76, y: 70, click: false, label: "Your site" },
-  { id: "ready", ms: 380, x: 91, y: 8, click: false, label: "Publish" },
-  { id: "publish", ms: 640, x: 91, y: 8, click: true, label: "Publishing" },
-  { id: "ebayLive", ms: 420, x: 16, y: 38, click: false, label: "Live on eBay" },
-  { id: "amazonLive", ms: 380, x: 50, y: 38, click: false, label: "Live on Amazon" },
-  { id: "facebookLive", ms: 380, x: 84, y: 38, click: false, label: "Live on Facebook" },
-  { id: "shopifyLive", ms: 380, x: 24, y: 70, click: false, label: "Live on Shopify" },
-  { id: "webLive", ms: 420, x: 76, y: 70, click: false, label: "Live on your site" },
-  { id: "sales", ms: 1100, x: 88, y: 93, click: false, label: "Revenue" },
-  { id: "hold", ms: 640, x: 88, y: 93, click: false, label: "Next product" },
+  { id: "grab", ms: 700, x: 14, y: 74, click: true, label: "Grab one photo" },
+  { id: "drag", ms: 900, x: 9, y: 11, click: false, label: "Drop on listing" },
+  { id: "drop", ms: 560, x: 9, y: 11, click: true, label: "Photo in" },
+  { id: "photos", ms: 900, x: 22, y: 8, click: false, label: "Higlou adds shots" },
+  { id: "title", ms: 860, x: 40, y: 8, click: false, label: "Title writes itself" },
+  { id: "desc", ms: 720, x: 40, y: 8, click: false, label: "Description" },
+  { id: "compare", ms: 800, x: 40, y: 8, click: false, label: "Priced vs sold comps" },
+  { id: "fillEbay", ms: 640, x: 16, y: 38, click: false, label: "eBay" },
+  { id: "fillAmazon", ms: 580, x: 50, y: 38, click: false, label: "Amazon" },
+  { id: "fillFacebook", ms: 580, x: 84, y: 38, click: false, label: "Facebook" },
+  { id: "fillShopify", ms: 580, x: 24, y: 70, click: false, label: "Shopify" },
+  { id: "fillWeb", ms: 640, x: 76, y: 70, click: false, label: "Your site" },
+  { id: "ready", ms: 560, x: 91, y: 8, click: false, label: "Publish" },
+  { id: "publish", ms: 760, x: 91, y: 8, click: true, label: "Publishing" },
+  { id: "ebayLive", ms: 580, x: 16, y: 38, click: false, label: "Live on eBay" },
+  { id: "amazonLive", ms: 540, x: 50, y: 38, click: false, label: "Live on Amazon" },
+  { id: "facebookLive", ms: 540, x: 84, y: 38, click: false, label: "Live on Facebook" },
+  { id: "shopifyLive", ms: 540, x: 24, y: 70, click: false, label: "Live on Shopify" },
+  { id: "webLive", ms: 640, x: 76, y: 70, click: false, label: "Live on your site" },
+  { id: "sales", ms: 1400, x: 88, y: 93, click: false, label: "Revenue" },
+  { id: "hold", ms: 800, x: 88, y: 93, click: false, label: "Next product" },
 ] as const;
 
 const DROP_STEPS = [
-  { id: "grab", ms: 520, x: 14, y: 74, click: true, label: "Grab one photo" },
-  { id: "drag", ms: 780, x: 9, y: 11, click: false, label: "Drop on listing" },
-  { id: "drop", ms: 420, x: 9, y: 11, click: true, label: "Photo in" },
-  { id: "hold", ms: 800, x: 9, y: 11, click: false, label: "Your turn" },
+  { id: "grab", ms: 700, x: 14, y: 74, click: true, label: "Grab one photo" },
+  { id: "drag", ms: 900, x: 9, y: 11, click: false, label: "Drop on listing" },
+  { id: "drop", ms: 560, x: 9, y: 11, click: true, label: "Photo in" },
+  { id: "hold", ms: 1100, x: 9, y: 11, click: false, label: "Your turn" },
 ] as const;
 
 type StepId = (typeof STEPS)[number]["id"];
@@ -298,21 +298,144 @@ function GuideCursor({
         />
       </motion.div>
       <AnimatePresence mode="wait">
-        <motion.span
-          key={clickKey}
-          initial={{ opacity: 0, y: 6, x: flip ? 8 : -8 }}
-          animate={{ opacity: 1, y: 0, x: 0 }}
-          exit={{ opacity: 0, y: -4 }}
-          transition={{ duration: 0.2 }}
-          className={cn(
-            "absolute top-7 whitespace-nowrap rounded-md bg-[#141414] px-2 py-1 text-[12px] font-medium text-white shadow-[0_8px_20px_-10px_rgba(0,0,0,0.45)]",
-            flip ? "right-1" : "left-5",
-          )}
-        >
-          {label}
-        </motion.span>
+        {label ? (
+          <motion.span
+            key={clickKey}
+            initial={{ opacity: 0, y: 6, x: flip ? 8 : -8 }}
+            animate={{ opacity: 1, y: 0, x: 0 }}
+            exit={{ opacity: 0, y: -4 }}
+            transition={{ duration: 0.2 }}
+            className={cn(
+              "absolute top-7 max-w-[220px] rounded-md bg-[#141414] px-2 py-1 text-[12px] font-medium text-white shadow-[0_8px_20px_-10px_rgba(0,0,0,0.45)]",
+              flip ? "right-1" : "left-5",
+            )}
+          >
+            {label}
+          </motion.span>
+        ) : null}
       </AnimatePresence>
     </motion.div>
+  );
+}
+
+function storyCaption(
+  id: string,
+  ctx: {
+    filled: number;
+    shots: number;
+    dropMode: boolean;
+    freezeDrop: boolean;
+  },
+): { headline: string; sub: string } {
+  if (ctx.freezeDrop) {
+    return {
+      headline: "Photo in.",
+      sub: "Continue when you’re ready. Higlou writes the listing from here.",
+    };
+  }
+  if (ctx.dropMode) {
+    if (id === "grab") {
+      return { headline: "Grab one photo.", sub: "This is how every listing starts." };
+    }
+    if (id === "drag") {
+      return { headline: "Drop it on the first slot.", sub: "One photo. That’s the whole move." };
+    }
+    if (id === "drop") {
+      return { headline: "That’s the move.", sub: "Now drop yours the same way." };
+    }
+    return { headline: "Your turn.", sub: "Drop one photo to start your listing." };
+  }
+  switch (id) {
+    case "grab":
+      return { headline: "Grab one photo.", sub: "Drop it on the first listing slot." };
+    case "drag":
+      return { headline: "Drop it here.", sub: "The first slot is the listing. Higlou does the rest." };
+    case "drop":
+      return { headline: "Photo in.", sub: "Higlou takes over from here." };
+    case "photos":
+      return {
+        headline: "Higlou adds extra shots.",
+        sub: `${ctx.filled} of ${ctx.shots} photos — pulled from that one image.`,
+      };
+    case "title":
+      return { headline: "The title writes itself.", sub: "From the photo. Ready for every store." };
+    case "desc":
+      return { headline: "Then the description.", sub: "Buyer-ready copy. No typing." };
+    case "compare":
+      return { headline: "Priced against sold comps.", sub: "You come in under what already sold." };
+    case "fillEbay":
+      return { headline: "Same product fills eBay.", sub: "No second listing. The photo flies in." };
+    case "fillAmazon":
+      return { headline: "Now Amazon.", sub: "Same title. Same price. Same photos." };
+    case "fillFacebook":
+      return { headline: "Now Facebook Marketplace.", sub: "Still the same product." };
+    case "fillShopify":
+      return { headline: "Now your Shopify store.", sub: "Your storefront, already filled." };
+    case "fillWeb":
+      return { headline: "Now your own site.", sub: "Five storefronts. One listing." };
+    case "ready":
+      return { headline: "All five stores are ready.", sub: "One publish sends them live." };
+    case "publish":
+      return { headline: "Publishing.", sub: "One click. Every store at once." };
+    case "ebayLive":
+      return { headline: "Live on eBay.", sub: "Shoppers can buy it now." };
+    case "amazonLive":
+      return { headline: "Live on Amazon.", sub: "Same listing. New storefront." };
+    case "facebookLive":
+      return { headline: "Live on Facebook.", sub: "Marketplace is selling it too." };
+    case "shopifyLive":
+      return { headline: "Live on Shopify.", sub: "Your store is open." };
+    case "webLive":
+      return { headline: "Live on your site.", sub: "Five stores. One product. Live." };
+    case "sales":
+      return { headline: "Sales hit the wallet.", sub: "Watch the money come in, in real time." };
+    case "hold":
+      return { headline: "Next product.", sub: "The wallet keeps the money. The machine starts again." };
+    default:
+      return { headline: "Watch this.", sub: "One photo becomes five live storefronts." };
+  }
+}
+
+function StoryCaption({
+  headline,
+  sub,
+  stepKey,
+  compact,
+}: {
+  headline: string;
+  sub: string;
+  stepKey: string;
+  compact?: boolean;
+}) {
+  return (
+    <div className="shrink-0 border-b border-[#eee] bg-white px-4 py-3 sm:px-5">
+      <AnimatePresence mode="wait">
+        <motion.div
+          key={stepKey}
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -8 }}
+          transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
+        >
+          <p
+            className={cn(
+              "font-semibold tracking-tight text-[#141414] leading-[1.15]",
+              compact ? "text-[18px]" : "text-[22px] sm:text-[28px]",
+            )}
+          >
+            {headline}
+          </p>
+          <p
+            className={cn(
+              "mt-1 leading-snug text-[#565959]",
+              compact ? "text-[13px]" : "text-[15px] sm:text-[17px]",
+            )}
+          >
+            {sub}
+          </p>
+        </motion.div>
+      </AnimatePresence>
+    </div>
   );
 }
 
@@ -795,6 +918,12 @@ export function ListingPipeline({
     is("grab") ? "grab" : is("drag") ? "drag" : is("drop") ? "drop" : "gone";
   const priceLabel = `$${item.price.toFixed(2)}`;
   const compsLabel = `$${item.comps.toLocaleString("en-US")}`;
+  const caption = storyCaption(step.id, {
+    filled,
+    shots: shots.length,
+    dropMode,
+    freezeDrop,
+  });
 
   useEffect(() => {
     if (freezeDrop) {
@@ -874,13 +1003,7 @@ export function ListingPipeline({
             y={step.y}
             click={step.click || (is("photos") && filled > 1)}
             visible={!CURSOR_OFF.has(step.id) && !(dropMode && is("hold"))}
-            label={
-              is("photos")
-                ? `${filled} of ${shots.length} photos`
-                : at("sales")
-                  ? moneyLabel(sales)
-                  : step.label
-            }
+            label=""
             clickKey={`${step.id}-${sku}-${is("photos") ? filled : beat}`}
           />
         </>
@@ -962,17 +1085,17 @@ export function ListingPipeline({
           <p className="truncate text-[13px] font-semibold tracking-tight text-[#191919] sm:text-[15px]">
             {dropMode
               ? freezeDrop
-                ? "Photo in. Continue when you’re ready."
+                ? "Your photo"
                 : photoIn
-                  ? "That’s the move. Drop yours the same way."
-                  : "Drop one photo to start the listing."
+                  ? "That’s the move"
+                  : "New listing"
               : draftOn
                 ? typing
                 : photosOn
-                  ? "Higlou pulls more shots from that photo…"
+                  ? item.name
                   : photoIn
-                    ? "One photo in. Watch this."
-                    : "Drop one photo. Higlou writes the rest."}
+                    ? item.name
+                    : "New listing"}
             {!dropMode && is("title") && typing.length < item.title.length ? (
               <span className="ml-0.5 inline-block h-3 w-px animate-pulse bg-[#191919]" />
             ) : null}
@@ -985,12 +1108,8 @@ export function ListingPipeline({
               ) : null}
             </p>
           ) : null}
-          <p className="mt-0.5 text-[12px] text-[#707070]">
-            {dropMode
-              ? freezeDrop
-                ? `${shots.length} photo${shots.length === 1 ? "" : "s"}`
-                : "Grab one photo. Drop it on the first slot."
-              : priceOn ? (
+          {priceOn && !dropMode ? (
+            <p className="mt-0.5 text-[12px] text-[#707070]">
               <motion.span
                 key="price"
                 initial={{ opacity: 0, y: 6 }}
@@ -1002,22 +1121,12 @@ export function ListingPipeline({
                 <span>Amazon ${Math.round(item.comps * 0.94).toLocaleString("en-US")}</span>
                 <span className="font-semibold text-[#141414]">You ${price.toFixed(0)}</span>
               </motion.span>
-            ) : photosOn ? (
-              `${filled} of ${shots.length} photos`
-            ) : photoIn ? (
-              "One photo. Higlou does the rest."
-            ) : (
-              "Grab one photo. Drop it on the listing."
-            )}
-            {!dropMode && draftOn && !descOn ? " · writing the title…" : null}
-            {!dropMode && descOn && !priceOn ? " · writing the description…" : null}
-            {!dropMode && priceOn && !ebayIn ? " · priced" : null}
-            {!dropMode && ebayIn && !readyOn ? " · filling stores…" : null}
-            {!dropMode && readyOn && !publishing && !liveOn ? " · all stores ready" : null}
-            {!dropMode && publishing ? " · publishing…" : null}
-            {!dropMode && liveOn && !allLive ? " · going live, store by store" : null}
-            {!dropMode && allLive ? " · live on 5 stores" : null}
-          </p>
+            </p>
+          ) : photosOn && !descOn ? (
+            <p className="mt-0.5 text-[12px] text-[#707070]">
+              {filled} of {shots.length} photos
+            </p>
+          ) : null}
         </div>
         {!dropMode ? (
         <motion.div
@@ -1047,6 +1156,13 @@ export function ListingPipeline({
         </motion.div>
         ) : null}
       </div>
+
+      <StoryCaption
+        headline={caption.headline}
+        sub={caption.sub}
+        stepKey={`${sku}-${step.id}-${is("photos") ? filled : beat}`}
+        compact={compact}
+      />
 
       {dropMode ? (
         <div className="relative min-h-0 flex-1 bg-[#fafafa]" />

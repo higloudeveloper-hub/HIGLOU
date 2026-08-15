@@ -109,7 +109,7 @@ export function MoneyMachineHome({
                 Ready to list
               </p>
               <p className="mt-0.5 text-[12px] text-[#707070]">
-                Cost in. List price out. You keep the spread.
+                Cost in. Five stores out. You keep the spread.
               </p>
             </div>
             <Link

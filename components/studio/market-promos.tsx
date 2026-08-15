@@ -79,23 +79,25 @@ export function MarketPromos({
               href="/listings/new"
               data-ready-sku={i}
               className={cn(
-                "group block bg-white ring-1 ring-[#e8e8e8] transition duration-200",
-                active ? "ring-[#141414]" : "hover:ring-[#cfcfcf]",
+                "group block bg-white ring-1 transition duration-200",
+                active
+                  ? "ring-[#141414]"
+                  : "ring-[#e8e8e8] hover:ring-[#cfcfcf]",
               )}
             >
-              <div className="grid grid-cols-[132px_minmax(0,1fr)] sm:grid-cols-[156px_minmax(0,1fr)]">
-                <div className="relative aspect-square bg-white">
+              <div className="grid grid-cols-[140px_minmax(0,1fr)] sm:grid-cols-[168px_minmax(0,1fr)]">
+                <div className="relative aspect-square bg-[#fafafa]">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src={item.photo}
                     alt=""
                     decoding="async"
                     loading={i < 2 ? "eager" : "lazy"}
-                    className="absolute inset-0 size-full object-contain p-3"
+                    className="absolute inset-0 size-full object-contain p-4"
                   />
                 </div>
 
-                <div className="flex min-w-0 flex-col justify-between border-l border-[#f0f0f0] px-3 py-2.5 sm:px-3.5">
+                <div className="flex min-w-0 flex-col justify-between border-l border-[#f0f0f0] px-3.5 py-3">
                   <div>
                     <div className="flex items-center justify-between gap-2">
                       <p className="text-[11px] text-[#8a8a8a]">
@@ -107,25 +109,30 @@ export function MarketPromos({
                         </span>
                       ) : null}
                     </div>
-                    <p className="mt-1 line-clamp-2 text-[14px] leading-snug font-medium tracking-tight text-[#191919]">
+                    <p className="mt-1.5 line-clamp-2 text-[15px] leading-snug font-medium tracking-tight text-[#191919]">
                       {item.title}
                     </p>
                     <p className="mt-1 text-[11px] text-[#8a8a8a]">{item.ships}</p>
                   </div>
 
-                  <div className="mt-2.5">
+                  <div className="mt-3">
                     <LiveOnMarks />
-                    <div className="mt-2 flex items-baseline justify-between gap-2 text-[12px] tabular-nums">
-                      <span className="text-[#8a8a8a]">
+                    <div className="mt-2.5 flex items-end justify-between gap-2">
+                      <p className="text-[12px] tabular-nums text-[#8a8a8a]">
                         {money(item.buy)}
-                        <span className="mx-1 text-[#c5c5c5]">→</span>
+                        <span className="mx-1 text-[#d0d0d0]">→</span>
                         {money(item.sell)}
-                      </span>
-                      <span className="text-[15px] font-medium tracking-tight text-[#141414]">
-                        You keep +{money(profit)}
-                      </span>
+                      </p>
+                      <p className="text-right">
+                        <span className="block text-[10px] tracking-[0.08em] text-[#8a8a8a] uppercase">
+                          You keep
+                        </span>
+                        <span className="text-[17px] font-medium tabular-nums tracking-tight text-[#141414]">
+                          +{money(profit)}
+                        </span>
+                      </p>
                     </div>
-                    <p className="mt-0.5 text-[11px] text-[#8a8a8a]">
+                    <p className="mt-1 text-[11px] text-[#8a8a8a]">
                       {margin}% after cost
                       {undercut > 0 ? ` · ${money(undercut)} under sold` : ""}
                     </p>

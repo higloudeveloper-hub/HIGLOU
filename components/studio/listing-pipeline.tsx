@@ -37,8 +37,8 @@ const STEPS = [
   { id: "ready", ms: 1600, x: 91, y: 8, click: false, label: "Publish" },
   { id: "publish", ms: 1500, x: 50, y: 48, click: true, label: "Publishing" },
   { id: "dispatch", ms: 2800, x: 50, y: 48, click: false, label: "Sending" },
-  { id: "sales", ms: 3200, x: 88, y: 93, click: false, label: "Revenue" },
-  { id: "hold", ms: 2200, x: 88, y: 93, click: false, label: "Next product" },
+  { id: "sales", ms: 3600, x: 88, y: 93, click: false, label: "Revenue" },
+  { id: "hold", ms: 2400, x: 88, y: 93, click: false, label: "Next product" },
 ] as const;
 
 const DROP_STEPS = [
@@ -393,7 +393,7 @@ function CenterLine({
           ) : (
             <p
               className={cn(
-                "font-medium tracking-tight text-[#141414] leading-[1.08] [text-shadow:0_0_12px_#fff,0_0_4px_#fff]",
+                "font-medium tracking-tight text-[#141414] leading-[1.08]",
                 compact ? "text-[22px]" : "text-[26px] sm:text-[34px]",
               )}
             >
@@ -402,7 +402,7 @@ function CenterLine({
           )}
           <p
             className={cn(
-              "font-medium text-[#565959] [text-shadow:0_0_10px_#fff,0_0_4px_#fff]",
+              "font-medium text-[#565959]",
               mark ? "mt-1" : "mt-1.5",
               compact ? "text-[13px]" : "text-[14px] sm:text-[16px]",
             )}
@@ -1484,7 +1484,16 @@ export function ListingPipeline({
         </div>
       ) : (
       <div className="relative min-h-0 flex-1">
+        <AnimatePresence mode="wait">
         {showAdmin ? (
+          <motion.div
+            key={`admin-${sku}`}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.4, ease: EASE }}
+            className="h-full min-h-0"
+          >
           <AdminLivePanel
             title={item.title}
             cover={cover}
@@ -1493,8 +1502,15 @@ export function ListingPipeline({
             sold={sold}
             storeName={shop}
           />
+          </motion.div>
         ) : (
-        <div className="grid h-full min-h-0 grid-cols-6 grid-rows-2 divide-x divide-y divide-[#e5e5e5]">
+        <motion.div
+          key={`stores-${sku}`}
+          initial={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.32, ease: EASE }}
+          className="grid h-full min-h-0 grid-cols-6 grid-rows-2 divide-x divide-y divide-[#e5e5e5]"
+        >
         <ChannelShell dim={publishing && !ebayIn} className="col-span-2">
           {ebayIn ? (
             <EbayLivePreview
@@ -1563,8 +1579,9 @@ export function ListingPipeline({
             <WaitingSite />
           )}
         </ChannelShell>
-        </div>
+        </motion.div>
         )}
+        </AnimatePresence>
       </div>
       )}
 

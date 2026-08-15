@@ -73,18 +73,18 @@ export function MoneyMachineHome({
 
         <aside className="flex min-h-0 flex-col border-t border-[#eee] bg-[#f3f3f3] lg:border-t-0 lg:border-l">
           <HomeWallet available={wallet} />
-          <div className="flex shrink-0 items-center justify-between px-4 py-3">
+          <div className="flex shrink-0 items-center justify-between px-4 py-3.5">
             <div>
-              <p className="text-[15px] font-bold tracking-tight text-[#191919]">
+              <p className="text-[15px] font-medium tracking-tight text-[#191919]">
                 Ready to list
               </p>
               <p className="mt-0.5 text-[12px] text-[#707070]">
-                Supplier stock. List to your stores. Keep the spread.
+                Cost in. List price out. You keep the spread.
               </p>
             </div>
             <Link
               href="/listings/new"
-              className="shrink-0 text-[13px] font-semibold text-[#3665F3]"
+              className="shrink-0 text-[13px] font-medium text-[#3665F3]"
             >
               List one
             </Link>

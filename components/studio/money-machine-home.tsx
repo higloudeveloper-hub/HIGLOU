@@ -7,6 +7,7 @@ import { ListingCard } from "@/components/studio/listing-card";
 import { MarketPromos } from "@/components/studio/market-promos";
 import { NewListingButton } from "@/components/brand/new-listing-button";
 import { HomeWallet } from "@/components/studio/home-wallet";
+import { ReadyGrabGhost } from "@/components/studio/ready-grab-ghost";
 import { formatRelativeTime } from "@/lib/format-relative-time";
 
 export type HomeDraft = {
@@ -40,6 +41,11 @@ export function MoneyMachineHome({
   drafts?: HomeDraft[];
 }) {
   const [wallet, setWallet] = useState(0);
+  const [story, setStory] = useState<{
+    sku: number;
+    phase: "grab" | "drag" | "drop" | "gone";
+    cover: string;
+  }>({ sku: 0, phase: "gone", cover: "" });
 
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-white md:h-full">
@@ -58,8 +64,12 @@ export function MoneyMachineHome({
         <NewListingButton tone="on-blue" size="sm" className="shrink-0" />
       </div>
 
-      <div className="grid min-h-0 flex-1 lg:grid-cols-[minmax(0,1.05fr)_minmax(420px,0.95fr)]">
-        <ListingPipeline storeName={storeName} onWallet={setWallet} />
+      <div className="relative grid min-h-0 flex-1 lg:grid-cols-[minmax(0,1.05fr)_minmax(420px,0.95fr)]">
+        <ListingPipeline
+          storeName={storeName}
+          onWallet={setWallet}
+          onStory={setStory}
+        />
 
         <aside className="flex min-h-0 flex-col border-t border-[#eee] bg-[#f3f3f3] lg:border-t-0 lg:border-l">
           <HomeWallet available={wallet} />
@@ -80,7 +90,7 @@ export function MoneyMachineHome({
             </Link>
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-4">
-            <MarketPromos />
+            <MarketPromos activeIndex={story.sku} />
             {drafts.length > 0 ? (
               <div className="mt-6">
                 <div className="mb-3 flex items-center justify-between">
@@ -120,6 +130,9 @@ export function MoneyMachineHome({
             ) : null}
           </div>
         </aside>
+        {story.phase !== "gone" ? (
+          <ReadyGrabGhost sku={story.sku} phase={story.phase} src={story.cover} />
+        ) : null}
       </div>
     </div>
   );

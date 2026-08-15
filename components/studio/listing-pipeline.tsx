@@ -10,53 +10,9 @@ import {
   useConnectedEbayStoreName,
 } from "@/components/studio/ebay-live-preview";
 import { cn } from "@/lib/utils";
+import { STORY_CATALOG } from "@/components/studio/ready-catalog";
 
-const CATALOG = [
-  {
-    name: "Watch",
-    title: "Automatic Stainless Chronograph — Unworn",
-    description: "Unworn steel chronograph. Black sunburst dial, oyster bracelet, box ready.",
-    price: 1895,
-    comps: 2290,
-    photos: [
-      "/demo/wow-watch.webp",
-      "/demo/wow-watch-dial.webp",
-      "/demo/wow-watch-side.webp",
-    ],
-  },
-  {
-    name: "Headphones",
-    title: "Wireless Noise Cancelling Headphones",
-    description: "Wireless ANC, 30-hour battery, champagne metal yoke, unmarked.",
-    price: 349,
-    comps: 429,
-    photos: ["/demo/wow-headphones.webp", "/demo/wow-headphones-side.webp", "/demo/wow-headphones-cup.webp"],
-  },
-  {
-    name: "Sneakers",
-    title: "Premium Leather Court Sneakers — White",
-    description: "Full-grain leather court sneaker. Clean white, unworn pair.",
-    price: 220,
-    comps: 279,
-    photos: ["/demo/wow-sneakers.webp", "/demo/wow-sneakers-pair.webp", "/demo/wow-sneakers-top.webp"],
-  },
-  {
-    name: "Gold",
-    title: "14K Gold Cuban Link Bracelet",
-    description: "Solid 14K yellow gold Cuban link. Stamped, heavy, ready to ship.",
-    price: 2450,
-    comps: 2890,
-    photos: ["/demo/wow-gold.webp", "/demo/wow-gold-line.webp", "/demo/wow-gold-links.webp"],
-  },
-  {
-    name: "Camera",
-    title: "Full-Frame Mirrorless Camera + 50mm",
-    description: "Full-frame body with 50mm prime. Low shutter, clean sensor.",
-    price: 1799,
-    comps: 2199,
-    photos: ["/demo/wow-camera.webp", "/demo/wow-camera-back.webp", "/demo/wow-camera-lens.webp"],
-  },
-] as const;
+const CATALOG = STORY_CATALOG;
 
 const STEPS = [
   { id: "grab", ms: 700, x: 14, y: 74, click: true, label: "Grab one photo" },
@@ -397,9 +353,19 @@ function storyCaption(
   }
   switch (id) {
     case "grab":
-      return { headline: "Grab one photo.", sub: "Drop it on the first listing slot." };
+      return {
+        headline: ctx.dropMode ? "Grab one photo." : "Grab a product from Ready to list.",
+        sub: ctx.dropMode
+          ? "Drop it on the first listing slot."
+          : "The stock on the right is what Higlou lists.",
+      };
     case "drag":
-      return { headline: "Drop it here.", sub: "The first slot is the listing. Higlou does the rest." };
+      return {
+        headline: "Drop it on the listing.",
+        sub: ctx.dropMode
+          ? "The first slot is the listing. Higlou does the rest."
+          : "Same product from the right. One photo starts it.",
+      };
     case "drop":
       return { headline: "Photo in.", sub: "Higlou takes over from here." };
     case "photos":
@@ -970,6 +936,7 @@ export function ListingPipeline({
   photos,
   mode = "story",
   onWallet,
+  onStory,
 }: {
   storeName?: string | null;
   compact?: boolean;
@@ -977,6 +944,11 @@ export function ListingPipeline({
   photos?: string[] | null;
   mode?: "story" | "drop";
   onWallet?: (available: number) => void;
+  onStory?: (story: {
+    sku: number;
+    phase: "grab" | "drag" | "drop" | "gone";
+    cover: string;
+  }) => void;
 }) {
   const reduce = usePrefersReducedMotion();
   const dropMode = mode === "drop";
@@ -1063,6 +1035,14 @@ export function ListingPipeline({
     freezeDrop,
     fileDrag,
   });
+
+  useEffect(() => {
+    if (dropMode) {
+      onStory?.({ sku: 0, phase: "gone", cover });
+      return;
+    }
+    onStory?.({ sku, phase: dragPhase, cover });
+  }, [dropMode, sku, dragPhase, cover, onStory]);
 
   useEffect(() => {
     if (!dropMode || freezeDrop) {
@@ -1176,7 +1156,7 @@ export function ListingPipeline({
     >
       {!reduce && !freezeDrop && !fileDrag ? (
         <>
-          {beat <= timeline.findIndex((s) => s.id === "drop") ? (
+          {dropMode && beat <= timeline.findIndex((s) => s.id === "drop") ? (
             <DragGhost src={cover} x={step.x} y={step.y} phase={dragPhase} />
           ) : null}
           {!dropMode && FILL_FLY[step.id] ? (
@@ -1209,7 +1189,11 @@ export function ListingPipeline({
             x={is("photos") ? 8 + Math.max(0, filled - 1) * 5.2 : step.x}
             y={step.y}
             click={step.click || (is("photos") && filled > 1)}
-            visible={!CURSOR_OFF.has(step.id) && !(dropMode && is("hold"))}
+            visible={
+              !CURSOR_OFF.has(step.id) &&
+              !(dropMode && is("hold")) &&
+              !(!dropMode && (is("grab") || is("drag")))
+            }
             label=""
             clickKey={`${step.id}-${sku}-${is("photos") ? filled : beat}`}
           />
@@ -1235,6 +1219,7 @@ export function ListingPipeline({
             shots.map((_, i) => (
               <div
                 key={`slot-${i}`}
+                data-listing-slot={i === 0 ? "" : undefined}
                 className={cn(
                   "size-11 rounded-md sm:size-12",
                   i === 0
@@ -1247,6 +1232,7 @@ export function ListingPipeline({
             shots.map((src, i) => (
               <motion.div
                 key={`${sku}-${src}`}
+                data-listing-slot={i === 0 ? "" : undefined}
                 initial={i === 0 ? false : { opacity: 0, scale: 0.45, x: -18 }}
                 animate={{
                   opacity: packing ? (i === 0 ? 1 : 0.35) : i < filled ? 1 : photoIn ? 0.2 : 0,

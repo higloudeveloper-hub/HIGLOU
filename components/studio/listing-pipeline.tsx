@@ -325,12 +325,19 @@ function storyCaption(
     shots: number;
     dropMode: boolean;
     freezeDrop: boolean;
+    fileDrag?: boolean;
   },
 ): { headline: string; sub: string } {
   if (ctx.freezeDrop) {
     return {
       headline: "Photo in.",
       sub: "Continue when you’re ready. Higlou writes the listing from here.",
+    };
+  }
+  if (ctx.fileDrag) {
+    return {
+      headline: "Drop it on the first slot.",
+      sub: "One photo starts the listing. Higlou does the rest.",
     };
   }
   if (ctx.dropMode) {
@@ -850,7 +857,7 @@ export function ListingPipeline({
   const timeline = dropMode ? DROP_STEPS : STEPS;
   const [beat, setBeat] = useState(0);
   const [sku, setSku] = useState(0);
-  const [filled, setFilled] = useState(reduce ? 4 : 0);
+  const [fileDrag, setFileDrag] = useState(false);
   const shop = useConnectedEbayStoreName(storeName);
   const catalog =
     hasUserPhotos
@@ -885,6 +892,8 @@ export function ListingPipeline({
   const sales = useCountToward(money, reduce);
   const walletRef = useRef(0);
   const prevSales = useRef(0);
+  const fileDragRef = useRef(false);
+  fileDragRef.current = fileDrag;
 
   useEffect(() => {
     const delta = sales - prevSales.current;
@@ -923,7 +932,34 @@ export function ListingPipeline({
     shots: shots.length,
     dropMode,
     freezeDrop,
+    fileDrag,
   });
+
+  useEffect(() => {
+    if (!dropMode || freezeDrop) {
+      setFileDrag(false);
+      return;
+    }
+    const isFile = (e: DragEvent) =>
+      Array.from(e.dataTransfer?.types ?? []).includes("Files");
+    const onEnter = (e: DragEvent) => {
+      if (isFile(e)) setFileDrag(true);
+    };
+    const onEnd = () => setFileDrag(false);
+    const onWindowLeave = (e: DragEvent) => {
+      if (e.relatedTarget === null) setFileDrag(false);
+    };
+    window.addEventListener("dragenter", onEnter);
+    window.addEventListener("drop", onEnd);
+    window.addEventListener("dragend", onEnd);
+    window.addEventListener("dragleave", onWindowLeave);
+    return () => {
+      window.removeEventListener("dragenter", onEnter);
+      window.removeEventListener("drop", onEnd);
+      window.removeEventListener("dragend", onEnd);
+      window.removeEventListener("dragleave", onWindowLeave);
+    };
+  }, [dropMode, freezeDrop]);
 
   useEffect(() => {
     if (freezeDrop) {
@@ -938,14 +974,22 @@ export function ListingPipeline({
     let id = 0;
     const loop = () => {
       id = window.setTimeout(() => {
+        if (fileDragRef.current) {
+          loop();
+          return;
+        }
         i += 1;
         if (i >= timeline.length) {
+          if (dropMode) {
+            setBeat(timeline.length - 1);
+            return;
+          }
           i = 0;
-          if (!dropMode) setSku((n) => n + 1);
+          setSku((n) => n + 1);
         }
         setBeat(i);
         loop();
-      }, timeline[i].ms);
+      }, fileDragRef.current ? 120 : timeline[Math.min(i, timeline.length - 1)].ms);
     };
     loop();
     return () => window.clearTimeout(id);
@@ -982,7 +1026,7 @@ export function ListingPipeline({
         className,
       )}
     >
-      {!reduce && !freezeDrop ? (
+      {!reduce && !freezeDrop && !fileDrag ? (
         <>
           {beat <= timeline.findIndex((s) => s.id === "drop") ? (
             <DragGhost src={cover} x={step.x} y={step.y} phase={dragPhase} />
@@ -1016,20 +1060,10 @@ export function ListingPipeline({
         )}
       >
         <div className="relative flex shrink-0 items-center gap-1">
-          {dragging ? (
+          {dragging || fileDrag ? (
             shots.map((_, i) => (
-              <motion.div
+              <div
                 key={`slot-${i}`}
-                initial={false}
-                animate={
-                  i === 0
-                    ? {
-                        scale: is("drag") ? [1, 1.12, 1] : [1, 1.05, 1],
-                        borderColor: is("drag") ? "rgba(20,20,20,1)" : "rgba(20,20,20,0.7)",
-                      }
-                    : { scale: 1 }
-                }
-                transition={i === 0 ? { duration: is("drag") ? 0.7 : 1.1, repeat: Infinity } : undefined}
                 className={cn(
                   "size-11 rounded-md sm:size-12",
                   i === 0

@@ -81,6 +81,7 @@ export function ImageUploader({
   variant = "default",
 }: ImageUploaderProps) {
   const inputRef = useRef<HTMLInputElement>(null);
+  const dragDepth = useRef(0);
   const [dragging, setDragging] = useState(false);
   const [busy, setBusy] = useState(false);
   const [dragIndex, setDragIndex] = useState<number | null>(null);
@@ -203,6 +204,8 @@ export function ImageUploader({
 
   const onDrop = async (event: React.DragEvent) => {
     event.preventDefault();
+    event.stopPropagation();
+    dragDepth.current = 0;
     setDragging(false);
     if (disabled) return;
     await processFiles(event.dataTransfer.files);
@@ -287,12 +290,22 @@ export function ImageUploader({
               openFilePicker();
             }
           }}
+          onDragEnter={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            dragDepth.current += 1;
+            setDragging(true);
+          }}
           onDragOver={(e) => {
             e.preventDefault();
             e.stopPropagation();
-            setDragging(true);
           }}
-          onDragLeave={() => setDragging(false)}
+          onDragLeave={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            dragDepth.current = Math.max(0, dragDepth.current - 1);
+            if (dragDepth.current === 0) setDragging(false);
+          }}
           onDrop={onDrop}
           onClick={() => {
             if (images.length === 0) openFilePicker();
@@ -303,19 +316,25 @@ export function ImageUploader({
             (disabled || busy) && "pointer-events-none opacity-60",
           )}
         >
-          {dragging ? (
-            <div className="m-5 flex flex-1 items-center justify-center rounded-xl border-2 border-dashed border-[#141414] bg-white/90 text-center">
+          <div className="relative min-h-0 flex-1">
+            {images.length === 0 ? (
+              <div className="pointer-events-none absolute inset-x-0 bottom-4 flex justify-center">
+                <p className="rounded-md bg-white/95 px-3 py-1.5 text-[13px] text-[#565959] shadow-sm ring-1 ring-[#e5e5e5]">
+                  Drop photos anywhere to list on five stores
+                </p>
+              </div>
+            ) : null}
+            <div
+              className={cn(
+                "pointer-events-none absolute inset-5 flex items-center justify-center rounded-xl border-2 border-dashed border-[#141414] bg-white/90 text-center transition-opacity",
+                dragging ? "opacity-100" : "opacity-0",
+              )}
+            >
               <p className="px-6 text-[15px] font-semibold tracking-tight text-[#141414]">
                 Drop — eBay · Amazon · Facebook · Shopify · your site
               </p>
             </div>
-          ) : images.length === 0 ? (
-            <div className="mt-auto flex justify-center pb-4">
-              <p className="rounded-md bg-white/95 px-3 py-1.5 text-[13px] text-[#565959] shadow-sm ring-1 ring-[#e5e5e5]">
-                Drop photos anywhere to list on five stores
-              </p>
-            </div>
-          ) : null}
+          </div>
           {fileInput}
         </div>
         {images.length > 0 ? (
@@ -372,11 +391,19 @@ export function ImageUploader({
               openFilePicker();
             }
           }}
-          onDragOver={(e) => {
+          onDragEnter={(e) => {
             e.preventDefault();
+            dragDepth.current += 1;
             setDragging(true);
           }}
-          onDragLeave={() => setDragging(false)}
+          onDragOver={(e) => {
+            e.preventDefault();
+          }}
+          onDragLeave={(e) => {
+            e.preventDefault();
+            dragDepth.current = Math.max(0, dragDepth.current - 1);
+            if (dragDepth.current === 0) setDragging(false);
+          }}
           onDrop={onDrop}
           onClick={openFilePicker}
           className={cn(
@@ -522,17 +549,25 @@ export function ImageUploader({
   return (
     <div className="space-y-4">
       <div
-        onDragOver={(e) => {
+        onDragEnter={(e) => {
           e.preventDefault();
+          dragDepth.current += 1;
           setDragging(true);
         }}
-        onDragLeave={() => setDragging(false)}
+        onDragOver={(e) => {
+          e.preventDefault();
+        }}
+        onDragLeave={(e) => {
+          e.preventDefault();
+          dragDepth.current = Math.max(0, dragDepth.current - 1);
+          if (dragDepth.current === 0) setDragging(false);
+        }}
         onDrop={onDrop}
         className={cn(
           "relative overflow-hidden rounded-[28px] border border-dashed text-center transition-all duration-300",
           compact ? "p-8" : "px-8 py-14 sm:py-16",
           dragging
-            ? "scale-[1.01] border-zinc-900 bg-zinc-50 shadow-sm"
+            ? "border-zinc-900 bg-zinc-50 shadow-sm"
             : "border-zinc-300 bg-white",
         )}
       >

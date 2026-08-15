@@ -3,15 +3,38 @@
 import Link from "next/link";
 import { Sparkles } from "lucide-react";
 import { ListingPipeline } from "@/components/studio/listing-pipeline";
+import { ListingCard } from "@/components/studio/listing-card";
+import { formatRelativeTime } from "@/lib/format-relative-time";
+
+export type HomeDraft = {
+  id: string;
+  title: string;
+  brand?: string | null;
+  status?: string;
+  updatedAt?: string;
+  coverUrl?: string | null;
+  price?: number | null;
+};
+
+function statusLabel(status?: string) {
+  const s = (status || "").toLowerCase();
+  if (s.includes("csv") || s.includes("ready") || s.includes("exported")) {
+    return { label: "Ready", ready: true };
+  }
+  if (s.includes("draft")) return { label: "Draft", ready: false };
+  return { label: "Needs a look", ready: false };
+}
 
 export function MoneyMachineHome({
   storeName,
+  drafts = [],
 }: {
   name?: string | null;
   storeName?: string | null;
   nextDraft?: { id: string; title: string } | null;
   ebayConnected?: boolean;
   setupHref?: string | null;
+  drafts?: HomeDraft[];
 }) {
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-white md:h-full">
@@ -34,7 +57,59 @@ export function MoneyMachineHome({
           New listing
         </Link>
       </div>
-      <ListingPipeline storeName={storeName} />
+
+      <div className="grid min-h-0 flex-1 lg:grid-cols-[minmax(0,1.05fr)_minmax(420px,0.95fr)]">
+        <ListingPipeline storeName={storeName} />
+
+        <aside className="flex min-h-0 flex-col border-t border-[#eee] bg-[#f3f3f3] lg:border-t-0 lg:border-l">
+          <div className="flex shrink-0 items-center justify-between px-4 py-3">
+            <p className="text-[15px] font-bold tracking-tight text-[#191919]">
+              Ready to list
+            </p>
+            <Link href="/listings" className="text-[13px] font-semibold text-[#3665F3]">
+              See all
+            </Link>
+          </div>
+          <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-4">
+            {drafts.length === 0 ? (
+              <Link
+                href="/listings/new"
+                className="grid min-h-[200px] place-items-center rounded-[20px] bg-white text-[13px] text-[#707070] shadow-[0_1px_3px_rgba(15,17,17,0.08)]"
+              >
+                Drop photos to fill this board
+              </Link>
+            ) : (
+              <div className="grid grid-cols-2 gap-3">
+                {drafts.map((draft, i) => {
+                  const ready = statusLabel(draft.status);
+                  return (
+                    <ListingCard
+                      key={draft.id}
+                      href={`/listings/${draft.id}`}
+                      photo={draft.coverUrl}
+                      title={draft.title}
+                      brand={draft.brand}
+                      meta={
+                        draft.updatedAt
+                          ? formatRelativeTime(draft.updatedAt)
+                          : undefined
+                      }
+                      price={
+                        draft.price != null
+                          ? `$${draft.price.toFixed(2)}`
+                          : null
+                      }
+                      badge={ready.label}
+                      badgeTone={ready.ready ? "ready" : "muted"}
+                      priority={i < 2}
+                    />
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </aside>
+      </div>
     </div>
   );
 }

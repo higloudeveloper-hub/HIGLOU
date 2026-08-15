@@ -1,0 +1,78 @@
+"use client";
+
+import Link from "next/link";
+import { cn } from "@/lib/utils";
+
+export function ListingCard({
+  href,
+  photo,
+  title,
+  brand,
+  meta,
+  price,
+  badge,
+  badgeTone = "muted",
+  priority = false,
+}: {
+  href: string;
+  photo?: string | null;
+  title: string;
+  brand?: string | null;
+  meta?: string;
+  price?: string | null;
+  badge?: string;
+  badgeTone?: "muted" | "ready";
+  priority?: boolean;
+}) {
+  return (
+    <Link
+      href={href}
+      className="group block overflow-hidden rounded-[20px] bg-white shadow-[0_1px_3px_rgba(15,17,17,0.08),0_8px_24px_-14px_rgba(15,17,17,0.18)] transition duration-200 hover:-translate-y-1 hover:shadow-[0_16px_36px_-16px_rgba(15,17,17,0.28)]"
+    >
+      <div className="relative aspect-[16/10] bg-[#f3f3f3]">
+        {photo ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={photo}
+            alt=""
+            decoding="async"
+            loading={priority ? "eager" : "lazy"}
+            fetchPriority={priority ? "high" : "auto"}
+            className="absolute inset-0 size-full object-contain p-3"
+          />
+        ) : (
+          <div className="grid size-full place-items-center text-[12px] text-[#bbb]">
+            No photo yet
+          </div>
+        )}
+        {badge ? (
+          <span
+            className={cn(
+              "absolute bottom-2 left-2 rounded-full px-2 py-0.5 text-[11px] font-semibold shadow-sm",
+              badgeTone === "ready"
+                ? "bg-white text-emerald-800"
+                : "bg-white/95 text-[#191919]",
+            )}
+          >
+            {badge}
+          </span>
+        ) : null}
+      </div>
+      <div className="px-3.5 py-3">
+        <p className="line-clamp-2 min-h-[40px] text-[15px] leading-snug font-bold tracking-tight text-[#191919]">
+          {title || "Untitled listing"}
+        </p>
+        <div className="mt-1.5 flex items-baseline justify-between gap-2">
+          <p className="truncate text-[13px] text-[#707070]">
+            {[brand || "Brand TBD", meta].filter(Boolean).join(" · ")}
+          </p>
+          {price ? (
+            <p className="shrink-0 text-[15px] font-bold tabular-nums text-[#191919]">
+              {price}
+            </p>
+          ) : null}
+        </div>
+      </div>
+    </Link>
+  );
+}

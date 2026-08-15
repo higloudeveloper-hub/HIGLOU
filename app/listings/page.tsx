@@ -5,9 +5,10 @@ import { useEffect, useMemo, useState } from "react";
 import { Plus, Search } from "lucide-react";
 import { AppShell } from "@/components/layout/app-shell";
 import { StudioFrame } from "@/components/layout/studio-frame";
-import { formatRelativeTime } from "@/lib/format-relative-time";
 import { EmptyPanel, SkeletonBlock } from "@/components/ui/studio";
 import { ListingPipeline } from "@/components/studio/listing-pipeline";
+import { ListingCard } from "@/components/studio/listing-card";
+import { formatRelativeTime } from "@/lib/format-relative-time";
 import { cn } from "@/lib/utils";
 
 type ProductRow = {
@@ -207,58 +208,26 @@ export default function ListingsPage() {
                 />
               </div>
             ) : (
-              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
-                {filtered.map((product) => {
+              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+                {filtered.map((product, i) => {
                   const ready = readiness(product.status);
                   return (
-                    <Link
+                    <ListingCard
                       key={product.id}
                       href={`/listings/${product.id}`}
-                      className="group flex flex-col overflow-hidden rounded-xl border border-[#e5e5e5] bg-white transition hover:border-[#ccc] hover:shadow-[0_8px_24px_-16px_rgba(0,0,0,0.35)]"
-                    >
-                      <div className="relative aspect-[4/3] bg-white">
-                        {product.coverUrl ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img
-                            src={product.coverUrl}
-                            alt=""
-                            decoding="async"
-                            loading="lazy"
-                            className="size-full object-contain p-3"
-                          />
-                        ) : (
-                          <div className="grid size-full place-items-center text-[12px] text-[#bbb]">
-                            No photo yet
-                          </div>
-                        )}
-                      </div>
-                      <div className="flex flex-1 flex-col gap-1.5 px-3.5 py-3">
-                        <p className="text-[11px] font-medium tracking-wide text-[#707070] uppercase">
-                          {product.brand || "Brand TBD"}
-                        </p>
-                        <h3 className="line-clamp-2 text-[14px] leading-snug font-semibold text-[#191919]">
-                          {product.title || "Untitled listing"}
-                        </h3>
-                        {product.price != null ? (
-                          <p className="text-[16px] font-semibold tabular-nums text-[#191919]">
-                            ${product.price.toFixed(2)}
-                          </p>
-                        ) : null}
-                        <div className="mt-auto flex items-center justify-between gap-2 pt-1">
-                          <span
-                            className={cn(
-                              "text-[12px] font-medium",
-                              ready.ready ? "text-emerald-700" : "text-[#707070]",
-                            )}
-                          >
-                            {ready.label}
-                          </span>
-                          <span className="text-[11px] text-[#9b9b9b]">
-                            {formatRelativeTime(product.updatedAt)}
-                          </span>
-                        </div>
-                      </div>
-                    </Link>
+                      photo={product.coverUrl}
+                      title={product.title}
+                      brand={product.brand}
+                      meta={formatRelativeTime(product.updatedAt)}
+                      price={
+                        product.price != null
+                          ? `$${product.price.toFixed(2)}`
+                          : null
+                      }
+                      badge={ready.label}
+                      badgeTone={ready.ready ? "ready" : "muted"}
+                      priority={i < 4}
+                    />
                   );
                 })}
               </div>

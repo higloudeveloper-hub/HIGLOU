@@ -1,12 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { MoneyMachineHome } from "@/components/studio/money-machine-home";
-
-type ProductRow = {
-  id: string;
-  title: string;
-};
+import { MoneyMachineHome, type HomeDraft } from "@/components/studio/money-machine-home";
 
 export function ReturningHome({
   name,
@@ -15,7 +10,7 @@ export function ReturningHome({
 }: {
   name: string | null;
   listingCount: number;
-  drafts: ProductRow[];
+  drafts: HomeDraft[];
   exportsList: unknown[];
   ebayConnected: boolean;
 }) {
@@ -38,9 +33,8 @@ export function ReturningHome({
     <MoneyMachineHome
       name={name}
       storeName={storeName}
-      nextDraft={drafts[0] ? { id: drafts[0].id, title: drafts[0].title } : null}
+      drafts={drafts}
       ebayConnected={ebayConnected}
-      setupHref={ebayConnected ? null : "/settings#ebay-store"}
     />
   );
 }

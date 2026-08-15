@@ -45,13 +45,17 @@ function Thumb({
   return (
     <div
       className={cn(
-        "relative overflow-hidden bg-[#f4f4f2]",
+        "relative overflow-hidden bg-white",
         className ?? "size-12 shrink-0 rounded-sm",
       )}
     >
       {src ? (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={src} alt="" className="size-full object-contain p-1" />
+        <img
+          src={src}
+          alt=""
+          className="size-full object-contain p-3 contrast-[1.06] saturate-[1.08]"
+        />
       ) : (
         <span className="grid size-full place-items-center font-mono text-[13px] text-[#565959]">
           {(title.trim()[0] || "?").toUpperCase()}
@@ -138,7 +142,7 @@ export function StatsControlCenter() {
     <div className="higlou-hud-shell relative mx-auto max-w-[1120px] overflow-hidden rounded-2xl border border-[#d5d9d9] pb-6">
       <div
         aria-hidden
-        className="higlou-hud-sweep pointer-events-none absolute inset-x-0 top-0 z-10 h-24 bg-gradient-to-b from-brand/25 to-transparent"
+        className="higlou-hud-sweep pointer-events-none absolute inset-x-0 top-0 z-0 h-16 bg-gradient-to-b from-brand/12 to-transparent"
       />
 
       <header className="relative z-20 flex flex-wrap items-end justify-between gap-3 px-5 pt-5 pb-4">
@@ -184,7 +188,7 @@ export function StatsControlCenter() {
         </Link>
       ) : null}
 
-      <div className="relative z-20 grid grid-cols-2 gap-2 px-5 lg:grid-cols-3">
+      <div className="relative z-20 grid grid-cols-2 gap-3 px-5 lg:grid-cols-3">
         {metrics.map((metric, i) => (
           <MetricCard
             key={metric.code}
@@ -201,7 +205,7 @@ export function StatsControlCenter() {
         ))}
       </div>
 
-      <div className="relative z-20 mx-5 mt-3 min-h-[340px] border border-[#0f1111]/12 bg-white/80">
+      <div className="relative z-20 mx-5 mt-3 min-h-[340px] border border-[#0f1111]/15 bg-white">
         {active === "act" ? (
           <AlertPane alerts={snap.stockAlerts} />
         ) : active === "carts" ? (
@@ -256,8 +260,10 @@ function MetricCard({
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: index * 0.05, duration: 0.35 }}
       className={cn(
-        "relative min-h-[108px] overflow-hidden bg-white/90 px-4 py-3.5 text-left transition",
-        active ? "bg-brand-soft/80" : "hover:bg-white",
+        "relative isolate min-h-[118px] overflow-hidden border bg-white px-4 py-4 text-left shadow-[0_1px_0_rgba(15,17,17,0.06)] transition",
+        active
+          ? "border-brand bg-[#fff8dc]"
+          : "border-[#e4e4e4] hover:border-[#0f1111]",
       )}
     >
       <HudCorners active={active} />
@@ -267,21 +273,21 @@ function MetricCard({
           className="absolute inset-x-0 top-0 h-0.5 bg-brand [animation:higlou-scan_2.4s_ease-in-out_infinite]"
         />
       ) : null}
-      <p className="font-mono text-[10px] tracking-[0.18em] text-[#565959]">
+      <p className="font-mono text-[10px] font-medium tracking-[0.18em] text-[#6b6b6b]">
         {code} / {label}
       </p>
       <motion.p
         key={value}
-        initial={{ opacity: 0.4, y: 4 }}
+        initial={{ opacity: 1, y: 3 }}
         animate={{ opacity: 1, y: 0 }}
         className={cn(
-          "mt-1 font-mono text-[26px] leading-none tracking-tight",
+          "mt-2 font-sans text-[34px] font-bold leading-none tracking-tight",
           warn ? "text-amber-700" : "text-[#0f1111]",
         )}
       >
         {value}
       </motion.p>
-      <p className="mt-2 text-[11px] text-[#565959]">{hint}</p>
+      <p className="mt-2 text-[12px] font-medium text-[#4a4a4a]">{hint}</p>
     </motion.button>
   );
 }
@@ -311,33 +317,29 @@ function ProductGrid({
   }>;
 }) {
   return (
-    <div className="grid grid-cols-2 gap-2 p-3 sm:grid-cols-3">
+    <div className="grid grid-cols-2 gap-3 p-3 sm:grid-cols-3">
       {items.map((item, i) => (
         <motion.a
           key={item.key}
           href={item.href}
           target="_blank"
           rel="noreferrer"
-          initial={{ opacity: 0, scale: 0.97 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ delay: i * 0.04, duration: 0.3 }}
-          className="group relative overflow-hidden bg-[#f7f7f5]"
+          initial={{ opacity: 1, y: 6 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: i * 0.03, duration: 0.25 }}
+          className="group relative isolate overflow-hidden border border-[#e4e4e4] bg-white shadow-[0_1px_0_rgba(15,17,17,0.06)] hover:border-[#0f1111]"
         >
           <HudCorners />
           <Thumb
             src={item.pictureUrl}
             title={item.title}
-            className="aspect-square w-full"
+            className="aspect-square w-full bg-white"
           />
-          <span
-            aria-hidden
-            className="pointer-events-none absolute inset-x-2 top-2 h-10 bg-gradient-to-b from-brand/40 to-transparent opacity-0 transition group-hover:opacity-100 [animation:higlou-scan_2s_ease-in-out_infinite]"
-          />
-          <div className="border-t border-[#0f1111]/8 px-2.5 py-2">
-            <p className="line-clamp-2 text-[12px] font-medium leading-snug text-[#0f1111]">
+          <div className="border-t border-[#eee] bg-white px-2.5 py-2">
+            <p className="line-clamp-2 text-[13px] font-semibold leading-snug text-[#0f1111]">
               {item.title}
             </p>
-            <p className="mt-1 font-mono text-[10px] tracking-wide text-[#565959] uppercase">
+            <p className="mt-1 font-mono text-[10px] font-medium tracking-wide text-[#4a4a4a] uppercase">
               {item.meta}
             </p>
           </div>

@@ -44,19 +44,51 @@ function uniqueUrls(urls: string[]): string[] {
   const out: string[] = [];
   for (const raw of urls) {
     const url = upgradeAmazonImage(raw);
-    if (!url || seen.has(url)) continue;
-    seen.add(url);
+    if (!url) continue;
+    const key = amazonImageId(url) || url;
+    if (seen.has(key)) continue;
+    seen.add(key);
     out.push(url);
   }
   return out;
+}
+
+const AMAZON_JUNK =
+  /amazon_logo|social_share|nav-sprite|grey-pixel|play-icon|prime-logo|\/images\/[GS]\//i;
+
+/** Amazon CDN id, without size tokens like `._AC_US40_`. */
+export function amazonImageId(url: string): string | null {
+  const path = String(url || "").split("?")[0] || "";
+  const file = path.match(/\/images\/I\/([^/?#]+)/i)?.[1];
+  if (!file) return null;
+  const base = decodeURIComponent(file).replace(/\.(jpe?g|png|webp|gif)$/i, "");
+  const id = base.replace(/\._.+$/i, "").trim();
+  return id.length >= 3 ? id : null;
+}
+
+/** Large-file candidates for one Amazon photo (original first). */
+export function amazonImageCandidates(url: string): string[] {
+  const id = amazonImageId(url);
+  if (!id) {
+    const upgraded = upgradeAmazonImage(url);
+    return upgraded ? [upgraded] : [];
+  }
+  return [
+    `https://m.media-amazon.com/images/I/${id}.jpg`,
+    `https://m.media-amazon.com/images/I/${id}._AC_SL1500_.jpg`,
+    `https://m.media-amazon.com/images/I/${id}._SL1500_.jpg`,
+  ];
 }
 
 /** Prefer a large Amazon image variant. */
 export function upgradeAmazonImage(url: string): string {
   const clean = String(url || "").trim().replace(/&amp;/g, "&");
   if (!/^https:\/\//i.test(clean)) return "";
+  if (AMAZON_JUNK.test(clean)) return "";
   if (!/amazon|ssl-images-amazon|media-amazon/i.test(clean)) return clean;
-  return clean.replace(/\._[^.]+(?=\.(jpe?g|png|webp))/i, "._AC_SL1500_");
+  const id = amazonImageId(clean);
+  if (!id) return "";
+  return `https://m.media-amazon.com/images/I/${id}._AC_SL1500_.jpg`;
 }
 
 function jsonLdProducts(html: string): Record<string, unknown>[] {

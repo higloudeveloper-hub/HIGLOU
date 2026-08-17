@@ -48,6 +48,22 @@ describe("upgradeAmazonImage", () => {
       upgradeAmazonImage("https://m.media-amazon.com/images/I/71abc._AC_US40_.jpg"),
     ).toBe("https://m.media-amazon.com/images/I/71abc._AC_SL1500_.jpg");
   });
+
+  it("rewrites ssl-images-amazon thumbs onto the media CDN", () => {
+    expect(
+      upgradeAmazonImage(
+        "https://images-na.ssl-images-amazon.com/images/I/51share._SS40_.jpg",
+      ),
+    ).toBe("https://m.media-amazon.com/images/I/51share._AC_SL1500_.jpg");
+  });
+
+  it("drops logos and sprite assets", () => {
+    expect(
+      upgradeAmazonImage(
+        "https://m.media-amazon.com/images/G/01/social_share/amazon_logo.png",
+      ),
+    ).toBe("");
+  });
 });
 
 describe("parseAmazonProductPage markdown fallback", () => {

@@ -61,14 +61,35 @@ async function fetchImageBuffer(sourceUrl: string): Promise<Buffer> {
   return Buffer.from(await res.arrayBuffer());
 }
 
-async function toJpegBuffer(input: Buffer): Promise<Buffer> {
-  return sharp(input)
+/** eBay Picture Policy: longest side must be at least 500px. */
+export const EBAY_MIN_LONG_SIDE = 500;
+const EBAY_TARGET_LONG_SIDE = 1600;
+const EBAY_UPSCALE_LONG_SIDE = 800;
+const EBAY_SKIP_BELOW = 80;
+
+/**
+ * JPEG for EPS upload. Upscales 80–499px photos so Amazon og:image crops
+ * (often ~432px) still pass eBay 25002. Skips tiny icons.
+ */
+export async function prepareEbayListingJpeg(
+  input: Buffer,
+): Promise<Buffer | null> {
+  const meta = await sharp(input, { failOn: "none" }).rotate().metadata();
+  const width = meta.width ?? 0;
+  const height = meta.height ?? 0;
+  const longest = Math.max(width, height);
+  if (longest < EBAY_SKIP_BELOW) return null;
+
+  const needsUpscale = longest < EBAY_MIN_LONG_SIDE;
+  const target = needsUpscale ? EBAY_UPSCALE_LONG_SIDE : EBAY_TARGET_LONG_SIDE;
+
+  return sharp(input, { failOn: "none" })
     .rotate()
     .resize({
-      width: 1600,
-      height: 1600,
+      width: target,
+      height: target,
       fit: "inside",
-      withoutEnlargement: true,
+      withoutEnlargement: !needsUpscale,
     })
     .jpeg({ quality: 88, mozjpeg: true })
     .toBuffer();
@@ -90,14 +111,18 @@ export async function ensureEbayCompatibleImageUrls(options: {
     const normalized = normalizeEbayImageUrl(raw);
     if (!normalized) continue;
 
-    if (isEbayEpsUrl(normalized)) {
-      out.push(normalized);
-      continue;
-    }
-
     try {
       const input = await fetchImageBuffer(normalized);
-      const jpeg = await toJpegBuffer(input);
+      const sourceMeta = await sharp(input, { failOn: "none" }).rotate().metadata();
+      const sourceLong = Math.max(sourceMeta.width ?? 0, sourceMeta.height ?? 0);
+
+      if (isEbayEpsUrl(normalized) && sourceLong >= EBAY_MIN_LONG_SIDE) {
+        out.push(normalized);
+        continue;
+      }
+
+      const jpeg = await prepareEbayListingJpeg(input);
+      if (!jpeg) continue;
 
       try {
         out.push(
@@ -116,17 +141,18 @@ export async function ensureEbayCompatibleImageUrls(options: {
         );
       }
 
-      // Last Media attempt: ask eBay to pull our public HTTPS URL.
-      try {
-        out.push(
-          await createEbayEpsFromUrl(options.accessToken, normalized),
-        );
-      } catch (epsUrlError) {
-        errors.push(
-          epsUrlError instanceof Error
-            ? epsUrlError.message
-            : String(epsUrlError),
-        );
+      if (sourceLong >= EBAY_MIN_LONG_SIDE) {
+        try {
+          out.push(
+            await createEbayEpsFromUrl(options.accessToken, normalized),
+          );
+        } catch (epsUrlError) {
+          errors.push(
+            epsUrlError instanceof Error
+              ? epsUrlError.message
+              : String(epsUrlError),
+          );
+        }
       }
     } catch (error) {
       errors.push(error instanceof Error ? error.message : String(error));

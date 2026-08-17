@@ -559,6 +559,7 @@ export async function POST(request: Request) {
         } else {
           filled =
             inferAspectValueFromText(missingAspect, hay, {
+              title: listing.title,
               brand: listing.brand,
               model: listing.model,
               mpn: listing.mpn,
@@ -568,7 +569,7 @@ export async function POST(request: Request) {
 
         if (
           !filled &&
-          /^(model|mpn|compatible\s)/i.test(missingAspect)
+          /^(model|mpn|compatible\s|fragrance|scent)/i.test(missingAspect)
         ) {
           filled = "Does Not Apply";
         }

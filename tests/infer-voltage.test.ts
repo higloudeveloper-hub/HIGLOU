@@ -5,6 +5,7 @@ import {
   inferBatteryTechnologyFromText,
   inferCompatibleAspect,
   inferModelAspect,
+  inferFragranceName,
   inferAspectValueFromText,
   parseMissingAspectFromEbayError,
   humanizeEbayPublishError,
@@ -256,5 +257,55 @@ describe("Model aspect (eBay 25002 Model)", () => {
     listing.categoryName = "Electric Kettles";
     const item = listingToInventoryItem(listing);
     expect(item.aspects?.Model?.[0]).toBeTruthy();
+  });
+});
+
+describe("Fragrance Name aspect (eBay 25002 Fragrance Name)", () => {
+  it("parses Fragrance Name from eBay 25002 text", () => {
+    expect(
+      parseMissingAspectFromEbayError(
+        "A user error has occurred. The item specific Fragrance Name is missing. Add Fragrance Name to this listing, enter a valid value, and then try again. [eBay 25002]",
+      ),
+    ).toBe("Fragrance Name");
+  });
+
+  it("pulls the scent line from a perfume title", () => {
+    expect(
+      inferFragranceName({
+        title: "Valentine Nero Women Eau de Parfum 100ml",
+      }),
+    ).toBe("Valentine Nero");
+  });
+
+  it("strips the brand prefix from the title", () => {
+    expect(
+      inferFragranceName({
+        title: "URBAN COLLECTION Valentine Nero Women Eau de Parfum 100ml",
+        brand: "URBAN COLLECTION",
+      }),
+    ).toBe("Valentine Nero");
+  });
+
+  it("fills Fragrance Name on 25002 retry inference", () => {
+    expect(
+      inferAspectValueFromText(
+        "Fragrance Name",
+        "Valentine Nero Women Eau de Parfum 100ml",
+        { title: "Valentine Nero Women Eau de Parfum 100ml" },
+      ),
+    ).toBe("Valentine Nero");
+  });
+
+  it("fills required Fragrance Name before Inventory PUT", () => {
+    const aspects: Record<string, string[]> = { Brand: ["URBAN COLLECTION"] };
+    ensureRequiredCategoryAspects(aspects, ["Fragrance Name", "Brand"], {
+      title: "Valentine Nero Women Eau de Parfum 100ml",
+      brand: "URBAN COLLECTION",
+    });
+    expect(aspects["Fragrance Name"]).toEqual(["Valentine Nero"]);
+  });
+
+  it("uses Does Not Apply when the title has no scent line", () => {
+    expect(inferFragranceName({ title: "", brand: "" })).toBe("Does Not Apply");
   });
 });

@@ -152,6 +152,7 @@ export function inferAspectValueFromText(
   aspectName: string,
   text: string,
   extras?: {
+    title?: string;
     brand?: string;
     model?: string;
     mpn?: string;
@@ -168,16 +169,23 @@ export function inferAspectValueFromText(
   ) {
     return inferBatteryTechnologyFromText(text);
   }
+  if (name === "fragrance name" || name === "scent" || name === "fragrance") {
+    return inferFragranceName({
+      title: extras?.title || text,
+      brand: extras?.brand,
+      model: extras?.model,
+    });
+  }
   if (name === "model") {
     return inferModelAspect({
       model: extras?.model,
       mpn: extras?.mpn,
       brand: extras?.brand,
-      title: text,
+      title: extras?.title || text,
     });
   }
   const compatible = inferCompatibleAspect(aspectName, {
-    title: text,
+    title: extras?.title || text,
     brand: extras?.brand,
     model: extras?.model,
     productType: extras?.productType,
@@ -187,6 +195,58 @@ export function inferAspectValueFromText(
 }
 
 const EMPTY_ASPECT = /^(n\/?a|none|null|unknown|-|does\s*not\s*apply)$/i;
+
+/**
+ * Perfume / cologne categories require Fragrance Name (eBay 25002).
+ * Pull the scent line from the title, else Does Not Apply.
+ */
+export function inferFragranceName(opts: {
+  title?: string;
+  brand?: string;
+  model?: string;
+}): string {
+  const title = String(opts.title || "").trim();
+  const brand = String(opts.brand || "").trim();
+  const model = String(opts.model || "").trim();
+  if (looksLikeFragranceLine(model)) return model.slice(0, 65);
+
+  const fromTitle = stripFragranceSuffixes(title, brand);
+  if (fromTitle.length >= 2 && !EMPTY_ASPECT.test(fromTitle)) {
+    return fromTitle.slice(0, 65);
+  }
+  if (brand.length >= 2 && !EMPTY_ASPECT.test(brand)) return brand.slice(0, 65);
+  return "Does Not Apply";
+}
+
+function looksLikeFragranceLine(value: string): boolean {
+  if (value.length < 2 || value.length > 40) return false;
+  if (EMPTY_ASPECT.test(value) || /^\d+$/.test(value)) return false;
+  if (!/[a-zA-Z]/.test(value)) return false;
+  if (/^(amz-|hd-|b0)/i.test(value)) return false;
+  if (/\b(ml|oz|parfum|perfume|eau de|cologne|fragrance)\b/i.test(value)) {
+    return false;
+  }
+  return true;
+}
+
+function stripFragranceSuffixes(title: string, brand: string): string {
+  let rest = title;
+  if (brand && rest.toLowerCase().startsWith(brand.toLowerCase())) {
+    rest = rest.slice(brand.length).replace(/^[\s,:\-|–]+/, "").trim();
+  }
+  return rest
+    .replace(/\b\d+(?:\.\d+)?\s*(ml|fl\.?\s*oz|oz)\b.*$/i, "")
+    .replace(
+      /\b(eau de parfum|eau de toilette|eau de cologne|edp|edt|parfum|perfume|cologne|fragrance)\b.*$/i,
+      "",
+    )
+    .replace(
+      /\b(for\s+)?(women|men|pour femme|pour homme|unisex|lady|ladies)\b.*$/i,
+      "",
+    )
+    .replace(/[-–|,]+$/g, "")
+    .trim();
+}
 
 /**
  * eBay 25002 Model — kitchen/appliance categories require Model even when
@@ -314,6 +374,9 @@ const DNA_REQUIRED = new Set(
     "Unit Type",
     "Custom Bundle",
     "Modified Item",
+    "Fragrance Name",
+    "Scent",
+    "Fragrance",
   ].map((n) => n.toLowerCase()),
 );
 

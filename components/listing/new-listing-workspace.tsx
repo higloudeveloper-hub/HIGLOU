@@ -47,6 +47,7 @@ import {
   getAttentionFields,
 } from "@/components/listing/review-helpers";
 import { readAiProviderSettings } from "@/components/settings/ai-settings-form";
+import { detectCatalogStore } from "@/lib/catalog/detect-store";
 import {
   brandingFromEbayStoreName,
   displayNameFromEbayUsername,
@@ -226,7 +227,9 @@ export function NewListingWorkspace({
   );
   const [step, setStep] = useState<WizardStep>("photos");
   const [analyzing, setAnalyzing] = useState(false);
-  const [amazonImporting, setAmazonImporting] = useState(false);
+  const [catalogImporting, setCatalogImporting] = useState<
+    false | "amazon" | "homedepot"
+  >(false);
   const [analysisStep, setAnalysisStep] = useState(0);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
   const [analysisErrorCode, setAnalysisErrorCode] = useState<string | null>(
@@ -595,7 +598,7 @@ export function NewListingWorkspace({
         color: colors[0],
       });
 
-    const sku = prev.sku.startsWith("AMZ-")
+    const sku = /^(AMZ|HD)-/i.test(prev.sku)
       ? prev.sku
       : generateSku({
           brand,
@@ -664,7 +667,7 @@ export function NewListingWorkspace({
       conditionDescription:
         (analysis as { conditionNotes?: string }).conditionNotes ||
         prev.conditionDescription,
-      price: prev.sku.startsWith("AMZ-")
+      price: /^(AMZ|HD)-/i.test(prev.sku)
         ? prev.price ?? analysis.price
         : analysis.price ?? prev.price,
       quantity: analysis.quantity || prev.quantity,
@@ -962,12 +965,24 @@ export function NewListingWorkspace({
     }
   };
 
-  const importFromAmazon = async (url: string): Promise<boolean> => {
-    if (amazonImporting || analyzing) return false;
-    setAmazonImporting(true);
+  const importFromCatalog = async (url: string): Promise<boolean> => {
+    if (catalogImporting || analyzing) return false;
+    const store = detectCatalogStore(url);
+    if (!store) {
+      const message = "Paste an Amazon or Home Depot product link.";
+      setAnalysisError(message);
+      toast.error(message);
+      return false;
+    }
+
+    const storeLabel = store === "amazon" ? "Amazon" : "Home Depot";
+    const endpoint =
+      store === "amazon" ? "/api/amazon/import" : "/api/homedepot/import";
+
+    setCatalogImporting(store);
     setAnalysisError(null);
     try {
-      const response = await fetch("/api/amazon/import", {
+      const response = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ url }),
@@ -977,6 +992,7 @@ export function NewListingWorkspace({
         error?: string;
         title?: string;
         brand?: string;
+        model?: string;
         price?: number | null;
         upc?: string;
         features?: string[];
@@ -984,7 +1000,7 @@ export function NewListingWorkspace({
         images?: ProductImage[];
       } | null;
       if (!response.ok || !body?.ok || !body.images?.length) {
-        const message = body?.error || "Amazon import failed";
+        const message = body?.error || `${storeLabel} import failed`;
         setAnalysisError(message);
         toast.error(message);
         return false;
@@ -996,6 +1012,7 @@ export function NewListingWorkspace({
         ...listing,
         title: (body.title || listing.title).slice(0, 80),
         brand: body.brand || listing.brand,
+        model: body.model || listing.model,
         price: body.price ?? listing.price,
         upc: body.upc || listing.upc,
         sku: body.sku || listing.sku,
@@ -1007,15 +1024,16 @@ export function NewListingWorkspace({
         updatedAt: new Date().toISOString(),
       };
       setListing(seeded);
-      toast.success("Amazon product loaded — writing the eBay listing…");
+      toast.success(`${storeLabel} product loaded — writing the eBay listing…`);
       await analyzeProduct({
         images: body.images,
         imageUrls: body.images.map((img) => img.url),
         baseListing: seeded,
         hints: {
           brand: body.brand,
+          model: body.model,
           upc: body.upc,
-          notes: [body.title, ...(body.features || [])]
+          notes: [body.title, body.model, ...(body.features || [])]
             .filter(Boolean)
             .join("; ")
             .slice(0, 2000),
@@ -1025,12 +1043,12 @@ export function NewListingWorkspace({
       return true;
     } catch (error) {
       const message =
-        error instanceof Error ? error.message : "Amazon import failed";
+        error instanceof Error ? error.message : `${storeLabel} import failed`;
       setAnalysisError(message);
       toast.error(message);
       return false;
     } finally {
-      setAmazonImporting(false);
+      setCatalogImporting(false);
     }
   };
 
@@ -1784,11 +1802,11 @@ export function NewListingWorkspace({
           condition={listing.condition}
           storeName={storeBranding.storeName}
           uploadingPending={
-            amazonImporting ||
+            Boolean(catalogImporting) ||
             (listing.images.length > 0 && !httpsImageUrls.length)
           }
           canContinue={
-            httpsImageUrls.length > 0 && !analyzing && !amazonImporting
+            httpsImageUrls.length > 0 && !analyzing && !catalogImporting
           }
           analysisError={analysisError}
           onImagesChange={(images) => update("images", images)}
@@ -1803,8 +1821,8 @@ export function NewListingWorkspace({
             }));
           }}
           onContinue={() => void analyzeProduct()}
-          onAmazonImport={importFromAmazon}
-          amazonImporting={amazonImporting}
+          onCatalogImport={importFromCatalog}
+          catalogImporting={catalogImporting}
         />
       ) : null}
 

@@ -46,6 +46,21 @@ export function AmazonMark({
   );
 }
 
+/** Home Depot store chip — orange, not a traced logo. */
+export function HomeDepotMark({ className, title = "Home Depot" }: MarkProps) {
+  return (
+    <span
+      title={title}
+      className={cn(
+        "inline-flex h-[1em] items-center bg-[#F96302] px-[0.35em] text-[0.62em] font-bold tracking-[0.04em] text-white",
+        className,
+      )}
+    >
+      HOME DEPOT
+    </span>
+  );
+}
+
 /** Official Facebook wordmark. */
 export function FacebookMark({ className, title = "Facebook" }: MarkProps) {
   return <BrandImg src="/brands/facebook.svg" title={title} className={className} />;

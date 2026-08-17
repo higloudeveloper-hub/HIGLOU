@@ -4,7 +4,7 @@ import { useState } from "react";
 import { ArrowRight } from "lucide-react";
 import { ImageUploader } from "@/components/uploader/image-uploader";
 import { ListingPipeline } from "@/components/studio/listing-pipeline";
-import { AmazonMark } from "@/components/brand/store-marks";
+import { AmazonMark, HomeDepotMark } from "@/components/brand/store-marks";
 import { CONDITION_OPTIONS } from "@/config/condition-map";
 import type { ProductImage } from "@/types/product";
 import { cn } from "@/lib/utils";
@@ -22,8 +22,8 @@ export function PhotosScreen({
   onPriceChange,
   onConditionChange,
   onContinue,
-  onAmazonImport,
-  amazonImporting = false,
+  onCatalogImport,
+  catalogImporting = false,
 }: {
   images: ProductImage[];
   productId?: string;
@@ -38,49 +38,57 @@ export function PhotosScreen({
   onPriceChange: (price: number | null) => void;
   onConditionChange: (condition: string) => void;
   onContinue: () => void;
-  onAmazonImport?: (url: string) => Promise<boolean | void>;
-  amazonImporting?: boolean;
+  onCatalogImport?: (url: string) => Promise<boolean | void>;
+  catalogImporting?: false | "amazon" | "homedepot";
   onPhotoIntakeSessionChange?: (session: unknown) => void;
 }) {
-  const [amazonUrl, setAmazonUrl] = useState("");
+  const [catalogUrl, setCatalogUrl] = useState("");
   const shots = images
     .map((img) => img.previewUrl || img.url)
     .filter((src): src is string => Boolean(src));
+  const importing = Boolean(catalogImporting);
+  const importLabel =
+    catalogImporting === "homedepot"
+      ? "Reading Home Depot…"
+      : catalogImporting === "amazon"
+        ? "Reading Amazon…"
+        : "Import";
 
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-white">
-      {onAmazonImport ? (
+      {onCatalogImport ? (
         <form
           className="shrink-0 border-b border-[#e5e5e5] bg-white px-4 py-3"
           onSubmit={(e) => {
             e.preventDefault();
-            const url = amazonUrl.trim();
-            if (!url || amazonImporting) return;
-            void onAmazonImport(url).then((ok) => {
-              if (ok !== false) setAmazonUrl("");
+            const url = catalogUrl.trim();
+            if (!url || importing) return;
+            void onCatalogImport(url).then((ok) => {
+              if (ok !== false) setCatalogUrl("");
             });
           }}
         >
           <div className="flex flex-wrap items-center gap-2">
             <AmazonMark className="h-4 shrink-0" />
+            <HomeDepotMark className="h-4 shrink-0" />
             <p className="mr-1 text-[12px] text-[#707070]">
-              Paste an Amazon link. Higlou pulls photos and writes the eBay listing.
+              Paste an Amazon or Home Depot link. Higlou pulls photos and writes the eBay listing.
             </p>
           </div>
           <div className="mt-2 flex gap-2">
             <input
-              value={amazonUrl}
-              onChange={(e) => setAmazonUrl(e.target.value)}
-              placeholder="https://www.amazon.com/dp/…"
-              disabled={amazonImporting}
+              value={catalogUrl}
+              onChange={(e) => setCatalogUrl(e.target.value)}
+              placeholder="https://www.homedepot.com/p/… or amazon.com/dp/…"
+              disabled={importing}
               className="h-10 min-w-0 flex-1 border border-[#ccc] bg-white px-3 text-[13px] outline-none focus:border-[#141414] disabled:opacity-60"
             />
             <button
               type="submit"
-              disabled={amazonImporting || amazonUrl.trim().length < 8}
+              disabled={importing || catalogUrl.trim().length < 8}
               className="h-10 shrink-0 bg-[#141414] px-4 text-[13px] font-medium text-white disabled:opacity-40"
             >
-              {amazonImporting ? "Reading Amazon…" : "Import"}
+              {importLabel}
             </button>
           </div>
         </form>
@@ -150,9 +158,9 @@ export function PhotosScreen({
         <span className="min-w-0 flex-1 truncate text-[12px] text-[#707070]">
           {images.length
             ? `${images.length} photo${images.length === 1 ? "" : "s"}`
-            : amazonImporting
-              ? "Reading Amazon…"
-              : "Drop a photo on the pad, or paste an Amazon link"}
+            : importing
+              ? importLabel
+              : "Drop a photo on the pad, or paste an Amazon or Home Depot link"}
         </span>
         <button
           type="button"

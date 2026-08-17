@@ -55,7 +55,7 @@ function uniqueUrls(urls: string[]): string[] {
 }
 
 const AMAZON_JUNK =
-  /amazon_logo|social_share|nav-sprite|grey-pixel|play-icon|prime-logo|\/images\/[GS]\//i;
+  /amazon_logo|social_share|nav-sprite|grey-pixel|play-icon|prime-logo|\/images\/[GS]\/|\.js(\.|$)|\/[^/]*\.js\._|\.css(\.|$)/i;
 
 /** Amazon CDN id, without size tokens like `._AC_US40_`. */
 export function amazonImageId(url: string): string | null {
@@ -257,6 +257,45 @@ function imageGalleryData(html: string): string[] {
   return urlsFromGalleryBlock(blockAfterKey(decoded, "imageGalleryData", "["));
 }
 
+function amazonStateJson(html: string, key: string): string {
+  const decoded = decodeAmazonMarkup(html);
+  const needle = `"key":"${key}"`;
+  const idx = decoded.indexOf(needle);
+  if (idx < 0) return "";
+  const gt = decoded.indexOf(">", idx);
+  if (gt < 0) return "";
+  let i = gt + 1;
+  while (i < decoded.length && /\s/.test(decoded[i])) i += 1;
+  if (decoded[i] === "{") return extractBalanced(decoded, i, "{");
+  if (decoded[i] === "[") return extractBalanced(decoded, i, "[");
+  return "";
+}
+
+function galleryFromAmazonMobileState(html: string): string[] {
+  const urls: string[] = [];
+  const landingJson = amazonStateJson(html, "mobile-landing-image-data");
+  const landing =
+    landingJson.match(/"landingImageUrl"\s*:\s*"(https:[^"]+)"/)?.[1] || "";
+  if (landing) urls.push(landing);
+
+  const altJson = amazonStateJson(html, "ib-low-res-alt-images");
+  if (altJson) {
+    try {
+      const obj = JSON.parse(altJson) as Record<string, unknown>;
+      const keys = Object.keys(obj).sort((a, b) => Number(a) - Number(b));
+      for (const k of keys) {
+        const value = obj[k];
+        if (typeof value === "string" && /^https:\/\//i.test(value)) {
+          urls.push(value);
+        }
+      }
+    } catch {
+      urls.push(...urlsFromGalleryBlock(altJson));
+    }
+  }
+  return urls;
+}
+
 function primaryImages(html: string): string[] {
   const decoded = decodeAmazonMarkup(html);
   const aroundLanding = (() => {
@@ -294,6 +333,7 @@ export function collectAmazonImageUrlsFromHtml(
   const official = uniqueUrls([
     ...colorImagesForProduct(html, asin),
     ...imageGalleryData(html),
+    ...galleryFromAmazonMobileState(html),
     ...primaryImages(html),
   ]);
   if (official.length) return official;

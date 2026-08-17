@@ -116,6 +116,31 @@ describe("parseAmazonProductPage", () => {
     expect(ids).toEqual(expect.arrayContaining(["71HERO1", "71SIDE2", "71BACK3"]));
     expect(new Set(ids).size).toBe(3);
   });
+
+  it("reads the iPhone gallery from ib-low-res-alt-images so import is not stuck on one hero", () => {
+    const product = parseAmazonProductPage(
+      `
+      <script type="a-state" data-a-state="{&quot;key&quot;:&quot;mobile-landing-image-data&quot;}">{"landingImageUrl":"https://m.media-amazon.com/images/I/61nrIQ3yCtL._AC_UF350,350_QL50_.jpg"}</script>
+      <script type="a-state" data-a-state="{&quot;key&quot;:&quot;ib-low-res-alt-images&quot;}">{"1":"https://m.media-amazon.com/images/I/718YMVdXg3L._AC_UF350,350_QL80_.jpg","2":"https://m.media-amazon.com/images/I/71oRfIaJS0L._AC_UF350,350_QL80_.jpg","3":"https://m.media-amazon.com/images/I/71P2xG+FdpL._AC_UF350,350_QL80_.jpg","6":"https://m.media-amazon.com/images/I/61v6Yjamv-L._AC_UF350,350_QL80_.jpg"}</script>
+      <img src="https://m.media-amazon.com/images/I/11i1DYEiaoL._RC_AC_US40_.jpg" />
+      <img src="https://m.media-amazon.com/images/I/61xJcNKKLXL.js._AC_SL1500_.jpg" />
+      `,
+      { asin: "B0CHS1BVBC", url: "https://www.amazon.com/dp/B0CHS1BVBC" },
+    );
+    const ids = product.imageUrls.map((url) => url.match(/\/images\/I\/([^./]+)/i)?.[1]);
+    expect(ids[0]).toBe("61nrIQ3yCtL");
+    expect(ids).toEqual(
+      expect.arrayContaining([
+        "61nrIQ3yCtL",
+        "718YMVdXg3L",
+        "71oRfIaJS0L",
+        "71P2xG+FdpL",
+        "61v6Yjamv-L",
+      ]),
+    );
+    expect(ids.length).toBe(5);
+    expect(ids.join(" ")).not.toMatch(/11i1DYEiaoL|61xJcNKKLXL/);
+  });
 });
 
 describe("upgradeAmazonImage", () => {
@@ -133,10 +158,15 @@ describe("upgradeAmazonImage", () => {
     ).toBe("https://m.media-amazon.com/images/I/51share._AC_SL1500_.jpg");
   });
 
-  it("drops logos and sprite assets", () => {
+  it("drops logos, sprites, and script assets", () => {
     expect(
       upgradeAmazonImage(
         "https://m.media-amazon.com/images/G/01/social_share/amazon_logo.png",
+      ),
+    ).toBe("");
+    expect(
+      upgradeAmazonImage(
+        "https://m.media-amazon.com/images/I/61xJcNKKLXL.js._AC_SL1500_.jpg",
       ),
     ).toBe("");
   });

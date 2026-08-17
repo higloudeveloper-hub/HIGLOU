@@ -1,8 +1,10 @@
 "use client";
 
+import { useState } from "react";
 import { ArrowRight } from "lucide-react";
 import { ImageUploader } from "@/components/uploader/image-uploader";
 import { ListingPipeline } from "@/components/studio/listing-pipeline";
+import { AmazonMark } from "@/components/brand/store-marks";
 import { CONDITION_OPTIONS } from "@/config/condition-map";
 import type { ProductImage } from "@/types/product";
 import { cn } from "@/lib/utils";
@@ -20,6 +22,8 @@ export function PhotosScreen({
   onPriceChange,
   onConditionChange,
   onContinue,
+  onAmazonImport,
+  amazonImporting = false,
 }: {
   images: ProductImage[];
   productId?: string;
@@ -34,14 +38,53 @@ export function PhotosScreen({
   onPriceChange: (price: number | null) => void;
   onConditionChange: (condition: string) => void;
   onContinue: () => void;
+  onAmazonImport?: (url: string) => Promise<boolean | void>;
+  amazonImporting?: boolean;
   onPhotoIntakeSessionChange?: (session: unknown) => void;
 }) {
+  const [amazonUrl, setAmazonUrl] = useState("");
   const shots = images
     .map((img) => img.previewUrl || img.url)
     .filter((src): src is string => Boolean(src));
 
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-white">
+      {onAmazonImport ? (
+        <form
+          className="shrink-0 border-b border-[#e5e5e5] bg-white px-4 py-3"
+          onSubmit={(e) => {
+            e.preventDefault();
+            const url = amazonUrl.trim();
+            if (!url || amazonImporting) return;
+            void onAmazonImport(url).then((ok) => {
+              if (ok !== false) setAmazonUrl("");
+            });
+          }}
+        >
+          <div className="flex flex-wrap items-center gap-2">
+            <AmazonMark className="h-4 shrink-0" />
+            <p className="mr-1 text-[12px] text-[#707070]">
+              Paste an Amazon link. Higlou pulls photos and writes the eBay listing.
+            </p>
+          </div>
+          <div className="mt-2 flex gap-2">
+            <input
+              value={amazonUrl}
+              onChange={(e) => setAmazonUrl(e.target.value)}
+              placeholder="https://www.amazon.com/dp/…"
+              disabled={amazonImporting}
+              className="h-10 min-w-0 flex-1 border border-[#ccc] bg-white px-3 text-[13px] outline-none focus:border-[#141414] disabled:opacity-60"
+            />
+            <button
+              type="submit"
+              disabled={amazonImporting || amazonUrl.trim().length < 8}
+              className="h-10 shrink-0 bg-[#141414] px-4 text-[13px] font-medium text-white disabled:opacity-40"
+            >
+              {amazonImporting ? "Reading Amazon…" : "Import"}
+            </button>
+          </div>
+        </form>
+      ) : null}
       <div className="relative min-h-0 flex-1">
         <ListingPipeline storeName={storeName} photos={shots} mode="drop" />
         <ImageUploader
@@ -107,7 +150,9 @@ export function PhotosScreen({
         <span className="min-w-0 flex-1 truncate text-[12px] text-[#707070]">
           {images.length
             ? `${images.length} photo${images.length === 1 ? "" : "s"}`
-            : "Drop a photo on the pad to continue"}
+            : amazonImporting
+              ? "Reading Amazon…"
+              : "Drop a photo on the pad, or paste an Amazon link"}
         </span>
         <button
           type="button"

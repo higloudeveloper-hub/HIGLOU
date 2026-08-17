@@ -226,6 +226,7 @@ export function NewListingWorkspace({
   );
   const [step, setStep] = useState<WizardStep>("photos");
   const [analyzing, setAnalyzing] = useState(false);
+  const [amazonImporting, setAmazonImporting] = useState(false);
   const [analysisStep, setAnalysisStep] = useState(0);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
   const [analysisErrorCode, setAnalysisErrorCode] = useState<string | null>(
@@ -594,12 +595,14 @@ export function NewListingWorkspace({
         color: colors[0],
       });
 
-    const sku = generateSku({
-      brand,
-      model: model || analysis.collection,
-      size,
-      color: colors[0],
-    });
+    const sku = prev.sku.startsWith("AMZ-")
+      ? prev.sku
+      : generateSku({
+          brand,
+          model: model || analysis.collection,
+          size,
+          color: colors[0],
+        });
 
     const itemSpecifics =
       analysis.itemSpecifics.length > 0
@@ -642,8 +645,8 @@ export function NewListingWorkspace({
       brand,
       collection: analysis.collection || prev.collection,
       model,
-      mpn: analysis.mpn || "",
-      upc: analysis.upc || "",
+      mpn: analysis.mpn || prev.mpn,
+      upc: analysis.upc || prev.upc,
       sku,
       productType,
       type: productType,
@@ -661,7 +664,9 @@ export function NewListingWorkspace({
       conditionDescription:
         (analysis as { conditionNotes?: string }).conditionNotes ||
         prev.conditionDescription,
-      price: analysis.price ?? prev.price,
+      price: prev.sku.startsWith("AMZ-")
+        ? prev.price ?? analysis.price
+        : analysis.price ?? prev.price,
       quantity: analysis.quantity || prev.quantity,
       size,
       colors,
@@ -731,12 +736,28 @@ export function NewListingWorkspace({
     forceImproveOcr?: boolean;
     forceDeepAnalysis?: boolean;
     forceFreshAnalysis?: boolean;
+    images?: ProductImage[];
+    imageUrls?: string[];
+    baseListing?: ProductListing;
+    hints?: {
+      brand?: string;
+      model?: string;
+      upc?: string;
+      notes?: string;
+      condition?: string;
+    };
   }) => {
-    if (!listing.images.length) {
+    const current = options?.baseListing ?? listing;
+    const images = options?.images ?? current.images;
+    const imageUrls = (
+      options?.imageUrls ??
+      images.map((img) => img.url).filter((url) => /^https:\/\//i.test(url))
+    );
+    if (!images.length) {
       toast.error("Upload at least one product image first");
       return;
     }
-    if (!httpsImageUrls.length) {
+    if (!imageUrls.length) {
       toast.error(
         "Upload images to HTTPS public URLs before analyzing (retry failed uploads).",
       );
@@ -764,12 +785,12 @@ export function NewListingWorkspace({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          imageUrls: httpsImageUrls,
+          imageUrls,
           forceImproveOcr: Boolean(options?.forceImproveOcr),
           forceDeepAnalysis: Boolean(options?.forceDeepAnalysis),
           forceFreshAnalysis: Boolean(options?.forceFreshAnalysis),
           analysisTier: options?.forceDeepAnalysis ? "advanced" : "economy",
-          productId: /^[0-9a-f-]{36}$/i.test(listing.id) ? listing.id : undefined,
+          productId: /^[0-9a-f-]{36}$/i.test(current.id) ? current.id : undefined,
           providers: {
             openaiEnabled: aiProviders.openaiEnabled,
             googleVisionEnabled: aiProviders.googleVisionEnabled,
@@ -778,7 +799,7 @@ export function NewListingWorkspace({
             googleVisionMaxImages: aiProviders.googleVisionMaxImages,
             documentTextFallback: aiProviders.documentTextFallback,
           },
-          imageMeta: listing.images
+          imageMeta: images
             .filter((img) => /^https:\/\//i.test(img.url))
             .map((img) => ({
               id: img.id,
@@ -787,13 +808,14 @@ export function NewListingWorkspace({
               isPrimary: img.isPrimary,
             })),
           productHints: {
-            brand: listing.brand,
-            model: listing.model,
-            upc: listing.upc,
-            categoryId: listing.categoryId,
-            categoryName: listing.categoryName,
-            condition: listing.condition,
-            size: listing.size,
+            brand: options?.hints?.brand || current.brand,
+            model: options?.hints?.model || current.model,
+            upc: options?.hints?.upc || current.upc,
+            categoryId: current.categoryId,
+            categoryName: current.categoryName,
+            condition: options?.hints?.condition || current.condition,
+            size: current.size,
+            notes: options?.hints?.notes,
           },
         }),
       });
@@ -897,7 +919,7 @@ export function NewListingWorkspace({
           body.costEstimate?.cacheHit ||
           body.normalizedProduct?.analysis?.cacheHit,
       );
-      const analyzed = applyAnalysisResult(body.analysis!, listing);
+      const analyzed = applyAnalysisResult(body.analysis!, current);
       setListing(analyzed);
       setStep("reveal");
       setCostEstimate({
@@ -937,6 +959,78 @@ export function NewListingWorkspace({
     } finally {
       window.clearInterval(progressTimer);
       setAnalyzing(false);
+    }
+  };
+
+  const importFromAmazon = async (url: string): Promise<boolean> => {
+    if (amazonImporting || analyzing) return false;
+    setAmazonImporting(true);
+    setAnalysisError(null);
+    try {
+      const response = await fetch("/api/amazon/import", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url }),
+      });
+      const body = (await response.json().catch(() => null)) as {
+        ok?: boolean;
+        error?: string;
+        title?: string;
+        brand?: string;
+        price?: number | null;
+        upc?: string;
+        features?: string[];
+        sku?: string;
+        images?: ProductImage[];
+      } | null;
+      if (!response.ok || !body?.ok || !body.images?.length) {
+        const message = body?.error || "Amazon import failed";
+        setAnalysisError(message);
+        toast.error(message);
+        return false;
+      }
+
+      const newCondition = "New";
+      const match = CONDITION_OPTIONS.find((c) => c.label === newCondition);
+      const seeded: ProductListing = {
+        ...listing,
+        title: (body.title || listing.title).slice(0, 80),
+        brand: body.brand || listing.brand,
+        price: body.price ?? listing.price,
+        upc: body.upc || listing.upc,
+        sku: body.sku || listing.sku,
+        features: body.features?.length ? body.features : listing.features,
+        images: body.images,
+        condition: newCondition,
+        conditionId: match?.conditionId ?? listing.conditionId,
+        status: "Uploaded",
+        updatedAt: new Date().toISOString(),
+      };
+      setListing(seeded);
+      toast.success("Amazon product loaded — writing the eBay listing…");
+      await analyzeProduct({
+        images: body.images,
+        imageUrls: body.images.map((img) => img.url),
+        baseListing: seeded,
+        hints: {
+          brand: body.brand,
+          upc: body.upc,
+          notes: [body.title, ...(body.features || [])]
+            .filter(Boolean)
+            .join("; ")
+            .slice(0, 2000),
+          condition: newCondition,
+        },
+      });
+      return true;
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Amazon import failed";
+      setAnalysisError(message);
+      toast.error(message);
+      return false;
+    } finally {
+      setAmazonImporting(false);
     }
   };
 
@@ -1689,8 +1783,13 @@ export function NewListingWorkspace({
           price={listing.price}
           condition={listing.condition}
           storeName={storeBranding.storeName}
-          uploadingPending={listing.images.length > 0 && !httpsImageUrls.length}
-          canContinue={httpsImageUrls.length > 0 && !analyzing}
+          uploadingPending={
+            amazonImporting ||
+            (listing.images.length > 0 && !httpsImageUrls.length)
+          }
+          canContinue={
+            httpsImageUrls.length > 0 && !analyzing && !amazonImporting
+          }
           analysisError={analysisError}
           onImagesChange={(images) => update("images", images)}
           onPriceChange={(price) => update("price", price)}
@@ -1704,6 +1803,8 @@ export function NewListingWorkspace({
             }));
           }}
           onContinue={() => void analyzeProduct()}
+          onAmazonImport={importFromAmazon}
+          amazonImporting={amazonImporting}
         />
       ) : null}
 

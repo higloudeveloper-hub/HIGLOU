@@ -56,6 +56,10 @@ describe("Home Depot catalog photo search", () => {
     });
     expect(queries.some((q) => /Vissani VDH35 homedepot/i.test(q))).toBe(true);
     expect(queries.some((q) => /"VDH35-e4"/i.test(q))).toBe(true);
+    expect(queries.some((q) => /"VDH35-4f"/i.test(q))).toBe(true);
+    expect(queries.findIndex((q) => /"VDH35-e4"/i.test(q))).toBeLessThan(
+      queries.findIndex((q) => /site:homedepot\.com/i.test(q)),
+    );
     expect(queries.some((q) => /whites-vissani-dehumidifiers-vdh35/i.test(q))).toBe(
       true,
     );
@@ -105,6 +109,22 @@ describe("Home Depot catalog photo search", () => {
       });
       expect(urls.length).toBeGreaterThanOrEqual(1);
       expect(urls.every((u) => /fsbboximwh/i.test(u))).toBe(true);
+    },
+    45_000,
+  );
+
+  it(
+    "finds more than the hero shot for a Klein pliers gallery",
+    async () => {
+      const urls = await searchHomeDepotCatalogPhotos({
+        brand: "Klein",
+        model: "J2000-9NE",
+        itemId: "100400407",
+        title: "Klein Tools Journeyman High Leverage Side Cutting Pliers",
+      });
+      expect(urls.length).toBeGreaterThanOrEqual(2);
+      expect(urls.every((u) => /j2000-9ne-/i.test(u))).toBe(true);
+      expect(urls.some((u) => /j2000-9netp/i.test(u))).toBe(false);
     },
     45_000,
   );

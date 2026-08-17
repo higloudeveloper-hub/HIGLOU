@@ -216,6 +216,21 @@ describe("selectHomeDepotSearchPhotos", () => {
     expect(photos.some((u) => /vad35s1awt/i.test(u))).toBe(false);
   });
 
+  it("does not treat J2000-9NETP as the J2000-9NE SKU", () => {
+    const html = `
+      https://images.thdstatic.com/productImages/aaa/svn/klein-tools-lineman-s-pliers-j2000-9ne-64_600.jpg
+      https://images.thdstatic.com/productImages/bbb/svn/klein-tools-lineman-s-pliers-j2000-9ne-e4_600.jpg
+      https://images.thdstatic.com/productImages/ccc/svn/klein-tools-lineman-s-pliers-j2000-9netp-64_600.jpg
+    `;
+    const photos = selectHomeDepotSearchPhotos(
+      collectHomeDepotImageUrlsFromHtml(html),
+      { model: "J2000-9NE", itemId: "100400407" },
+    );
+    expect(photos).toHaveLength(2);
+    expect(photos.every((u) => /j2000-9ne-/i.test(u))).toBe(true);
+    expect(photos.some((u) => /j2000-9netp/i.test(u))).toBe(false);
+  });
+
   it("keeps the repeating wall-pack stem when the model is missing", () => {
     const html = `
       https://images.thdstatic.com/productImages/aaa/svn/black-commercial-electric-wall-pack-lights-dw9582bk-c-64_600.jpg

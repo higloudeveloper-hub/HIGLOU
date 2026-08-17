@@ -187,9 +187,7 @@ async function runImageSearch(
   opts: { brand: string; model: string; itemId: string; stem?: string },
 ): Promise<string[]> {
   const pooled: string[] = [];
-  let misses = 0;
   for (const query of queries) {
-    const before = selectHomeDepotSearchPhotos(pooled, opts).length;
     const [bingPage, bingAsync, ddg] = await Promise.all([
       fetchHtml(
         `https://www.bing.com/images/search?q=${encodeURIComponent(query)}&form=HDRSC2&first=1&count=50`,
@@ -211,12 +209,6 @@ async function runImageSearch(
       soFar = selectHomeDepotSearchPhotos(pooled, opts);
     }
     if (soFar.length >= 6) return soFar;
-    if (soFar.length > 0 && soFar.length === before) {
-      misses += 1;
-      if (misses >= 3) return soFar;
-    } else {
-      misses = 0;
-    }
   }
   return selectHomeDepotSearchPhotos(pooled, opts);
 }
@@ -256,13 +248,13 @@ export function homeDepotSearchQueries(opts: {
   const models = homeDepotModelSearchTokens(opts.model);
   const stems = homeDepotStemVariants(opts.stem || "");
   const title = homeDepotTitleSearchToken(opts.title || "");
-  const extraTypes = ["e1", "e4", "40", "1d"] as const;
+  const extraTypes = ["e1", "e4", "4f", "c3", "40", "1d"] as const;
   const modelQueries = models.flatMap((model) => [
     [opts.brand, model, "homedepot"].filter(Boolean).join(" "),
     [opts.brand, model, "thdstatic"].filter(Boolean).join(" "),
+    `"${model}-e1" OR "${model}-e4" OR "${model}-4f" OR "${model}-c3" OR "${model}-1d" OR "${model}-40" thdstatic`,
     [model, "thdstatic"].filter(Boolean).join(" "),
     [model, "site:homedepot.com"].filter(Boolean).join(" "),
-    `"${model}-e1" OR "${model}-e4" OR "${model}-1d" OR "${model}-40" thdstatic`,
   ]);
   const typeQueries = models.slice(0, 1).flatMap((model) =>
     extraTypes.map((type) => `"${model}-${type}" thdstatic`),

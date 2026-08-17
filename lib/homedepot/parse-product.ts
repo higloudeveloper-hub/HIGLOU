@@ -264,6 +264,9 @@ export const HOME_DEPOT_GALLERY_TYPES = [
   "a0",
   "44",
   "66",
+  "4f",
+  "c3",
+  "77",
 ] as const;
 
 /**
@@ -327,6 +330,30 @@ function homeDepotModelNeedles(model: string): string[] {
   return needles;
 }
 
+function escapeHomeDepotNeedle(needle: string): string {
+  return needle.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/** Match the SKU as a filename token, not a prefix of a related model. */
+export function filenameHasHomeDepotNeedle(url: string, needle: string): boolean {
+  const file = (String(url || "").split("?")[0].split("/").pop() || "").toLowerCase();
+  const n = String(needle || "").trim().toLowerCase();
+  if (!file || !n) return false;
+  const token = new RegExp(
+    `(^|[^a-z0-9])${escapeHomeDepotNeedle(n)}(-[a-z0-9]{1,3}_|[^a-z0-9]|$)`,
+    "i",
+  );
+  if (token.test(file)) return true;
+  const compact = n.replace(/-/g, "");
+  if (compact.length >= 6 && compact !== n) {
+    return new RegExp(
+      `(^|[^a-z0-9])${escapeHomeDepotNeedle(compact)}(-[a-z0-9]{1,3}_|[^a-z0-9]|$)`,
+      "i",
+    ).test(file);
+  }
+  return false;
+}
+
 export function belongsToHomeDepotProduct(
   url: string,
   opts: { model?: string; itemId?: string; stem?: string },
@@ -336,9 +363,7 @@ export function belongsToHomeDepotProduct(
   const itemId = String(opts.itemId || "").trim().toLowerCase();
   if (itemId.length >= 8 && u.includes(itemId)) return true;
   for (const needle of homeDepotModelNeedles(String(opts.model || ""))) {
-    if (u.includes(needle)) return true;
-    const compact = needle.replace(/-/g, "");
-    if (compact.length >= 6 && u.replace(/-/g, "").includes(compact)) return true;
+    if (filenameHasHomeDepotNeedle(u, needle)) return true;
   }
   const stem = String(opts.stem || "").trim().toLowerCase();
   if (

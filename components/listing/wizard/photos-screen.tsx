@@ -123,7 +123,7 @@ export function PhotosScreen({
               ? catalogImporting === "homedepot"
                 ? "Reading Home Depot…"
                 : "Reading Amazon…"
-              : "Drop a photo on the pad, or import from Amazon or Home Depot"}
+              : "Drop a photo, or import — then delete, add, or reorder"}
         </span>
         <button
           type="button"

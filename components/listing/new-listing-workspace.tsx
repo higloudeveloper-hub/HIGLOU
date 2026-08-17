@@ -1024,22 +1024,10 @@ export function NewListingWorkspace({
         updatedAt: new Date().toISOString(),
       };
       setListing(seeded);
-      toast.success(`${storeLabel} product loaded — writing the eBay listing…`);
-      await analyzeProduct({
-        images: body.images,
-        imageUrls: body.images.map((img) => img.url),
-        baseListing: seeded,
-        hints: {
-          brand: body.brand,
-          model: body.model,
-          upc: body.upc,
-          notes: [body.title, body.model, ...(body.features || [])]
-            .filter(Boolean)
-            .join("; ")
-            .slice(0, 2000),
-          condition: newCondition,
-        },
-      });
+      setStep("photos");
+      toast.success(
+        `${storeLabel} photos loaded — delete, add, or drag to reorder, then Continue.`,
+      );
       return true;
     } catch (error) {
       const message =
@@ -1889,6 +1877,8 @@ export function NewListingWorkspace({
           onOpenMore={() => setMoreOpen(true)}
           storeBranding={storeBranding}
           onStoreBrandingChange={handleStoreBrandingChange}
+          onImagesChange={(images) => update("images", images)}
+          productId={listing.id}
         />
       ) : null}
 

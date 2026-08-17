@@ -33,7 +33,7 @@ interface ImageUploaderProps {
   productId?: string;
   compact?: boolean;
   /** `wizard` = dashed box. `stage` = full-area drop over the live storefronts. */
-  variant?: "default" | "wizard" | "stage";
+  variant?: "default" | "wizard" | "stage" | "tray";
 }
 
 type UploadApiImage = {
@@ -239,7 +239,13 @@ export function ImageUploader({
     const copy = [...images];
     const [item] = copy.splice(from, 1);
     copy.splice(to, 0, item);
-    onChange(copy.map((img, index) => ({ ...img, sortOrder: index })));
+    onChange(
+      copy.map((img, index) => ({
+        ...img,
+        sortOrder: index,
+        isPrimary: index === 0,
+      })),
+    );
   };
 
   const rotateOrder = () => {
@@ -276,6 +282,73 @@ export function ImageUploader({
       }}
     />
   );
+
+  if (variant === "tray") {
+    return (
+      <div className="flex flex-col gap-2">
+        {fileInput}
+        <p className="text-[11px] font-medium text-[#707070]">
+          Drag to reorder · first photo is the eBay main · X to remove · Add your own
+        </p>
+        <div className="flex min-w-0 items-center gap-2">
+          <div className="flex min-w-0 flex-1 gap-1.5 overflow-x-auto">
+            {images.map((image, index) => (
+              <div
+                key={image.id}
+                draggable={!disabled}
+                onDragStart={() => setDragIndex(index)}
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  if (dragIndex === null) return;
+                  moveImage(dragIndex, index);
+                  setDragIndex(null);
+                }}
+                onDragEnd={() => setDragIndex(null)}
+                className={cn(
+                  "relative size-16 shrink-0 cursor-grab overflow-hidden rounded-md bg-[#f7f7f7] ring-1 ring-[#e5e5e5] active:cursor-grabbing",
+                  dragIndex === index && "opacity-50",
+                  image.isPrimary && "ring-2 ring-[#141414]",
+                )}
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={image.previewUrl || image.url}
+                  alt=""
+                  className="size-full object-contain p-0.5"
+                  draggable={false}
+                />
+                <button
+                  type="button"
+                  aria-label="Remove photo"
+                  className="absolute top-0.5 right-0.5 grid size-5 place-items-center rounded-sm bg-white text-[#141414] shadow-sm"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    removeImage(image.id);
+                  }}
+                >
+                  <X className="size-3" />
+                </button>
+              </div>
+            ))}
+          </div>
+          <button
+            type="button"
+            onClick={openFilePicker}
+            disabled={disabled || busy}
+            className="inline-flex h-10 shrink-0 items-center gap-1.5 rounded-md border border-[#d8d8d8] bg-white px-3 text-[12px] font-semibold text-[#141414] disabled:opacity-40"
+          >
+            <ImagePlus className="size-3.5" />
+            Add
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   if (variant === "stage") {
     return (
@@ -320,23 +393,46 @@ export function ImageUploader({
           {fileInput}
         </div>
         {images.length > 0 ? (
-          <div className="pointer-events-auto flex shrink-0 items-center gap-2 border-t border-[#e5e5e5] bg-white px-3 py-2">
+          <div className="pointer-events-auto flex shrink-0 flex-col gap-1.5 border-t border-[#e5e5e5] bg-white px-3 py-2">
+            <p className="text-[11px] font-medium text-[#707070]">
+              Drag to reorder · first photo is the eBay main · X to remove
+            </p>
+            <div className="flex min-w-0 items-center gap-2">
             <div className="flex min-w-0 flex-1 gap-1.5 overflow-x-auto">
-              {images.map((image) => (
+              {images.map((image, index) => (
                 <div
                   key={image.id}
-                  className="relative size-12 shrink-0 overflow-hidden rounded-md bg-[#f7f7f7] ring-1 ring-[#e5e5e5]"
+                  draggable={!disabled}
+                  onDragStart={() => setDragIndex(index)}
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                  }}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (dragIndex === null) return;
+                    moveImage(dragIndex, index);
+                    setDragIndex(null);
+                  }}
+                  onDragEnd={() => setDragIndex(null)}
+                  className={cn(
+                    "relative size-14 shrink-0 cursor-grab overflow-hidden rounded-md bg-[#f7f7f7] ring-1 ring-[#e5e5e5] active:cursor-grabbing",
+                    dragIndex === index && "opacity-50",
+                    image.isPrimary && "ring-2 ring-[#141414]",
+                  )}
                 >
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src={image.previewUrl || image.url}
                     alt=""
                     className="size-full object-contain p-0.5"
+                    draggable={false}
                   />
                   <button
                     type="button"
                     aria-label="Remove photo"
-                    className="absolute top-0.5 right-0.5 grid size-4 place-items-center rounded-sm bg-white/90 text-[#141414]"
+                    className="absolute top-0.5 right-0.5 grid size-5 place-items-center rounded-sm bg-white text-[#141414] shadow-sm"
                     onClick={(e) => {
                       e.stopPropagation();
                       removeImage(image.id);
@@ -350,11 +446,12 @@ export function ImageUploader({
             <button
               type="button"
               onClick={openFilePicker}
-              className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md border border-[#d8d8d8] bg-white px-2.5 text-[12px] font-semibold text-[#141414]"
+              className="inline-flex h-10 shrink-0 items-center gap-1.5 rounded-md border border-[#d8d8d8] bg-white px-3 text-[12px] font-semibold text-[#141414]"
             >
               <ImagePlus className="size-3.5" />
               Add
             </button>
+            </div>
           </div>
         ) : null}
       </div>

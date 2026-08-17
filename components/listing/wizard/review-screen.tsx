@@ -50,9 +50,10 @@ import {
   type AttentionField,
   type ReviewFieldId,
 } from "@/components/listing/review-helpers";
-import type { ProductListing } from "@/types/product";
+import type { ProductImage, ProductListing } from "@/types/product";
 import type { StoreBranding } from "@/config/store-branding";
 import { cn } from "@/lib/utils";
+import { ImageUploader } from "@/components/uploader/image-uploader";
 
 function FieldNote({
   attentionFields,
@@ -100,6 +101,8 @@ export function ReviewScreen({
   onOpenMore,
   storeBranding,
   onStoreBrandingChange,
+  onImagesChange,
+  productId,
 }: {
   listing: ProductListing;
   attentionFields: AttentionField[];
@@ -118,6 +121,8 @@ export function ReviewScreen({
   onOpenMore: () => void;
   storeBranding?: StoreBranding;
   onStoreBrandingChange?: (next: StoreBranding) => void;
+  onImagesChange?: (images: ProductImage[]) => void;
+  productId?: string;
 }) {
   const reduceMotion = usePrefersReducedMotion();
   const [activePhoto, setActivePhoto] = useState(0);
@@ -488,6 +493,23 @@ export function ReviewScreen({
               </div>
             </div>
           </div>
+
+          {onImagesChange ? (
+            <div className="border-b border-border/60 px-4 py-3 sm:px-5">
+              <Label className="mb-2 block text-[11px] font-semibold tracking-[0.08em] text-muted-foreground uppercase">
+                Photos
+              </Label>
+              <ImageUploader
+                images={listing.images}
+                onChange={(next) => {
+                  onImagesChange(next);
+                  setActivePhoto(0);
+                }}
+                productId={productId}
+                variant="tray"
+              />
+            </div>
+          ) : null}
 
           {/* Tabbed details — switch panels instead of endless scroll */}
           <Tabs

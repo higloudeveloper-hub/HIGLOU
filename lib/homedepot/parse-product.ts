@@ -178,6 +178,10 @@ function titleFromHtml(html: string): string {
     .trim();
 }
 
+export function uniqueHomeDepotImages(urls: string[]): string[] {
+  return uniqueUrls(urls).slice(0, DEFAULT_VALUES.maxImages);
+}
+
 export function parseHomeDepotProductPage(
   html: string,
   meta: { itemId: string; url: string },
@@ -218,11 +222,11 @@ export function parseHomeDepotProductPage(
       ? ldGtin
       : "");
 
-  const imageUrls = uniqueUrls([
+  const imageUrls = uniqueHomeDepotImages([
     ...ldImages,
     attr(html, "og:image"),
     ...collectImageUrls(html),
-  ]).slice(0, DEFAULT_VALUES.maxImages);
+  ]);
 
   return {
     itemId: meta.itemId,

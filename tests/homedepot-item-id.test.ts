@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseHomeDepotLink } from "@/lib/homedepot/item-id";
+import { identityFromHomeDepotLink, parseHomeDepotLink } from "@/lib/homedepot/item-id";
 import { detectCatalogStore } from "@/lib/catalog/detect-store";
 
 describe("parseHomeDepotLink", () => {
@@ -28,6 +28,18 @@ describe("parseHomeDepotLink", () => {
 
   it("rejects non-Home Depot links", () => {
     expect(parseHomeDepotLink("https://www.amazon.com/dp/B0D123ABCD")).toBeNull();
+  });
+
+  it("reads title, brand, and model from the SEO slug", () => {
+    const parsed = parseHomeDepotLink(
+      "https://www.homedepot.com/p/Defiant-MaxDetect-240-Black-MotionSensing-Wired-Outdoor-3-Head-LED-Security-Flood-Light-3000-Lumens-17000148/324294069",
+    );
+    expect(parsed?.itemId).toBe("324294069");
+    const identity = identityFromHomeDepotLink(parsed!);
+    expect(identity.brand).toBe("Defiant");
+    expect(identity.model).toBe("17000148");
+    expect(identity.title).toMatch(/Max Detect/i);
+    expect(identity.title).toMatch(/Flood Light/i);
   });
 });
 

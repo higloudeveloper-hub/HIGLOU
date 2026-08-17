@@ -20,7 +20,41 @@ export type ParsedHomeDepotLink = {
   canonicalUrl: string;
   original: string;
   host: string;
+  slug: string;
 };
+
+function slugFromPath(pathname: string, itemId: string): string {
+  const parts = pathname.split("/").filter(Boolean);
+  const last = parts[parts.length - 1] || "";
+  const slug = last === itemId ? parts[parts.length - 2] || "" : last;
+  if (!slug || /^\d{8,12}$/.test(slug)) return "";
+  return decodeURIComponent(slug);
+}
+
+/** Title / brand / model from the SEO slug when Home Depot blocks the HTML. */
+export function identityFromHomeDepotLink(parsed: ParsedHomeDepotLink): {
+  title: string;
+  brand: string;
+  model: string;
+} {
+  const tokens = parsed.slug
+    .split("-")
+    .map((t) => t.trim())
+    .filter(Boolean)
+    .map((t) => t.replace(/([a-z])([A-Z])/g, "$1 $2"));
+  if (!tokens.length) {
+    return { title: "", brand: "", model: "" };
+  }
+  const last = tokens[tokens.length - 1] || "";
+  const model = /^[A-Z0-9][A-Z0-9.]{3,}$/i.test(last) ? last : "";
+  const words = model ? tokens.slice(0, -1) : tokens;
+  const title = words.join(" ").replace(/\s+/g, " ").trim();
+  return {
+    title,
+    brand: words[0] || "",
+    model,
+  };
+}
 
 /** Pull a Home Depot item id from a product URL or a bare 8–12 digit id. */
 export function parseHomeDepotLink(input: string): ParsedHomeDepotLink | null {
@@ -33,6 +67,7 @@ export function parseHomeDepotLink(input: string): ParsedHomeDepotLink | null {
       canonicalUrl: `https://www.homedepot.com/p/${original}`,
       original,
       host: "www.homedepot.com",
+      slug: "",
     };
   }
 
@@ -67,5 +102,6 @@ export function parseHomeDepotLink(input: string): ParsedHomeDepotLink | null {
     canonicalUrl: `https://${host}${url.pathname.replace(/\/$/, "") || `/p/${itemId}`}`,
     original,
     host,
+    slug: slugFromPath(url.pathname, itemId),
   };
 }

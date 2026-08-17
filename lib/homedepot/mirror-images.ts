@@ -94,6 +94,26 @@ async function downloadLargestHomeDepotImage(url: string): Promise<Buffer | null
   }
 }
 
+async function mapPool<T, R>(
+  items: T[],
+  limit: number,
+  fn: (item: T, index: number) => Promise<R>,
+): Promise<R[]> {
+  const out: R[] = new Array(items.length);
+  let next = 0;
+  const worker = async () => {
+    while (next < items.length) {
+      const index = next;
+      next += 1;
+      out[index] = await fn(items[index], index);
+    }
+  };
+  await Promise.all(
+    Array.from({ length: Math.min(limit, items.length) }, () => worker()),
+  );
+  return out;
+}
+
 export async function mirrorHomeDepotImages(options: {
   imageUrls: string[];
   userId: string;
@@ -101,14 +121,14 @@ export async function mirrorHomeDepotImages(options: {
 }): Promise<MirroredHomeDepotImage[]> {
   await ensureProductImagesBucket();
   const admin = createAdminClient();
-  const mirrored: MirroredHomeDepotImage[] = [];
+  const urls = options.imageUrls.slice(0, DEFAULT_VALUES.maxImages);
 
-  for (const [index, imageUrl] of options.imageUrls.entries()) {
+  const rows = await mapPool(urls, 4, async (imageUrl, index) => {
     try {
       const raw = await downloadLargestHomeDepotImage(imageUrl);
-      if (!raw) continue;
+      if (!raw) return null;
       const resolved = resolveImageMime(raw, "image/jpeg");
-      if (!resolved.mime) continue;
+      if (!resolved.mime) return null;
       const compressed = await compressImageBuffer(raw);
       const ext =
         resolved.mime === "image/png"
@@ -124,19 +144,19 @@ export async function mirrorHomeDepotImages(options: {
           contentType: resolved.mime,
           upsert: false,
         });
-      if (error) continue;
-      mirrored.push({
+      if (error) return null;
+      const row: MirroredHomeDepotImage = {
         publicUrl: publicObjectUrl(storagePath),
         storagePath,
         fileName,
         mimeType: resolved.mime,
         sizeBytes: compressed.byteLength,
-      });
+      };
+      return row;
     } catch {
-      /* skip one bad image */
+      return null;
     }
-    if (mirrored.length >= DEFAULT_VALUES.maxImages) break;
-  }
+  });
 
-  return mirrored;
+  return rows.filter((row): row is MirroredHomeDepotImage => Boolean(row));
 }

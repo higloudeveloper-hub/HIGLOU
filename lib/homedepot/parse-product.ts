@@ -130,17 +130,40 @@ function jsonLdProducts(html: string): Record<string, unknown>[] {
   return out;
 }
 
-export function collectHomeDepotImageUrlsFromHtml(html: string): string[] {
-  const decoded = String(html || "")
-    .replace(/\\u003cSIZE\\u003e/gi, "1000")
-    .replace(/\\u003cSIZE>/gi, "1000")
+function decodeHomeDepotMarkup(html: string): string {
+  let decoded = String(html || "")
+    .replace(/\\u003c/gi, "<")
+    .replace(/\\u003e/gi, ">")
+    .replace(/\\u002[fF]/g, "/")
+    .replace(/\\\//g, "/")
     .replace(/<SIZE>/gi, "1000")
-    .replace(/\\u002[fF]/g, "/");
-  return [
+    .replace(/&amp;/g, "&");
+  decoded = decoded.replace(
+    /https?%3A%2F%2F(?:images\.)?(?:thdstatic|homedepot-static)\.com[^"'&\\\s>]*/gi,
+    (match) => {
+      try {
+        return decodeURIComponent(match);
+      } catch {
+        return match;
+      }
+    },
+  );
+  return decoded;
+}
+
+export function collectHomeDepotImageUrlsFromHtml(html: string): string[] {
+  const decoded = decodeHomeDepotMarkup(html);
+  const fromHref = [
     ...decoded.matchAll(
       /https:\/\/(?:images\.)?(?:thdstatic|homedepot-static)\.com\/[^"'\\\s>]+\.(?:jpe?g|png|webp)/gi,
     ),
   ].map((m) => m[0]);
+  const fromProtocol = [
+    ...decoded.matchAll(
+      /\/\/(?:images\.)?(?:thdstatic|homedepot-static)\.com\/[^"'\\\s>]+\.(?:jpe?g|png|webp)/gi,
+    ),
+  ].map((m) => `https:${m[0]}`);
+  return [...fromHref, ...fromProtocol];
 }
 
 function featureBullets(html: string): string[] {
@@ -194,6 +217,11 @@ function titleFromHtml(html: string): string {
     .trim();
 }
 
+/** Deduped gallery URLs, no cap — cap after this-SKU filter. */
+export function dedupeHomeDepotImages(urls: string[]): string[] {
+  return uniqueUrls(urls);
+}
+
 export function uniqueHomeDepotImages(urls: string[]): string[] {
   return uniqueUrls(urls).slice(0, DEFAULT_VALUES.maxImages);
 }
@@ -238,9 +266,9 @@ export function selectHomeDepotSearchPhotos(
   urls: string[],
   opts: { model?: string; itemId?: string; stem?: string },
 ): string[] {
-  const all = uniqueHomeDepotImages(urls);
-  const matched = all.filter((url) => belongsToHomeDepotProduct(url, opts));
-  return matched;
+  return uniqueUrls(urls)
+    .filter((url) => belongsToHomeDepotProduct(url, opts))
+    .slice(0, DEFAULT_VALUES.maxImages);
 }
 
 export function parseHomeDepotProductPage(
@@ -284,18 +312,20 @@ export function parseHomeDepotProductPage(
       : "");
 
   const ogImage = attr(html, "og:image");
-  const stem = homeDepotMediaStem(ogImage || (typeof ldImages[0] === "string" ? ldImages[0] : ""));
+  const collected = dedupeHomeDepotImages([
+    ...ldImages,
+    ogImage,
+    ...collectHomeDepotImageUrlsFromHtml(html),
+  ]);
+  const stem = homeDepotMediaStem(
+    ogImage || (typeof ldImages[0] === "string" ? ldImages[0] : "") || collected[0] || "",
+  );
   const owned = {
     model: model || ldMpn,
     itemId: meta.itemId,
     stem,
   };
-  const imageUrls = uniqueHomeDepotImages(
-    selectHomeDepotSearchPhotos(
-      [...ldImages, ogImage, ...collectHomeDepotImageUrlsFromHtml(html)],
-      owned,
-    ),
-  );
+  const imageUrls = selectHomeDepotSearchPhotos(collected, owned);
 
   return {
     itemId: meta.itemId,

@@ -122,6 +122,47 @@ describe("Home Depot gallery angles", () => {
     expect(urls.some((u) => u.includes("-40_1000.jpg"))).toBe(true);
   });
 
+  it("reads JSON-escaped and percent-encoded gallery URLs", () => {
+    const html = `
+      {"url":"https:\\/\\/images.thdstatic.com\\/productImages\\/bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb\\/svn\\/black-defiant-floodlights-17000148-e1_1000.jpg"}
+      https%3A%2F%2Fimages.thdstatic.com%2FproductImages%2Fcccccccc-cccc-cccc-cccc-cccccccccccc%2Fsvn%2Fblack-defiant-floodlights-17000148-1d_600.jpg
+    `;
+    const urls = collectHomeDepotImageUrlsFromHtml(html);
+    expect(urls.some((u) => u.includes("-e1_1000.jpg"))).toBe(true);
+    expect(urls.some((u) => u.includes("-1d_600.jpg"))).toBe(true);
+  });
+
+  it("keeps this SKU even when twelve related products appear first", () => {
+    const related = Array.from({ length: 12 }, (_, i) => {
+      const id = String(i).padStart(2, "0");
+      return `https://images.thdstatic.com/productImages/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa${id}/svn/other-floodlights-17000019-64_400.jpg`;
+    });
+    const own = [
+      "64",
+      "e1",
+      "e2",
+      "e3",
+      "e4",
+      "40",
+      "a0",
+      "1d",
+      "1f",
+      "44",
+      "66",
+    ].map(
+      (type, i) =>
+        `https://images.thdstatic.com/productImages/bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbb${String(i).padStart(2, "0")}/svn/black-defiant-floodlights-17000148-${type}_400.jpg`,
+    );
+    const html = [...related, ...own].map((u) => `<img src="${u}" />`).join("\n");
+    const photos = selectHomeDepotSearchPhotos(
+      collectHomeDepotImageUrlsFromHtml(html),
+      { model: "17000148", itemId: "324294069" },
+    );
+    expect(photos).toHaveLength(11);
+    expect(photos.every((u) => u.includes("17000148"))).toBe(true);
+    expect(photos.some((u) => u.includes("17000019"))).toBe(false);
+  });
+
   it("drops related-product photos from the same Home Depot page", () => {
     const html = `
       <meta property="og:image" content="https://images.thdstatic.com/productImages/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/svn/milwaukee-brad-nailers-2541-20-48-73-2010-64_400.jpg" />

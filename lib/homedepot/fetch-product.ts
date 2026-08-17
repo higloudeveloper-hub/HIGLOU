@@ -1,14 +1,16 @@
+import { DEFAULT_VALUES } from "@/config/default-values";
 import {
   identityFromHomeDepotLink,
   parseHomeDepotLink,
 } from "@/lib/homedepot/item-id";
 import {
   collectHomeDepotImageUrlsFromHtml,
+  dedupeHomeDepotImages,
   homeDepotMediaStem,
+  isGenericHomeDepotModel,
   isHomeDepotBlockedPage,
   parseHomeDepotProductPage,
   selectHomeDepotSearchPhotos,
-  uniqueHomeDepotImages,
   type HomeDepotProductDraft,
 } from "@/lib/homedepot/parse-product";
 
@@ -20,11 +22,13 @@ const ANDROID_UA =
   "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36";
 const GOOGLEBOT_UA =
   "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)";
+const BINGBOT_UA =
+  "Mozilla/5.0 (compatible; bingbot/2.0; +http://www.bing.com/bingbot.htm)";
 const DESKTOP_UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36";
 
 // Desktop Chrome is Akamai 403. Prefer clients that still get the gallery JSON.
-const USER_AGENTS = [IPHONE_UA, ANDROID_UA, GOOGLEBOT_UA, DESKTOP_UA];
+const USER_AGENTS = [IPHONE_UA, ANDROID_UA, GOOGLEBOT_UA, BINGBOT_UA, DESKTOP_UA];
 
 function headersFor(userAgent: string): Record<string, string> {
   return {
@@ -51,7 +55,7 @@ async function readUrl(
 }
 
 function galleryCount(html: string): number {
-  return uniqueHomeDepotImages(collectHomeDepotImageUrlsFromHtml(html)).length;
+  return dedupeHomeDepotImages(collectHomeDepotImageUrlsFromHtml(html)).length;
 }
 
 function htmlLooksUsable(html: string): boolean {
@@ -61,22 +65,26 @@ function htmlLooksUsable(html: string): boolean {
 }
 
 async function fetchProductHtml(productUrl: string): Promise<string> {
+  const pages = await Promise.all(
+    USER_AGENTS.map(async (ua) => {
+      try {
+        return (await readUrl(productUrl, ua)).body;
+      } catch {
+        return "";
+      }
+    }),
+  );
   let best = "";
   let bestScore = 0;
-  for (const ua of USER_AGENTS) {
-    try {
-      const page = await readUrl(productUrl, ua);
-      const images = galleryCount(page.body);
-      const score = page.body.length + images * 50_000;
-      if (score > bestScore) {
-        best = page.body;
-        bestScore = score;
-      }
-      if (htmlLooksUsable(page.body) && images >= 6) return page.body;
-    } catch {
-      /* try the next client */
+  for (const body of pages) {
+    const images = galleryCount(body);
+    const score = body.length + images * 50_000;
+    if (score > bestScore) {
+      best = body;
+      bestScore = score;
     }
   }
+  if (htmlLooksUsable(best) && galleryCount(best) >= 6) return best;
   const reader = await fetchViaReader(productUrl);
   if (reader && galleryCount(reader) > galleryCount(best)) return reader;
   return best;
@@ -143,10 +151,16 @@ async function searchCatalogPhotos(opts: {
   itemId: string;
   stem?: string;
 }): Promise<string[]> {
+  const model = String(opts.model || "").trim();
+  const stem = String(opts.stem || "").trim();
   const queries = [
-    [opts.model, opts.itemId, "site:homedepot.com"].filter(Boolean).join(" "),
+    [model, "site:homedepot.com"].filter(Boolean).join(" "),
+    stem.length >= 12 ? `${stem} thdstatic` : "",
+    [opts.brand, model, "homedepot"].filter(Boolean).join(" "),
     [opts.itemId, "homedepot"].filter(Boolean).join(" "),
-    [opts.brand, opts.model, opts.itemId, "homedepot"].filter(Boolean).join(" "),
+    model && !isGenericHomeDepotModel(model)
+      ? `"${model}-e1" OR "${model}-e4" OR "${model}-1d" OR "${model}-40" thdstatic`
+      : "",
   ].filter((q, index, all) => {
     const compact = q.replace(/\s+/g, " ").trim();
     return compact.length >= 8 && all.indexOf(q) === index;
@@ -154,25 +168,27 @@ async function searchCatalogPhotos(opts: {
 
   const pooled: string[] = [];
   for (const query of queries) {
-    for (const first of [1, 21, 41]) {
-      try {
-        const bing = await fetchHtml(
-          `https://www.bing.com/images/search?q=${encodeURIComponent(query)}&form=HDRSC2&first=${first}`,
-        );
-        pooled.push(...collectHomeDepotImageUrlsFromHtml(bing));
-      } catch {
-        /* Bing is a fallback */
-      }
+    const [bingPages, ddg] = await Promise.all([
+      Promise.all(
+        [1, 21, 41].map(async (first) => {
+          try {
+            return await fetchHtml(
+              `https://www.bing.com/images/search?q=${encodeURIComponent(query)}&form=HDRSC2&first=${first}&count=50`,
+            );
+          } catch {
+            return "";
+          }
+        }),
+      ),
+      fetchDuckDuckGoImages(query).catch(() => [] as string[]),
+    ]);
+    for (const bing of bingPages) {
+      pooled.push(...collectHomeDepotImageUrlsFromHtml(bing));
     }
-
-    try {
-      pooled.push(...(await fetchDuckDuckGoImages(query)));
-    } catch {
-      /* DuckDuckGo is a fallback */
-    }
+    pooled.push(...ddg);
 
     const soFar = selectHomeDepotSearchPhotos(pooled, opts);
-    if (soFar.length >= 8) return soFar;
+    if (soFar.length >= DEFAULT_VALUES.maxImages) return soFar;
   }
   return selectHomeDepotSearchPhotos(pooled, opts);
 }
@@ -200,14 +216,18 @@ export async function fetchHomeDepotProduct(input: string): Promise<HomeDepotPro
       itemId,
       stem: homeDepotMediaStem(product.imageUrls[0] || ""),
     };
-    product.imageUrls = selectHomeDepotSearchPhotos(product.imageUrls, owned);
+    product.imageUrls = selectHomeDepotSearchPhotos(
+      [...product.imageUrls, ...collectHomeDepotImageUrlsFromHtml(html)],
+      owned,
+    );
+    owned.stem = owned.stem || homeDepotMediaStem(product.imageUrls[0] || "");
 
-    if (product.imageUrls.length < 3) {
+    if (product.imageUrls.length < 8) {
       const extra = await searchCatalogPhotos(owned);
-      product.imageUrls = uniqueHomeDepotImages([
-        ...product.imageUrls,
-        ...extra,
-      ]);
+      product.imageUrls = selectHomeDepotSearchPhotos(
+        [...product.imageUrls, ...extra],
+        owned,
+      );
     }
 
     if (!product.title && product.imageUrls.length === 0) {

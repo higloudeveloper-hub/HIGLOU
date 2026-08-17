@@ -170,6 +170,7 @@ async function searchCatalogPhotos(opts: {
   const model = String(opts.model || "").trim();
   const stem = String(opts.stem || "").trim();
   const queries = [
+    [model, "thdstatic"].filter(Boolean).join(" "),
     [model, "site:homedepot.com"].filter(Boolean).join(" "),
     stem.length >= 12 ? `${stem} thdstatic` : "",
     [opts.brand, model, "homedepot"].filter(Boolean).join(" "),
@@ -179,7 +180,7 @@ async function searchCatalogPhotos(opts: {
       : "",
   ].filter((q, index, all) => {
     const compact = q.replace(/\s+/g, " ").trim();
-    return compact.length >= 8 && all.indexOf(q) === index;
+    return compact.length >= 8 && all.indexOf(q) === index && !/^site:homedepot\.com$/i.test(compact) && compact !== "homedepot";
   });
 
   const pooled: string[] = [];

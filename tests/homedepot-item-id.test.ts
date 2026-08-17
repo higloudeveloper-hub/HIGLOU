@@ -53,6 +53,18 @@ describe("parseHomeDepotLink", () => {
     expect(identity.model).not.toBe("2010");
     expect(identity.title).toMatch(/Brad Nailer/i);
   });
+
+  it("reads a hyphenated SKU like BEBRNOV-PD27, not just PD27", () => {
+    const parsed = parseHomeDepotLink(
+      "https://www.homedepot.com/p/BEYOND-BRIGHT-60-Watt-Ultra-Bright-LED-Light-Bulb-6500K-with-10-Adjustable-Light-Panels-BEBRNOV-PD27/319137828?MERCH=REC",
+    );
+    expect(parsed?.itemId).toBe("319137828");
+    const identity = identityFromHomeDepotLink(parsed!);
+    expect(identity.brand).toBe("BEYOND");
+    expect(identity.model).toBe("BEBRNOV-PD27");
+    expect(identity.model).not.toBe("PD27");
+    expect(identity.title).toMatch(/Light Bulb/i);
+  });
 });
 
 describe("detectCatalogStore", () => {

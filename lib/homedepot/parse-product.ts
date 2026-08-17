@@ -261,6 +261,15 @@ export function belongsToHomeDepotProduct(
   if (model && !isGenericHomeDepotModel(model) && u.includes(model.toLowerCase())) {
     return true;
   }
+  const compact = model.replace(/-/g, "").toLowerCase();
+  if (
+    model &&
+    !isGenericHomeDepotModel(model) &&
+    compact.length >= 6 &&
+    u.replace(/-/g, "").includes(compact)
+  ) {
+    return true;
+  }
   const stem = String(opts.stem || "").trim().toLowerCase();
   if (stem.length >= 12 && homeDepotMediaStem(u) === stem) return true;
   return false;

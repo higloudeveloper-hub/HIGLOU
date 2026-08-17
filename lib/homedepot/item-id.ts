@@ -31,15 +31,43 @@ function slugFromPath(pathname: string, itemId: string): string {
   return decodeURIComponent(slug);
 }
 
-/** Trailing HD model: 17000148, DCD791P1, or combo 2541-20-48-73-2010. */
+/** Trailing HD model: 17000148, DCD791P1, BEBRNOV-PD27, or combo 2541-20-48-73-2010. */
 export function modelFromHomeDepotSlug(slug: string): string {
   const s = String(slug || "").trim();
   if (!s) return "";
   const combo = s.match(/(\d{3,5}-\d{2}(?:-\d{2,4}){1,8})$/i)?.[1];
   if (combo && combo.replace(/-/g, "").length >= 6) return combo;
-  const last = s.split("-").filter(Boolean).pop() || "";
+
+  const tokens = s.split("-").filter(Boolean);
+  const walked = trailingHomeDepotModel(tokens);
+  if (walked) return walked;
+
+  const last = tokens[tokens.length - 1] || "";
   if (/^[A-Z0-9][A-Z0-9.]{5,}$/i.test(last)) return last;
   return "";
+}
+
+const HD_SLUG_STOP =
+  /^(and|the|with|for|from|inch|in|ft|oz|led|light|lights|bulb|bulbs|watt|watts|pack|kit|set|only|black|white|red|plus|ultra|bright|adjustable|panels|panel|wired|outdoor|head|security|flood|motion|sensing|lumens|lumen)$/i;
+
+function looksLikeHomeDepotModelToken(token: string): boolean {
+  const t = String(token || "").trim();
+  if (!t || t.length > 20) return false;
+  if (HD_SLUG_STOP.test(t)) return false;
+  if (/\d/.test(t)) return true;
+  return t.length >= 5 && /^[A-Z0-9]+$/.test(t) && t === t.toUpperCase();
+}
+
+function trailingHomeDepotModel(tokens: string[]): string {
+  const parts: string[] = [];
+  for (let i = tokens.length - 1; i >= 0; i--) {
+    if (!looksLikeHomeDepotModelToken(tokens[i])) break;
+    parts.unshift(tokens[i]);
+  }
+  const model = parts.join("-");
+  const compact = model.replace(/-/g, "");
+  if (!model || !/\d/.test(model) || compact.length < 6) return "";
+  return model;
 }
 
 /** Title / brand / model from the SEO slug when Home Depot blocks the HTML. */

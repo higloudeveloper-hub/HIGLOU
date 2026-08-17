@@ -93,6 +93,20 @@ describe("selectHomeDepotSearchPhotos", () => {
     expect(photos[0]).toContain("17000148");
     expect(photos[0]).toContain("_1000.");
   });
+
+  it("keeps Beyond Bright photos when the model is BEBRNOV-PD27", () => {
+    const html = `
+      https://images.thdstatic.com/productImages/aaa/svn/beyond-bright-led-light-bulbs-bebrnov-pd27-64_600.jpg
+      https://images.thdstatic.com/productImages/bbb/svn/beyond-bright-led-light-bulbs-bebrnov-pd27-e4_600.jpg
+      https://images.thdstatic.com/productImages/ccc/svn/other-led-bulbs-pd27-64_600.jpg
+    `;
+    const photos = selectHomeDepotSearchPhotos(
+      collectHomeDepotImageUrlsFromHtml(html),
+      { model: "BEBRNOV-PD27", itemId: "319137828" },
+    );
+    expect(photos).toHaveLength(2);
+    expect(photos.every((u) => u.includes("bebrnov-pd27"))).toBe(true);
+  });
 });
 
 describe("Home Depot gallery angles", () => {

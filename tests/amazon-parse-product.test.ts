@@ -56,6 +56,66 @@ describe("parseAmazonProductPage", () => {
     expect(ids).toEqual(expect.arrayContaining(["71aaa", "71bbb", "71ccc"]));
     expect(new Set(ids).size).toBeGreaterThanOrEqual(3);
   });
+
+  it("keeps this ASIN gallery and drops related-product photos on the same page", () => {
+    const product = parseAmazonProductPage(
+      `
+      'colorImages': { 'initial': [
+        {"hiRes":"https://m.media-amazon.com/images/I/71THIS1._AC_SL1500_.jpg"},
+        {"hiRes":"https://m.media-amazon.com/images/I/71THIS2._AC_SL1500_.jpg"},
+        {"hiRes":"https://m.media-amazon.com/images/I/71THIS3._AC_SL1500_.jpg"}
+      ] }
+      <div id="purchase-sims-feature">
+        <img src="https://m.media-amazon.com/images/I/71OTHERA._AC_US40_.jpg" />
+        <img src="https://m.media-amazon.com/images/I/71OTHERB._AC_US40_.jpg" />
+      </div>
+      <img src="https://m.media-amazon.com/images/I/71SPONSO._AC_SL1500_.jpg" />
+      `,
+      { asin: "B0EXACTAS1", url: "https://www.amazon.com/dp/B0EXACTAS1" },
+    );
+    const ids = product.imageUrls.map((url) => url.match(/\/images\/I\/([^./]+)/i)?.[1]);
+    expect(ids).toEqual(["71THIS1", "71THIS2", "71THIS3"]);
+    expect(ids.join(" ")).not.toMatch(/OTHER|SPONSO/);
+  });
+
+  it("uses the color gallery that matches the pasted ASIN", () => {
+    const product = parseAmazonProductPage(
+      `
+      'colorToAsin': { 'initial': { 'Black': 'B0BLACK001', 'Red': 'B0RED00001' } }
+      'colorImages': {
+        'initial': [{"hiRes":"https://m.media-amazon.com/images/I/71BLACK._AC_SL1500_.jpg"}],
+        'Black': [{"hiRes":"https://m.media-amazon.com/images/I/71BLACK._AC_SL1500_.jpg"}],
+        'Red': [
+          {"hiRes":"https://m.media-amazon.com/images/I/71RED01._AC_SL1500_.jpg"},
+          {"hiRes":"https://m.media-amazon.com/images/I/71RED02._AC_SL1500_.jpg"}
+        ]
+      }
+      `,
+      { asin: "B0RED00001", url: "https://www.amazon.com/dp/B0RED00001" },
+    );
+    const ids = product.imageUrls.map((url) => url.match(/\/images\/I\/([^./]+)/i)?.[1]);
+    expect(ids).toEqual(["71RED01", "71RED02"]);
+    expect(ids).not.toContain("71BLACK");
+  });
+
+  it("adds imageGalleryData slides so the gallery is not only the hero", () => {
+    const product = parseAmazonProductPage(
+      `
+      'colorImages': { 'initial': [
+        {"hiRes":"https://m.media-amazon.com/images/I/71HERO1._AC_SL1500_.jpg"}
+      ] }
+      'imageGalleryData': [
+        {"mainUrl":"https://m.media-amazon.com/images/I/71HERO1._AC_SL1500_.jpg"},
+        {"mainUrl":"https://m.media-amazon.com/images/I/71SIDE2._AC_SL1500_.jpg"},
+        {"mainUrl":"https://m.media-amazon.com/images/I/71BACK3._AC_SL1500_.jpg"}
+      ]
+      `,
+      { asin: "B0GALLERY1", url: "https://www.amazon.com/dp/B0GALLERY1" },
+    );
+    const ids = product.imageUrls.map((url) => url.match(/\/images\/I\/([^./]+)/i)?.[1]);
+    expect(ids).toEqual(expect.arrayContaining(["71HERO1", "71SIDE2", "71BACK3"]));
+    expect(new Set(ids).size).toBe(3);
+  });
 });
 
 describe("upgradeAmazonImage", () => {

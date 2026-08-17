@@ -1,4 +1,3 @@
-import { DEFAULT_VALUES } from "@/config/default-values";
 import { parseAmazonLink } from "@/lib/amazon/asin";
 import { fetchAmazonPageHtml } from "@/lib/amazon/fetch-page";
 import {
@@ -25,9 +24,9 @@ function headersFor(userAgent: string): Record<string, string> {
   };
 }
 
-function galleryCount(html: string): number {
+function galleryCount(html: string, asin?: string): number {
   if (!html || isCaptchaPage(html)) return 0;
-  return collectAmazonImageUrlsFromHtml(html).length;
+  return collectAmazonImageUrlsFromHtml(html, asin).length;
 }
 
 async function fetchViaEdgePage(origin: string, productUrl: string): Promise<string> {
@@ -78,50 +77,15 @@ async function resolveShortLink(url: string): Promise<string> {
   return res.url || url;
 }
 
-function pickRicherHtml(current: string, next: string): string {
-  if (galleryCount(next) > galleryCount(current)) return next;
-  if (galleryCount(next) === galleryCount(current) && next.length > current.length) {
+function pickRicherHtml(current: string, next: string, asin: string): string {
+  if (galleryCount(next, asin) > galleryCount(current, asin)) return next;
+  if (
+    galleryCount(next, asin) === galleryCount(current, asin) &&
+    next.length > current.length
+  ) {
     return next;
   }
   return current;
-}
-
-async function fetchHtml(url: string): Promise<string> {
-  try {
-    const res = await fetch(url, {
-      headers: headersFor(DESKTOP_UA),
-      cache: "no-store",
-      signal: AbortSignal.timeout(FETCH_MS),
-    });
-    if (!res.ok) return "";
-    return res.text();
-  } catch {
-    return "";
-  }
-}
-
-async function searchAmazonPhotos(asin: string): Promise<string[]> {
-  const queries = [
-    `"${asin}" media-amazon images/I`,
-    `${asin} site:amazon.com`,
-    `"${asin}" site:amazon.com`,
-  ];
-  const pooled: string[] = [];
-  for (const query of queries) {
-    const [bing, ddg] = await Promise.all([
-      fetchHtml(
-        `https://www.bing.com/images/search?q=${encodeURIComponent(query)}&form=HDRSC2&first=1&count=50`,
-      ),
-      fetchHtml(
-        `https://duckduckgo.com/?q=${encodeURIComponent(query)}&iax=images&ia=images`,
-      ),
-    ]);
-    pooled.push(...collectAmazonImageUrlsFromHtml(bing));
-    pooled.push(...collectAmazonImageUrlsFromHtml(ddg));
-    const unique = collectAmazonImageUrlsFromHtml(pooled.join("\n"));
-    if (unique.length >= DEFAULT_VALUES.maxImages) return unique;
-  }
-  return collectAmazonImageUrlsFromHtml(pooled.join("\n"));
 }
 
 export async function fetchAmazonProduct(
@@ -154,34 +118,27 @@ export async function fetchAmazonProduct(
       html = "";
     }
 
-    if (galleryCount(html) < 3 && opts?.pageOrigin) {
-      html = pickRicherHtml(html, await fetchViaEdgePage(opts.pageOrigin, canonical));
+    if (galleryCount(html, asin) < 3 && opts?.pageOrigin) {
+      html = pickRicherHtml(
+        html,
+        await fetchViaEdgePage(opts.pageOrigin, canonical),
+        asin,
+      );
     }
 
-    if (galleryCount(html) < 3) {
+    if (galleryCount(html, asin) < 3) {
       try {
-        html = pickRicherHtml(html, await readUrl(canonical, DESKTOP_UA));
+        html = pickRicherHtml(html, await readUrl(canonical, DESKTOP_UA), asin);
       } catch {
         /* keep what we have */
       }
     }
 
-    if (galleryCount(html) < 3 || isCaptchaPage(html)) {
-      html = pickRicherHtml(html, await fetchViaReader(canonical));
+    if (galleryCount(html, asin) < 3 || isCaptchaPage(html)) {
+      html = pickRicherHtml(html, await fetchViaReader(canonical), asin);
     }
 
     const product = parseAmazonProductPage(html, { asin, url: canonical });
-    if (product.imageUrls.length < 3) {
-      const searched = await searchAmazonPhotos(asin);
-      const seen = new Set(product.imageUrls.map((url) => url));
-      for (const url of searched) {
-        if (seen.has(url)) continue;
-        seen.add(url);
-        product.imageUrls.push(url);
-        if (product.imageUrls.length >= DEFAULT_VALUES.maxImages) break;
-      }
-    }
-
     if (!product.title && product.imageUrls.length === 0) {
       throw new Error(
         "Amazon did not return the listing. Copy the full product URL and try again.",

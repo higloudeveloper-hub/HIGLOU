@@ -20,14 +20,14 @@ function headersFor(userAgent: string): Record<string, string> {
   };
 }
 
-function galleryCount(html: string): number {
+function galleryCount(html: string, asin?: string): number {
   if (!html || isCaptchaPage(html)) return 0;
-  return collectAmazonImageUrlsFromHtml(html).length;
+  return collectAmazonImageUrlsFromHtml(html, asin).length;
 }
 
-function scoreHtml(html: string): number {
+function scoreHtml(html: string, asin?: string): number {
   if (!html || isCaptchaPage(html)) return 0;
-  return html.length + galleryCount(html) * 40_000;
+  return html.length + galleryCount(html, asin) * 40_000;
 }
 
 async function readPage(url: string, userAgent: string): Promise<string> {
@@ -62,7 +62,7 @@ export async function fetchAmazonPageHtml(input: string): Promise<string> {
   let best = "";
   let bestScore = 0;
   for (const body of pages) {
-    const score = scoreHtml(body);
+    const score = scoreHtml(body, parsed.asin);
     if (score > bestScore) {
       best = body;
       bestScore = score;

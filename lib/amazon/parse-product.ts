@@ -132,54 +132,172 @@ function jsonLdProducts(html: string): Record<string, unknown>[] {
   return out;
 }
 
-function colorImages(html: string): string[] {
-  const decoded = String(html || "")
+function decodeAmazonMarkup(html: string): string {
+  return String(html || "")
     .replace(/&quot;/g, '"')
     .replace(/\\u002[fF]/g, "/")
-    .replace(/\\\//g, "/");
-  const start = decoded.search(/['"]colorImages['"]\s*:/i);
-  const block = start >= 0 ? decoded.slice(start, start + 80_000) : decoded;
-  const keyed = [
+    .replace(/\\\//g, "/")
+    .replace(/\\u003c/gi, "<");
+}
+
+function extractBalanced(
+  source: string,
+  start: number,
+  openCh: "{" | "[",
+): string {
+  const closeCh = openCh === "{" ? "}" : "]";
+  if (source[start] !== openCh) return "";
+  let depth = 0;
+  let inStr = false;
+  let quote = "";
+  let escape = false;
+  for (let i = start; i < source.length; i += 1) {
+    const c = source[i];
+    if (inStr) {
+      if (escape) {
+        escape = false;
+        continue;
+      }
+      if (c === "\\") {
+        escape = true;
+        continue;
+      }
+      if (c === quote) inStr = false;
+      continue;
+    }
+    if (c === '"' || c === "'") {
+      inStr = true;
+      quote = c;
+      continue;
+    }
+    if (c === openCh) depth += 1;
+    else if (c === closeCh) {
+      depth -= 1;
+      if (depth === 0) return source.slice(start, i + 1);
+    }
+  }
+  return "";
+}
+
+function blockAfterKey(
+  html: string,
+  key: string,
+  openCh: "{" | "[",
+): string {
+  const re = new RegExp(`['"]${key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}['"]\\s*:`, "i");
+  const match = re.exec(html);
+  if (!match || match.index == null) return "";
+  let i = match.index + match[0].length;
+  while (i < html.length && /\s/.test(html[i])) i += 1;
+  if (html[i] !== openCh) {
+    const found = html.indexOf(openCh, i);
+    if (found < 0 || found - i > 80) return "";
+    i = found;
+  }
+  return extractBalanced(html, i, openCh);
+}
+
+function urlsFromGalleryBlock(block: string): string[] {
+  if (!block) return [];
+  const hiRes = [
     ...block.matchAll(
-      /['"](?:hiRes|large|mainUrl|thumb|hiResImage)['"]\s*:\s*['"](https:[^"']+)['"]/g,
+      /['"](?:hiRes|mainUrl|hiResImage)['"]\s*:\s*['"](https:[^"']+)['"]/g,
     ),
   ].map((m) => m[1]);
-  const asJsonKeys = [
+  const large = [
+    ...block.matchAll(/['"]large['"]\s*:\s*['"](https:[^"']+)['"]/g),
+  ].map((m) => m[1]);
+  const mainKeys = [
     ...block.matchAll(
       /['"](https:\/\/[^"']+(?:media-amazon|ssl-images-amazon)[^"']*\/images\/I\/[^"']+)['"]\s*:/gi,
     ),
   ].map((m) => m[1]);
-  const harvested = [
+  const thumbs = [
     ...block.matchAll(
-      /https:\/\/[^"'\\\s]+(?:media-amazon|ssl-images-amazon)[^"'\\\s]*\/images\/I\/[^"'\\\s]+/gi,
+      /['"](?:thumb|thumbUrl)['"]\s*:\s*['"](https:[^"']+)['"]/g,
     ),
-  ].map((m) => m[0]);
-  return [...keyed, ...asJsonKeys, ...harvested];
-}
-
-function landingImages(html: string): string[] {
-  const decoded = String(html || "").replace(/&quot;/g, '"');
-  const dynamic =
-    decoded.match(
-      /data-a-dynamic-image=["'](\{[^"']+\})["']/i,
-    )?.[1] || "";
-  const fromLanding = [
-    ...decoded.matchAll(
-      /https:\/\/[^"'\\\s]+(?:media-amazon|ssl-images-amazon)[^"'\\\s]*\/images\/I\/[^"'\\\s]+/gi,
-    ),
-  ].map((m) => m[0]);
-  const fromDynamic = [
-    ...dynamic.matchAll(/"(https:\/\/[^"]+)"/g),
   ].map((m) => m[1]);
-  return [...fromDynamic, ...fromLanding];
+  return [...hiRes, ...large, ...mainKeys, ...thumbs].filter(
+    (url) => !/play-icon|vidthumb|video-thumbnail|360_icon/i.test(url),
+  );
 }
 
-export function collectAmazonImageUrlsFromHtml(html: string): string[] {
-  return uniqueUrls([
-    ...colorImages(html),
-    ...landingImages(html),
-    ...imagesFromMarkdown(html),
+function colorNameForAsin(html: string, asin: string): string {
+  const id = String(asin || "").trim().toUpperCase();
+  if (!id) return "";
+  const obj =
+    blockAfterKey(html, "colorToAsin", "{") ||
+    blockAfterKey(html, "asinToColor", "{");
+  if (!obj) return "";
+  const re = /['"]([^"']+)['"]\s*:\s*['"]([A-Z0-9]{10})['"]/gi;
+  let match: RegExpExecArray | null;
+  while ((match = re.exec(obj))) {
+    if (match[2].toUpperCase() === id && match[1] && match[1].toLowerCase() !== "initial") {
+      return match[1];
+    }
+  }
+  return "";
+}
+
+function colorImagesForProduct(html: string, asin?: string): string[] {
+  const decoded = decodeAmazonMarkup(html);
+  const obj = blockAfterKey(decoded, "colorImages", "{");
+  if (!obj) return [];
+  const color = colorNameForAsin(decoded, asin || "");
+  if (color) {
+    const named = blockAfterKey(obj, color, "[");
+    if (named) return urlsFromGalleryBlock(named);
+  }
+  const initial = blockAfterKey(obj, "initial", "[");
+  return urlsFromGalleryBlock(initial);
+}
+
+function imageGalleryData(html: string): string[] {
+  const decoded = decodeAmazonMarkup(html);
+  return urlsFromGalleryBlock(blockAfterKey(decoded, "imageGalleryData", "["));
+}
+
+function primaryImages(html: string): string[] {
+  const decoded = decodeAmazonMarkup(html);
+  const aroundLanding = (() => {
+    const idx = decoded.search(/id=["']landingImage["']/i);
+    if (idx < 0) return "";
+    return decoded.slice(Math.max(0, idx - 200), idx + 2500);
+  })();
+  const oldHires = [
+    ...decoded.matchAll(/data-old-hires=["'](https:[^"']+)["']/gi),
+  ].map((m) => m[1]);
+  const landingSrc =
+    aroundLanding.match(/\ssrc=["'](https:[^"']+)["']/i)?.[1] || "";
+  const dynamic = [
+    ...aroundLanding.matchAll(/"(https:\/\/[^"]+(?:media-amazon|ssl-images-amazon)[^"]*)"/gi),
+  ].map((m) => m[1]);
+  return [...oldHires, ...dynamic, landingSrc];
+}
+
+function markdownProductImages(text: string): string[] {
+  const cut =
+    String(text || "").split(
+      /\n#{1,3}\s+(Customers who|Products related|Sponsored|Frequently bought|Compare with)/i,
+    )[0] || text;
+  return [
+    ...cut.matchAll(
+      /https:\/\/[^\s)"']+(?:media-amazon|ssl-images-amazon)[^\s)"']+/gi,
+    ),
+  ].map((m) => m[0]);
+}
+
+export function collectAmazonImageUrlsFromHtml(
+  html: string,
+  asin?: string,
+): string[] {
+  const official = uniqueUrls([
+    ...colorImagesForProduct(html, asin),
+    ...imageGalleryData(html),
+    ...primaryImages(html),
   ]);
+  if (official.length) return official;
+  return uniqueUrls(markdownProductImages(html));
 }
 
 function featureBullets(html: string): string[] {
@@ -240,13 +358,6 @@ function titleFromHtml(html: string): string {
     .trim();
 }
 
-function imagesFromMarkdown(text: string): string[] {
-  const urls = [
-    ...text.matchAll(/https:\/\/[^\s)"']+(?:media-amazon|ssl-images-amazon)[^\s)"']+/gi),
-  ].map((m) => m[0]);
-  return urls;
-}
-
 export function parseAmazonProductPage(
   html: string,
   meta: { asin: string; url: string },
@@ -274,11 +385,9 @@ export function parseAmazonProductPage(
     (Number.isFinite(ldPrice) && (ldPrice as number) > 0 ? (ldPrice as number) : null);
 
   const imageUrls = uniqueUrls([
-    ...colorImages(html),
-    ...landingImages(html),
+    ...collectAmazonImageUrlsFromHtml(html, meta.asin),
     ...ldImages,
     attr(html, "og:image"),
-    ...imagesFromMarkdown(html),
   ]).slice(0, DEFAULT_VALUES.maxImages);
 
   return {

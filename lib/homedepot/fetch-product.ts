@@ -161,28 +161,10 @@ async function fetchDuckDuckGoImages(query: string): Promise<string[]> {
   ];
 }
 
-async function searchCatalogPhotos(opts: {
-  brand: string;
-  model: string;
-  itemId: string;
-  stem?: string;
-}): Promise<string[]> {
-  const model = String(opts.model || "").trim();
-  const stem = String(opts.stem || "").trim();
-  const queries = [
-    [model, "thdstatic"].filter(Boolean).join(" "),
-    [model, "site:homedepot.com"].filter(Boolean).join(" "),
-    stem.length >= 12 ? `${stem} thdstatic` : "",
-    [opts.brand, model, "homedepot"].filter(Boolean).join(" "),
-    [opts.itemId, "homedepot"].filter(Boolean).join(" "),
-    model && !isGenericHomeDepotModel(model)
-      ? `"${model}-e1" OR "${model}-e4" OR "${model}-1d" OR "${model}-40" thdstatic`
-      : "",
-  ].filter((q, index, all) => {
-    const compact = q.replace(/\s+/g, " ").trim();
-    return compact.length >= 8 && all.indexOf(q) === index && !/^site:homedepot\.com$/i.test(compact) && compact !== "homedepot";
-  });
-
+async function runImageSearch(
+  queries: string[],
+  opts: { brand: string; model: string; itemId: string; stem?: string },
+): Promise<string[]> {
   const pooled: string[] = [];
   for (const query of queries) {
     const [bingPages, ddg] = await Promise.all([
@@ -208,6 +190,46 @@ async function searchCatalogPhotos(opts: {
     if (soFar.length >= DEFAULT_VALUES.maxImages) return soFar;
   }
   return selectHomeDepotSearchPhotos(pooled, opts);
+}
+
+export function homeDepotSearchQueries(opts: {
+  brand: string;
+  model: string;
+  itemId: string;
+  stem?: string;
+}): string[] {
+  const model = String(opts.model || "").trim();
+  const stem = String(opts.stem || "").trim();
+  return [
+    [model, "thdstatic"].filter(Boolean).join(" "),
+    [model, "site:homedepot.com"].filter(Boolean).join(" "),
+    stem.length >= 12 ? `${stem} thdstatic` : "",
+    stem.length >= 12
+      ? `"${stem}-e1" OR "${stem}-e2" OR "${stem}-e4" OR "${stem}-1d" OR "${stem}-40" OR "${stem}-a0" thdstatic`
+      : "",
+    [opts.brand, model, "homedepot"].filter(Boolean).join(" "),
+    [opts.itemId, "homedepot"].filter(Boolean).join(" "),
+    model && !isGenericHomeDepotModel(model)
+      ? `"${model}-e1" OR "${model}-e4" OR "${model}-1d" OR "${model}-40" thdstatic`
+      : "",
+  ].filter((q, index, all) => {
+    const compact = q.replace(/\s+/g, " ").trim();
+    return (
+      compact.length >= 8 &&
+      all.indexOf(q) === index &&
+      !/^site:homedepot\.com$/i.test(compact) &&
+      compact !== "homedepot"
+    );
+  });
+}
+
+async function searchCatalogPhotos(opts: {
+  brand: string;
+  model: string;
+  itemId: string;
+  stem?: string;
+}): Promise<string[]> {
+  return runImageSearch(homeDepotSearchQueries(opts), opts);
 }
 
 export async function fetchHomeDepotProduct(
@@ -249,8 +271,22 @@ export async function fetchHomeDepotProduct(
       owned,
     );
     owned.stem = owned.stem || homeDepotMediaStem(product.imageUrls[0] || "");
+    const stemBeforeSearch = owned.stem;
 
     if (product.imageUrls.length < 8) {
+      const extra = await searchCatalogPhotos(owned);
+      product.imageUrls = selectHomeDepotSearchPhotos(
+        [...product.imageUrls, ...extra],
+        owned,
+      );
+    }
+    owned.stem = homeDepotMediaStem(product.imageUrls[0] || "") || owned.stem;
+    if (
+      product.imageUrls.length < 8 &&
+      owned.stem &&
+      owned.stem.length >= 12 &&
+      owned.stem !== stemBeforeSearch
+    ) {
       const extra = await searchCatalogPhotos(owned);
       product.imageUrls = selectHomeDepotSearchPhotos(
         [...product.imageUrls, ...extra],

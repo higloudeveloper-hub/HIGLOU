@@ -49,6 +49,11 @@ import {
 import { readAiProviderSettings } from "@/components/settings/ai-settings-form";
 import { detectCatalogStore } from "@/lib/catalog/detect-store";
 import {
+  HOME_DEPOT_CAPTURE_BOOKMARKLET,
+  isHomeDepotBrowserOrigin,
+  isHomeDepotGalleryMessage,
+} from "@/lib/homedepot/browser-capture";
+import {
   brandingFromEbayStoreName,
   displayNameFromEbayUsername,
 } from "@/lib/ebay/store-display-name";
@@ -230,6 +235,7 @@ export function NewListingWorkspace({
   const [catalogImporting, setCatalogImporting] = useState<
     false | "amazon" | "homedepot"
   >(false);
+  const [hdCapturePending, setHdCapturePending] = useState(false);
   const [analysisStep, setAnalysisStep] = useState(0);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
   const [analysisErrorCode, setAnalysisErrorCode] = useState<string | null>(
@@ -965,7 +971,10 @@ export function NewListingWorkspace({
     }
   };
 
-  const importFromCatalog = async (url: string): Promise<boolean> => {
+  const importFromCatalog = async (
+    url: string,
+    options?: { html?: string; openHomeDepot?: boolean },
+  ): Promise<boolean> => {
     if (catalogImporting || analyzing) return false;
     const store = detectCatalogStore(url);
     if (!store) {
@@ -978,6 +987,13 @@ export function NewListingWorkspace({
     const storeLabel = store === "amazon" ? "Amazon" : "Home Depot";
     const endpoint =
       store === "amazon" ? "/api/amazon/import" : "/api/homedepot/import";
+    const html = options?.html?.trim() || "";
+    const openHomeDepot =
+      store === "homedepot" &&
+      !html &&
+      options?.openHomeDepot !== false &&
+      typeof window !== "undefined";
+    const hdWin = openHomeDepot ? window.open(url, "higlou-hd") : null;
 
     setCatalogImporting(store);
     setAnalysisError(null);
@@ -985,7 +1001,7 @@ export function NewListingWorkspace({
       const response = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url }),
+        body: JSON.stringify(html ? { url, html } : { url }),
       });
       const body = (await response.json().catch(() => null)) as {
         ok?: boolean;
@@ -1025,9 +1041,26 @@ export function NewListingWorkspace({
       };
       setListing(seeded);
       setStep("photos");
-      toast.success(
-        `${storeLabel} photos loaded — delete, add, or drag to reorder, then Continue.`,
-      );
+
+      const shortGallery = store === "homedepot" && body.images.length < 6;
+      setHdCapturePending(shortGallery);
+      if (shortGallery && hdWin && !hdWin.closed) {
+        window.setTimeout(() => {
+          try {
+            hdWin.location.href = HOME_DEPOT_CAPTURE_BOOKMARKLET;
+          } catch {
+            /* cross-origin assign is blocked; seller uses the bookmark */
+          }
+        }, 4000);
+        toast.message(
+          "Home Depot hid extra photos. Keep that tab open — click Load photos in bookmarks if the gallery stays short.",
+        );
+      } else {
+        if (!shortGallery) hdWin?.close();
+        toast.success(
+          `${storeLabel} photos loaded — delete, add, or drag to reorder, then Continue.`,
+        );
+      }
       return true;
     } catch (error) {
       const message =
@@ -1039,6 +1072,27 @@ export function NewListingWorkspace({
       setCatalogImporting(false);
     }
   };
+
+  const importFromCatalogRef = useRef(importFromCatalog);
+  importFromCatalogRef.current = importFromCatalog;
+
+  useEffect(() => {
+    const onMessage = (event: MessageEvent) => {
+      if (!isHomeDepotBrowserOrigin(event.origin)) return;
+      if (!isHomeDepotGalleryMessage(event.data)) return;
+      void importFromCatalogRef.current(event.data.url, {
+        html: event.data.html,
+        openHomeDepot: false,
+      }).then((ok) => {
+        if (ok) {
+          setHdCapturePending(false);
+          toast.success("Home Depot gallery loaded from your browser.");
+        }
+      });
+    };
+    window.addEventListener("message", onMessage);
+    return () => window.removeEventListener("message", onMessage);
+  }, []);
 
   const persistDraft = async (options?: {
     quiet?: boolean;
@@ -1811,6 +1865,7 @@ export function NewListingWorkspace({
           onContinue={() => void analyzeProduct()}
           onCatalogImport={importFromCatalog}
           catalogImporting={catalogImporting}
+          hdCapturePending={hdCapturePending}
         />
       ) : null}
 

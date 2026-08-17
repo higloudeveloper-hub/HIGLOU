@@ -5,6 +5,7 @@ import { ImageUploader } from "@/components/uploader/image-uploader";
 import { ListingPipeline } from "@/components/studio/listing-pipeline";
 import { CatalogImportDock } from "@/components/listing/wizard/catalog-import-dock";
 import { CONDITION_OPTIONS } from "@/config/condition-map";
+import { HOME_DEPOT_CAPTURE_BOOKMARKLET } from "@/lib/homedepot/browser-capture";
 import type { ProductImage } from "@/types/product";
 import { cn } from "@/lib/utils";
 
@@ -23,6 +24,7 @@ export function PhotosScreen({
   onContinue,
   onCatalogImport,
   catalogImporting = false,
+  hdCapturePending = false,
 }: {
   images: ProductImage[];
   productId?: string;
@@ -39,6 +41,7 @@ export function PhotosScreen({
   onContinue: () => void;
   onCatalogImport?: (url: string) => Promise<boolean | void>;
   catalogImporting?: false | "amazon" | "homedepot";
+  hdCapturePending?: boolean;
   onPhotoIntakeSessionChange?: (session: unknown) => void;
 }) {
   const shots = images
@@ -53,6 +56,25 @@ export function PhotosScreen({
           importing={catalogImporting}
           onImport={onCatalogImport}
         />
+      ) : null}
+      {hdCapturePending ? (
+        <div className="shrink-0 border-b border-[#e5e5e5] bg-white px-4 py-3">
+          <p className="text-[14px] font-medium text-[#141414]">
+            Home Depot hid the rest of the gallery from our servers.
+          </p>
+          <p className="mt-1 text-[13px] text-[#707070]">
+            Keep the Home Depot tab open. Drag{" "}
+            <a
+              href={HOME_DEPOT_CAPTURE_BOOKMARKLET}
+              title="Drag to the bookmarks bar, then click it on the Home Depot tab"
+              className="font-medium text-[#3665F3] underline-offset-2 hover:underline"
+              onClick={(e) => e.preventDefault()}
+            >
+              Load photos
+            </a>{" "}
+            to your bookmarks bar, then click it on that tab.
+          </p>
+        </div>
       ) : null}
       <div className="relative min-h-0 flex-1">
         <ListingPipeline storeName={storeName} photos={shots} mode="drop" />

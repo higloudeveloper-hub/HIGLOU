@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" fill="none">
+  <path fill="#fff" d="M6 40 50 4l44 36v56H6Z"/>
+  <text x="50" y="54" text-anchor="middle" fill="#F96302" font-family="Arial Black, Helvetica Neue, Arial, sans-serif" font-size="9" font-weight="800" letter-spacing="2.4">THE</text>
+  <text x="50" y="72" text-anchor="middle" fill="#F96302" font-family="Arial Black, Helvetica Neue, Arial, sans-serif" font-size="15" font-weight="800" letter-spacing="0.6">HOME</text>
+  <text x="50" y="88" text-anchor="middle" fill="#F96302" font-family="Arial Black, Helvetica Neue, Arial, sans-serif" font-size="15" font-weight="800" letter-spacing="0.4">DEPOT</text>
+</svg>

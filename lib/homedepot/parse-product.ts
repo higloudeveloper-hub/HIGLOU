@@ -163,7 +163,12 @@ export function collectHomeDepotImageUrlsFromHtml(html: string): string[] {
       /\/\/(?:images\.)?(?:thdstatic|homedepot-static)\.com\/[^"'\\\s>]+\.(?:jpe?g|png|webp)/gi,
     ),
   ].map((m) => `https:${m[0]}`);
-  return [...fromHref, ...fromProtocol];
+  const fromJson = [
+    ...decoded.matchAll(
+      /"url"\s*:\s*"(https:\/\/(?:images\.)?(?:thdstatic|homedepot-static)\.com\/[^"]+)"/gi,
+    ),
+  ].map((m) => m[1]);
+  return [...fromHref, ...fromProtocol, ...fromJson];
 }
 
 function featureBullets(html: string): string[] {
@@ -341,7 +346,7 @@ export function parseHomeDepotProductPage(
 }
 
 export function isHomeDepotBlockedPage(html: string): boolean {
-  return /access denied|akamai|bot detection|pardon our interruption|captcha/i.test(
+  return /access denied|akamai|bot detection|pardon our interruption|captcha|<title>\s*error page\s*<\/title>/i.test(
     html,
   );
 }

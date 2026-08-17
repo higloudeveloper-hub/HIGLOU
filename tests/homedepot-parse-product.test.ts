@@ -163,6 +163,40 @@ describe("Home Depot gallery angles", () => {
     expect(photos.some((u) => u.includes("17000019"))).toBe(false);
   });
 
+  it("reads official media.images JSON even when related products fill the HTML first", () => {
+    const related = Array.from({ length: 12 }, (_, i) => {
+      const id = String(i).padStart(2, "0");
+      return `"url":"https://images.thdstatic.com/productImages/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa${id}/svn/other-floodlights-17000019-64_<SIZE>.jpg"`;
+    }).join(",");
+    const gallery = [
+      "64",
+      "e1",
+      "e2",
+      "e3",
+      "e4",
+      "40",
+      "a0",
+      "1d",
+      "1f",
+      "44",
+      "66",
+    ]
+      .map(
+        (type, i) =>
+          `"url":"https://images.thdstatic.com/productImages/bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbb${String(i).padStart(2, "0")}/svn/black-defiant-floodlights-17000148-${type}_\\u003cSIZE>.jpg"`,
+      )
+      .join(",");
+    const html = `{"itemId":"324294069","media":{"images":[${related},${gallery}]}}`;
+    const photos = selectHomeDepotSearchPhotos(
+      collectHomeDepotImageUrlsFromHtml(html),
+      { model: "17000148", itemId: "324294069" },
+    );
+    expect(photos).toHaveLength(11);
+    expect(photos.every((u) => u.includes("17000148") && u.includes("_1000."))).toBe(
+      true,
+    );
+  });
+
   it("drops related-product photos from the same Home Depot page", () => {
     const html = `
       <meta property="og:image" content="https://images.thdstatic.com/productImages/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/svn/milwaukee-brad-nailers-2541-20-48-73-2010-64_400.jpg" />

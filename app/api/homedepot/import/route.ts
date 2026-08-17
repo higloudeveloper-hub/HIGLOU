@@ -15,6 +15,7 @@ export const maxDuration = 60;
 
 const bodySchema = z.object({
   url: z.string().min(8).max(2000),
+  html: z.string().max(6_000_000).optional(),
 });
 
 export async function POST(request: Request) {
@@ -44,8 +45,11 @@ export async function POST(request: Request) {
   }
 
   let url = "";
+  let html = "";
   try {
-    url = bodySchema.parse(await request.json()).url;
+    const body = bodySchema.parse(await request.json());
+    url = body.url;
+    html = body.html?.trim() || "";
   } catch {
     return NextResponse.json(
       { error: "Send JSON { url } with a Home Depot product link." },
@@ -54,7 +58,10 @@ export async function POST(request: Request) {
   }
 
   try {
-    const product = await fetchHomeDepotProduct(url);
+    const product = await fetchHomeDepotProduct(url, {
+      pageHtml: html || undefined,
+      pageOrigin: new URL(request.url).origin,
+    });
     const images = await mirrorHomeDepotImages({
       imageUrls: product.imageUrls,
       userId: auth.user.id,

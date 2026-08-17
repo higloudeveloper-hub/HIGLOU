@@ -55,6 +55,7 @@ async function readUrl(
 }
 
 function galleryCount(html: string): number {
+  if (!html || isHomeDepotBlockedPage(html)) return 0;
   return dedupeHomeDepotImages(collectHomeDepotImageUrlsFromHtml(html)).length;
 }
 
@@ -62,6 +63,21 @@ function htmlLooksUsable(html: string): boolean {
   if (!html || html.length < 800) return false;
   if (isHomeDepotBlockedPage(html)) return false;
   return galleryCount(html) >= 3 || html.length > 80_000;
+}
+
+async function fetchViaEdgePage(origin: string, productUrl: string): Promise<string> {
+  try {
+    const pageUrl = new URL("/api/homedepot/page", origin);
+    pageUrl.searchParams.set("url", productUrl);
+    const res = await fetch(pageUrl, {
+      cache: "no-store",
+      signal: AbortSignal.timeout(FETCH_MS),
+    });
+    if (!res.ok) return "";
+    return res.text();
+  } catch {
+    return "";
+  }
 }
 
 async function fetchProductHtml(productUrl: string): Promise<string> {
@@ -193,7 +209,10 @@ async function searchCatalogPhotos(opts: {
   return selectHomeDepotSearchPhotos(pooled, opts);
 }
 
-export async function fetchHomeDepotProduct(input: string): Promise<HomeDepotProductDraft> {
+export async function fetchHomeDepotProduct(
+  input: string,
+  opts?: { pageHtml?: string; pageOrigin?: string },
+): Promise<HomeDepotProductDraft> {
   try {
     const parsed = parseHomeDepotLink(input);
     if (!parsed) {
@@ -204,7 +223,15 @@ export async function fetchHomeDepotProduct(input: string): Promise<HomeDepotPro
     const itemId = parsed.itemId;
     const fromSlug = identityFromHomeDepotLink(parsed);
 
-    const html = await fetchProductHtml(canonical);
+    let html = opts?.pageHtml?.trim() || "";
+    if (galleryCount(html) < 6 && opts?.pageOrigin) {
+      const fromEdge = await fetchViaEdgePage(opts.pageOrigin, canonical);
+      if (galleryCount(fromEdge) > galleryCount(html)) html = fromEdge;
+    }
+    if (galleryCount(html) < 6) {
+      const fetched = await fetchProductHtml(canonical);
+      if (galleryCount(fetched) > galleryCount(html)) html = fetched;
+    }
     const product = parseHomeDepotProductPage(html, { itemId, url: canonical });
     product.title = product.title || fromSlug.title;
     product.brand = product.brand || fromSlug.brand;

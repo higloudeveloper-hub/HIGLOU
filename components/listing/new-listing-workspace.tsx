@@ -49,7 +49,9 @@ import {
 import { readAiProviderSettings } from "@/components/settings/ai-settings-form";
 import { detectCatalogStore } from "@/lib/catalog/detect-store";
 import {
-  HOME_DEPOT_CAPTURE_BOOKMARKLET,
+  HOME_DEPOT_CAPTURE_WINDOW,
+  captureHomeDepotGalleryFromTab,
+  homeDepotCapturePath,
   isHomeDepotBrowserOrigin,
   isHomeDepotGalleryMessage,
 } from "@/lib/homedepot/browser-capture";
@@ -285,6 +287,7 @@ export function NewListingWorkspace({
   );
   const analyzeAbortRef = useRef(false);
   const firstAttentionRef = useRef<HTMLDivElement | null>(null);
+  const hdWinRef = useRef<Window | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -993,7 +996,22 @@ export function NewListingWorkspace({
       !html &&
       options?.openHomeDepot !== false &&
       typeof window !== "undefined";
-    const hdWin = openHomeDepot ? window.open(url, "higlou-hd") : null;
+    const capturePath = openHomeDepot ? homeDepotCapturePath(url) : "";
+    const hdWin =
+      capturePath && typeof window !== "undefined"
+        ? window.open(capturePath, HOME_DEPOT_CAPTURE_WINDOW)
+        : null;
+    if (hdWin) {
+      hdWinRef.current = hdWin;
+      setHdCapturePending(true);
+      toast.message(
+        "Home Depot is opening. Come back to this Higlou tab — that’s where the photos land.",
+      );
+    } else if (openHomeDepot) {
+      toast.error(
+        "Allow popups for Higlou so we can open Home Depot and copy every photo.",
+      );
+    }
 
     setCatalogImporting(store);
     setAnalysisError(null);
@@ -1042,21 +1060,30 @@ export function NewListingWorkspace({
       setListing(seeded);
       setStep("photos");
 
+      const fromBrowser = Boolean(html);
       const shortGallery = store === "homedepot" && body.images.length < 6;
-      setHdCapturePending(shortGallery);
-      if (shortGallery && hdWin && !hdWin.closed) {
-        window.setTimeout(() => {
-          try {
-            hdWin.location.href = HOME_DEPOT_CAPTURE_BOOKMARKLET;
-          } catch {
-            /* cross-origin assign is blocked; seller uses the bookmark */
-          }
-        }, 4000);
+      if (fromBrowser) {
+        if (shortGallery) {
+          toast.message(
+            "Still missing shots. Wait for Home Depot to finish, then click Bring all photos again.",
+          );
+        } else {
+          setHdCapturePending(false);
+          hdWinRef.current?.close();
+          hdWinRef.current = null;
+          toast.success("Full Home Depot gallery loaded from that tab.");
+        }
+      } else if (shortGallery && hdWinRef.current && !hdWinRef.current.closed) {
+        setHdCapturePending(true);
         toast.message(
-          "Home Depot hid extra photos. Keep that tab open — click Load photos in bookmarks if the gallery stays short.",
+          "A few photos loaded. Come back here and click Bring all photos for the rest.",
         );
       } else {
-        if (!shortGallery) hdWin?.close();
+        if (!shortGallery) {
+          setHdCapturePending(false);
+          hdWinRef.current?.close();
+          hdWinRef.current = null;
+        }
         toast.success(
           `${storeLabel} photos loaded — delete, add, or drag to reorder, then Continue.`,
         );
@@ -1076,6 +1103,18 @@ export function NewListingWorkspace({
   const importFromCatalogRef = useRef(importFromCatalog);
   importFromCatalogRef.current = importFromCatalog;
 
+  const bringHdPhotos = () => {
+    const result = captureHomeDepotGalleryFromTab();
+    if (result === "blocked") {
+      toast.error(
+        "The Home Depot tab closed or popups are blocked. Import the link again.",
+      );
+      return;
+    }
+    toast.message("Copying the gallery from Home Depot… stay on this tab.");
+    window.focus();
+  };
+
   useEffect(() => {
     const onMessage = (event: MessageEvent) => {
       if (!isHomeDepotBrowserOrigin(event.origin)) return;
@@ -1083,16 +1122,32 @@ export function NewListingWorkspace({
       void importFromCatalogRef.current(event.data.url, {
         html: event.data.html,
         openHomeDepot: false,
-      }).then((ok) => {
-        if (ok) {
-          setHdCapturePending(false);
-          toast.success("Home Depot gallery loaded from your browser.");
-        }
       });
     };
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);
   }, []);
+
+  useEffect(() => {
+    if (!hdCapturePending) return;
+    const original = document.title;
+    let on = true;
+    const tick = () => {
+      document.title = on ? "← Come back to Higlou" : original;
+      on = !on;
+    };
+    tick();
+    const timer = window.setInterval(tick, 1100);
+    const onVisible = () => {
+      if (document.visibilityState === "visible") document.title = original;
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisible);
+      document.title = original;
+    };
+  }, [hdCapturePending]);
 
   const persistDraft = async (options?: {
     quiet?: boolean;
@@ -1862,10 +1917,14 @@ export function NewListingWorkspace({
               updatedAt: new Date().toISOString(),
             }));
           }}
-          onContinue={() => void analyzeProduct()}
+          onContinue={() => {
+            setHdCapturePending(false);
+            void analyzeProduct();
+          }}
           onCatalogImport={importFromCatalog}
           catalogImporting={catalogImporting}
           hdCapturePending={hdCapturePending}
+          onBringHdPhotos={bringHdPhotos}
         />
       ) : null}
 

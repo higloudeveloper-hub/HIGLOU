@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   HOME_DEPOT_CAPTURE_BOOKMARKLET,
   HOME_DEPOT_GALLERY_MESSAGE,
+  homeDepotCapturePath,
   isHomeDepotBrowserOrigin,
   isHomeDepotGalleryMessage,
 } from "@/lib/homedepot/browser-capture";
@@ -18,7 +19,20 @@ describe("Home Depot browser capture", () => {
         html: `<html>${"x".repeat(900)}</html>`,
       }),
     ).toBe(true);
-    expect(HOME_DEPOT_CAPTURE_BOOKMARKLET.startsWith("javascript:")).toBe(true);
+    expect(HOME_DEPOT_CAPTURE_BOOKMARKLET.startsWith("javascript:void(")).toBe(
+      true,
+    );
+    expect(HOME_DEPOT_CAPTURE_BOOKMARKLET).toContain("higlou-hd-gallery");
+  });
+
+  it("opens a Higlou splash that then loads the Home Depot product", () => {
+    expect(
+      homeDepotCapturePath(
+        "https://www.homedepot.com/p/Commercial-Electric-19-Watt-Black-Outdoor-Integrated-LED-Classic-Wall-Pack-Light-with-Dusk-to-Dawn-Control-DW9582BK-C/307505277",
+      ),
+    ).toBe(
+      "/hd-capture?url=https%3A%2F%2Fwww.homedepot.com%2Fp%2FCommercial-Electric-19-Watt-Black-Outdoor-Integrated-LED-Classic-Wall-Pack-Light-with-Dusk-to-Dawn-Control-DW9582BK-C%2F307505277",
+    );
   });
 });
 

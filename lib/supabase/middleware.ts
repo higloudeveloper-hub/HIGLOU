@@ -1,7 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
-const PUBLIC_PATH_PREFIXES = ["/login", "/forgot-password", "/auth", "/welcome"];
+const PUBLIC_PATH_PREFIXES = ["/login", "/forgot-password", "/auth", "/welcome", "/hd-capture"];
 const PUBLIC_EXACT_PATHS = [
   "/api/health",
   "/",

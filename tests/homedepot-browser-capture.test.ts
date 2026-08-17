@@ -69,5 +69,7 @@ describe("homeDepotSearchQueries", () => {
       true,
     );
     expect(queries.some((q) => q.includes("307505277"))).toBe(true);
+    expect(queries.some((q) => q.includes('"DW9582BK-C-e1"'))).toBe(true);
+    expect(queries.some((q) => q.includes('"DW9582BK-C-64"'))).toBe(true);
   });
 });

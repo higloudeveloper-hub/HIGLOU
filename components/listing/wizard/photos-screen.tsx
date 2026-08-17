@@ -23,9 +23,6 @@ export function PhotosScreen({
   onContinue,
   onCatalogImport,
   catalogImporting = false,
-  hdCapturePending = false,
-  hdCaptureHref,
-  onBringHdPhotos,
 }: {
   images: ProductImage[];
   productId?: string;
@@ -42,9 +39,6 @@ export function PhotosScreen({
   onContinue: () => void;
   onCatalogImport?: (url: string) => Promise<boolean | void>;
   catalogImporting?: false | "amazon" | "homedepot";
-  hdCapturePending?: boolean;
-  hdCaptureHref?: string;
-  onBringHdPhotos?: () => void;
   onPhotoIntakeSessionChange?: (session: unknown) => void;
 }) {
   const shots = images
@@ -59,43 +53,6 @@ export function PhotosScreen({
           importing={catalogImporting}
           onImport={onCatalogImport}
         />
-      ) : null}
-      {hdCapturePending ? (
-        <div className="shrink-0 border-b border-[#e5e5e5] bg-white px-4 py-3">
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="min-w-0 flex-1">
-              <p className="text-[14px] font-medium text-[#141414]">
-                Home Depot opened in a new tab. Stay on this one.
-              </p>
-              <p className="mt-1 text-[13px] text-[#707070]">
-                Drag <span className="font-medium text-[#141414]">Bring all photos</span>{" "}
-                onto the Home Depot tab. That copies the iPhone gallery — search
-                only finds a few angles.
-              </p>
-            </div>
-            {hdCaptureHref ? (
-              <a
-                href={hdCaptureHref}
-                draggable
-                onClick={(e) => {
-                  e.preventDefault();
-                  onBringHdPhotos?.();
-                }}
-                className="grid h-10 shrink-0 place-items-center bg-[#3665F3] px-4 text-[13px] font-semibold text-white transition hover:bg-[#2b53d4]"
-              >
-                Bring all photos
-              </a>
-            ) : onBringHdPhotos ? (
-              <button
-                type="button"
-                onClick={onBringHdPhotos}
-                className="h-10 shrink-0 bg-[#3665F3] px-4 text-[13px] font-semibold text-white transition hover:bg-[#2b53d4]"
-              >
-                Bring all photos
-              </button>
-            ) : null}
-          </div>
-        </div>
       ) : null}
       <div className="relative min-h-0 flex-1">
         <ListingPipeline storeName={storeName} photos={shots} mode="drop" />

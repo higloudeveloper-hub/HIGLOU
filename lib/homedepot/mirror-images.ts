@@ -9,7 +9,7 @@ import {
 } from "@/lib/images/storage";
 import { getPublicSupabaseUrl } from "@/lib/images/url-sanitize";
 import { resolveImageMime } from "@/config/supported-image-formats";
-import { homeDepotImageCandidates } from "@/lib/homedepot/parse-product";
+import { homeDepotImageCandidates, isLikelyHomeDepotPlaceholder } from "@/lib/homedepot/parse-product";
 import { IPHONE_SAFARI_UA } from "@/lib/homedepot/mobile-gallery";
 import { EBAY_MIN_LONG_SIDE } from "@/lib/ebay/ensure-ebay-images";
 
@@ -57,6 +57,7 @@ async function downloadLargestHomeDepotImage(url: string): Promise<Buffer | null
     try {
       const meta = await sharp(raw, { failOn: "none" }).metadata();
       const longest = Math.max(meta.width ?? 0, meta.height ?? 0);
+      if (isLikelyHomeDepotPlaceholder(raw.byteLength, longest)) continue;
       if (longest > bestLong) {
         best = raw;
         bestLong = longest;

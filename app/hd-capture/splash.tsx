@@ -20,9 +20,8 @@ export function HomeDepotCaptureSplash() {
         Opening Home Depot
       </h1>
       <p className="mt-4 max-w-md text-[16px] leading-7 text-[#707070]">
-        This tab is loading the product. Go back to Higlou and drag{" "}
-        <span className="font-medium text-[#141414]">Bring all photos</span> onto
-        the Home Depot tab.
+        This tab is loading the product. Go back to Higlou — photos import from
+        the link, without opening Home Depot.
       </p>
     </main>
   );

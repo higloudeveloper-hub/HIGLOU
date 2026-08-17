@@ -8,6 +8,7 @@ import {
   collectHomeDepotImageUrlsFromHtml,
   dedupeHomeDepotImages,
   homeDepotMediaStem,
+  HOME_DEPOT_GALLERY_TYPES,
   isGenericHomeDepotModel,
   isHomeDepotBlockedPage,
   parseHomeDepotProductPage,
@@ -167,33 +168,44 @@ async function fetchDuckDuckGoImages(query: string): Promise<string[]> {
   ];
 }
 
+async function fetchBingAsyncImages(query: string): Promise<string[]> {
+  try {
+    const page = await fetchHtml(
+      `https://www.bing.com/images/async?q=${encodeURIComponent(query)}&first=0&count=35`,
+    );
+    return collectHomeDepotImageUrlsFromHtml(page);
+  } catch {
+    return [];
+  }
+}
+
 async function runImageSearch(
   queries: string[],
   opts: { brand: string; model: string; itemId: string; stem?: string },
 ): Promise<string[]> {
   const pooled: string[] = [];
   for (const query of queries) {
-    const [bingPages, ddg] = await Promise.all([
-      Promise.all(
-        [1, 21, 41].map(async (first) => {
-          try {
-            return await fetchHtml(
-              `https://www.bing.com/images/search?q=${encodeURIComponent(query)}&form=HDRSC2&first=${first}&count=50`,
-            );
-          } catch {
-            return "";
-          }
-        }),
-      ),
+    const [bingPage, bingAsync, ddg] = await Promise.all([
+      fetchHtml(
+        `https://www.bing.com/images/search?q=${encodeURIComponent(query)}&form=HDRSC2&first=1&count=50`,
+      ).catch(() => ""),
+      fetchBingAsyncImages(query),
       fetchDuckDuckGoImages(query).catch(() => [] as string[]),
     ]);
-    for (const bing of bingPages) {
-      pooled.push(...collectHomeDepotImageUrlsFromHtml(bing));
-    }
+    pooled.push(...collectHomeDepotImageUrlsFromHtml(bingPage));
+    pooled.push(...bingAsync);
     pooled.push(...ddg);
 
-    const soFar = selectHomeDepotSearchPhotos(pooled, opts);
+    let soFar = selectHomeDepotSearchPhotos(pooled, opts);
     if (soFar.length >= DEFAULT_VALUES.maxImages) return soFar;
+    if (soFar.length < 4) {
+      const extraPage = await fetchHtml(
+        `https://www.bing.com/images/search?q=${encodeURIComponent(query)}&form=HDRSC2&first=21&count=50`,
+      ).catch(() => "");
+      pooled.push(...collectHomeDepotImageUrlsFromHtml(extraPage));
+      soFar = selectHomeDepotSearchPhotos(pooled, opts);
+    }
+    if (soFar.length >= 6) return soFar;
   }
   return selectHomeDepotSearchPhotos(pooled, opts);
 }
@@ -230,8 +242,18 @@ export function homeDepotSearchQueries(opts: {
       ? `"${model}-e1" OR "${model}-e4" OR "${model}-1d" OR "${model}-40" thdstatic`
       : "",
   ]);
+  const extraTypes = HOME_DEPOT_GALLERY_TYPES.slice(0, 7);
+  const typeQueries = models.slice(0, 1).flatMap((model) =>
+    extraTypes.map((type) => `"${model}-${type}" thdstatic`),
+  );
+  const stemTypeQueries =
+    stem.length >= 12
+      ? extraTypes.map((type) => `"${stem}-${type}" thdstatic`)
+      : [];
   return [
     ...modelQueries,
+    ...typeQueries,
+    ...stemTypeQueries,
     stem.length >= 12 ? `${stem} thdstatic` : "",
     stem.length >= 12
       ? `"${stem}-e1" OR "${stem}-e2" OR "${stem}-e4" OR "${stem}-1d" OR "${stem}-40" OR "${stem}-a0" thdstatic`
@@ -257,6 +279,15 @@ async function searchCatalogPhotos(opts: {
   stem?: string;
 }): Promise<string[]> {
   return runImageSearch(homeDepotSearchQueries(opts), opts);
+}
+
+export async function searchHomeDepotCatalogPhotos(opts: {
+  brand: string;
+  model: string;
+  itemId: string;
+  stem?: string;
+}): Promise<string[]> {
+  return searchCatalogPhotos(opts);
 }
 
 export async function fetchHomeDepotProduct(

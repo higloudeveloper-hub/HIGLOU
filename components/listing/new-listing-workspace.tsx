@@ -48,12 +48,6 @@ import {
 } from "@/components/listing/review-helpers";
 import { readAiProviderSettings } from "@/components/settings/ai-settings-form";
 import { detectCatalogStore } from "@/lib/catalog/detect-store";
-import { parseHomeDepotLink } from "@/lib/homedepot/item-id";
-import {
-  homeDepotCaptureBookmarklet,
-  isHomeDepotBrowserOrigin,
-  isHomeDepotGalleryMessage,
-} from "@/lib/homedepot/browser-capture";
 import {
   brandingFromEbayStoreName,
   displayNameFromEbayUsername,
@@ -236,7 +230,6 @@ export function NewListingWorkspace({
   const [catalogImporting, setCatalogImporting] = useState<
     false | "amazon" | "homedepot"
   >(false);
-  const [hdCapturePending, setHdCapturePending] = useState(false);
   const [analysisStep, setAnalysisStep] = useState(0);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
   const [analysisErrorCode, setAnalysisErrorCode] = useState<string | null>(
@@ -286,9 +279,6 @@ export function NewListingWorkspace({
   );
   const analyzeAbortRef = useRef(false);
   const firstAttentionRef = useRef<HTMLDivElement | null>(null);
-  const hdProductUrlRef = useRef("");
-  const hdCaptureTokenRef = useRef("");
-  const [hdCaptureToken, setHdCaptureToken] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -975,10 +965,7 @@ export function NewListingWorkspace({
     }
   };
 
-  const importFromCatalog = async (
-    url: string,
-    options?: { html?: string; openHomeDepot?: boolean },
-  ): Promise<boolean> => {
+  const importFromCatalog = async (url: string): Promise<boolean> => {
     if (catalogImporting || analyzing) return false;
     const store = detectCatalogStore(url);
     if (!store) {
@@ -991,27 +978,6 @@ export function NewListingWorkspace({
     const storeLabel = store === "amazon" ? "Amazon" : "Home Depot";
     const endpoint =
       store === "amazon" ? "/api/amazon/import" : "/api/homedepot/import";
-    const html = options?.html?.trim() || "";
-    const openHomeDepot =
-      store === "homedepot" &&
-      !html &&
-      options?.openHomeDepot !== false &&
-      typeof window !== "undefined";
-    const parsedHd = openHomeDepot ? parseHomeDepotLink(url) : null;
-    if (parsedHd) {
-      hdProductUrlRef.current = parsedHd.canonicalUrl;
-      const hdWin = window.open(parsedHd.canonicalUrl, "_blank");
-      setHdCapturePending(true);
-      if (hdWin) {
-        toast.message(
-          "Home Depot opened in a new tab. Stay on Higlou — drag Bring all photos onto that tab.",
-        );
-      } else {
-        toast.error(
-          "Allow Higlou to open a new tab so Home Depot can load beside this one.",
-        );
-      }
-    }
 
     setCatalogImporting(store);
     setAnalysisError(null);
@@ -1019,7 +985,7 @@ export function NewListingWorkspace({
       const response = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(html ? { url, html } : { url }),
+        body: JSON.stringify({ url }),
       });
       const body = (await response.json().catch(() => null)) as {
         ok?: boolean;
@@ -1032,7 +998,6 @@ export function NewListingWorkspace({
         features?: string[];
         sku?: string;
         images?: ProductImage[];
-        captureToken?: string;
       } | null;
       if (!response.ok || !body?.ok || !body.images?.length) {
         const message = body?.error || `${storeLabel} import failed`;
@@ -1060,33 +1025,9 @@ export function NewListingWorkspace({
       };
       setListing(seeded);
       setStep("photos");
-      if (store === "homedepot" && body.captureToken) {
-        hdCaptureTokenRef.current = body.captureToken;
-        setHdCaptureToken(body.captureToken);
-      }
-
-      const fromBrowser = Boolean(html);
-      const shortGallery = store === "homedepot" && body.images.length < 6;
-      if (fromBrowser) {
-        if (shortGallery) {
-          toast.message(
-            "Still missing shots. Wait for Home Depot to finish, then click Bring all photos again.",
-          );
-        } else {
-          setHdCapturePending(false);
-          toast.success("Full Home Depot gallery loaded from that tab.");
-        }
-      } else if (shortGallery) {
-        setHdCapturePending(true);
-        toast.message(
-          "A few photos loaded. Drag Bring all photos onto the Home Depot tab for the rest.",
-        );
-      } else {
-        setHdCapturePending(false);
-        toast.success(
-          `${storeLabel} photos loaded — delete, add, or drag to reorder, then Continue.`,
-        );
-      }
+      toast.success(
+        `${storeLabel} photos loaded — delete, add, or drag to reorder, then Continue.`,
+      );
       return true;
     } catch (error) {
       const message =
@@ -1098,85 +1039,6 @@ export function NewListingWorkspace({
       setCatalogImporting(false);
     }
   };
-
-  const importFromCatalogRef = useRef(importFromCatalog);
-  importFromCatalogRef.current = importFromCatalog;
-
-  const bringHdPhotos = () => {
-    const href = homeDepotCaptureBookmarklet({
-      origin: window.location.origin,
-      token: hdCaptureTokenRef.current,
-    });
-    void navigator.clipboard.writeText(href).catch(() => undefined);
-    toast.message(
-      "Drop the blue button onto the Home Depot tab — that copies every photo.",
-    );
-  };
-
-  useEffect(() => {
-    const onMessage = (event: MessageEvent) => {
-      if (!isHomeDepotBrowserOrigin(event.origin)) return;
-      if (!isHomeDepotGalleryMessage(event.data)) return;
-      void importFromCatalogRef.current(event.data.url, {
-        html: event.data.html,
-        openHomeDepot: false,
-      });
-    };
-    window.addEventListener("message", onMessage);
-    return () => window.removeEventListener("message", onMessage);
-  }, []);
-
-  useEffect(() => {
-    if (!hdCapturePending || !hdCaptureToken) return;
-    let cancelled = false;
-    const poll = async () => {
-      try {
-        const res = await fetch(
-          `/api/homedepot/ingest?token=${encodeURIComponent(hdCaptureToken)}`,
-          { cache: "no-store" },
-        );
-        const body = (await res.json().catch(() => null)) as {
-          ok?: boolean;
-          url?: string;
-          html?: string;
-        } | null;
-        if (cancelled || !body?.ok || !body.url || !body.html) return;
-        await importFromCatalogRef.current(body.url, {
-          html: body.html,
-          openHomeDepot: false,
-        });
-      } catch {
-        /* keep polling */
-      }
-    };
-    void poll();
-    const timer = window.setInterval(() => void poll(), 2000);
-    return () => {
-      cancelled = true;
-      window.clearInterval(timer);
-    };
-  }, [hdCapturePending, hdCaptureToken]);
-
-  useEffect(() => {
-    if (!hdCapturePending) return;
-    const original = document.title;
-    let on = true;
-    const tick = () => {
-      document.title = on ? "← Come back to Higlou" : original;
-      on = !on;
-    };
-    tick();
-    const timer = window.setInterval(tick, 1100);
-    const onVisible = () => {
-      if (document.visibilityState === "visible") document.title = original;
-    };
-    document.addEventListener("visibilitychange", onVisible);
-    return () => {
-      window.clearInterval(timer);
-      document.removeEventListener("visibilitychange", onVisible);
-      document.title = original;
-    };
-  }, [hdCapturePending]);
 
   const persistDraft = async (options?: {
     quiet?: boolean;
@@ -1947,22 +1809,10 @@ export function NewListingWorkspace({
             }));
           }}
           onContinue={() => {
-            setHdCapturePending(false);
             void analyzeProduct();
           }}
           onCatalogImport={importFromCatalog}
           catalogImporting={catalogImporting}
-          hdCapturePending={hdCapturePending}
-          hdCaptureHref={
-            hdCaptureToken
-              ? homeDepotCaptureBookmarklet({
-                  origin:
-                    typeof window !== "undefined" ? window.location.origin : "",
-                  token: hdCaptureToken,
-                })
-              : undefined
-          }
-          onBringHdPhotos={bringHdPhotos}
         />
       ) : null}
 

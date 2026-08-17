@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   collectHomeDepotImageUrlsFromHtml,
+  isLikelyHomeDepotPlaceholder,
   parseHomeDepotProductPage,
   selectHomeDepotSearchPhotos,
   upgradeHomeDepotImage,
@@ -83,6 +84,15 @@ describe("parseHomeDepotProductPage", () => {
     expect(product.imageUrls.every((u) => u.includes("_1000."))).toBe(true);
     expect(product.imageUrls.some((u) => u.includes("-e1_1000."))).toBe(true);
     expect(product.imageUrls.some((u) => u.includes("-1d_1000."))).toBe(true);
+  });
+});
+
+describe("isLikelyHomeDepotPlaceholder", () => {
+  it("drops tiny files and gray 1000px placeholders", () => {
+    expect(isLikelyHomeDepotPlaceholder(8299, 600)).toBe(true);
+    expect(isLikelyHomeDepotPlaceholder(28484, 1000)).toBe(true);
+    expect(isLikelyHomeDepotPlaceholder(43036, 1000)).toBe(false);
+    expect(isLikelyHomeDepotPlaceholder(72924, 1000)).toBe(false);
   });
 });
 

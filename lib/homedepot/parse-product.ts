@@ -241,6 +241,31 @@ export function isGenericHomeDepotModel(model: string): boolean {
   return GENERIC_HD_MODEL.test(m);
 }
 
+/** Gallery angle codes Home Depot puts in productImages filenames. */
+export const HOME_DEPOT_GALLERY_TYPES = [
+  "64",
+  "e1",
+  "e2",
+  "e3",
+  "e4",
+  "40",
+  "1d",
+  "1f",
+  "a0",
+  "44",
+  "66",
+] as const;
+
+/** Gray/error files HD serves when that angle or size does not exist. */
+export function isLikelyHomeDepotPlaceholder(
+  bytes: number,
+  longestSide: number,
+): boolean {
+  if (bytes < 10_000) return true;
+  if (longestSide >= 800 && bytes < 35_000) return true;
+  return false;
+}
+
 /** Filename stem without the 64_1000 / e1_600 gallery suffix. */
 export function homeDepotMediaStem(url: string): string {
   const file = (String(url || "").split("?")[0].split("/").pop() || "")

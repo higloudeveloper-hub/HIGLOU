@@ -89,6 +89,16 @@ describe("parseHomeDepotLink", () => {
     expect(identity.title).toMatch(/Dehumidifier/i);
     expect(identity.title).not.toMatch(/VDH35/i);
   });
+
+  it("reads a letter-only model like FSBBOXIMWH", () => {
+    const parsed = parseHomeDepotLink(
+      "https://www.homedepot.com/p/Tectite-1-2-in-Brass-Push-to-Connect-Ice-Maker-Outlet-Box-with-Water-Hammer-Arrestor-FSBBOXIMWH/301460651",
+    );
+    expect(parsed?.itemId).toBe("301460651");
+    const identity = identityFromHomeDepotLink(parsed!);
+    expect(identity.model).toBe("FSBBOXIMWH");
+    expect(identity.brand).toBe("Tectite");
+  });
 });
 
 describe("detectCatalogStore", () => {

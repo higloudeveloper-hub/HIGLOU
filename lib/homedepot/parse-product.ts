@@ -79,9 +79,16 @@ export function upgradeHomeDepotImage(url: string): string {
 export function homeDepotImageCandidates(url: string): string[] {
   const upgraded = upgradeHomeDepotImage(url);
   if (!upgraded) return [];
-  const mid = upgraded.replace(/_(\d+)_1000\.(jpe?g|png|webp)/i, "_$1_600.$2");
-  const original = String(url || "").trim().split("?")[0] || "";
-  return [...new Set([upgraded, mid, original].filter((u) => /^https:\/\//i.test(u)))];
+  const sized = (n: number) =>
+    upgraded.replace(/_(\d+)\.(jpe?g|png|webp)$/i, `_${n}.$2`);
+  const original = String(url || "").trim().replace(/&amp;/g, "&").split("?")[0] || "";
+  return [
+    ...new Set(
+      [upgraded, sized(600), sized(400), original].filter((u) =>
+        /^https:\/\//i.test(u),
+      ),
+    ),
+  ];
 }
 
 function uniqueUrls(urls: string[]): string[] {
@@ -259,13 +266,19 @@ export const HOME_DEPOT_GALLERY_TYPES = [
   "66",
 ] as const;
 
-/** Gray/error files HD serves when that angle or size does not exist. */
+/**
+ * Drop empty/corrupt files and flat gray HD error tiles.
+ * Do not use file size at 1000px — white-background catalog shots are often 8–30KB.
+ */
 export function isLikelyHomeDepotPlaceholder(
   bytes: number,
   longestSide: number,
+  channelStdev?: number[],
 ): boolean {
-  if (bytes < 10_000) return true;
-  if (longestSide >= 800 && bytes < 35_000) return true;
+  if (bytes < 2_000) return true;
+  if (longestSide > 0 && longestSide < 40) return true;
+  const stdev = channelStdev?.length ? Math.max(...channelStdev) : null;
+  if (stdev != null && stdev < 16) return true;
   return false;
 }
 

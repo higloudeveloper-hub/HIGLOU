@@ -57,7 +57,14 @@ async function downloadLargestHomeDepotImage(url: string): Promise<Buffer | null
     try {
       const meta = await sharp(raw, { failOn: "none" }).metadata();
       const longest = Math.max(meta.width ?? 0, meta.height ?? 0);
-      if (isLikelyHomeDepotPlaceholder(raw.byteLength, longest)) continue;
+      let stdev: number[] | undefined;
+      try {
+        const stats = await sharp(raw, { failOn: "none" }).stats();
+        stdev = stats.channels.map((channel) => channel.stdev);
+      } catch {
+        stdev = undefined;
+      }
+      if (isLikelyHomeDepotPlaceholder(raw.byteLength, longest, stdev)) continue;
       if (longest > bestLong) {
         best = raw;
         bestLong = longest;

@@ -93,4 +93,19 @@ describe("Home Depot catalog photo search", () => {
     },
     45_000,
   );
+
+  it(
+    "finds Tectite ice-maker box photos from public search",
+    async () => {
+      const urls = await searchHomeDepotCatalogPhotos({
+        brand: "Tectite",
+        model: "FSBBOXIMWH",
+        itemId: "301460651",
+        title: "Tectite Ice Maker Outlet Box",
+      });
+      expect(urls.length).toBeGreaterThanOrEqual(1);
+      expect(urls.every((u) => /fsbboximwh/i.test(u))).toBe(true);
+    },
+    45_000,
+  );
 });

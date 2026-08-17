@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   collectHomeDepotImageUrlsFromHtml,
+  homeDepotImageCandidates,
   isGenericHomeDepotModel,
   isLikelyHomeDepotPlaceholder,
   parseHomeDepotProductPage,
@@ -98,11 +99,12 @@ describe("isGenericHomeDepotModel", () => {
 });
 
 describe("isLikelyHomeDepotPlaceholder", () => {
-  it("drops tiny files and gray 1000px placeholders", () => {
-    expect(isLikelyHomeDepotPlaceholder(8299, 600)).toBe(true);
-    expect(isLikelyHomeDepotPlaceholder(28484, 1000)).toBe(true);
-    expect(isLikelyHomeDepotPlaceholder(43036, 1000)).toBe(false);
-    expect(isLikelyHomeDepotPlaceholder(72924, 1000)).toBe(false);
+  it("drops empty files and flat gray tiles, not small white-background product shots", () => {
+    expect(isLikelyHomeDepotPlaceholder(1800, 1000)).toBe(true);
+    expect(isLikelyHomeDepotPlaceholder(28484, 1000, [4, 4, 4])).toBe(true);
+    expect(isLikelyHomeDepotPlaceholder(12428, 1000, [55, 55, 56])).toBe(false);
+    expect(isLikelyHomeDepotPlaceholder(8486, 1000, [35, 35, 35])).toBe(false);
+    expect(isLikelyHomeDepotPlaceholder(43036, 1000, [40, 40, 40])).toBe(false);
   });
 });
 
@@ -141,6 +143,17 @@ describe("upgradeHomeDepotImage", () => {
     ).toBe(
       "https://images.thdstatic.com/productImages/abc/svn/dewalt-64_1000.jpg",
     );
+  });
+});
+
+describe("homeDepotImageCandidates", () => {
+  it("tries 1000, 600, and 400 when Home Depot only indexed one size", () => {
+    const urls = homeDepotImageCandidates(
+      "https://images.thdstatic.com/productImages/abc/svn/tectite-ice-maker-water-valves-fsbboximwh-64_1000.jpg",
+    );
+    expect(urls.some((u) => u.endsWith("-64_1000.jpg"))).toBe(true);
+    expect(urls.some((u) => u.endsWith("-64_600.jpg"))).toBe(true);
+    expect(urls.some((u) => u.endsWith("-64_400.jpg"))).toBe(true);
   });
 });
 

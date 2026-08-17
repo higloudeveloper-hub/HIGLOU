@@ -48,6 +48,7 @@ import {
 } from "@/components/listing/review-helpers";
 import { readAiProviderSettings } from "@/components/settings/ai-settings-form";
 import { detectCatalogStore } from "@/lib/catalog/detect-store";
+import { fetchHomeDepotOfficialGalleryInBrowser } from "@/lib/homedepot/browser-gallery";
 import {
   brandingFromEbayStoreName,
   displayNameFromEbayUsername,
@@ -982,10 +983,14 @@ export function NewListingWorkspace({
     setCatalogImporting(store);
     setAnalysisError(null);
     try {
+      const html =
+        store === "homedepot"
+          ? await fetchHomeDepotOfficialGalleryInBrowser(url).catch(() => "")
+          : "";
       const response = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url }),
+        body: JSON.stringify({ url, ...(html ? { html } : {}) }),
       });
       const body = (await response.json().catch(() => null)) as {
         ok?: boolean;

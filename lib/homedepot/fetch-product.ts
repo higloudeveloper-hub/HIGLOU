@@ -1,9 +1,11 @@
 import { DEFAULT_VALUES } from "@/config/default-values";
+import { HOME_DEPOT_OFFICIAL_MAX_IMAGES } from "@/lib/homedepot/gallery-request";
 import {
   identityFromHomeDepotLink,
   parseHomeDepotLink,
 } from "@/lib/homedepot/item-id";
 import { fetchHomeDepotMobileGallery, homeDepotSessionCookie, IPHONE_SAFARI_UA } from "@/lib/homedepot/mobile-gallery";
+import { fetchHomeDepotOfficialGallery } from "@/lib/homedepot/official-gallery";
 import {
   collectHomeDepotImageUrlsFromHtml,
   dedupeHomeDepotImages,
@@ -248,11 +250,11 @@ export function homeDepotSearchQueries(opts: {
   const models = homeDepotModelSearchTokens(opts.model);
   const stems = homeDepotStemVariants(opts.stem || "");
   const title = homeDepotTitleSearchToken(opts.title || "");
-  const extraTypes = ["e1", "e4", "4f", "c3", "40", "1d"] as const;
+  const extraTypes = ["64", "e1", "e4", "4f", "c3", "40", "1d"] as const;
   const modelQueries = models.flatMap((model) => [
     [opts.brand, model, "homedepot"].filter(Boolean).join(" "),
     [opts.brand, model, "thdstatic"].filter(Boolean).join(" "),
-    `"${model}-e1" OR "${model}-e4" OR "${model}-4f" OR "${model}-c3" OR "${model}-1d" OR "${model}-40" thdstatic`,
+    `"${model}-64" OR "${model}-e1" OR "${model}-e4" OR "${model}-4f" OR "${model}-c3" OR "${model}-1d" OR "${model}-40" thdstatic`,
     [model, "thdstatic"].filter(Boolean).join(" "),
     [model, "site:homedepot.com"].filter(Boolean).join(" "),
   ]);
@@ -317,6 +319,15 @@ export async function fetchHomeDepotProduct(
     const fromSlug = identityFromHomeDepotLink(parsed);
 
     let html = opts?.pageHtml?.trim() || "";
+    let officialCount = galleryCount(html);
+    if (officialCount < 6) {
+      const official = await fetchHomeDepotOfficialGallery(itemId).catch(() => "");
+      const officialHits = galleryCount(official);
+      if (officialHits > officialCount) {
+        html = html ? `${official}\n${html}` : official;
+        officialCount = officialHits;
+      }
+    }
     if (galleryCount(html) < 6) {
       const fromIphoneApi = await fetchHomeDepotMobileGallery(itemId).catch(
         () => "",
@@ -333,7 +344,12 @@ export async function fetchHomeDepotProduct(
       const fetched = await fetchProductHtml(canonical);
       if (galleryCount(fetched) > galleryCount(html)) html = fetched;
     }
-    const product = parseHomeDepotProductPage(html, { itemId, url: canonical });
+    const product = parseHomeDepotProductPage(html, {
+      itemId,
+      url: canonical,
+      maxImages:
+        officialCount >= 1 ? HOME_DEPOT_OFFICIAL_MAX_IMAGES : DEFAULT_VALUES.maxImages,
+    });
     product.title = product.title || fromSlug.title;
     product.brand = product.brand || fromSlug.brand;
     product.model = product.model || fromSlug.model;
@@ -345,14 +361,19 @@ export async function fetchHomeDepotProduct(
       stem: homeDepotMediaStem(product.imageUrls[0] || ""),
       title: product.title,
     };
+    const photoOpts = {
+      ...owned,
+      maxImages:
+        officialCount >= 1 ? HOME_DEPOT_OFFICIAL_MAX_IMAGES : DEFAULT_VALUES.maxImages,
+    };
     product.imageUrls = selectHomeDepotSearchPhotos(
       [...product.imageUrls, ...collectHomeDepotImageUrlsFromHtml(html)],
-      owned,
+      photoOpts,
     );
     owned.stem = owned.stem || homeDepotMediaStem(product.imageUrls[0] || "");
     const stemBeforeSearch = owned.stem;
 
-    if (product.imageUrls.length < 8) {
+    if (officialCount < 1 && product.imageUrls.length < 8) {
       const extra = await searchCatalogPhotos(owned);
       product.imageUrls = selectHomeDepotSearchPhotos(
         [...product.imageUrls, ...extra],
@@ -361,6 +382,7 @@ export async function fetchHomeDepotProduct(
     }
     owned.stem = homeDepotMediaStem(product.imageUrls[0] || "") || owned.stem;
     if (
+      officialCount < 1 &&
       product.imageUrls.length < 8 &&
       owned.stem &&
       owned.stem.length >= 12 &&

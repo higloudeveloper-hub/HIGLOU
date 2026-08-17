@@ -398,17 +398,18 @@ function dominantHomeDepotStemPhotos(urls: string[]): string[] {
 /** Keep photos of this SKU only — not related Milwaukee tools on the same page. */
 export function selectHomeDepotSearchPhotos(
   urls: string[],
-  opts: { model?: string; itemId?: string; stem?: string },
+  opts: { model?: string; itemId?: string; stem?: string; maxImages?: number },
 ): string[] {
   const unique = uniqueUrls(urls);
+  const cap = Math.max(1, opts.maxImages ?? DEFAULT_VALUES.maxImages);
   const owned = unique.filter((url) => belongsToHomeDepotProduct(url, opts));
-  if (owned.length) return owned.slice(0, DEFAULT_VALUES.maxImages);
-  return dominantHomeDepotStemPhotos(unique).slice(0, DEFAULT_VALUES.maxImages);
+  if (owned.length) return owned.slice(0, cap);
+  return dominantHomeDepotStemPhotos(unique).slice(0, cap);
 }
 
 export function parseHomeDepotProductPage(
   html: string,
-  meta: { itemId: string; url: string },
+  meta: { itemId: string; url: string; maxImages?: number },
 ): HomeDepotProductDraft {
   const ld = jsonLdProducts(html)[0] || {};
   const ldName = typeof ld.name === "string" ? ld.name : "";
@@ -462,6 +463,7 @@ export function parseHomeDepotProductPage(
     model: model || ldMpn,
     itemId: meta.itemId,
     stem,
+    maxImages: meta.maxImages,
   };
   const imageUrls = selectHomeDepotSearchPhotos(collected, owned);
 

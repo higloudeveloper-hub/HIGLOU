@@ -3,14 +3,9 @@
 export const IPHONE_SAFARI_UA =
   "Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Mobile/15E148 Safari/604.1";
 
-export const HOME_DEPOT_PRODUCT_GALLERY_QUERY = `query productClientOnlyProduct($itemId: String!) {
-  product(itemId: $itemId) {
-    itemId
-    identifiers { brandName modelNumber productLabel upc }
-    details { description highlights }
-    media { images { url type subType sizes } }
-  }
-}`;
+import { HOME_DEPOT_PRODUCT_GALLERY_QUERY } from "@/lib/homedepot/gallery-request";
+
+export { HOME_DEPOT_PRODUCT_GALLERY_QUERY };
 
 export const HOME_DEPOT_SEARCH_GALLERY_QUERY = `query searchModel($keyword: String, $channel: Channel = MOBILE) {
   searchModel(keyword: $keyword, channel: $channel, storefilter: ALL) {

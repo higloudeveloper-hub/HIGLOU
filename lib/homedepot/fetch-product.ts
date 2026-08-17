@@ -7,6 +7,7 @@ import {
   isHomeDepotBlockedPage,
   parseHomeDepotProductPage,
   selectHomeDepotSearchPhotos,
+  uniqueHomeDepotImages,
   type HomeDepotProductDraft,
 } from "@/lib/homedepot/parse-product";
 
@@ -16,13 +17,13 @@ const IPHONE_UA =
   "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1";
 const ANDROID_UA =
   "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36";
-const FACEBOOK_UA =
-  "facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)";
+const GOOGLEBOT_UA =
+  "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)";
 const DESKTOP_UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36";
 
-// Desktop Chrome is Akamai 403. iPhone Safari still returns the product page.
-const USER_AGENTS = [IPHONE_UA, ANDROID_UA, FACEBOOK_UA, DESKTOP_UA];
+// Desktop Chrome is Akamai 403. Prefer clients that still get the gallery JSON.
+const USER_AGENTS = [IPHONE_UA, ANDROID_UA, GOOGLEBOT_UA, DESKTOP_UA];
 
 function headersFor(userAgent: string): Record<string, string> {
   return {
@@ -48,26 +49,35 @@ async function readUrl(
   return { finalUrl: res.url || url, body, ok: res.ok };
 }
 
-function htmlLooksUsable(html: string, ok: boolean): boolean {
+function galleryCount(html: string): number {
+  return uniqueHomeDepotImages(collectHomeDepotImageUrlsFromHtml(html)).length;
+}
+
+function htmlLooksUsable(html: string): boolean {
   if (!html || html.length < 800) return false;
   if (isHomeDepotBlockedPage(html)) return false;
-  if (ok) return true;
-  return collectHomeDepotImageUrlsFromHtml(html).length > 0;
+  return galleryCount(html) >= 3 || html.length > 80_000;
 }
 
 async function fetchProductHtml(productUrl: string): Promise<string> {
   let best = "";
+  let bestScore = 0;
   for (const ua of USER_AGENTS) {
     try {
       const page = await readUrl(productUrl, ua);
-      if (htmlLooksUsable(page.body, page.ok)) return page.body;
-      if (page.body.length > best.length) best = page.body;
+      const images = galleryCount(page.body);
+      const score = page.body.length + images * 50_000;
+      if (score > bestScore) {
+        best = page.body;
+        bestScore = score;
+      }
+      if (htmlLooksUsable(page.body) && images >= 6) return page.body;
     } catch {
       /* try the next client */
     }
   }
   const reader = await fetchViaReader(productUrl);
-  if (reader) return reader;
+  if (reader && galleryCount(reader) > galleryCount(best)) return reader;
   return best;
 }
 
@@ -133,34 +143,36 @@ async function searchCatalogPhotos(opts: {
 }): Promise<string[]> {
   const queries = [
     [opts.model, opts.itemId, "site:homedepot.com"].filter(Boolean).join(" "),
+    [opts.itemId, "homedepot"].filter(Boolean).join(" "),
     [opts.brand, opts.model, opts.itemId, "homedepot"].filter(Boolean).join(" "),
-  ].filter((q) => q.replace(/\s+/g, " ").trim().length >= 8);
+  ].filter((q, index, all) => {
+    const compact = q.replace(/\s+/g, " ").trim();
+    return compact.length >= 8 && all.indexOf(q) === index;
+  });
 
+  const pooled: string[] = [];
   for (const query of queries) {
-    try {
-      const bing = await fetchHtml(
-        `https://www.bing.com/images/search?q=${encodeURIComponent(query)}&form=HDRSC2&first=1`,
-      );
-      const fromBing = selectHomeDepotSearchPhotos(
-        collectHomeDepotImageUrlsFromHtml(bing),
-        opts,
-      );
-      if (fromBing.length) return fromBing;
-    } catch {
-      /* Bing is a fallback */
+    for (const first of [1, 21, 41]) {
+      try {
+        const bing = await fetchHtml(
+          `https://www.bing.com/images/search?q=${encodeURIComponent(query)}&form=HDRSC2&first=${first}`,
+        );
+        pooled.push(...collectHomeDepotImageUrlsFromHtml(bing));
+      } catch {
+        /* Bing is a fallback */
+      }
     }
 
     try {
-      const found = selectHomeDepotSearchPhotos(
-        await fetchDuckDuckGoImages(query),
-        opts,
-      );
-      if (found.length) return found;
+      pooled.push(...(await fetchDuckDuckGoImages(query)));
     } catch {
       /* DuckDuckGo is a fallback */
     }
+
+    const soFar = selectHomeDepotSearchPhotos(pooled, opts);
+    if (soFar.length >= 8) return soFar;
   }
-  return [];
+  return selectHomeDepotSearchPhotos(pooled, opts);
 }
 
 export async function fetchHomeDepotProduct(input: string): Promise<HomeDepotProductDraft> {
@@ -180,12 +192,16 @@ export async function fetchHomeDepotProduct(input: string): Promise<HomeDepotPro
     product.brand = product.brand || fromSlug.brand;
     product.model = product.model || fromSlug.model;
 
-    if (!product.imageUrls.length) {
-      product.imageUrls = await searchCatalogPhotos({
+    if (product.imageUrls.length < 8) {
+      const extra = await searchCatalogPhotos({
         brand: product.brand,
         model: product.model,
         itemId,
       });
+      product.imageUrls = uniqueHomeDepotImages([
+        ...product.imageUrls,
+        ...extra,
+      ]);
     }
 
     if (!product.title && product.imageUrls.length === 0) {

@@ -46,7 +46,10 @@ const HD_JUNK =
 
 export function homeDepotImageType(url: string): string {
   const file = String(url || "").split("?")[0] || "";
-  return file.match(/[-_]([a-z]?\d+)_\d*\.(jpe?g|png|webp)$/i)?.[1]?.toLowerCase() || "";
+  return (
+    file.match(/[-_]([a-z0-9]{1,3})_(\d+)\.(jpe?g|png|webp)$/i)?.[1]?.toLowerCase() ||
+    ""
+  );
 }
 
 export function homeDepotImageKey(url: string): string {
@@ -66,7 +69,8 @@ export function upgradeHomeDepotImage(url: string): string {
   if (!/\.(jpe?g|png|webp)$/i.test(clean)) return "";
   if (!/productImages|product-images|mediacontent/i.test(clean)) return "";
   return clean
-    .replace(/([a-z]?\d+)_\.(jpe?g|png|webp)$/i, "$1_1000.$2")
+    .replace(/<SIZE>/gi, "1000")
+    .replace(/([a-z0-9]{1,3})_\.(jpe?g|png|webp)$/i, "$1_1000.$2")
     .replace(/_(\d+)_(\d+)\.(jpe?g|png|webp)/i, "_$1_1000.$3")
     .replace(/_(300|400|600|100)\.(jpe?g|png|webp)/i, "_1000.$2");
 }
@@ -127,11 +131,16 @@ function jsonLdProducts(html: string): Record<string, unknown>[] {
 }
 
 export function collectHomeDepotImageUrlsFromHtml(html: string): string[] {
+  const decoded = String(html || "")
+    .replace(/\\u003cSIZE\\u003e/gi, "1000")
+    .replace(/\\u003cSIZE>/gi, "1000")
+    .replace(/<SIZE>/gi, "1000")
+    .replace(/\\u002[fF]/g, "/");
   return [
-    ...html.matchAll(
+    ...decoded.matchAll(
       /https:\/\/(?:images\.)?(?:thdstatic|homedepot-static)\.com\/[^"'\\\s>]+\.(?:jpe?g|png|webp)/gi,
     ),
-  ].map((m) => m[0].replace(/\\u002F/g, "/"));
+  ].map((m) => m[0]);
 }
 
 function featureBullets(html: string): string[] {

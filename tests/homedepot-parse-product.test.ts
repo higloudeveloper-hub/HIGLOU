@@ -111,4 +111,14 @@ describe("Home Depot gallery angles", () => {
     expect(product.imageUrls.some((u) => u.includes("-e1_1000."))).toBe(true);
     expect(product.imageUrls.some((u) => u.includes("-e4_1000."))).toBe(true);
   });
+
+  it("reads gallery URLs that use a <SIZE> token", () => {
+    const html = `
+      {"url":"https://images.thdstatic.com/productImages/bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb/svn/black-defiant-floodlights-17000148-e1_\\u003cSIZE>.jpg"}
+      {"url":"https://images.thdstatic.com/productImages/cccccccc-cccc-cccc-cccc-cccccccccccc/svn/black-defiant-floodlights-17000148-40_<SIZE>.jpg"}
+    `;
+    const urls = collectHomeDepotImageUrlsFromHtml(html);
+    expect(urls.some((u) => u.includes("-e1_1000.jpg"))).toBe(true);
+    expect(urls.some((u) => u.includes("-40_1000.jpg"))).toBe(true);
+  });
 });

@@ -33,7 +33,7 @@ async function fetchBuffer(url: string): Promise<Buffer | null> {
     const res = await fetch(url, {
       headers: {
         "User-Agent":
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",
+          "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1",
         Accept: "image/jpeg,image/png,image/webp;q=0.8,*/*;q=0.5",
         Referer: "https://www.homedepot.com/",
       },

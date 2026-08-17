@@ -1,4 +1,5 @@
 import { DEFAULT_VALUES } from "@/config/default-values";
+import { isUsableCatalogBullet } from "@/lib/catalog/bullets";
 
 export type HomeDepotProductDraft = {
   itemId: string;
@@ -133,10 +134,11 @@ function featureBullets(html: string): string[] {
     ),
   ]
     .map((m) => stripTags(m[1] || ""))
-    .filter((line) => line.length > 12 && !/skip to|sign in|cookie/i.test(line));
+    .filter((line) => isUsableCatalogBullet(line));
   if (fromHtml.length) return fromHtml.slice(0, 8);
-  return [...html.matchAll(/^\s*[-*]\s+(.{12,220})$/gm)]
+  return [...html.matchAll(/^\s*[-*]\s+(.{8,220})$/gm)]
     .map((m) => stripTags(m[1] || ""))
+    .filter((line) => isUsableCatalogBullet(line))
     .slice(0, 8);
 }
 

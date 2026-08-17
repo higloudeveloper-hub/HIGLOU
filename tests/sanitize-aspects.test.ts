@@ -18,6 +18,23 @@ describe("sanitizeEbayAspects", () => {
     expect(aspects.Features).toEqual(["Pull-Down", "Two Handle", "LED"]);
   });
 
+  it("drops Amazon video markdown and clips Features to 65 characters", () => {
+    const long =
+      "Brushless motor with extra runtime for heavy jobs around the house and garage every day";
+    const aspects = sanitizeEbayAspects({
+      Features: [
+        "[Videos](https://www.amazon.com/dp/B0FP96MNQ4#va-related-videos-widget_feature_div)",
+        long,
+        "LED light",
+      ],
+    });
+    expect(aspects.Features?.some((v) => /video|https?:\/\//i.test(v))).toBe(
+      false,
+    );
+    expect(aspects.Features?.every((v) => v.length <= 65)).toBe(true);
+    expect(aspects.Features).toContain("LED light");
+  });
+
   it("splits pipe/comma Color strings into one value", () => {
     const aspects = sanitizeEbayAspects({
       Color: ["Matte Black | Brown"],

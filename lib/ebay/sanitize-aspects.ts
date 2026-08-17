@@ -63,6 +63,26 @@ function splitAspectValues(raw: string): string[] {
     .filter(Boolean);
 }
 
+/** eBay item-specific values cannot exceed 65 characters (error 25002). */
+export const EBAY_ASPECT_VALUE_MAX = 65;
+
+export function cleanEbayAspectValue(raw: string): string {
+  let value = String(raw || "").replace(/\s+/g, " ").trim();
+  if (!value) return "";
+  if (/https?:\/\//i.test(value) || /\[[^\]]+\]\(/i.test(value)) return "";
+  if (/video|va-related-videos|widget_feature|javascript:/i.test(value)) {
+    return "";
+  }
+  if (value.length <= EBAY_ASPECT_VALUE_MAX) return value;
+  const clipped = value
+    .slice(0, EBAY_ASPECT_VALUE_MAX)
+    .replace(/\s+\S*$/, "")
+    .trim();
+  return clipped.length >= 3
+    ? clipped
+    : value.slice(0, EBAY_ASPECT_VALUE_MAX).trim();
+}
+
 /**
  * Normalize Inventory product.aspects for eBay cardinality rules.
  * Color/Finish/etc must be a single-element array or eBay returns 25002.
@@ -81,7 +101,7 @@ export function sanitizeEbayAspects(
       Array.isArray(rawValues) ? rawValues : splitAspectValues(String(rawValues))
     )
       .flatMap((v) => splitAspectValues(String(v)))
-      .map((v) => v.trim())
+      .map((v) => cleanEbayAspectValue(v))
       .filter(Boolean);
 
     if (!values.length) continue;

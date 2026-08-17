@@ -1,4 +1,5 @@
 import { DEFAULT_VALUES } from "@/config/default-values";
+import { isUsableCatalogBullet } from "@/lib/catalog/bullets";
 
 export type AmazonProductDraft = {
   asin: string;
@@ -148,11 +149,11 @@ function featureBullets(html: string): string[] {
     ...section.matchAll(/<span[^>]*class="[^"]*a-list-item[^"]*"[^>]*>([\s\S]*?)<\/span>/gi),
   ]
     .map((m) => stripTags(m[1] || ""))
-    .filter((line) => line.length > 8 && !/make sure this fits/i.test(line));
+    .filter((line) => isUsableCatalogBullet(line));
   if (fromHtml.length) return fromHtml.slice(0, 8);
-  return [...html.matchAll(/^\s*[-*]\s+(.{12,220})$/gm)]
+  return [...html.matchAll(/^\s*[-*]\s+(.{8,220})$/gm)]
     .map((m) => stripTags(m[1] || ""))
-    .filter((line) => !/make sure this fits|skip to|sign in/i.test(line))
+    .filter((line) => isUsableCatalogBullet(line))
     .slice(0, 8);
 }
 

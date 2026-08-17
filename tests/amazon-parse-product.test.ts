@@ -76,4 +76,13 @@ describe("parseAmazonProductPage markdown fallback", () => {
     expect(product.features[0]).toMatch(/Brushless/i);
     expect(product.imageUrls[0]).toContain("71md");
   });
+
+  it("ignores Amazon Videos widget links", () => {
+    const product = parseAmazonProductPage(
+      `# Perfume\n\n- [Videos](https://www.amazon.com/dp/B0FP96MNQ4#va-related-videos-widget_feature_div)\n- Glass bottle with high heel silhouette\n`,
+      { asin: "B0FP96MNQ4", url: "https://www.amazon.com/dp/B0FP96MNQ4" },
+    );
+    expect(product.features.join(" ")).not.toMatch(/video|https?:\/\//i);
+    expect(product.features[0]).toMatch(/Glass bottle/i);
+  });
 });

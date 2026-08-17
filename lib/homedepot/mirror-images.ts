@@ -34,7 +34,7 @@ async function fetchBuffer(url: string): Promise<Buffer | null> {
       headers: {
         "User-Agent":
           "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",
-        Accept: "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
+        Accept: "image/jpeg,image/png,image/webp;q=0.8,*/*;q=0.5",
         Referer: "https://www.homedepot.com/",
       },
       cache: "no-store",
@@ -68,20 +68,30 @@ async function downloadLargestHomeDepotImage(url: string): Promise<Buffer | null
   }
 
   if (!best || bestLong < 80) return null;
-  if (bestLong >= EBAY_MIN_LONG_SIDE) return best;
+  if (bestLong < EBAY_MIN_LONG_SIDE) {
+    const meta = await sharp(best, { failOn: "none" }).metadata();
+    const width = meta.width ?? bestLong;
+    const height = meta.height ?? bestLong;
+    const scale = 800 / bestLong;
+    return sharp(best, { failOn: "none" })
+      .resize({
+        width: Math.max(800, Math.round(width * scale)),
+        height: Math.max(800, Math.round(height * scale)),
+        fit: "inside",
+      })
+      .jpeg({ quality: 90, mozjpeg: true })
+      .toBuffer();
+  }
 
-  const meta = await sharp(best, { failOn: "none" }).metadata();
-  const width = meta.width ?? bestLong;
-  const height = meta.height ?? bestLong;
-  const scale = 800 / bestLong;
-  return sharp(best, { failOn: "none" })
-    .resize({
-      width: Math.max(800, Math.round(width * scale)),
-      height: Math.max(800, Math.round(height * scale)),
-      fit: "inside",
-    })
-    .jpeg({ quality: 90, mozjpeg: true })
-    .toBuffer();
+  const resolved = resolveImageMime(best, "image/jpeg");
+  if (resolved.mime) return best;
+  try {
+    return await sharp(best, { failOn: "none" })
+      .jpeg({ quality: 90, mozjpeg: true })
+      .toBuffer();
+  } catch {
+    return null;
+  }
 }
 
 export async function mirrorHomeDepotImages(options: {

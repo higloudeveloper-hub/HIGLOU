@@ -44,8 +44,15 @@ function attr(html: string, property: string): string {
 const HD_JUNK =
   /swatchImages|logo|sprite|pixel|icon|badge|social|homedepot-header/i;
 
+export function homeDepotImageType(url: string): string {
+  const file = String(url || "").split("?")[0] || "";
+  return file.match(/[-_]([a-z]?\d+)_\d*\.(jpe?g|png|webp)$/i)?.[1]?.toLowerCase() || "";
+}
+
 export function homeDepotImageKey(url: string): string {
   const uuid = url.match(/\/productImages\/([a-f0-9-]{8,})/i)?.[1];
+  const type = homeDepotImageType(url);
+  if (uuid && type) return `${uuid.toLowerCase()}:${type}`;
   if (uuid) return uuid.toLowerCase();
   return upgradeHomeDepotImage(url) || url;
 }
@@ -59,8 +66,9 @@ export function upgradeHomeDepotImage(url: string): string {
   if (!/\.(jpe?g|png|webp)$/i.test(clean)) return "";
   if (!/productImages|product-images|mediacontent/i.test(clean)) return "";
   return clean
+    .replace(/([a-z]?\d+)_\.(jpe?g|png|webp)$/i, "$1_1000.$2")
     .replace(/_(\d+)_(\d+)\.(jpe?g|png|webp)/i, "_$1_1000.$3")
-    .replace(/_(300|400|600)\.(jpe?g|png|webp)/i, "_1000.$2");
+    .replace(/_(300|400|600|100)\.(jpe?g|png|webp)/i, "_1000.$2");
 }
 
 export function homeDepotImageCandidates(url: string): string[] {

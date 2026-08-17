@@ -34,7 +34,7 @@ async function fetchBuffer(url: string): Promise<Buffer | null> {
       headers: {
         "User-Agent":
           "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",
-        Accept: "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
+        Accept: "image/jpeg,image/png,image/webp;q=0.8,*/*;q=0.5",
         Referer: "https://www.amazon.com/",
       },
       cache: "no-store",

@@ -67,6 +67,16 @@ describe("upgradeHomeDepotImage", () => {
       ),
     ).toBe("");
   });
+
+  it("fills the empty size token on Home Depot media URLs", () => {
+    expect(
+      upgradeHomeDepotImage(
+        "https://images.thdstatic.com/productImages/abc/svn/dewalt-64_.jpg",
+      ),
+    ).toBe(
+      "https://images.thdstatic.com/productImages/abc/svn/dewalt-64_1000.jpg",
+    );
+  });
 });
 
 describe("selectHomeDepotSearchPhotos", () => {
@@ -82,5 +92,23 @@ describe("selectHomeDepotSearchPhotos", () => {
     expect(photos).toHaveLength(1);
     expect(photos[0]).toContain("17000148");
     expect(photos[0]).toContain("_1000.");
+  });
+});
+
+describe("Home Depot gallery angles", () => {
+  it("keeps extra shots that share a productImages id", () => {
+    const html = `
+      <meta property="og:image" content="https://images.thdstatic.com/productImages/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/svn/black-defiant-floodlights-17000148-64_400.jpg" />
+      <img src="https://images.thdstatic.com/productImages/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/svn/black-defiant-floodlights-17000148-e1_400.jpg" />
+      <img src="https://images.thdstatic.com/productImages/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/svn/black-defiant-floodlights-17000148-e4_400.jpg" />
+    `;
+    const product = parseHomeDepotProductPage(html, {
+      itemId: "324294069",
+      url: "https://www.homedepot.com/p/324294069",
+    });
+    expect(product.imageUrls).toHaveLength(3);
+    expect(product.imageUrls.some((u) => u.includes("-64_1000."))).toBe(true);
+    expect(product.imageUrls.some((u) => u.includes("-e1_1000."))).toBe(true);
+    expect(product.imageUrls.some((u) => u.includes("-e4_1000."))).toBe(true);
   });
 });

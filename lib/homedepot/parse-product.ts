@@ -56,9 +56,8 @@ export function upgradeHomeDepotImage(url: string): string {
   if (!/^https:\/\//i.test(clean)) return "";
   if (HD_JUNK.test(clean)) return "";
   if (!/thdstatic|homedepot-static|homedepot\.com/i.test(clean)) return "";
-  if (!/productImages|product-images|mediacontent/i.test(clean) && !/\.(jpe?g|png|webp)$/i.test(clean)) {
-    return "";
-  }
+  if (!/\.(jpe?g|png|webp)$/i.test(clean)) return "";
+  if (!/productImages|product-images|mediacontent/i.test(clean)) return "";
   return clean
     .replace(/_(\d+)_(\d+)\.(jpe?g|png|webp)/i, "_$1_1000.$3")
     .replace(/_(300|400|600)\.(jpe?g|png|webp)/i, "_1000.$2");
@@ -119,7 +118,7 @@ function jsonLdProducts(html: string): Record<string, unknown>[] {
   return out;
 }
 
-function collectImageUrls(html: string): string[] {
+export function collectHomeDepotImageUrlsFromHtml(html: string): string[] {
   return [
     ...html.matchAll(
       /https:\/\/(?:images\.)?(?:thdstatic|homedepot-static)\.com\/[^"'\\\s>]+\.(?:jpe?g|png|webp)/gi,
@@ -182,6 +181,22 @@ export function uniqueHomeDepotImages(urls: string[]): string[] {
   return uniqueUrls(urls).slice(0, DEFAULT_VALUES.maxImages);
 }
 
+/** Keep search-result photos that belong to this SKU, not a similar floodlight. */
+export function selectHomeDepotSearchPhotos(
+  urls: string[],
+  opts: { model?: string; itemId?: string },
+): string[] {
+  const all = uniqueHomeDepotImages(urls);
+  const needles = [opts.model, opts.itemId]
+    .map((n) => String(n || "").trim().toLowerCase())
+    .filter((n) => n.length >= 4);
+  if (!needles.length) return all;
+  const matched = all.filter((url) =>
+    needles.some((n) => url.toLowerCase().includes(n)),
+  );
+  return matched.length ? matched : [];
+}
+
 export function parseHomeDepotProductPage(
   html: string,
   meta: { itemId: string; url: string },
@@ -225,7 +240,7 @@ export function parseHomeDepotProductPage(
   const imageUrls = uniqueHomeDepotImages([
     ...ldImages,
     attr(html, "og:image"),
-    ...collectImageUrls(html),
+    ...collectHomeDepotImageUrlsFromHtml(html),
   ]);
 
   return {

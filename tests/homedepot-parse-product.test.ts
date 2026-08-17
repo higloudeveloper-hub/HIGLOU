@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  collectHomeDepotImageUrlsFromHtml,
   parseHomeDepotProductPage,
+  selectHomeDepotSearchPhotos,
   upgradeHomeDepotImage,
 } from "@/lib/homedepot/parse-product";
 
@@ -56,5 +58,29 @@ describe("upgradeHomeDepotImage", () => {
         "https://images.thdstatic.com/catalog/swatchImages/35/95/dewalt_35.jpg",
       ),
     ).toBe("");
+  });
+
+  it("drops truncated search URLs that are not image files", () => {
+    expect(
+      upgradeHomeDepotImage(
+        "https://images.thdstatic.com/productImages/abc/svn/black-defiant-floodlights-17000148-6",
+      ),
+    ).toBe("");
+  });
+});
+
+describe("selectHomeDepotSearchPhotos", () => {
+  it("keeps this SKU and drops a similar floodlight", () => {
+    const html = `
+      murl&quot;:&quot;https://images.thdstatic.com/productImages/aaa/svn/black-defiant-floodlights-17000018-64_600.jpg&quot;
+      murl&quot;:&quot;https://images.thdstatic.com/productImages/bbb/svn/black-defiant-floodlights-17000148-64_600.jpg&quot;
+    `;
+    const photos = selectHomeDepotSearchPhotos(
+      collectHomeDepotImageUrlsFromHtml(html),
+      { model: "17000148", itemId: "324294069" },
+    );
+    expect(photos).toHaveLength(1);
+    expect(photos[0]).toContain("17000148");
+    expect(photos[0]).toContain("_1000.");
   });
 });

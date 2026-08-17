@@ -10,6 +10,7 @@ import {
 import { getPublicSupabaseUrl } from "@/lib/images/url-sanitize";
 import { resolveImageMime } from "@/config/supported-image-formats";
 import { homeDepotImageCandidates } from "@/lib/homedepot/parse-product";
+import { IPHONE_SAFARI_UA } from "@/lib/homedepot/mobile-gallery";
 import { EBAY_MIN_LONG_SIDE } from "@/lib/ebay/ensure-ebay-images";
 
 function publicObjectUrl(path: string): string {
@@ -32,8 +33,7 @@ async function fetchBuffer(url: string): Promise<Buffer | null> {
   try {
     const res = await fetch(url, {
       headers: {
-        "User-Agent":
-          "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1",
+        "User-Agent": IPHONE_SAFARI_UA,
         Accept: "image/jpeg,image/png,image/webp;q=0.8,*/*;q=0.5",
         Referer: "https://www.homedepot.com/",
       },

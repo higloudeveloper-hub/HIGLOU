@@ -39,6 +39,51 @@ describe("parseHomeDepotProductPage", () => {
     expect(product.imageUrls.length).toBeGreaterThan(0);
     expect(product.imageUrls.every((u) => u.includes("_1000."))).toBe(true);
   });
+
+  it("reads the iPhone GraphQL gallery, including SIZE tokens", () => {
+    const json = JSON.stringify({
+      data: {
+        product: {
+          itemId: "307505277",
+          identifiers: {
+            brandName: "Commercial Electric",
+            modelNumber: "DW9582BK-C",
+            productLabel: "19-Watt Black Outdoor LED Classic Wall Pack Light",
+          },
+          media: {
+            images: [
+              {
+                url: "https://images.thdstatic.com/productImages/aaa/svn/black-commercial-electric-wall-pack-lights-dw9582bk-c-64_<SIZE>.jpg",
+              },
+              {
+                url: "https://images.thdstatic.com/productImages/bbb/svn/black-commercial-electric-wall-pack-lights-dw9582bk-c-e1_<SIZE>.jpg",
+              },
+              {
+                url: "https://images.thdstatic.com/productImages/ccc/svn/black-commercial-electric-wall-pack-lights-dw9582bk-c-e4_<SIZE>.jpg",
+              },
+              {
+                url: "https://images.thdstatic.com/productImages/ddd/svn/black-commercial-electric-wall-pack-lights-dw9582bk-c-40_<SIZE>.jpg",
+              },
+              {
+                url: "https://images.thdstatic.com/productImages/eee/svn/black-commercial-electric-wall-pack-lights-dw9582bk-c-1d_<SIZE>.jpg",
+              },
+            ],
+          },
+        },
+      },
+    });
+    const product = parseHomeDepotProductPage(json, {
+      itemId: "307505277",
+      url: "https://www.homedepot.com/p/307505277",
+    });
+    expect(product.title).toMatch(/Wall Pack/i);
+    expect(product.brand).toBe("Commercial Electric");
+    expect(product.model).toBe("DW9582BK-C");
+    expect(product.imageUrls.length).toBe(5);
+    expect(product.imageUrls.every((u) => u.includes("_1000."))).toBe(true);
+    expect(product.imageUrls.some((u) => u.includes("-e1_1000."))).toBe(true);
+    expect(product.imageUrls.some((u) => u.includes("-1d_1000."))).toBe(true);
+  });
 });
 
 describe("upgradeHomeDepotImage", () => {

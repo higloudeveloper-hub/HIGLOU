@@ -339,7 +339,10 @@ export function parseHomeDepotProductPage(
   ).replace(/\D/g, "");
   const ldMpn = typeof ld.mpn === "string" ? ld.mpn : "";
 
-  const title = titleFromHtml(html) || decodeEntities(ldName);
+  const title =
+    titleFromHtml(html) ||
+    jsonString(html, "productLabel") ||
+    decodeEntities(ldName);
   const brand =
     specValue(html, "Brand") ||
     jsonString(html, "brandName") ||

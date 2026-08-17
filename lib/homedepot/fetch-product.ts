@@ -3,6 +3,7 @@ import {
   identityFromHomeDepotLink,
   parseHomeDepotLink,
 } from "@/lib/homedepot/item-id";
+import { fetchHomeDepotMobileGallery, IPHONE_SAFARI_UA } from "@/lib/homedepot/mobile-gallery";
 import {
   collectHomeDepotImageUrlsFromHtml,
   dedupeHomeDepotImages,
@@ -16,8 +17,6 @@ import {
 
 const FETCH_MS = 20_000;
 
-const IPHONE_UA =
-  "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1";
 const ANDROID_UA =
   "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36";
 const GOOGLEBOT_UA =
@@ -28,15 +27,22 @@ const DESKTOP_UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36";
 
 // Desktop Chrome is Akamai 403. Prefer clients that still get the gallery JSON.
-const USER_AGENTS = [IPHONE_UA, ANDROID_UA, GOOGLEBOT_UA, BINGBOT_UA, DESKTOP_UA];
+const USER_AGENTS = [IPHONE_SAFARI_UA, ANDROID_UA, GOOGLEBOT_UA, BINGBOT_UA, DESKTOP_UA];
 
 function headersFor(userAgent: string): Record<string, string> {
+  const mobile = /iPhone|Android/i.test(userAgent);
   return {
     "User-Agent": userAgent,
     Accept:
       "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
     "Accept-Language": "en-US,en;q=0.9",
     "Cache-Control": "no-cache",
+    ...(mobile
+      ? {
+          "sec-ch-ua-mobile": "?1",
+          "sec-ch-ua-platform": userAgent.includes("iPhone") ? '"iOS"' : '"Android"',
+        }
+      : {}),
   };
 }
 
@@ -268,6 +274,14 @@ export async function fetchHomeDepotProduct(
     const fromSlug = identityFromHomeDepotLink(parsed);
 
     let html = opts?.pageHtml?.trim() || "";
+    if (galleryCount(html) < 6) {
+      const fromIphoneApi = await fetchHomeDepotMobileGallery(itemId).catch(
+        () => "",
+      );
+      if (galleryCount(fromIphoneApi) > galleryCount(html)) {
+        html = html ? `${fromIphoneApi}\n${html}` : fromIphoneApi;
+      }
+    }
     if (galleryCount(html) < 6 && opts?.pageOrigin) {
       const fromEdge = await fetchViaEdgePage(opts.pageOrigin, canonical);
       if (galleryCount(fromEdge) > galleryCount(html)) html = fromEdge;

@@ -39,49 +39,88 @@ export function homeDepotCapturePath(productUrl: string): string {
 }
 
 /**
- * Runs inside the Home Depot tab. void() keeps the product page from going blank.
- * Waits briefly so lazy gallery JSON can land, then posts HTML back to Higlou.
+ * Runs inside the Home Depot tab as a real browser client (same path as iPhone).
+ * Asks the product GraphQL for media.images, then posts JSON + HTML back to Higlou.
  */
 function homeDepotCaptureScript(): void {
-  try {
-    if (!/homedepot\./i.test(location.hostname)) {
-      alert(
-        "Wait until Home Depot finishes loading, then click Bring all photos again.",
-      );
-      return;
-    }
-    const send = () => {
-      const payload = {
-        type: "higlou-hd-gallery",
-        url: location.href,
-        html: document.documentElement.outerHTML,
-      };
-      if (window.opener) {
-        window.opener.postMessage(payload, "*");
-        try {
-          window.opener.focus();
-        } catch {
-          /* ignore */
-        }
-      } else {
-        alert("Come back to Higlou and import this product first.");
-      }
-    };
-    let n = 0;
-    const wait = () => {
-      const html = document.documentElement.outerHTML;
-      const hits = html.match(/productImages/g) || [];
-      if (hits.length >= 6 || n >= 15) {
-        send();
+  void (async () => {
+    try {
+      if (!/homedepot\./i.test(location.hostname)) {
+        alert(
+          "Wait until Home Depot finishes loading, then click Bring all photos again.",
+        );
         return;
       }
-      n += 1;
-      window.setTimeout(wait, 350);
-    };
-    wait();
-  } catch (error) {
-    alert(String(error));
-  }
+      const itemId = (location.pathname.match(/\/(\d{8,12})\/?$/) || [])[1] || "";
+      const query =
+        "query productClientOnlyProduct($itemId: String!) { product(itemId: $itemId) { itemId identifiers { brandName modelNumber productLabel upc } details { description highlights } media { images { url type subType sizes } } } }";
+      const payload = JSON.stringify({
+        operationName: "productClientOnlyProduct",
+        variables: { itemId: itemId, storeId: "121", zipCode: "30339" },
+        query: query,
+      });
+      const headers = {
+        "content-type": "application/json",
+        accept: "*/*",
+        "x-experience-name": "general-merchandise",
+        "x-hd-dc": "origin",
+      };
+      const endpoints = [
+        "/federation-gateway/graphql?opname=productClientOnlyProduct",
+        "https://apionline.homedepot.com/federation-gateway/graphql?opname=productClientOnlyProduct",
+      ];
+      let api = "";
+      for (let i = 0; i < endpoints.length; i++) {
+        try {
+          const res = await fetch(endpoints[i], {
+            method: "POST",
+            headers: headers,
+            credentials: "include",
+            body: payload,
+          });
+          const text = await res.text();
+          if (/productImages|thdstatic/i.test(text)) {
+            api = text;
+            break;
+          }
+        } catch {
+          /* try next */
+        }
+      }
+      if (!api) {
+        await new Promise((resolve) => {
+          let n = 0;
+          const wait = () => {
+            const hits =
+              document.documentElement.outerHTML.match(/productImages/g) || [];
+            if (hits.length >= 6 || n >= 15) {
+              resolve(undefined);
+              return;
+            }
+            n += 1;
+            window.setTimeout(wait, 350);
+          };
+          wait();
+        });
+      }
+      const html = `${api}\n${document.documentElement.outerHTML}`;
+      if (!window.opener) {
+        alert("Come back to Higlou and import this product first.");
+        return;
+      }
+      window.opener.postMessage(
+        { type: "higlou-hd-gallery", url: location.href, html: html },
+        "*",
+      );
+      try {
+        window.opener.focus();
+      } catch {
+        /* ignore */
+      }
+    } catch (error) {
+      alert(String(error));
+    }
+  })();
 }
 
 export const HOME_DEPOT_CAPTURE_BOOKMARKLET = `javascript:void(${homeDepotCaptureScript.toString()}());`;

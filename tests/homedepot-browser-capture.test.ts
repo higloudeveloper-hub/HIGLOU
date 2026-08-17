@@ -23,6 +23,8 @@ describe("Home Depot browser capture", () => {
       true,
     );
     expect(HOME_DEPOT_CAPTURE_BOOKMARKLET).toContain("higlou-hd-gallery");
+    expect(HOME_DEPOT_CAPTURE_BOOKMARKLET).toContain("federation-gateway");
+    expect(HOME_DEPOT_CAPTURE_BOOKMARKLET).toContain("productClientOnlyProduct");
   });
 
   it("opens a Higlou splash that then loads the Home Depot product", () => {

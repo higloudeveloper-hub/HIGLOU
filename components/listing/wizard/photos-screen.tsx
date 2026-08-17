@@ -67,7 +67,7 @@ export function PhotosScreen({
               </p>
               <p className="mt-1 text-[13px] text-[#707070]">
                 Search only finds a few angles. Bring all photos copies the
-                real gallery from that Home Depot tab.
+                iPhone gallery from that Home Depot tab.
               </p>
             </div>
             {onBringHdPhotos ? (

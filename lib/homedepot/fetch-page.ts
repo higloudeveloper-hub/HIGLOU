@@ -1,12 +1,11 @@
 import { parseHomeDepotLink } from "@/lib/homedepot/item-id";
+import { fetchHomeDepotMobileGallery, IPHONE_SAFARI_UA } from "@/lib/homedepot/mobile-gallery";
 import {
   collectHomeDepotImageUrlsFromHtml,
   dedupeHomeDepotImages,
   isHomeDepotBlockedPage,
 } from "@/lib/homedepot/parse-product";
 
-const IPHONE_UA =
-  "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1";
 const ANDROID_UA =
   "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36";
 
@@ -17,6 +16,8 @@ function headersFor(userAgent: string): Record<string, string> {
       "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
     "Accept-Language": "en-US,en;q=0.9",
     "Cache-Control": "no-cache",
+    "sec-ch-ua-mobile": "?1",
+    "sec-ch-ua-platform": userAgent.includes("iPhone") ? '"iOS"' : '"Android"',
   };
 }
 
@@ -43,8 +44,14 @@ async function readPage(url: string, userAgent: string): Promise<string> {
 export async function fetchHomeDepotPageHtml(input: string): Promise<string> {
   const parsed = parseHomeDepotLink(input);
   if (!parsed) return "";
+
+  const fromIphoneApi = await fetchHomeDepotMobileGallery(parsed.itemId).catch(
+    () => "",
+  );
+  if (galleryCount(fromIphoneApi) >= 6) return fromIphoneApi;
+
   const pages = await Promise.all(
-    [IPHONE_UA, ANDROID_UA].map(async (ua) => {
+    [IPHONE_SAFARI_UA, ANDROID_UA].map(async (ua) => {
       try {
         return await readPage(parsed.canonicalUrl, ua);
       } catch {
@@ -52,14 +59,17 @@ export async function fetchHomeDepotPageHtml(input: string): Promise<string> {
       }
     }),
   );
-  let best = "";
-  let bestScore = 0;
+  let best = fromIphoneApi;
+  let bestScore = scoreHtml(fromIphoneApi);
   for (const body of pages) {
     const score = scoreHtml(body);
     if (score > bestScore) {
       best = body;
       bestScore = score;
     }
+  }
+  if (fromIphoneApi && galleryCount(fromIphoneApi) > galleryCount(best)) {
+    return `${fromIphoneApi}\n${best}`;
   }
   return bestScore > 0 ? best : "";
 }

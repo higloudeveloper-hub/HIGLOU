@@ -31,8 +31,9 @@ export function HomeDepotCaptureSplash() {
         Come back to Higlou
       </h1>
       <p className="mt-4 max-w-md text-[16px] leading-7 text-[#707070]">
-        Home Depot opens next in this tab. When you see the product, switch
-        back to Higlou — the photos land there, not here.
+        This tab loads Home Depot the way an iPhone does — that is how we get
+        every photo. When you see the product, switch back to Higlou and click
+        Bring all photos.
       </p>
       <p className="mt-8 text-[13px] text-[#707070]">Opening Home Depot…</p>
     </main>

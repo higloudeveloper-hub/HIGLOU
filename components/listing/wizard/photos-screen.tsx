@@ -24,6 +24,7 @@ export function PhotosScreen({
   onCatalogImport,
   catalogImporting = false,
   hdCapturePending = false,
+  hdCaptureHref,
   onBringHdPhotos,
 }: {
   images: ProductImage[];
@@ -42,6 +43,7 @@ export function PhotosScreen({
   onCatalogImport?: (url: string) => Promise<boolean | void>;
   catalogImporting?: false | "amazon" | "homedepot";
   hdCapturePending?: boolean;
+  hdCaptureHref?: string;
   onBringHdPhotos?: () => void;
   onPhotoIntakeSessionChange?: (session: unknown) => void;
 }) {
@@ -63,14 +65,27 @@ export function PhotosScreen({
           <div className="flex flex-wrap items-center gap-3">
             <div className="min-w-0 flex-1">
               <p className="text-[14px] font-medium text-[#141414]">
-                Home Depot opened in another tab. Come back here.
+                Home Depot is in the other window. Stay on this tab.
               </p>
               <p className="mt-1 text-[13px] text-[#707070]">
-                Search only finds a few angles. Bring all photos copies the
-                iPhone gallery from that Home Depot tab.
+                Drag <span className="font-medium text-[#141414]">Bring all photos</span>{" "}
+                onto the Home Depot tab. That copies the iPhone gallery — search
+                only finds a few angles.
               </p>
             </div>
-            {onBringHdPhotos ? (
+            {hdCaptureHref ? (
+              <a
+                href={hdCaptureHref}
+                draggable
+                onClick={(e) => {
+                  e.preventDefault();
+                  onBringHdPhotos?.();
+                }}
+                className="grid h-10 shrink-0 place-items-center bg-[#3665F3] px-4 text-[13px] font-semibold text-white transition hover:bg-[#2b53d4]"
+              >
+                Bring all photos
+              </a>
+            ) : onBringHdPhotos ? (
               <button
                 type="button"
                 onClick={onBringHdPhotos}

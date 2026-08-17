@@ -11,15 +11,12 @@ export function HomeDepotCaptureSplash() {
       window.close();
       return;
     }
-    const timer = window.setTimeout(() => {
-      try {
-        window.opener?.focus();
-      } catch {
-        /* some browsers block focus steal */
-      }
-      window.location.replace(parsed.canonicalUrl);
-    }, 2800);
-    return () => window.clearTimeout(timer);
+    window.open(parsed.canonicalUrl, "hd-product");
+    try {
+      window.opener?.focus();
+    } catch {
+      /* some browsers block focus steal */
+    }
   }, []);
 
   return (
@@ -31,11 +28,10 @@ export function HomeDepotCaptureSplash() {
         Come back to Higlou
       </h1>
       <p className="mt-4 max-w-md text-[16px] leading-7 text-[#707070]">
-        This tab loads Home Depot the way an iPhone does — that is how we get
-        every photo. When you see the product, switch back to Higlou and click
-        Bring all photos.
+        Home Depot is in the other window. Go back to Higlou and drag{" "}
+        <span className="font-medium text-[#141414]">Bring all photos</span> onto
+        that Home Depot tab.
       </p>
-      <p className="mt-8 text-[13px] text-[#707070]">Opening Home Depot…</p>
     </main>
   );
 }

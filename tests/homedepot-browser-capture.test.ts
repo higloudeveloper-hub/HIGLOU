@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   HOME_DEPOT_CAPTURE_BOOKMARKLET,
   HOME_DEPOT_GALLERY_MESSAGE,
+  homeDepotCaptureBookmarklet,
   homeDepotCapturePath,
   isHomeDepotBrowserOrigin,
   isHomeDepotGalleryMessage,
@@ -19,12 +20,15 @@ describe("Home Depot browser capture", () => {
         html: `<html>${"x".repeat(900)}</html>`,
       }),
     ).toBe(true);
-    expect(HOME_DEPOT_CAPTURE_BOOKMARKLET.startsWith("javascript:void(")).toBe(
-      true,
-    );
-    expect(HOME_DEPOT_CAPTURE_BOOKMARKLET).toContain("higlou-hd-gallery");
+    expect(HOME_DEPOT_CAPTURE_BOOKMARKLET.startsWith("javascript:")).toBe(true);
     expect(HOME_DEPOT_CAPTURE_BOOKMARKLET).toContain("federation-gateway");
     expect(HOME_DEPOT_CAPTURE_BOOKMARKLET).toContain("productClientOnlyProduct");
+    expect(HOME_DEPOT_CAPTURE_BOOKMARKLET).toContain("/api/homedepot/ingest");
+    const live = homeDepotCaptureBookmarklet({
+      origin: "https://higlou.vercel.app",
+      token: "user.nonce.1.sig",
+    });
+    expect(live).toContain("user.nonce.1.sig");
   });
 
   it("opens a Higlou splash that then loads the Home Depot product", () => {

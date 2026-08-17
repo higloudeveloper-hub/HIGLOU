@@ -48,10 +48,10 @@ import {
 } from "@/components/listing/review-helpers";
 import { readAiProviderSettings } from "@/components/settings/ai-settings-form";
 import { detectCatalogStore } from "@/lib/catalog/detect-store";
+import { parseHomeDepotLink } from "@/lib/homedepot/item-id";
 import {
   HOME_DEPOT_CAPTURE_WINDOW,
-  captureHomeDepotGalleryFromTab,
-  homeDepotCapturePath,
+  homeDepotCaptureBookmarklet,
   isHomeDepotBrowserOrigin,
   isHomeDepotGalleryMessage,
 } from "@/lib/homedepot/browser-capture";
@@ -288,6 +288,9 @@ export function NewListingWorkspace({
   const analyzeAbortRef = useRef(false);
   const firstAttentionRef = useRef<HTMLDivElement | null>(null);
   const hdWinRef = useRef<Window | null>(null);
+  const hdProductUrlRef = useRef("");
+  const hdCaptureTokenRef = useRef("");
+  const [hdCaptureToken, setHdCaptureToken] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -996,20 +999,21 @@ export function NewListingWorkspace({
       !html &&
       options?.openHomeDepot !== false &&
       typeof window !== "undefined";
-    const capturePath = openHomeDepot ? homeDepotCapturePath(url) : "";
-    const hdWin =
-      capturePath && typeof window !== "undefined"
-        ? window.open(capturePath, HOME_DEPOT_CAPTURE_WINDOW)
-        : null;
-    if (hdWin) {
+    const parsedHd = openHomeDepot ? parseHomeDepotLink(url) : null;
+    if (parsedHd) {
+      hdProductUrlRef.current = parsedHd.canonicalUrl;
+      const hdWin = window.open(
+        parsedHd.canonicalUrl,
+        HOME_DEPOT_CAPTURE_WINDOW,
+      );
       hdWinRef.current = hdWin;
       setHdCapturePending(true);
       toast.message(
-        "Home Depot is opening. Come back to this Higlou tab — that’s where the photos land.",
+        "Home Depot is in the other window. Stay on Higlou — drag Bring all photos onto that tab.",
       );
     } else if (openHomeDepot) {
       toast.error(
-        "Allow popups for Higlou so we can open Home Depot and copy every photo.",
+        "Allow popups for Higlou so Home Depot can open next to this tab.",
       );
     }
 
@@ -1032,6 +1036,7 @@ export function NewListingWorkspace({
         features?: string[];
         sku?: string;
         images?: ProductImage[];
+        captureToken?: string;
       } | null;
       if (!response.ok || !body?.ok || !body.images?.length) {
         const message = body?.error || `${storeLabel} import failed`;
@@ -1059,6 +1064,10 @@ export function NewListingWorkspace({
       };
       setListing(seeded);
       setStep("photos");
+      if (store === "homedepot" && body.captureToken) {
+        hdCaptureTokenRef.current = body.captureToken;
+        setHdCaptureToken(body.captureToken);
+      }
 
       const fromBrowser = Boolean(html);
       const shortGallery = store === "homedepot" && body.images.length < 6;
@@ -1073,10 +1082,10 @@ export function NewListingWorkspace({
           hdWinRef.current = null;
           toast.success("Full Home Depot gallery loaded from that tab.");
         }
-      } else if (shortGallery && hdWinRef.current && !hdWinRef.current.closed) {
+      } else if (shortGallery) {
         setHdCapturePending(true);
         toast.message(
-          "A few photos loaded. Come back here and click Bring all photos for the rest.",
+          "A few photos loaded. Drag Bring all photos onto the Home Depot tab for the rest.",
         );
       } else {
         if (!shortGallery) {
@@ -1104,15 +1113,17 @@ export function NewListingWorkspace({
   importFromCatalogRef.current = importFromCatalog;
 
   const bringHdPhotos = () => {
-    const result = captureHomeDepotGalleryFromTab();
-    if (result === "blocked") {
-      toast.error(
-        "The Home Depot tab closed or popups are blocked. Import the link again.",
-      );
-      return;
+    const href = homeDepotCaptureBookmarklet({
+      origin: window.location.origin,
+      token: hdCaptureTokenRef.current,
+    });
+    void navigator.clipboard.writeText(href).catch(() => undefined);
+    if (hdProductUrlRef.current) {
+      window.open(hdProductUrlRef.current, HOME_DEPOT_CAPTURE_WINDOW);
     }
-    toast.message("Copying the gallery from Home Depot… stay on this tab.");
-    window.focus();
+    toast.message(
+      "Drop the blue button onto the Home Depot tab — that copies every photo.",
+    );
   };
 
   useEffect(() => {
@@ -1127,6 +1138,37 @@ export function NewListingWorkspace({
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);
   }, []);
+
+  useEffect(() => {
+    if (!hdCapturePending || !hdCaptureToken) return;
+    let cancelled = false;
+    const poll = async () => {
+      try {
+        const res = await fetch(
+          `/api/homedepot/ingest?token=${encodeURIComponent(hdCaptureToken)}`,
+          { cache: "no-store" },
+        );
+        const body = (await res.json().catch(() => null)) as {
+          ok?: boolean;
+          url?: string;
+          html?: string;
+        } | null;
+        if (cancelled || !body?.ok || !body.url || !body.html) return;
+        await importFromCatalogRef.current(body.url, {
+          html: body.html,
+          openHomeDepot: false,
+        });
+      } catch {
+        /* keep polling */
+      }
+    };
+    void poll();
+    const timer = window.setInterval(() => void poll(), 2000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [hdCapturePending, hdCaptureToken]);
 
   useEffect(() => {
     if (!hdCapturePending) return;
@@ -1924,6 +1966,15 @@ export function NewListingWorkspace({
           onCatalogImport={importFromCatalog}
           catalogImporting={catalogImporting}
           hdCapturePending={hdCapturePending}
+          hdCaptureHref={
+            hdCaptureToken
+              ? homeDepotCaptureBookmarklet({
+                  origin:
+                    typeof window !== "undefined" ? window.location.origin : "",
+                  token: hdCaptureToken,
+                })
+              : undefined
+          }
           onBringHdPhotos={bringHdPhotos}
         />
       ) : null}

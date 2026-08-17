@@ -9,6 +9,7 @@ import {
 } from "@/lib/api/rate-limit";
 import { fetchHomeDepotProduct } from "@/lib/homedepot/fetch-product";
 import { mirrorHomeDepotImages } from "@/lib/homedepot/mirror-images";
+import { signHomeDepotCaptureToken } from "@/lib/homedepot/capture-token";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -81,6 +82,7 @@ export async function POST(request: Request) {
       ok: true,
       itemId: product.itemId,
       homeDepotUrl: product.url,
+      captureToken: signHomeDepotCaptureToken(auth.user.id),
       title: product.title,
       brand: product.brand,
       model: product.model,

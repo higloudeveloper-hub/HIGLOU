@@ -48,13 +48,15 @@ export function modelFromHomeDepotSlug(slug: string): string {
 }
 
 const HD_SLUG_STOP =
-  /^(and|the|with|for|from|inch|in|ft|oz|led|light|lights|bulb|bulbs|watt|watts|pack|kit|set|only|black|white|red|plus|ultra|bright|adjustable|panels|panel|wired|outdoor|head|security|flood|motion|sensing|lumens|lumen)$/i;
+  /^(and|the|with|for|from|inch|in|ft|oz|led|light|lights|bulb|bulbs|watt|watts|pack|kit|set|only|black|white|red|plus|ultra|bright|adjustable|panels|panel|wired|outdoor|head|security|flood|motion|sensing|lumens|lumen|control|dawn|dusk|classic)$/i;
 
 function looksLikeHomeDepotModelToken(token: string): boolean {
   const t = String(token || "").trim();
   if (!t || t.length > 20) return false;
   if (HD_SLUG_STOP.test(t)) return false;
   if (/\d/.test(t)) return true;
+  // Trailing color/finish codes: DW9582BK-C, DFI-0654-BK
+  if (t.length <= 3 && /^[A-Z0-9]+$/i.test(t)) return true;
   return t.length >= 5 && /^[A-Z0-9]+$/.test(t) && t === t.toUpperCase();
 }
 

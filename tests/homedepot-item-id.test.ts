@@ -65,6 +65,18 @@ describe("parseHomeDepotLink", () => {
     expect(identity.model).not.toBe("PD27");
     expect(identity.title).toMatch(/Light Bulb/i);
   });
+
+  it("reads DW9582BK-C including the trailing C, not an empty model", () => {
+    const parsed = parseHomeDepotLink(
+      "https://www.homedepot.com/p/Commercial-Electric-19-Watt-Black-Outdoor-Integrated-LED-Classic-Wall-Pack-Light-with-Dusk-to-Dawn-Control-DW9582BK-C/307505277",
+    );
+    expect(parsed?.itemId).toBe("307505277");
+    const identity = identityFromHomeDepotLink(parsed!);
+    expect(identity.model).toBe("DW9582BK-C");
+    expect(identity.model).not.toBe("");
+    expect(identity.brand).toBe("Commercial");
+    expect(identity.title).toMatch(/Wall Pack/i);
+  });
 });
 
 describe("detectCatalogStore", () => {

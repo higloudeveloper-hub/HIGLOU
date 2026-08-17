@@ -35,4 +35,19 @@ describe("homeDepotSearchQueries", () => {
     );
     expect(queries.some((q) => q.includes("-e1") && q.includes("-e4"))).toBe(true);
   });
+
+  it("also searches DW9582BK when the slug model is DW9582BK-C", () => {
+    const queries = homeDepotSearchQueries({
+      brand: "Commercial",
+      model: "DW9582BK-C",
+      itemId: "307505277",
+    });
+    expect(queries.some((q) => q.includes("DW9582BK-C") && q.includes("thdstatic"))).toBe(
+      true,
+    );
+    expect(queries.some((q) => /\bDW9582BK\b/.test(q) && q.includes("thdstatic"))).toBe(
+      true,
+    );
+    expect(queries.some((q) => q.includes("307505277"))).toBe(true);
+  });
 });

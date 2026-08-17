@@ -249,6 +249,23 @@ export function homeDepotMediaStem(url: string): string {
   return file.replace(/-[a-z0-9]{1,3}_\d+$/i, "");
 }
 
+function homeDepotModelNeedles(model: string): string[] {
+  const m = String(model || "").trim();
+  if (!m || isGenericHomeDepotModel(m)) return [];
+  const needles = [m.toLowerCase()];
+  const stripped = m.replace(/-[A-Z0-9]{1,3}$/i, "");
+  if (
+    stripped &&
+    stripped !== m &&
+    stripped.length >= 6 &&
+    /\d/.test(stripped) &&
+    !isGenericHomeDepotModel(stripped)
+  ) {
+    needles.push(stripped.toLowerCase());
+  }
+  return needles;
+}
+
 export function belongsToHomeDepotProduct(
   url: string,
   opts: { model?: string; itemId?: string; stem?: string },
@@ -257,22 +274,34 @@ export function belongsToHomeDepotProduct(
   if (!u) return false;
   const itemId = String(opts.itemId || "").trim().toLowerCase();
   if (itemId.length >= 8 && u.includes(itemId)) return true;
-  const model = String(opts.model || "").trim();
-  if (model && !isGenericHomeDepotModel(model) && u.includes(model.toLowerCase())) {
-    return true;
-  }
-  const compact = model.replace(/-/g, "").toLowerCase();
-  if (
-    model &&
-    !isGenericHomeDepotModel(model) &&
-    compact.length >= 6 &&
-    u.replace(/-/g, "").includes(compact)
-  ) {
-    return true;
+  for (const needle of homeDepotModelNeedles(String(opts.model || ""))) {
+    if (u.includes(needle)) return true;
+    const compact = needle.replace(/-/g, "");
+    if (compact.length >= 6 && u.replace(/-/g, "").includes(compact)) return true;
   }
   const stem = String(opts.stem || "").trim().toLowerCase();
   if (stem.length >= 12 && homeDepotMediaStem(u) === stem) return true;
   return false;
+}
+
+/** When the SKU is missing from filenames, keep the gallery that repeats the most. */
+function dominantHomeDepotStemPhotos(urls: string[]): string[] {
+  if (urls.length < 2) return [];
+  const byStem = new Map<string, string[]>();
+  for (const url of urls) {
+    const stem = homeDepotMediaStem(url);
+    if (stem.length < 12) continue;
+    const list = byStem.get(stem) || [];
+    list.push(url);
+    byStem.set(stem, list);
+  }
+  let best: string[] = [];
+  for (const list of byStem.values()) {
+    if (list.length > best.length) best = list;
+  }
+  if (best.length < 2) return [];
+  if (best.length < 3 && best.length <= urls.length / 2) return [];
+  return best;
 }
 
 /** Keep photos of this SKU only — not related Milwaukee tools on the same page. */
@@ -280,9 +309,10 @@ export function selectHomeDepotSearchPhotos(
   urls: string[],
   opts: { model?: string; itemId?: string; stem?: string },
 ): string[] {
-  return uniqueUrls(urls)
-    .filter((url) => belongsToHomeDepotProduct(url, opts))
-    .slice(0, DEFAULT_VALUES.maxImages);
+  const unique = uniqueUrls(urls);
+  const owned = unique.filter((url) => belongsToHomeDepotProduct(url, opts));
+  if (owned.length) return owned.slice(0, DEFAULT_VALUES.maxImages);
+  return dominantHomeDepotStemPhotos(unique).slice(0, DEFAULT_VALUES.maxImages);
 }
 
 export function parseHomeDepotProductPage(

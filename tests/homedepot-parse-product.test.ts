@@ -107,6 +107,34 @@ describe("selectHomeDepotSearchPhotos", () => {
     expect(photos).toHaveLength(2);
     expect(photos.every((u) => u.includes("bebrnov-pd27"))).toBe(true);
   });
+
+  it("keeps wall-pack photos when the model is DW9582BK-C", () => {
+    const html = `
+      https://images.thdstatic.com/productImages/aaa/svn/black-commercial-electric-wall-pack-lights-dw9582bk-c-64_600.jpg
+      https://images.thdstatic.com/productImages/bbb/svn/black-commercial-electric-wall-pack-lights-dw9582bk-c-e4_600.jpg
+      https://images.thdstatic.com/productImages/ccc/svn/black-wall-pack-lights-dw10231bk-c-64_600.jpg
+    `;
+    const photos = selectHomeDepotSearchPhotos(
+      collectHomeDepotImageUrlsFromHtml(html),
+      { model: "DW9582BK-C", itemId: "307505277" },
+    );
+    expect(photos).toHaveLength(2);
+    expect(photos.every((u) => u.includes("dw9582bk-c"))).toBe(true);
+  });
+
+  it("keeps the repeating wall-pack stem when the model is missing", () => {
+    const html = `
+      https://images.thdstatic.com/productImages/aaa/svn/black-commercial-electric-wall-pack-lights-dw9582bk-c-64_600.jpg
+      https://images.thdstatic.com/productImages/bbb/svn/black-commercial-electric-wall-pack-lights-dw9582bk-c-e4_600.jpg
+      https://images.thdstatic.com/productImages/ccc/svn/black-wall-pack-lights-dw10231bk-c-64_600.jpg
+    `;
+    const photos = selectHomeDepotSearchPhotos(
+      collectHomeDepotImageUrlsFromHtml(html),
+      { model: "", itemId: "307505277" },
+    );
+    expect(photos).toHaveLength(2);
+    expect(photos.every((u) => u.includes("dw9582bk-c"))).toBe(true);
+  });
 });
 
 describe("Home Depot gallery angles", () => {

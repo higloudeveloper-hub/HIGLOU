@@ -192,26 +192,47 @@ async function runImageSearch(
   return selectHomeDepotSearchPhotos(pooled, opts);
 }
 
+function homeDepotModelSearchTokens(model: string): string[] {
+  const m = String(model || "").trim();
+  if (!m) return [];
+  const tokens = [m];
+  const stripped = m.replace(/-[A-Z0-9]{1,3}$/i, "");
+  if (
+    stripped &&
+    stripped !== m &&
+    stripped.length >= 6 &&
+    /\d/.test(stripped) &&
+    !isGenericHomeDepotModel(stripped)
+  ) {
+    tokens.push(stripped);
+  }
+  return tokens;
+}
+
 export function homeDepotSearchQueries(opts: {
   brand: string;
   model: string;
   itemId: string;
   stem?: string;
 }): string[] {
-  const model = String(opts.model || "").trim();
+  const models = homeDepotModelSearchTokens(opts.model);
   const stem = String(opts.stem || "").trim();
-  return [
+  const modelQueries = models.flatMap((model) => [
     [model, "thdstatic"].filter(Boolean).join(" "),
     [model, "site:homedepot.com"].filter(Boolean).join(" "),
+    model && !isGenericHomeDepotModel(model)
+      ? `"${model}-e1" OR "${model}-e4" OR "${model}-1d" OR "${model}-40" thdstatic`
+      : "",
+  ]);
+  return [
+    ...modelQueries,
     stem.length >= 12 ? `${stem} thdstatic` : "",
     stem.length >= 12
       ? `"${stem}-e1" OR "${stem}-e2" OR "${stem}-e4" OR "${stem}-1d" OR "${stem}-40" OR "${stem}-a0" thdstatic`
       : "",
-    [opts.brand, model, "homedepot"].filter(Boolean).join(" "),
+    [opts.brand, models[0] || "", "homedepot"].filter(Boolean).join(" "),
     [opts.itemId, "homedepot"].filter(Boolean).join(" "),
-    model && !isGenericHomeDepotModel(model)
-      ? `"${model}-e1" OR "${model}-e4" OR "${model}-1d" OR "${model}-40" thdstatic`
-      : "",
+    [opts.itemId, "thdstatic"].filter(Boolean).join(" "),
   ].filter((q, index, all) => {
     const compact = q.replace(/\s+/g, " ").trim();
     return (

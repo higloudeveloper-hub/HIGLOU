@@ -31,23 +31,37 @@ function slugFromPath(pathname: string, itemId: string): string {
   return decodeURIComponent(slug);
 }
 
+/** Trailing HD model: 17000148, DCD791P1, or combo 2541-20-48-73-2010. */
+export function modelFromHomeDepotSlug(slug: string): string {
+  const s = String(slug || "").trim();
+  if (!s) return "";
+  const combo = s.match(/(\d{3,5}-\d{2}(?:-\d{2,4}){1,8})$/i)?.[1];
+  if (combo && combo.replace(/-/g, "").length >= 6) return combo;
+  const last = s.split("-").filter(Boolean).pop() || "";
+  if (/^[A-Z0-9][A-Z0-9.]{5,}$/i.test(last)) return last;
+  return "";
+}
+
 /** Title / brand / model from the SEO slug when Home Depot blocks the HTML. */
 export function identityFromHomeDepotLink(parsed: ParsedHomeDepotLink): {
   title: string;
   brand: string;
   model: string;
 } {
-  const tokens = parsed.slug
-    .split("-")
-    .map((t) => t.trim())
-    .filter(Boolean)
-    .map((t) => t.replace(/([a-z])([A-Z])/g, "$1 $2"));
-  if (!tokens.length) {
+  const rawTokens = parsed.slug.split("-").map((t) => t.trim()).filter(Boolean);
+  if (!rawTokens.length) {
     return { title: "", brand: "", model: "" };
   }
-  const last = tokens[tokens.length - 1] || "";
-  const model = /^[A-Z0-9][A-Z0-9.]{3,}$/i.test(last) ? last : "";
-  const words = model ? tokens.slice(0, -1) : tokens;
+  const model = modelFromHomeDepotSlug(parsed.slug);
+  let used = rawTokens;
+  if (model) {
+    const parts = model.split("-");
+    const tail = rawTokens.slice(-parts.length).join("-");
+    if (tail.toLowerCase() === model.toLowerCase()) {
+      used = rawTokens.slice(0, -parts.length);
+    }
+  }
+  const words = used.map((t) => t.replace(/([a-z])([A-Z])/g, "$1 $2"));
   const title = words.join(" ").replace(/\s+/g, " ").trim();
   return {
     title,

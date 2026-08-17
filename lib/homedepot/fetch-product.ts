@@ -4,6 +4,7 @@ import {
 } from "@/lib/homedepot/item-id";
 import {
   collectHomeDepotImageUrlsFromHtml,
+  homeDepotMediaStem,
   isHomeDepotBlockedPage,
   parseHomeDepotProductPage,
   selectHomeDepotSearchPhotos,
@@ -140,6 +141,7 @@ async function searchCatalogPhotos(opts: {
   brand: string;
   model: string;
   itemId: string;
+  stem?: string;
 }): Promise<string[]> {
   const queries = [
     [opts.model, opts.itemId, "site:homedepot.com"].filter(Boolean).join(" "),
@@ -192,12 +194,16 @@ export async function fetchHomeDepotProduct(input: string): Promise<HomeDepotPro
     product.brand = product.brand || fromSlug.brand;
     product.model = product.model || fromSlug.model;
 
-    if (product.imageUrls.length < 8) {
-      const extra = await searchCatalogPhotos({
-        brand: product.brand,
-        model: product.model,
-        itemId,
-      });
+    const owned = {
+      brand: product.brand,
+      model: product.model,
+      itemId,
+      stem: homeDepotMediaStem(product.imageUrls[0] || ""),
+    };
+    product.imageUrls = selectHomeDepotSearchPhotos(product.imageUrls, owned);
+
+    if (product.imageUrls.length < 3) {
+      const extra = await searchCatalogPhotos(owned);
       product.imageUrls = uniqueHomeDepotImages([
         ...product.imageUrls,
         ...extra,

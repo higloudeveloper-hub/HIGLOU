@@ -121,4 +121,21 @@ describe("Home Depot gallery angles", () => {
     expect(urls.some((u) => u.includes("-e1_1000.jpg"))).toBe(true);
     expect(urls.some((u) => u.includes("-40_1000.jpg"))).toBe(true);
   });
+
+  it("drops related-product photos from the same Home Depot page", () => {
+    const html = `
+      <meta property="og:image" content="https://images.thdstatic.com/productImages/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/svn/milwaukee-brad-nailers-2541-20-48-73-2010-64_400.jpg" />
+      <img src="https://images.thdstatic.com/productImages/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/svn/milwaukee-brad-nailers-2541-20-48-73-2010-e1_400.jpg" />
+      <img src="https://images.thdstatic.com/productImages/dddddddd-dddd-dddd-dddd-dddddddddddd/svn/milwaukee-power-drills-2904-20-64_400.jpg" />
+    `;
+    const product = parseHomeDepotProductPage(html, {
+      itemId: "330557271",
+      url: "https://www.homedepot.com/p/330557271",
+    });
+    expect(product.imageUrls.every((u) => u.includes("2541-20-48-73-2010"))).toBe(
+      true,
+    );
+    expect(product.imageUrls.some((u) => u.includes("2904-20"))).toBe(false);
+    expect(product.imageUrls.length).toBe(2);
+  });
 });

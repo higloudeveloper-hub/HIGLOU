@@ -198,20 +198,49 @@ export function uniqueHomeDepotImages(urls: string[]): string[] {
   return uniqueUrls(urls).slice(0, DEFAULT_VALUES.maxImages);
 }
 
-/** Keep search-result photos that belong to this SKU, not a similar floodlight. */
+const GENERIC_HD_MODEL =
+  /^(fuel|kit|set|combo|pack|max|m12|m18|volt|black|white|red|new)$/i;
+
+export function isGenericHomeDepotModel(model: string): boolean {
+  const m = String(model || "").trim();
+  if (m.length < 6) return true;
+  if (/^\d{4}$/.test(m)) return true;
+  return GENERIC_HD_MODEL.test(m);
+}
+
+/** Filename stem without the 64_1000 / e1_600 gallery suffix. */
+export function homeDepotMediaStem(url: string): string {
+  const file = (String(url || "").split("?")[0].split("/").pop() || "")
+    .replace(/\.(jpe?g|png|webp)$/i, "")
+    .toLowerCase();
+  return file.replace(/-[a-z0-9]{1,3}_\d+$/i, "");
+}
+
+export function belongsToHomeDepotProduct(
+  url: string,
+  opts: { model?: string; itemId?: string; stem?: string },
+): boolean {
+  const u = String(url || "").toLowerCase();
+  if (!u) return false;
+  const itemId = String(opts.itemId || "").trim().toLowerCase();
+  if (itemId.length >= 8 && u.includes(itemId)) return true;
+  const model = String(opts.model || "").trim();
+  if (model && !isGenericHomeDepotModel(model) && u.includes(model.toLowerCase())) {
+    return true;
+  }
+  const stem = String(opts.stem || "").trim().toLowerCase();
+  if (stem.length >= 12 && homeDepotMediaStem(u) === stem) return true;
+  return false;
+}
+
+/** Keep photos of this SKU only — not related Milwaukee tools on the same page. */
 export function selectHomeDepotSearchPhotos(
   urls: string[],
-  opts: { model?: string; itemId?: string },
+  opts: { model?: string; itemId?: string; stem?: string },
 ): string[] {
   const all = uniqueHomeDepotImages(urls);
-  const needles = [opts.model, opts.itemId]
-    .map((n) => String(n || "").trim().toLowerCase())
-    .filter((n) => n.length >= 4);
-  if (!needles.length) return all;
-  const matched = all.filter((url) =>
-    needles.some((n) => url.toLowerCase().includes(n)),
-  );
-  return matched.length ? matched : [];
+  const matched = all.filter((url) => belongsToHomeDepotProduct(url, opts));
+  return matched;
 }
 
 export function parseHomeDepotProductPage(
@@ -254,11 +283,19 @@ export function parseHomeDepotProductPage(
       ? ldGtin
       : "");
 
-  const imageUrls = uniqueHomeDepotImages([
-    ...ldImages,
-    attr(html, "og:image"),
-    ...collectHomeDepotImageUrlsFromHtml(html),
-  ]);
+  const ogImage = attr(html, "og:image");
+  const stem = homeDepotMediaStem(ogImage || (typeof ldImages[0] === "string" ? ldImages[0] : ""));
+  const owned = {
+    model: model || ldMpn,
+    itemId: meta.itemId,
+    stem,
+  };
+  const imageUrls = uniqueHomeDepotImages(
+    selectHomeDepotSearchPhotos(
+      [...ldImages, ogImage, ...collectHomeDepotImageUrlsFromHtml(html)],
+      owned,
+    ),
+  );
 
   return {
     itemId: meta.itemId,

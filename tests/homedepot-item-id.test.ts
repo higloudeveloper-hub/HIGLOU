@@ -41,6 +41,18 @@ describe("parseHomeDepotLink", () => {
     expect(identity.title).toMatch(/Max Detect/i);
     expect(identity.title).toMatch(/Flood Light/i);
   });
+
+  it("reads a Milwaukee combo model, not the trailing 2010 glasses SKU", () => {
+    const parsed = parseHomeDepotLink(
+      "https://www.homedepot.com/p/Milwaukee-M12-FUEL-12-Volt-Lithium-Ion-Brushless-Cordless-18-Gauge-1-1-2-in-Compact-Brad-Nailer-Tool-Only-with-Safety-Glasses-2541-20-48-73-2010/330557271",
+    );
+    expect(parsed?.itemId).toBe("330557271");
+    const identity = identityFromHomeDepotLink(parsed!);
+    expect(identity.brand).toBe("Milwaukee");
+    expect(identity.model).toBe("2541-20-48-73-2010");
+    expect(identity.model).not.toBe("2010");
+    expect(identity.title).toMatch(/Brad Nailer/i);
+  });
 });
 
 describe("detectCatalogStore", () => {

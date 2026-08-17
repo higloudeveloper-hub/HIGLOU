@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import { searchHomeDepotCatalogPhotos } from "@/lib/homedepot/fetch-product";
+import { searchHomeDepotCatalogPhotos, homeDepotSearchQueries } from "@/lib/homedepot/fetch-product";
 import { selectHomeDepotSearchPhotos } from "@/lib/homedepot/parse-product";
 
 function readRepo(relative: string): string {
@@ -46,6 +46,21 @@ describe("Home Depot import stays on Higlou", () => {
 });
 
 describe("Home Depot catalog photo search", () => {
+  it("searches compact SKUs like VDH35 by brand and model", () => {
+    const queries = homeDepotSearchQueries({
+      brand: "Vissani",
+      model: "VDH35",
+      itemId: "319166850",
+      stem: "white-vissani-dehumidifiers-vdh35",
+      title: "Vissani 35 pt Dehumidifier for Basement Garage or Wet Rooms",
+    });
+    expect(queries.some((q) => /Vissani VDH35 homedepot/i.test(q))).toBe(true);
+    expect(queries.some((q) => /"VDH35-e4"/i.test(q))).toBe(true);
+    expect(queries.some((q) => /whites-vissani-dehumidifiers-vdh35/i.test(q))).toBe(
+      true,
+    );
+  });
+
   it(
     "finds wall-pack photos from public search without opening Home Depot",
     async () => {
@@ -58,6 +73,23 @@ describe("Home Depot catalog photo search", () => {
       expect(urls.length).toBeGreaterThanOrEqual(2);
       expect(urls.every((u) => /dw9582bk-c/i.test(u))).toBe(true);
       expect(urls.every((u) => /thdstatic|homedepot-static/i.test(u))).toBe(true);
+    },
+    45_000,
+  );
+
+  it(
+    "keeps VDH35 dehumidifier photos, not a related Vissani SKU",
+    async () => {
+      const urls = await searchHomeDepotCatalogPhotos({
+        brand: "Vissani",
+        model: "VDH35",
+        itemId: "319166850",
+        stem: "white-vissani-dehumidifiers-vdh35",
+        title: "Vissani 35 pt Dehumidifier",
+      });
+      expect(urls.length).toBeGreaterThanOrEqual(1);
+      expect(urls.every((u) => /vdh35/i.test(u))).toBe(true);
+      expect(urls.some((u) => /vad35s1awt/i.test(u))).toBe(false);
     },
     45_000,
   );

@@ -1,5 +1,6 @@
 import { DEFAULT_VALUES } from "@/config/default-values";
 import { isUsableCatalogBullet } from "@/lib/catalog/bullets";
+import { isCompactHomeDepotSku } from "@/lib/homedepot/item-id";
 
 export type HomeDepotProductDraft = {
   itemId: string;
@@ -236,6 +237,8 @@ const GENERIC_HD_MODEL =
 
 export function isGenericHomeDepotModel(model: string): boolean {
   const m = String(model || "").trim();
+  if (!m) return true;
+  if (isCompactHomeDepotSku(m)) return false;
   if (m.length < 6) return true;
   if (/^\d{4}$/.test(m)) return true;
   return GENERIC_HD_MODEL.test(m);
@@ -274,6 +277,26 @@ export function homeDepotMediaStem(url: string): string {
   return file.replace(/-[a-z0-9]{1,3}_\d+$/i, "");
 }
 
+/** HD SEO slugs flip white/whites (and black/blacks) on the same SKU. */
+export function normalizeHomeDepotStem(stem: string): string {
+  return String(stem || "")
+    .trim()
+    .toLowerCase()
+    .replace(/^whites-/, "white-")
+    .replace(/^blacks-/, "black-");
+}
+
+export function homeDepotStemVariants(stem: string): string[] {
+  const s = String(stem || "").trim().toLowerCase();
+  if (s.length < 12) return [];
+  const variants = new Set([s]);
+  if (s.startsWith("whites-")) variants.add(`white-${s.slice(7)}`);
+  else if (s.startsWith("white-")) variants.add(`whites-${s.slice(6)}`);
+  if (s.startsWith("blacks-")) variants.add(`black-${s.slice(7)}`);
+  else if (s.startsWith("black-")) variants.add(`blacks-${s.slice(6)}`);
+  return [...variants];
+}
+
 function homeDepotModelNeedles(model: string): string[] {
   const m = String(model || "").trim();
   if (!m || isGenericHomeDepotModel(m)) return [];
@@ -305,7 +328,12 @@ export function belongsToHomeDepotProduct(
     if (compact.length >= 6 && u.replace(/-/g, "").includes(compact)) return true;
   }
   const stem = String(opts.stem || "").trim().toLowerCase();
-  if (stem.length >= 12 && homeDepotMediaStem(u) === stem) return true;
+  if (
+    stem.length >= 12 &&
+    normalizeHomeDepotStem(homeDepotMediaStem(u)) === normalizeHomeDepotStem(stem)
+  ) {
+    return true;
+  }
   return false;
 }
 

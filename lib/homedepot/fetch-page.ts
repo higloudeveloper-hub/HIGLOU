@@ -1,5 +1,9 @@
 import { parseHomeDepotLink } from "@/lib/homedepot/item-id";
-import { fetchHomeDepotMobileGallery, IPHONE_SAFARI_UA } from "@/lib/homedepot/mobile-gallery";
+import {
+  fetchHomeDepotMobileGallery,
+  homeDepotSessionCookie,
+  IPHONE_SAFARI_UA,
+} from "@/lib/homedepot/mobile-gallery";
 import {
   collectHomeDepotImageUrlsFromHtml,
   dedupeHomeDepotImages,
@@ -9,7 +13,7 @@ import {
 const ANDROID_UA =
   "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36";
 
-function headersFor(userAgent: string): Record<string, string> {
+function headersFor(userAgent: string, cookie?: string): Record<string, string> {
   return {
     "User-Agent": userAgent,
     Accept:
@@ -18,6 +22,7 @@ function headersFor(userAgent: string): Record<string, string> {
     "Cache-Control": "no-cache",
     "sec-ch-ua-mobile": "?1",
     "sec-ch-ua-platform": userAgent.includes("iPhone") ? '"iOS"' : '"Android"',
+    ...(cookie ? { Cookie: cookie } : {}),
   };
 }
 
@@ -30,9 +35,9 @@ function scoreHtml(html: string): number {
   return html.length + galleryCount(html) * 50_000;
 }
 
-async function readPage(url: string, userAgent: string): Promise<string> {
+async function readPage(url: string, userAgent: string, cookie?: string): Promise<string> {
   const res = await fetch(url, {
-    headers: headersFor(userAgent),
+    headers: headersFor(userAgent, cookie),
     redirect: "follow",
     cache: "no-store",
     signal: AbortSignal.timeout(18_000),
@@ -50,10 +55,11 @@ export async function fetchHomeDepotPageHtml(input: string): Promise<string> {
   );
   if (galleryCount(fromIphoneApi) >= 6) return fromIphoneApi;
 
+  const cookie = await homeDepotSessionCookie().catch(() => "");
   const pages = await Promise.all(
     [IPHONE_SAFARI_UA, ANDROID_UA].map(async (ua) => {
       try {
-        return await readPage(parsed.canonicalUrl, ua);
+        return await readPage(parsed.canonicalUrl, ua, cookie);
       } catch {
         return "";
       }

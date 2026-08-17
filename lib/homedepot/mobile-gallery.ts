@@ -22,7 +22,11 @@ export const HOME_DEPOT_SEARCH_GALLERY_QUERY = `query searchModel($keyword: Stri
   }
 }`;
 
-function iphoneHeaders(referer: string, experience: string): Record<string, string> {
+function iphoneHeaders(
+  referer: string,
+  experience: string,
+  extra?: Record<string, string>,
+): Record<string, string> {
   return {
     "User-Agent": IPHONE_SAFARI_UA,
     Accept: "*/*",
@@ -34,7 +38,37 @@ function iphoneHeaders(referer: string, experience: string): Record<string, stri
     "x-hd-dc": "origin",
     "sec-ch-ua-mobile": "?1",
     "sec-ch-ua-platform": '"iOS"',
+    ...extra,
   };
+}
+
+let sessionCookieJob: Promise<string> | null = null;
+
+/** Homepage cookies — the /p/ page is often 403 without a session. */
+export function homeDepotSessionCookie(): Promise<string> {
+  if (!sessionCookieJob) {
+    sessionCookieJob = (async () => {
+      const res = await fetch("https://www.homedepot.com/", {
+        headers: {
+          "User-Agent": IPHONE_SAFARI_UA,
+          Accept: "text/html,application/xhtml+xml,*/*;q=0.8",
+          "Accept-Language": "en-US,en;q=0.9",
+        },
+        redirect: "follow",
+        cache: "no-store",
+        signal: AbortSignal.timeout(10_000),
+      });
+      const cookies =
+        typeof res.headers.getSetCookie === "function"
+          ? res.headers.getSetCookie()
+          : [];
+      return cookies
+        .map((row) => String(row || "").split(";")[0].trim())
+        .filter(Boolean)
+        .join("; ");
+    })().catch(() => "");
+  }
+  return sessionCookieJob;
 }
 
 function galleryHits(body: string): number {
@@ -46,10 +80,15 @@ async function postJson(
   payload: unknown,
   experience: string,
   referer: string,
+  cookie: string,
 ): Promise<string> {
   const res = await fetch(url, {
     method: "POST",
-    headers: iphoneHeaders(referer, experience),
+    headers: iphoneHeaders(
+      referer,
+      experience,
+      cookie ? { Cookie: cookie } : undefined,
+    ),
     body: JSON.stringify(payload),
     redirect: "follow",
     cache: "no-store",
@@ -74,30 +113,35 @@ export async function fetchHomeDepotMobileGallery(itemId: string): Promise<strin
     query: HOME_DEPOT_SEARCH_GALLERY_QUERY,
   };
 
+  const cookie = await homeDepotSessionCookie();
   const attempts = [
     postJson(
       "https://apionline.homedepot.com/federation-gateway/graphql?opname=productClientOnlyProduct",
       productPayload,
       "general-merchandise",
       referer,
+      cookie,
     ),
     postJson(
       "https://www.homedepot.com/federation-gateway/graphql?opname=productClientOnlyProduct",
       productPayload,
       "general-merchandise",
       referer,
+      cookie,
     ),
     postJson(
       "https://apionline.homedepot.com/federation-gateway/graphql?opname=searchModel",
       searchPayload,
       "general-merchandise",
       referer,
+      cookie,
     ),
     postJson(
       "https://apionline.homedepot.com/federation-gateway/graphql?opname=productClientOnlyProduct",
       productPayload,
       "mobile-web",
       referer,
+      cookie,
     ),
   ].map((job) => job.catch(() => ""));
 

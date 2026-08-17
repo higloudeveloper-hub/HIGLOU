@@ -77,6 +77,18 @@ describe("parseHomeDepotLink", () => {
     expect(identity.brand).toBe("Commercial");
     expect(identity.title).toMatch(/Wall Pack/i);
   });
+
+  it("reads a compact SKU like VDH35 from the SEO slug", () => {
+    const parsed = parseHomeDepotLink(
+      "https://www.homedepot.com/p/Vissani-35-pt-Dehumidifier-for-Basement-Garage-or-Wet-Rooms-up-to-3000-sq-ft-in-White-Energy-Star-VDH35/319166850",
+    );
+    expect(parsed?.itemId).toBe("319166850");
+    const identity = identityFromHomeDepotLink(parsed!);
+    expect(identity.model).toBe("VDH35");
+    expect(identity.brand).toBe("Vissani");
+    expect(identity.title).toMatch(/Dehumidifier/i);
+    expect(identity.title).not.toMatch(/VDH35/i);
+  });
 });
 
 describe("detectCatalogStore", () => {

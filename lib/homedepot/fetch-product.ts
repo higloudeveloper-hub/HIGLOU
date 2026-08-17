@@ -3,12 +3,12 @@ import {
   identityFromHomeDepotLink,
   parseHomeDepotLink,
 } from "@/lib/homedepot/item-id";
-import { fetchHomeDepotMobileGallery, IPHONE_SAFARI_UA } from "@/lib/homedepot/mobile-gallery";
+import { fetchHomeDepotMobileGallery, homeDepotSessionCookie, IPHONE_SAFARI_UA } from "@/lib/homedepot/mobile-gallery";
 import {
   collectHomeDepotImageUrlsFromHtml,
   dedupeHomeDepotImages,
   homeDepotMediaStem,
-  HOME_DEPOT_GALLERY_TYPES,
+  homeDepotStemVariants,
   isGenericHomeDepotModel,
   isHomeDepotBlockedPage,
   parseHomeDepotProductPage,
@@ -30,7 +30,7 @@ const DESKTOP_UA =
 // Desktop Chrome is Akamai 403. Prefer clients that still get the gallery JSON.
 const USER_AGENTS = [IPHONE_SAFARI_UA, ANDROID_UA, GOOGLEBOT_UA, BINGBOT_UA, DESKTOP_UA];
 
-function headersFor(userAgent: string): Record<string, string> {
+function headersFor(userAgent: string, cookie?: string): Record<string, string> {
   const mobile = /iPhone|Android/i.test(userAgent);
   return {
     "User-Agent": userAgent,
@@ -38,6 +38,7 @@ function headersFor(userAgent: string): Record<string, string> {
       "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
     "Accept-Language": "en-US,en;q=0.9",
     "Cache-Control": "no-cache",
+    ...(cookie ? { Cookie: cookie } : {}),
     ...(mobile
       ? {
           "sec-ch-ua-mobile": "?1",
@@ -50,9 +51,10 @@ function headersFor(userAgent: string): Record<string, string> {
 async function readUrl(
   url: string,
   userAgent: string,
+  cookie?: string,
 ): Promise<{ finalUrl: string; body: string; ok: boolean }> {
   const res = await fetch(url, {
-    headers: headersFor(userAgent),
+    headers: headersFor(userAgent, cookie),
     redirect: "follow",
     cache: "no-store",
     signal: AbortSignal.timeout(FETCH_MS),
@@ -88,10 +90,11 @@ async function fetchViaEdgePage(origin: string, productUrl: string): Promise<str
 }
 
 async function fetchProductHtml(productUrl: string): Promise<string> {
+  const cookie = await homeDepotSessionCookie().catch(() => "");
   const pages = await Promise.all(
     USER_AGENTS.map(async (ua) => {
       try {
-        return (await readUrl(productUrl, ua)).body;
+        return (await readUrl(productUrl, ua, cookie)).body;
       } catch {
         return "";
       }
@@ -184,7 +187,9 @@ async function runImageSearch(
   opts: { brand: string; model: string; itemId: string; stem?: string },
 ): Promise<string[]> {
   const pooled: string[] = [];
+  let misses = 0;
   for (const query of queries) {
+    const before = selectHomeDepotSearchPhotos(pooled, opts).length;
     const [bingPage, bingAsync, ddg] = await Promise.all([
       fetchHtml(
         `https://www.bing.com/images/search?q=${encodeURIComponent(query)}&form=HDRSC2&first=1&count=50`,
@@ -206,19 +211,24 @@ async function runImageSearch(
       soFar = selectHomeDepotSearchPhotos(pooled, opts);
     }
     if (soFar.length >= 6) return soFar;
+    if (soFar.length > 0 && soFar.length === before) {
+      misses += 1;
+      if (misses >= 3) return soFar;
+    } else {
+      misses = 0;
+    }
   }
   return selectHomeDepotSearchPhotos(pooled, opts);
 }
 
 function homeDepotModelSearchTokens(model: string): string[] {
   const m = String(model || "").trim();
-  if (!m) return [];
+  if (!m || isGenericHomeDepotModel(m)) return [];
   const tokens = [m];
   const stripped = m.replace(/-[A-Z0-9]{1,3}$/i, "");
   if (
     stripped &&
     stripped !== m &&
-    stripped.length >= 6 &&
     /\d/.test(stripped) &&
     !isGenericHomeDepotModel(stripped)
   ) {
@@ -227,38 +237,46 @@ function homeDepotModelSearchTokens(model: string): string[] {
   return tokens;
 }
 
+function homeDepotTitleSearchToken(title: string): string {
+  return String(title || "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .split(" ")
+    .slice(0, 8)
+    .join(" ");
+}
+
 export function homeDepotSearchQueries(opts: {
   brand: string;
   model: string;
   itemId: string;
   stem?: string;
+  title?: string;
 }): string[] {
   const models = homeDepotModelSearchTokens(opts.model);
-  const stem = String(opts.stem || "").trim();
+  const stems = homeDepotStemVariants(opts.stem || "");
+  const title = homeDepotTitleSearchToken(opts.title || "");
+  const extraTypes = ["e1", "e4", "40", "1d"] as const;
   const modelQueries = models.flatMap((model) => [
+    [opts.brand, model, "homedepot"].filter(Boolean).join(" "),
+    [opts.brand, model, "thdstatic"].filter(Boolean).join(" "),
     [model, "thdstatic"].filter(Boolean).join(" "),
     [model, "site:homedepot.com"].filter(Boolean).join(" "),
-    model && !isGenericHomeDepotModel(model)
-      ? `"${model}-e1" OR "${model}-e4" OR "${model}-1d" OR "${model}-40" thdstatic`
-      : "",
+    `"${model}-e1" OR "${model}-e4" OR "${model}-1d" OR "${model}-40" thdstatic`,
   ]);
-  const extraTypes = HOME_DEPOT_GALLERY_TYPES.slice(0, 7);
   const typeQueries = models.slice(0, 1).flatMap((model) =>
     extraTypes.map((type) => `"${model}-${type}" thdstatic`),
   );
-  const stemTypeQueries =
-    stem.length >= 12
-      ? extraTypes.map((type) => `"${stem}-${type}" thdstatic`)
-      : [];
+  const stemQueries = stems.flatMap((stem) => [
+    `${stem} thdstatic`,
+    `"${stem}-e1" OR "${stem}-e2" OR "${stem}-e4" OR "${stem}-1d" OR "${stem}-40" OR "${stem}-a0" thdstatic`,
+  ]);
   return [
     ...modelQueries,
     ...typeQueries,
-    ...stemTypeQueries,
-    stem.length >= 12 ? `${stem} thdstatic` : "",
-    stem.length >= 12
-      ? `"${stem}-e1" OR "${stem}-e2" OR "${stem}-e4" OR "${stem}-1d" OR "${stem}-40" OR "${stem}-a0" thdstatic`
-      : "",
-    [opts.brand, models[0] || "", "homedepot"].filter(Boolean).join(" "),
+    ...stemQueries,
+    title ? `${title} thdstatic` : "",
+    title ? `${title} homedepot` : "",
     [opts.itemId, "homedepot"].filter(Boolean).join(" "),
     [opts.itemId, "thdstatic"].filter(Boolean).join(" "),
   ].filter((q, index, all) => {
@@ -277,6 +295,7 @@ async function searchCatalogPhotos(opts: {
   model: string;
   itemId: string;
   stem?: string;
+  title?: string;
 }): Promise<string[]> {
   return runImageSearch(homeDepotSearchQueries(opts), opts);
 }
@@ -286,6 +305,7 @@ export async function searchHomeDepotCatalogPhotos(opts: {
   model: string;
   itemId: string;
   stem?: string;
+  title?: string;
 }): Promise<string[]> {
   return searchCatalogPhotos(opts);
 }
@@ -331,6 +351,7 @@ export async function fetchHomeDepotProduct(
       model: product.model,
       itemId,
       stem: homeDepotMediaStem(product.imageUrls[0] || ""),
+      title: product.title,
     };
     product.imageUrls = selectHomeDepotSearchPhotos(
       [...product.imageUrls, ...collectHomeDepotImageUrlsFromHtml(html)],

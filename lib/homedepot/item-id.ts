@@ -31,7 +31,13 @@ function slugFromPath(pathname: string, itemId: string): string {
   return decodeURIComponent(slug);
 }
 
-/** Trailing HD model: 17000148, DCD791P1, BEBRNOV-PD27, or combo 2541-20-48-73-2010. */
+/** Compact HD SKUs like VDH35, DCD12 — too short for the 6-char rule, still unique. */
+export function isCompactHomeDepotSku(model: string): boolean {
+  const m = String(model || "").trim();
+  return m.length >= 4 && m.length <= 12 && /^[A-Z]{2,}\d{2,}[A-Z0-9]*$/i.test(m);
+}
+
+/** Trailing HD model: 17000148, DCD791P1, VDH35, BEBRNOV-PD27, or combo 2541-20-48-73-2010. */
 export function modelFromHomeDepotSlug(slug: string): string {
   const s = String(slug || "").trim();
   if (!s) return "";
@@ -44,6 +50,7 @@ export function modelFromHomeDepotSlug(slug: string): string {
 
   const last = tokens[tokens.length - 1] || "";
   if (/^[A-Z0-9][A-Z0-9.]{5,}$/i.test(last)) return last;
+  if (isCompactHomeDepotSku(last)) return last;
   return "";
 }
 
@@ -68,8 +75,9 @@ function trailingHomeDepotModel(tokens: string[]): string {
   }
   const model = parts.join("-");
   const compact = model.replace(/-/g, "");
-  if (!model || !/\d/.test(model) || compact.length < 6) return "";
-  return model;
+  if (!model || !/\d/.test(model)) return "";
+  if (compact.length >= 6 || isCompactHomeDepotSku(compact)) return model;
+  return "";
 }
 
 /** Title / brand / model from the SEO slug when Home Depot blocks the HTML. */

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   collectHomeDepotImageUrlsFromHtml,
+  isGenericHomeDepotModel,
   isLikelyHomeDepotPlaceholder,
   parseHomeDepotProductPage,
   selectHomeDepotSearchPhotos,
@@ -84,6 +85,15 @@ describe("parseHomeDepotProductPage", () => {
     expect(product.imageUrls.every((u) => u.includes("_1000."))).toBe(true);
     expect(product.imageUrls.some((u) => u.includes("-e1_1000."))).toBe(true);
     expect(product.imageUrls.some((u) => u.includes("-1d_1000."))).toBe(true);
+  });
+});
+
+describe("isGenericHomeDepotModel", () => {
+  it("keeps compact SKUs like VDH35 and drops color words", () => {
+    expect(isGenericHomeDepotModel("VDH35")).toBe(false);
+    expect(isGenericHomeDepotModel("white")).toBe(true);
+    expect(isGenericHomeDepotModel("M12")).toBe(true);
+    expect(isGenericHomeDepotModel("DW9582BK-C")).toBe(false);
   });
 });
 
@@ -175,6 +185,22 @@ describe("selectHomeDepotSearchPhotos", () => {
     );
     expect(photos).toHaveLength(2);
     expect(photos.every((u) => u.includes("dw9582bk-c"))).toBe(true);
+  });
+
+  it("keeps VDH35 photos and drops a related Vissani dehumidifier", () => {
+    const html = `
+      https://images.thdstatic.com/productImages/aaa/svn/whites-vissani-dehumidifiers-vdh35-64_600.jpg
+      https://images.thdstatic.com/productImages/bbb/svn/white-vissani-dehumidifiers-vdh35-e4_600.jpg
+      https://images.thdstatic.com/productImages/ccc/svn/white-vissani-dehumidifiers-vad35s1awt-64_600.jpg
+      https://images.thdstatic.com/productImages/ddd/svn/white-vissani-dehumidifiers-vad35s1awt-e4_600.jpg
+    `;
+    const photos = selectHomeDepotSearchPhotos(
+      collectHomeDepotImageUrlsFromHtml(html),
+      { model: "VDH35", itemId: "319166850" },
+    );
+    expect(photos).toHaveLength(2);
+    expect(photos.every((u) => /vdh35/i.test(u))).toBe(true);
+    expect(photos.some((u) => /vad35s1awt/i.test(u))).toBe(false);
   });
 
   it("keeps the repeating wall-pack stem when the model is missing", () => {

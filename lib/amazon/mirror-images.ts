@@ -28,14 +28,17 @@ export type MirroredAmazonImage = {
   sizeBytes: number;
 };
 
+const IPHONE_UA =
+  "Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Mobile/15E148 Safari/604.1";
+
 async function fetchBuffer(url: string): Promise<Buffer | null> {
   try {
     const res = await fetch(url, {
       headers: {
-        "User-Agent":
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",
+        "User-Agent": IPHONE_UA,
         Accept: "image/jpeg,image/png,image/webp;q=0.8,*/*;q=0.5",
         Referer: "https://www.amazon.com/",
+        "Accept-Language": "en-US,en;q=0.9",
       },
       cache: "no-store",
       signal: AbortSignal.timeout(20_000),
@@ -84,6 +87,26 @@ async function downloadLargestAmazonImage(url: string): Promise<Buffer | null> {
     .toBuffer();
 }
 
+async function mapPool<T, R>(
+  items: T[],
+  limit: number,
+  fn: (item: T, index: number) => Promise<R>,
+): Promise<R[]> {
+  const out: R[] = new Array(items.length);
+  let next = 0;
+  const worker = async () => {
+    while (next < items.length) {
+      const index = next;
+      next += 1;
+      out[index] = await fn(items[index], index);
+    }
+  };
+  await Promise.all(
+    Array.from({ length: Math.min(limit, items.length) }, () => worker()),
+  );
+  return out;
+}
+
 export async function mirrorAmazonImages(options: {
   imageUrls: string[];
   userId: string;
@@ -91,14 +114,14 @@ export async function mirrorAmazonImages(options: {
 }): Promise<MirroredAmazonImage[]> {
   await ensureProductImagesBucket();
   const admin = createAdminClient();
-  const mirrored: MirroredAmazonImage[] = [];
+  const urls = options.imageUrls.slice(0, DEFAULT_VALUES.maxImages);
 
-  for (const [index, imageUrl] of options.imageUrls.entries()) {
+  const rows = await mapPool(urls, 4, async (imageUrl, index) => {
     try {
       const raw = await downloadLargestAmazonImage(imageUrl);
-      if (!raw) continue;
+      if (!raw) return null;
       const resolved = resolveImageMime(raw, "image/jpeg");
-      if (!resolved.mime) continue;
+      if (!resolved.mime) return null;
       const compressed = await compressImageBuffer(raw);
       const ext =
         resolved.mime === "image/png"
@@ -114,19 +137,19 @@ export async function mirrorAmazonImages(options: {
           contentType: resolved.mime,
           upsert: false,
         });
-      if (error) continue;
-      mirrored.push({
+      if (error) return null;
+      const row: MirroredAmazonImage = {
         publicUrl: publicObjectUrl(storagePath),
         storagePath,
         fileName,
         mimeType: resolved.mime,
         sizeBytes: compressed.byteLength,
-      });
+      };
+      return row;
     } catch {
-      /* skip one bad image */
+      return null;
     }
-    if (mirrored.length >= DEFAULT_VALUES.maxImages) break;
-  }
+  });
 
-  return mirrored;
+  return rows.filter((row): row is MirroredAmazonImage => Boolean(row));
 }

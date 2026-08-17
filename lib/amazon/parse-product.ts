@@ -69,16 +69,22 @@ export function amazonImageId(url: string): string | null {
 
 /** Large-file candidates for one Amazon photo (original first). */
 export function amazonImageCandidates(url: string): string[] {
-  const id = amazonImageId(url);
-  if (!id) {
-    const upgraded = upgradeAmazonImage(url);
-    return upgraded ? [upgraded] : [];
+  const clean = String(url || "").trim().replace(/&amp;/g, "&");
+  const id = amazonImageId(clean);
+  const seen = new Set<string>();
+  const out: string[] = [];
+  const push = (next: string) => {
+    if (!next || seen.has(next)) return;
+    seen.add(next);
+    out.push(next);
+  };
+  if (/^https:\/\//i.test(clean) && !AMAZON_JUNK.test(clean)) push(clean);
+  if (id) {
+    push(`https://m.media-amazon.com/images/I/${id}.jpg`);
+    push(`https://m.media-amazon.com/images/I/${id}._AC_SL1500_.jpg`);
+    push(`https://m.media-amazon.com/images/I/${id}._SL1500_.jpg`);
   }
-  return [
-    `https://m.media-amazon.com/images/I/${id}.jpg`,
-    `https://m.media-amazon.com/images/I/${id}._AC_SL1500_.jpg`,
-    `https://m.media-amazon.com/images/I/${id}._SL1500_.jpg`,
-  ];
+  return out;
 }
 
 /** Prefer a large Amazon image variant. */
@@ -127,17 +133,53 @@ function jsonLdProducts(html: string): Record<string, unknown>[] {
 }
 
 function colorImages(html: string): string[] {
-  const block =
-    html.match(/['"]colorImages['"]\s*:\s*\{\s*['"]initial['"]\s*:\s*(\[[\s\S]*?\])/i)?.[1] ||
-    html.match(/colorImages['"]\s*:\s*\{\s*initial:\s*(\[[\s\S]*?\])/i)?.[1];
-  if (!block) return [];
-  const urls: string[] = [];
-  const re = /"(?:hiRes|large|mainUrl)"\s*:\s*"(https:[^"]+)"/g;
-  let match: RegExpExecArray | null;
-  while ((match = re.exec(block))) {
-    urls.push(match[1].replace(/\\u002F/g, "/"));
-  }
-  return urls;
+  const decoded = String(html || "")
+    .replace(/&quot;/g, '"')
+    .replace(/\\u002[fF]/g, "/")
+    .replace(/\\\//g, "/");
+  const start = decoded.search(/['"]colorImages['"]\s*:/i);
+  const block = start >= 0 ? decoded.slice(start, start + 80_000) : decoded;
+  const keyed = [
+    ...block.matchAll(
+      /['"](?:hiRes|large|mainUrl|thumb|hiResImage)['"]\s*:\s*['"](https:[^"']+)['"]/g,
+    ),
+  ].map((m) => m[1]);
+  const asJsonKeys = [
+    ...block.matchAll(
+      /['"](https:\/\/[^"']+(?:media-amazon|ssl-images-amazon)[^"']*\/images\/I\/[^"']+)['"]\s*:/gi,
+    ),
+  ].map((m) => m[1]);
+  const harvested = [
+    ...block.matchAll(
+      /https:\/\/[^"'\\\s]+(?:media-amazon|ssl-images-amazon)[^"'\\\s]*\/images\/I\/[^"'\\\s]+/gi,
+    ),
+  ].map((m) => m[0]);
+  return [...keyed, ...asJsonKeys, ...harvested];
+}
+
+function landingImages(html: string): string[] {
+  const decoded = String(html || "").replace(/&quot;/g, '"');
+  const dynamic =
+    decoded.match(
+      /data-a-dynamic-image=["'](\{[^"']+\})["']/i,
+    )?.[1] || "";
+  const fromLanding = [
+    ...decoded.matchAll(
+      /https:\/\/[^"'\\\s]+(?:media-amazon|ssl-images-amazon)[^"'\\\s]*\/images\/I\/[^"'\\\s]+/gi,
+    ),
+  ].map((m) => m[0]);
+  const fromDynamic = [
+    ...dynamic.matchAll(/"(https:\/\/[^"]+)"/g),
+  ].map((m) => m[1]);
+  return [...fromDynamic, ...fromLanding];
+}
+
+export function collectAmazonImageUrlsFromHtml(html: string): string[] {
+  return uniqueUrls([
+    ...colorImages(html),
+    ...landingImages(html),
+    ...imagesFromMarkdown(html),
+  ]);
 }
 
 function featureBullets(html: string): string[] {
@@ -233,6 +275,7 @@ export function parseAmazonProductPage(
 
   const imageUrls = uniqueUrls([
     ...colorImages(html),
+    ...landingImages(html),
     ...ldImages,
     attr(html, "og:image"),
     ...imagesFromMarkdown(html),

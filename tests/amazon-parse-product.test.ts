@@ -40,6 +40,22 @@ describe("parseAmazonProductPage", () => {
     expect(product.imageUrls.length).toBeGreaterThan(0);
     expect(product.imageUrls.every((u) => u.includes("_AC_SL1500_"))).toBe(true);
   });
+
+  it("keeps later gallery slides when the first photo has nested [width,height]", () => {
+    const product = parseAmazonProductPage(
+      `
+      'colorImages': { 'initial': [
+        {"hiRes":"https://m.media-amazon.com/images/I/71aaa._AC_SL1500_.jpg","main":{"https://m.media-amazon.com/images/I/71aaa._AC_SX679_.jpg":[679,679]}},
+        {"hiRes":"https://m.media-amazon.com/images/I/71bbb._AC_SL1500_.jpg","large":"https://m.media-amazon.com/images/I/71bbb._AC_SX679_.jpg"},
+        {"hiRes":"https://m.media-amazon.com/images/I/71ccc._AC_SL1500_.jpg","large":"https://m.media-amazon.com/images/I/71ccc._AC_SX679_.jpg"}
+      ] }
+      `,
+      { asin: "B0NESTED01", url: "https://www.amazon.com/dp/B0NESTED01" },
+    );
+    const ids = product.imageUrls.map((url) => url.match(/\/images\/I\/([^./]+)/i)?.[1]);
+    expect(ids).toEqual(expect.arrayContaining(["71aaa", "71bbb", "71ccc"]));
+    expect(new Set(ids).size).toBeGreaterThanOrEqual(3);
+  });
 });
 
 describe("upgradeAmazonImage", () => {

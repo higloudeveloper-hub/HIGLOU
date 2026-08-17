@@ -54,7 +54,9 @@ export async function POST(request: Request) {
   }
 
   try {
-    const product = await fetchAmazonProduct(url);
+    const product = await fetchAmazonProduct(url, {
+      pageOrigin: new URL(request.url).origin,
+    });
     const images = await mirrorAmazonImages({
       imageUrls: product.imageUrls,
       userId: auth.user.id,

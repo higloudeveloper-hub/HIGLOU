@@ -1,7 +1,6 @@
 import { parseHomeDepotLink } from "@/lib/homedepot/item-id";
 
 export const HOME_DEPOT_GALLERY_MESSAGE = "higlou-hd-gallery";
-export const HOME_DEPOT_CAPTURE_WINDOW = "higlou-hd";
 
 export type HomeDepotGalleryMessage = {
   type: typeof HOME_DEPOT_GALLERY_MESSAGE;

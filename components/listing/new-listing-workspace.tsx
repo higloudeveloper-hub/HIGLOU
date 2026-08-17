@@ -50,7 +50,6 @@ import { readAiProviderSettings } from "@/components/settings/ai-settings-form";
 import { detectCatalogStore } from "@/lib/catalog/detect-store";
 import { parseHomeDepotLink } from "@/lib/homedepot/item-id";
 import {
-  HOME_DEPOT_CAPTURE_WINDOW,
   homeDepotCaptureBookmarklet,
   isHomeDepotBrowserOrigin,
   isHomeDepotGalleryMessage,
@@ -287,7 +286,6 @@ export function NewListingWorkspace({
   );
   const analyzeAbortRef = useRef(false);
   const firstAttentionRef = useRef<HTMLDivElement | null>(null);
-  const hdWinRef = useRef<Window | null>(null);
   const hdProductUrlRef = useRef("");
   const hdCaptureTokenRef = useRef("");
   const [hdCaptureToken, setHdCaptureToken] = useState("");
@@ -1002,19 +1000,17 @@ export function NewListingWorkspace({
     const parsedHd = openHomeDepot ? parseHomeDepotLink(url) : null;
     if (parsedHd) {
       hdProductUrlRef.current = parsedHd.canonicalUrl;
-      const hdWin = window.open(
-        parsedHd.canonicalUrl,
-        HOME_DEPOT_CAPTURE_WINDOW,
-      );
-      hdWinRef.current = hdWin;
+      const hdWin = window.open(parsedHd.canonicalUrl, "_blank");
       setHdCapturePending(true);
-      toast.message(
-        "Home Depot is in the other window. Stay on Higlou — drag Bring all photos onto that tab.",
-      );
-    } else if (openHomeDepot) {
-      toast.error(
-        "Allow popups for Higlou so Home Depot can open next to this tab.",
-      );
+      if (hdWin) {
+        toast.message(
+          "Home Depot opened in a new tab. Stay on Higlou — drag Bring all photos onto that tab.",
+        );
+      } else {
+        toast.error(
+          "Allow Higlou to open a new tab so Home Depot can load beside this one.",
+        );
+      }
     }
 
     setCatalogImporting(store);
@@ -1078,8 +1074,6 @@ export function NewListingWorkspace({
           );
         } else {
           setHdCapturePending(false);
-          hdWinRef.current?.close();
-          hdWinRef.current = null;
           toast.success("Full Home Depot gallery loaded from that tab.");
         }
       } else if (shortGallery) {
@@ -1088,11 +1082,7 @@ export function NewListingWorkspace({
           "A few photos loaded. Drag Bring all photos onto the Home Depot tab for the rest.",
         );
       } else {
-        if (!shortGallery) {
-          setHdCapturePending(false);
-          hdWinRef.current?.close();
-          hdWinRef.current = null;
-        }
+        setHdCapturePending(false);
         toast.success(
           `${storeLabel} photos loaded — delete, add, or drag to reorder, then Continue.`,
         );
@@ -1118,9 +1108,6 @@ export function NewListingWorkspace({
       token: hdCaptureTokenRef.current,
     });
     void navigator.clipboard.writeText(href).catch(() => undefined);
-    if (hdProductUrlRef.current) {
-      window.open(hdProductUrlRef.current, HOME_DEPOT_CAPTURE_WINDOW);
-    }
     toast.message(
       "Drop the blue button onto the Home Depot tab — that copies every photo.",
     );

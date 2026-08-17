@@ -65,7 +65,7 @@ export function PhotosScreen({
           <div className="flex flex-wrap items-center gap-3">
             <div className="min-w-0 flex-1">
               <p className="text-[14px] font-medium text-[#141414]">
-                Home Depot is in the other window. Stay on this tab.
+                Home Depot opened in a new tab. Stay on this one.
               </p>
               <p className="mt-1 text-[13px] text-[#707070]">
                 Drag <span className="font-medium text-[#141414]">Bring all photos</span>{" "}

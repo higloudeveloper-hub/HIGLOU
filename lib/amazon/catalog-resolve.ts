@@ -2,7 +2,6 @@ import {
   amazonCatalogQueries,
   pickExactAmazonCatalog,
   pickSoleBarcodeCatalogHit,
-  pickTitleAmazonCatalog,
   type AmazonCatalogHit,
   type AmazonMatchHints,
 } from "@/lib/amazon/catalog-match";
@@ -24,7 +23,7 @@ export type AmazonResolveInput = AmazonMatchHints & {
 };
 
 export type AmazonResolveResult = {
-  mode: "existing" | "create";
+  mode: "existing" | "none";
   asin: string;
   productType: string;
   title: string;
@@ -183,11 +182,20 @@ export async function resolveAmazonCatalogMatch(opts: {
       marketplaceId: opts.marketplaceId,
       asin: importedAsin,
     });
+    if (!catalog) {
+      return {
+        mode: "none",
+        asin: importedAsin,
+        productType: "PRODUCT",
+        title: String(opts.listing.title || ""),
+        catalog: null,
+      };
+    }
     return {
       mode: "existing",
-      asin: catalog?.asin || importedAsin,
-      productType: catalog?.productType || "PRODUCT",
-      title: catalog?.title || String(opts.listing.title || ""),
+      asin: catalog.asin || importedAsin,
+      productType: catalog.productType || "PRODUCT",
+      title: catalog.title || String(opts.listing.title || ""),
       catalog,
     };
   }
@@ -220,15 +228,15 @@ export async function resolveAmazonCatalogMatch(opts: {
     );
   }
 
-  const createResult = (): AmazonResolveResult => ({
-    mode: "create",
+  const noneResult = (): AmazonResolveResult => ({
+    mode: "none",
     asin: "",
     productType: "PRODUCT",
     title: String(opts.listing.title || ""),
     catalog: null,
   });
 
-  if (!collected.length) return createResult();
+  if (!collected.length) return noneResult();
 
   const hydrated = await hydrateHits({
     accessToken: opts.accessToken,
@@ -242,9 +250,8 @@ export async function resolveAmazonCatalogMatch(opts: {
     pickSoleBarcodeCatalogHit(hydratedBarcode, hints);
   const match =
     barcodeMatch ||
-    pickExactAmazonCatalog(hydrated.hits, hints) ||
-    pickTitleAmazonCatalog(hydrated.hits, hints);
-  if (!match) return createResult();
+    pickExactAmazonCatalog(hydrated.hits, hints);
+  if (!match) return noneResult();
 
   const catalog = hydrated.catalogs.get(match.asin) || null;
   return {

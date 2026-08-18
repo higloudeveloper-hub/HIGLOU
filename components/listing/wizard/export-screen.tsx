@@ -694,9 +694,9 @@ export function ExportScreen({
                   )}
                   {amazonPublishResult?.asin ? (
                     <p className="mt-1.5 text-[12px] text-muted-foreground">
-                      {amazonPublishResult.mode === "create"
-                        ? `Created a new Amazon product ${amazonPublishResult.asin}.`
-                        : `Complete listing on existing ASIN ${amazonPublishResult.asin}. Seller Central still calls this an oferta because that product page already exists — Higlou sent photos, price, quantity, and shipping, not a price-only offer.`}
+                      Offer linked to ASIN {amazonPublishResult.asin}. Higlou
+                      sent only price, quantity, condition, and shipping — not
+                      brand or catalog data.
                       {amazonPublishResult.sellerCentralUrl ? (
                         <>
                           {" · "}
@@ -717,10 +717,9 @@ export function ExportScreen({
                     </p>
                   ) : (
                     <p className="mt-1.5 text-[12px] text-muted-foreground">
-                      Sends a complete listing: photos, title, price, quantity,
-                      and shipping template. If the ASIN already exists, Amazon
-                      attaches yours to that page and Seller Central will label
-                      it an oferta — that is not a price-only offer.
+                      Publishes an offer on a confirmed Amazon ASIN. If there is
+                      no exact UPC or brand+model match, Higlou stops instead of
+                      creating a new product page.
                     </p>
                   )}
                 </div>

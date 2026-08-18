@@ -1907,18 +1907,11 @@ export function NewListingWorkspace({
         sellerCentralUrl: body?.sellerCentralUrl,
         mode: body?.mode,
       });
-      toast.success(
-        body?.mode === "create"
-          ? "Created a new Amazon product"
-          : "Published complete Amazon listing",
-        {
-          description: body?.asin
-            ? body.mode === "create"
-              ? `New catalog product ${body.asin}`
-              : `Attached to existing ASIN ${body.asin} with photos, price, and shipping`
-            : `SKU ${body?.sku || fresh.sku}`,
-        },
-      );
+      toast.success("Published Amazon offer", {
+        description: body?.asin
+          ? `Offer on ASIN ${body.asin} · SKU ${body.sku || fresh.sku}`
+          : `SKU ${body?.sku || fresh.sku}`,
+      });
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Amazon publish failed";

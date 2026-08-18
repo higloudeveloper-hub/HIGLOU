@@ -129,12 +129,144 @@ export function amazonBrandGatingReason(issues: AmazonSpIssue[] | undefined): st
   return String(blocked.message || "").trim() || "Amazon suppressed this listing.";
 }
 
+export function amazonUserFacingIssues(
+  issues: AmazonSpIssue[] | undefined,
+  status?: string,
+): string {
+  return amazonIncompleteListingReason(issues, status);
+}
+
+function amazonBrandLockMessage(
+  issues: AmazonSpIssue[] | undefined,
+): string {
+  const list = Array.isArray(issues) ? issues : [];
+  const brandLock = list.find((issue) => {
+    const text = `${issue.code || ""} ${issue.message || ""}`;
+    return (
+      /\b5995\b/.test(text) ||
+      /may not change the brand name/i.test(text) ||
+      /brand name currently shown on the ASIN/i.test(text)
+    );
+  });
+  if (!brandLock) return "";
+  return "Amazon blocked a brand change on this ASIN (error 5995). Higlou must send an offer only: ASIN, SKU, price, quantity, condition, and shipping — not brand, title, or images.";
+}
+
+export type AmazonListingRestrictionReason = {
+  reasonCode: string;
+  message: string;
+  approvalUrl?: string;
+};
+
+export type AmazonListingRestriction = {
+  marketplaceId: string;
+  conditionType: string;
+  reasons: AmazonListingRestrictionReason[];
+};
+
+export function amazonRestrictionBlockMessage(
+  restrictions: AmazonListingRestriction[],
+): string {
+  const reasons = restrictions.flatMap((row) => row.reasons || []);
+  if (!reasons.length) return "";
+  const codes = reasons.map((row) => row.reasonCode.toUpperCase());
+  const amazonText = reasons
+    .map((row) => row.message)
+    .filter(Boolean)
+    .slice(0, 2)
+    .join(" · ");
+  const approvalUrl = reasons.find((row) => row.approvalUrl)?.approvalUrl;
+  if (codes.some((code) => /APPROVAL_REQUIRED|BRAND/.test(code))) {
+    return [
+      "Approval required. Amazon will not let this seller account list this ASIN until Selling applications is approved.",
+      amazonText,
+      approvalUrl,
+    ]
+      .filter(Boolean)
+      .join(" ");
+  }
+  if (codes.some((code) => /NOT_ELIGIBLE|SELLER/.test(code))) {
+    return [
+      "Your Amazon seller account cannot sell this ASIN.",
+      amazonText,
+    ]
+      .filter(Boolean)
+      .join(" ");
+  }
+  if (codes.some((code) => /CONDITION/.test(code))) {
+    return [
+      "Amazon does not allow this condition on this ASIN.",
+      amazonText,
+    ]
+      .filter(Boolean)
+      .join(" ");
+  }
+  if (codes.some((code) => /HAZMAT|COMPLIANCE/.test(code))) {
+    return [
+      "Amazon needs compliance or hazmat details before this ASIN can be sold.",
+      amazonText,
+    ]
+      .filter(Boolean)
+      .join(" ");
+  }
+  return amazonText || "Amazon restricted this ASIN for this seller account.";
+}
+
+export async function getAmazonListingsRestrictions(opts: {
+  accessToken: string;
+  sellerId: string;
+  marketplaceId: string;
+  asin: string;
+  conditionType: string;
+}): Promise<AmazonListingRestriction[]> {
+  const params = new URLSearchParams({
+    asin: opts.asin,
+    sellerId: opts.sellerId,
+    marketplaceIds: opts.marketplaceId,
+    conditionType: opts.conditionType,
+    reasonLocale: "en_US",
+  });
+  const { ok, status, json } = await amazonFetch(
+    opts.accessToken,
+    `/listings/2021-08-01/restrictions?${params.toString()}`,
+  );
+  if (!ok) {
+    const detail = amazonIssuesText(json);
+    if (status === 404) return [];
+    throw new Error(
+      detail || `Amazon listing restriction check failed (${status})`,
+    );
+  }
+  const rows = (json.restrictions as Array<Record<string, unknown>>) || [];
+  return rows.map((row) => ({
+    marketplaceId: String(row.marketplaceId || opts.marketplaceId),
+    conditionType: String(row.conditionType || opts.conditionType),
+    reasons: (
+      (row.reasons as Array<Record<string, unknown>> | undefined) || []
+    ).map((reason) => {
+      const links = (reason.links as Array<Record<string, unknown>> | undefined) || [];
+      const approval = links.find((link) =>
+        /approv|selling.?application/i.test(
+          `${link.title || ""} ${link.resource || ""}`,
+        ),
+      );
+      return {
+        reasonCode: String(reason.reasonCode || ""),
+        message: String(reason.message || ""),
+        approvalUrl: String(approval?.resource || links[0]?.resource || ""),
+      };
+    }),
+  }));
+}
+
 export function amazonIncompleteListingReason(
   issues: AmazonSpIssue[] | undefined,
   status?: string,
 ): string {
   const brand = amazonBrandGatingReason(issues);
   if (brand) return brand;
+  const brandLock = amazonBrandLockMessage(issues);
+  if (brandLock) return brandLock;
   const errors = amazonErrorIssues(issues);
   const text = amazonIssuesText({ issues: errors });
   if (/^INVALID$/i.test(String(status || "")) && text) {

@@ -34,7 +34,8 @@ describe("Amazon seller publish stays on Higlou", () => {
     expect(publish).toMatch(/resolveAmazonCatalogMatch/);
     expect(resolve).toMatch(/searchAmazonCatalogForListing/);
     expect(resolve).toMatch(/hydrateHits/);
-    expect(resolve).toMatch(/pickTitleAmazonCatalog/);
+    expect(resolve).toMatch(/pickExactAmazonCatalog/);
+    expect(resolve).not.toMatch(/pickTitleAmazonCatalog/);
   });
 
   it("uses the imported Amazon ASIN instead of searching by brand", () => {
@@ -63,29 +64,27 @@ describe("Amazon seller publish stays on Higlou", () => {
     expect(card).toMatch(/Open on Amazon/);
   });
 
-  it("creates a new Amazon product when the exact model is not in the catalog", () => {
+  it("stops instead of creating a new Amazon product without an exact ASIN", () => {
     const publish = readRepo("lib/amazon/publish-listing.ts");
     const resolve = readRepo("lib/amazon/catalog-resolve.ts");
-    expect(resolve).toMatch(/mode: "create"/);
-    expect(resolve).not.toMatch(/Higlou will not publish a different product/);
-    expect(publish).toMatch(/creating = resolved.mode === "create"/);
-    expect(publish).toMatch(/create it as a new Amazon product/);
-    expect(publish).toMatch(/externally_assigned_product_identifier|upc/);
+    expect(resolve).toMatch(/mode: "none"/);
+    expect(resolve).not.toMatch(/mode: "create"/);
+    expect(publish).toMatch(/does not have a confirmed exact match/);
+    expect(publish).toMatch(/getAmazonListingsRestrictions/);
+    expect(publish).toMatch(/getAmazonCatalogItem/);
   });
 
-  it("publishes a complete Amazon listing, never a price-only offer", () => {
+  it("publishes existing ASINs as LISTING_OFFER_ONLY without catalog brand", () => {
     const publish = readRepo("lib/amazon/publish-listing.ts");
     const attributes = readRepo("lib/amazon/listing-attributes.ts");
     const exportScreen = readRepo("components/listing/wizard/export-screen.tsx");
-    expect(publish).toMatch(/requirements: "LISTING"/);
-    expect(publish).not.toMatch(/LISTING_OFFER_ONLY/);
-    expect(publish).toMatch(/amazonListingHasPrice/);
-    expect(publish).toMatch(/lockAmazonBrandAttributes/);
+    expect(publish).toMatch(/requirements: "LISTING_OFFER_ONLY"/);
+    expect(publish).toMatch(/productType: "PRODUCT"/);
+    expect(publish).toMatch(/buildAmazonOfferOnlyAttributes/);
+    expect(publish).not.toMatch(/lockAmazonBrandAttributes/);
     expect(attributes).toMatch(/merchant_shipping_group/);
-    expect(attributes).toMatch(/stripAmazonSynthesizedIdentity/);
-    expect(publish).toMatch(/attempt < 4/);
-    expect(publish).toMatch(/mode: creating \? "create" : "attach"/);
-    expect(exportScreen).toMatch(/Seller Central still calls this an oferta/);
+    expect(attributes).toMatch(/buildAmazonOfferOnlyAttributes/);
+    expect(exportScreen).toMatch(/confirmed Amazon ASIN/);
   });
 
   it("does not ask Amazon for identifiers when submitting a live offer", () => {

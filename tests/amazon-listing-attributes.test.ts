@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   amazonListingHasPrice,
   buildAmazonListingAttributes,
+  buildAmazonOfferOnlyAttributes,
   copyAmazonCatalogAttributes,
   countryOfOriginCode,
   fillAmazonAttributesFromIssues,
@@ -177,6 +178,46 @@ describe("Amazon complete listing attributes", () => {
       (attributes.main_product_image_locator as Array<{ media_location: string }>)[0].media_location,
     ).toMatch(/^https:/);
     expect(attributes.generic_keyword).toBeTruthy();
+  });
+
+  it("builds an existing-ASIN offer without brand title or images", () => {
+    const attributes = buildAmazonOfferOnlyAttributes({
+      marketplaceId: AMAZON_US_MARKETPLACE_ID,
+      asin: "B09V366BDY",
+      schema: thermostatSchema,
+      listing: {
+        title: "KSIPZE LED Lights",
+        brand: "KSIPZE ",
+        model: "KS-123",
+        price: 80,
+        quantity: 1,
+        images: ["https://images.example.com/ksipze.jpg"],
+        description: "Ebay rewrite that must not go to Amazon.",
+      },
+    });
+    expect(Object.keys(attributes).sort()).toEqual(
+      expect.arrayContaining([
+        "merchant_suggested_asin",
+        "condition_type",
+        "fulfillment_availability",
+        "purchasable_offer",
+      ]),
+    );
+    expect(attributes.brand).toBeUndefined();
+    expect(attributes.item_name).toBeUndefined();
+    expect(attributes.manufacturer).toBeUndefined();
+    expect(attributes.product_description).toBeUndefined();
+    expect(attributes.bullet_point).toBeUndefined();
+    expect(attributes.main_product_image_locator).toBeUndefined();
+    expect(attributes.list_price).toBeUndefined();
+    expect(attributes.externally_assigned_product_identifier).toBeUndefined();
+    expect(
+      (attributes.merchant_suggested_asin as Array<{ value: string }>)[0].value,
+    ).toBe("B09V366BDY");
+    expect(
+      (attributes.purchasable_offer as Array<{ our_price: Array<{ schedule: Array<{ value_with_tax: number }> }> }>)[0]
+        .our_price[0].schedule[0].value_with_tax,
+    ).toBe(80);
   });
 
   it("keeps Amazon catalog photos and brand when attaching to an existing ASIN", () => {

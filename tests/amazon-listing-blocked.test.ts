@@ -2,6 +2,7 @@ import {
   amazonBrandGatingReason,
   amazonIncompleteListingReason,
   amazonListingBlockedReason,
+  amazonRestrictionBlockMessage,
 } from "@/lib/amazon/sp-api";
 import { describe, expect, it } from "vitest";
 
@@ -55,5 +56,36 @@ describe("Amazon listing suppression", () => {
         "INVALID",
       ),
     ).toMatch(/not ready|country_of_origin/i);
+  });
+
+  it("turns 5995 into an offer-only instruction", () => {
+    expect(
+      amazonIncompleteListingReason([
+        {
+          code: "5995",
+          message:
+            "You may not change the brand name currently shown on the ASIN.",
+          severity: "ERROR",
+        },
+      ]),
+    ).toMatch(/offer only/i);
+  });
+
+  it("turns listing restrictions into Approval required", () => {
+    expect(
+      amazonRestrictionBlockMessage([
+        {
+          marketplaceId: "ATVPDKIKX0DER",
+          conditionType: "new_new",
+          reasons: [
+            {
+              reasonCode: "APPROVAL_REQUIRED",
+              message: "You need approval to list in this brand.",
+              approvalUrl: "https://sellercentral.amazon.com/hz/approval",
+            },
+          ],
+        },
+      ]),
+    ).toMatch(/Approval required/i);
   });
 });

@@ -61,7 +61,6 @@ const AMAZON_OFFER_ATTRIBUTE_KEYS = [
   "condition_note",
   "fulfillment_availability",
   "purchasable_offer",
-  "list_price",
   "merchant_shipping_group",
 ] as const;
 
@@ -92,6 +91,34 @@ export function amazonExistingAsinOfferAttributes(
     if (attributes[key] != null) out[key] = attributes[key];
   }
   return out;
+}
+
+/** Offer-only payload for an ASIN that already exists. Never send brand/title/images. */
+export function buildAmazonOfferOnlyAttributes(opts: {
+  marketplaceId: string;
+  asin: string;
+  listing: AmazonListingDraft;
+  schema?: AmazonProductTypeSchema | null;
+}): Record<string, unknown> {
+  const offer = amazonOfferAttributes({
+    marketplaceId: opts.marketplaceId,
+    asin: opts.asin,
+    conditionType: amazonConditionType(
+      opts.listing.condition,
+      opts.listing.conditionId,
+    ),
+    price: opts.listing.price,
+    quantity: Math.max(1, Math.floor(opts.listing.quantity || 1)),
+    handlingDays: Math.max(1, Math.floor(opts.listing.handlingTime || 2)),
+  });
+  const attributes: Record<string, unknown> = { ...offer };
+  delete attributes.externally_assigned_product_identifier;
+  const shipping = amazonMerchantShippingGroupRows(
+    opts.schema,
+    opts.marketplaceId,
+  );
+  if (shipping) attributes.merchant_shipping_group = shipping;
+  return amazonExistingAsinOfferAttributes(attributes);
 }
 
 export function dropAmazonBrandAttributes(

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   parseAmazonProductPage,
+  parseAmazonReviews,
   upgradeAmazonImage,
 } from "@/lib/amazon/parse-product";
 
@@ -140,6 +141,21 @@ describe("parseAmazonProductPage", () => {
     );
     expect(ids.length).toBe(5);
     expect(ids.join(" ")).not.toMatch(/11i1DYEiaoL|61xJcNKKLXL/);
+  });
+
+  it("reads star rating and review count from JSON-LD", () => {
+    const html = `
+      <script type="application/ld+json">
+        {"@type":"Product","name":"Fluke tester","aggregateRating":{"@type":"AggregateRating","ratingValue":"4.7","reviewCount":"3251"},"image":"https://m.media-amazon.com/images/I/71rate._AC_SL1500_.jpg"}
+      </script>
+    `;
+    const product = parseAmazonProductPage(html, {
+      asin: "B0REVIEW001",
+      url: "https://www.amazon.com/dp/B0REVIEW001",
+    });
+    expect(product.rating).toBe(4.7);
+    expect(product.reviewCount).toBe(3251);
+    expect(parseAmazonReviews(html)).toEqual({ rating: 4.7, reviewCount: 3251 });
   });
 });
 

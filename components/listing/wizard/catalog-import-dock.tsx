@@ -7,18 +7,22 @@ import {
   EbayMark,
   HomeDepotMark,
 } from "@/components/brand/store-marks";
+import { AmazonAutoImportPanel } from "@/components/listing/wizard/amazon-auto-import";
 import { detectCatalogStore, type CatalogStore } from "@/lib/catalog/detect-store";
 import { cn } from "@/lib/utils";
 
 export function CatalogImportDock({
   importing = false,
   onImport,
+  onAutoImport,
 }: {
-  importing?: false | CatalogStore;
+  importing?: false | CatalogStore | "amazon-auto";
   onImport: (url: string) => Promise<boolean | void>;
+  onAutoImport?: (asins: string[], ebayPrice: number) => Promise<boolean | void>;
 }) {
   const [url, setUrl] = useState("");
   const [picked, setPicked] = useState<CatalogStore | null>(null);
+  const [mode, setMode] = useState<"link" | "winners">("link");
   const inputRef = useRef<HTMLInputElement>(null);
   const detected = detectCatalogStore(url);
   const active = detected || picked;
@@ -33,38 +37,29 @@ export function CatalogImportDock({
   const submitLabel =
     importing === "homedepot"
       ? "Reading Home Depot…"
-      : importing === "amazon"
+      : importing === "amazon" || importing === "amazon-auto"
         ? "Reading Amazon…"
         : "Import";
 
   const choose = (store: CatalogStore) => {
     setPicked(store);
+    setMode("link");
     inputRef.current?.focus();
   };
 
   return (
-    <form
-      className="shrink-0 border-b border-[#e5e5e5] bg-white px-4 py-4"
-      onSubmit={(e) => {
-        e.preventDefault();
-        const next = url.trim();
-        if (!next || busy) return;
-        void onImport(next).then((ok) => {
-          if (ok !== false) setUrl("");
-        });
-      }}
-    >
+    <div className="shrink-0 border-b border-[#e5e5e5] bg-white px-4 py-4">
       <p className="text-[15px] font-medium tracking-tight text-[#141414]">
         Import from Amazon or Home Depot
       </p>
       <p className="mt-0.5 text-[13px] text-[#707070]">
-        Paste the product link. Higlou pulls the photos and writes the eBay listing.
+        Paste a product link, or find Amazon bestsellers and set your eBay price.
       </p>
 
       <div className="mt-3 grid grid-cols-3 gap-2 sm:gap-3">
         <StoreCard
-          active={active === "amazon"}
-          busy={importing === "amazon"}
+          active={active === "amazon" && mode === "link"}
+          busy={importing === "amazon" || importing === "amazon-auto"}
           disabled={busy}
           onClick={() => choose("amazon")}
           header={
@@ -123,24 +118,72 @@ export function CatalogImportDock({
         </div>
       </div>
 
-      <div className="mt-3 flex gap-2">
-        <input
-          ref={inputRef}
-          value={url}
-          onChange={(e) => setUrl(e.target.value)}
-          placeholder={placeholder}
-          disabled={busy}
-          className="h-12 min-w-0 flex-1 border border-[#ccc] bg-white px-3 text-[14px] outline-none focus:border-[#141414] disabled:opacity-60"
-        />
+      <div className="mt-3 flex gap-4 text-[13px]">
         <button
-          type="submit"
-          disabled={busy || url.trim().length < 8}
-          className="h-12 shrink-0 bg-[#141414] px-5 text-[14px] font-medium text-white disabled:opacity-40"
+          type="button"
+          disabled={busy}
+          onClick={() => setMode("link")}
+          className={cn(
+            "border-b pb-1",
+            mode === "link"
+              ? "border-[#141414] font-medium text-[#141414]"
+              : "border-transparent text-[#707070]",
+          )}
         >
-          {submitLabel}
+          Paste a link
         </button>
+        {onAutoImport ? (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => {
+              setPicked("amazon");
+              setMode("winners");
+            }}
+            className={cn(
+              "border-b pb-1",
+              mode === "winners"
+                ? "border-[#141414] font-medium text-[#141414]"
+                : "border-transparent text-[#707070]",
+            )}
+          >
+            Find Amazon bestsellers
+          </button>
+        ) : null}
       </div>
-    </form>
+
+      {mode === "winners" && onAutoImport ? (
+        <AmazonAutoImportPanel busy={busy} onImport={onAutoImport} />
+      ) : (
+        <form
+          className="mt-3 flex gap-2"
+          onSubmit={(e) => {
+            e.preventDefault();
+            const next = url.trim();
+            if (!next || busy) return;
+            void onImport(next).then((ok) => {
+              if (ok !== false) setUrl("");
+            });
+          }}
+        >
+          <input
+            ref={inputRef}
+            value={url}
+            onChange={(e) => setUrl(e.target.value)}
+            placeholder={placeholder}
+            disabled={busy}
+            className="h-12 min-w-0 flex-1 border border-[#ccc] bg-white px-3 text-[14px] outline-none focus:border-[#141414] disabled:opacity-60"
+          />
+          <button
+            type="submit"
+            disabled={busy || url.trim().length < 8}
+            className="h-12 shrink-0 bg-[#141414] px-5 text-[14px] font-medium text-white disabled:opacity-40"
+          >
+            {submitLabel}
+          </button>
+        </form>
+      )}
+    </div>
   );
 }
 

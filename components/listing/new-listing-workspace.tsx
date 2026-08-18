@@ -242,7 +242,7 @@ export function NewListingWorkspace({
   const [step, setStep] = useState<WizardStep>("photos");
   const [analyzing, setAnalyzing] = useState(false);
   const [catalogImporting, setCatalogImporting] = useState<
-    false | "amazon" | "homedepot"
+    false | "amazon" | "homedepot" | "amazon-auto"
   >(false);
   const [analysisStep, setAnalysisStep] = useState(0);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
@@ -1136,6 +1136,104 @@ export function NewListingWorkspace({
     } catch (error) {
       const message =
         error instanceof Error ? error.message : `${storeLabel} import failed`;
+      setAnalysisError(message);
+      toast.error(message);
+      return false;
+    } finally {
+      setCatalogImporting(false);
+    }
+  };
+
+  const importAmazonWinners = async (
+    asins: string[],
+    ebayPrice: number,
+  ): Promise<boolean> => {
+    if (catalogImporting || analyzing) return false;
+    setCatalogImporting("amazon-auto");
+    setAnalysisError(null);
+    try {
+      const response = await fetch("/api/amazon/auto-import", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ asins, ebayPrice }),
+      });
+      const body = (await response.json().catch(() => null)) as {
+        ok?: boolean;
+        error?: string;
+        title?: string;
+        brand?: string;
+        model?: string;
+        price?: number | null;
+        upc?: string;
+        features?: string[];
+        sku?: string;
+        asin?: string;
+        amazonUrl?: string;
+        images?: ProductImage[];
+        extras?: Array<{ id: string; asin: string; title: string }>;
+        skipped?: Array<{ asin: string; reason: string }>;
+      } | null;
+      if (!response.ok || !body?.ok || !body.images?.length) {
+        const message = body?.error || "Amazon auto-import failed";
+        setAnalysisError(message);
+        toast.error(message);
+        return false;
+      }
+
+      const newCondition = "New";
+      const match = CONDITION_OPTIONS.find((c) => c.label === newCondition);
+      const importedAsin = String(body.asin || "").trim().toUpperCase();
+      const withoutAsin = listing.itemSpecifics.filter(
+        (field) => !/^(asin|amazon\s*asin)$/i.test(field.label.replace(/^C:/, "")),
+      );
+      const seeded: ProductListing = {
+        ...listing,
+        title: (body.title || listing.title).slice(0, 80),
+        brand: body.brand || listing.brand,
+        model: body.model || listing.model,
+        price: ebayPrice,
+        upc: body.upc || listing.upc,
+        sku: body.sku || listing.sku,
+        amazonAsin: importedAsin || listing.amazonAsin,
+        amazonUrl:
+          String(body.amazonUrl || "").trim() ||
+          listing.amazonUrl ||
+          (importedAsin ? `https://www.amazon.com/dp/${importedAsin}` : ""),
+        features: body.features?.length ? body.features : listing.features,
+        images: body.images,
+        itemSpecifics: importedAsin
+          ? [
+              {
+                key: "C:ASIN",
+                label: "ASIN",
+                value: importedAsin,
+              },
+              ...withoutAsin,
+            ]
+          : listing.itemSpecifics,
+        condition: newCondition,
+        conditionId: match?.conditionId ?? listing.conditionId,
+        status: "Uploaded",
+        updatedAt: new Date().toISOString(),
+      };
+      setListing(seeded);
+      setStep("photos");
+      const extraCount = body.extras?.length || 0;
+      const skippedCount = body.skipped?.length || 0;
+      toast.success(
+        extraCount
+          ? `Imported ${1 + extraCount} Amazon products at $${ebayPrice.toFixed(2)} for eBay. ${extraCount} more saved in Listings.`
+          : "Amazon photos loaded — set the gallery, then Continue.",
+      );
+      if (skippedCount) {
+        toast.message(
+          `${skippedCount} Amazon product${skippedCount === 1 ? "" : "s"} could not be imported.`,
+        );
+      }
+      return true;
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Amazon auto-import failed";
       setAnalysisError(message);
       toast.error(message);
       return false;
@@ -2058,6 +2156,7 @@ export function NewListingWorkspace({
             void analyzeProduct();
           }}
           onCatalogImport={importFromCatalog}
+          onAmazonAutoImport={importAmazonWinners}
           catalogImporting={catalogImporting}
           sourceListing={listing}
         />

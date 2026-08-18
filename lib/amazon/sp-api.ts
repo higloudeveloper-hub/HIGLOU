@@ -3,6 +3,10 @@ import {
   type AmazonProductTypeSchema,
 } from "@/lib/amazon/listing-attributes";
 import {
+  winnerHitsFromCatalogPayload,
+  type AmazonWinnerHit,
+} from "@/lib/amazon/winner-rank";
+import {
   sellingPartnerIdFromAccessToken,
   sellingPartnerIdFromPayload,
 } from "@/lib/amazon/seller-id";
@@ -510,6 +514,45 @@ export async function searchAmazonCatalogForListing(opts: {
     if (hits.length >= 12) break;
   }
   return hits;
+}
+
+const WINNER_INCLUDED_DATA =
+  "summaries,images,salesRanks,identifiers,productTypes,classifications";
+
+export async function searchAmazonCatalogWinners(opts: {
+  accessToken: string;
+  marketplaceId: string;
+  keywords?: string;
+  classificationIds?: string;
+  identifiers?: string;
+  identifiersType?: "ASIN" | "UPC" | "EAN" | "GTIN";
+}): Promise<AmazonWinnerHit[]> {
+  const params = new URLSearchParams({
+    marketplaceIds: opts.marketplaceId,
+    includedData: WINNER_INCLUDED_DATA,
+    pageSize: "20",
+  });
+  const keywords = String(opts.keywords || "").trim();
+  const classificationIds = String(opts.classificationIds || "").trim();
+  const identifiers = String(opts.identifiers || "").trim();
+  if (identifiers && opts.identifiersType) {
+    params.set("identifiers", identifiers);
+    params.set("identifiersType", opts.identifiersType);
+  } else if (keywords) {
+    params.set("keywords", keywords);
+    if (classificationIds) params.set("classificationIds", classificationIds);
+  } else {
+    return [];
+  }
+  const { ok, json } = await amazonFetch(
+    opts.accessToken,
+    `/catalog/2022-04-01/items?${params.toString()}`,
+  );
+  if (!ok) {
+    const detail = amazonIssuesText(json) || "Amazon catalog search failed";
+    throw new Error(detail);
+  }
+  return winnerHitsFromCatalogPayload(json);
 }
 
 export function amazonListingBlockedReason(

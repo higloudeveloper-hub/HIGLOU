@@ -1,0 +1,257 @@
+import { NextResponse } from "next/server";
+import { z } from "zod";
+import { nanoid } from "nanoid";
+import { requireUser } from "@/lib/auth/require-user";
+import { isSupabaseConfigured } from "@/lib/supabase/admin";
+import {
+  checkRateLimit,
+  clientKeyFromRequest,
+} from "@/lib/api/rate-limit";
+import { fetchAmazonProduct } from "@/lib/amazon/fetch-product";
+import { mirrorAmazonImages } from "@/lib/amazon/mirror-images";
+import {
+  productBodySchema,
+  syncRelated,
+  toDbColumns,
+} from "@/lib/products/persistence";
+
+export const runtime = "nodejs";
+export const maxDuration = 60;
+
+const bodySchema = z.object({
+  asins: z.array(z.string().min(10).max(12)).min(1).max(5),
+  ebayPrice: z.number().positive().max(100000),
+  category: z.string().max(120).optional().default(""),
+});
+
+type ImportedListing = {
+  asin: string;
+  amazonUrl: string;
+  title: string;
+  brand: string;
+  price: number;
+  upc: string;
+  features: string[];
+  sku: string;
+  rating: number | null;
+  reviewCount: number | null;
+  images: Array<{
+    id: string;
+    url: string;
+    storagePath: string;
+    fileName: string;
+    sortOrder: number;
+    isPrimary: boolean;
+    mimeType: string;
+    sizeBytes: number;
+  }>;
+  dbImages: Array<{
+    publicUrl: string;
+    storagePath: string;
+    fileName: string;
+    sortOrder: number;
+    isPrimary: boolean;
+    mimeType: string;
+    sizeBytes: number;
+  }>;
+};
+
+async function importAsin(
+  asin: string,
+  ebayPrice: number,
+  userId: string,
+  pageOrigin: string,
+): Promise<ImportedListing> {
+  const product = await fetchAmazonProduct(`https://www.amazon.com/dp/${asin}`, {
+    pageOrigin,
+  });
+  const images = await mirrorAmazonImages({
+    imageUrls: product.imageUrls,
+    userId,
+    asin: product.asin,
+  });
+  if (!images.length) {
+    throw new Error("Amazon photos could not be saved.");
+  }
+  const dbImages = images.map((img, index) => ({
+    publicUrl: img.publicUrl,
+    storagePath: img.storagePath,
+    fileName: img.fileName,
+    sortOrder: index,
+    isPrimary: index === 0,
+    mimeType: img.mimeType,
+    sizeBytes: img.sizeBytes,
+  }));
+  return {
+    asin: product.asin,
+    amazonUrl: product.url,
+    title: product.title,
+    brand: product.brand,
+    price: ebayPrice,
+    upc: product.upc,
+    features: product.features,
+    sku: `AMZ-${product.asin}`,
+    rating: product.rating,
+    reviewCount: product.reviewCount,
+    images: dbImages.map((img) => ({
+      id: nanoid(),
+      url: img.publicUrl,
+      storagePath: img.storagePath,
+      fileName: img.fileName,
+      sortOrder: img.sortOrder,
+      isPrimary: img.isPrimary,
+      mimeType: img.mimeType,
+      sizeBytes: img.sizeBytes,
+    })),
+    dbImages,
+  };
+}
+
+export async function POST(request: Request) {
+  if (!isSupabaseConfigured()) {
+    return NextResponse.json(
+      { error: "Sign in to import from Amazon." },
+      { status: 503 },
+    );
+  }
+
+  const auth = await requireUser();
+  if (!auth.ok) return auth.response;
+
+  const rate = checkRateLimit({
+    key: `amazon-auto-import:${clientKeyFromRequest(request, auth.user.id)}`,
+    limit: 4,
+    windowMs: 60_000,
+  });
+  if (!rate.allowed) {
+    return NextResponse.json(
+      { error: "Too many Amazon imports. Wait a minute and try again." },
+      {
+        status: 429,
+        headers: { "Retry-After": String(Math.ceil(rate.retryAfterMs / 1000) || 1) },
+      },
+    );
+  }
+
+  let body: z.infer<typeof bodySchema>;
+  try {
+    body = bodySchema.parse(await request.json());
+  } catch {
+    return NextResponse.json(
+      { error: "Send JSON { asins, ebayPrice }." },
+      { status: 400 },
+    );
+  }
+
+  const asins = [
+    ...new Set(
+      body.asins
+        .map((value) => value.trim().toUpperCase())
+        .filter((value) => /^[A-Z0-9]{10}$/.test(value)),
+    ),
+  ].slice(0, 5);
+  if (!asins.length) {
+    return NextResponse.json(
+      { error: "Pick at least one Amazon product." },
+      { status: 400 },
+    );
+  }
+
+  const origin = new URL(request.url).origin;
+  const imported: ImportedListing[] = [];
+  const skipped: Array<{ asin: string; reason: string }> = [];
+
+  for (const asin of asins) {
+    try {
+      imported.push(
+        await importAsin(asin, body.ebayPrice, auth.user.id, origin),
+      );
+    } catch (error) {
+      skipped.push({
+        asin,
+        reason:
+          error instanceof Error ? error.message : "Amazon import failed",
+      });
+    }
+  }
+
+  if (!imported.length) {
+    return NextResponse.json(
+      {
+        error: skipped[0]?.reason || "Amazon import failed",
+        skipped,
+      },
+      { status: 422 },
+    );
+  }
+
+  const [primary, ...extras] = imported;
+  const savedExtras: Array<{ id: string; asin: string; title: string }> = [];
+
+  for (const extra of extras) {
+    try {
+      const data = productBodySchema.parse({
+        title: extra.title.slice(0, 80),
+        brand: extra.brand,
+        sku: extra.sku,
+        amazonAsin: extra.asin,
+        upc: extra.upc,
+        categoryName: body.category,
+        condition: "New",
+        conditionId: "NEW",
+        price: body.ebayPrice,
+        quantity: 1,
+        features: extra.features,
+        status: "Uploaded",
+        itemSpecifics: [
+          { key: "C:ASIN", label: "ASIN", value: extra.asin },
+        ],
+        images: extra.dbImages,
+      });
+      const { data: inserted, error } = await auth.supabase
+        .from("products")
+        .insert({
+          ...toDbColumns(data),
+          user_id: auth.user.id,
+        })
+        .select("id")
+        .single();
+      if (error || !inserted) {
+        skipped.push({
+          asin: extra.asin,
+          reason: error?.message || "Could not save listing",
+        });
+        continue;
+      }
+      await syncRelated(auth.supabase, auth.user.id, inserted.id, data);
+      savedExtras.push({
+        id: String(inserted.id),
+        asin: extra.asin,
+        title: extra.title,
+      });
+    } catch (error) {
+      skipped.push({
+        asin: extra.asin,
+        reason:
+          error instanceof Error ? error.message : "Could not save listing",
+      });
+    }
+  }
+
+  return NextResponse.json({
+    ok: true,
+    asin: primary.asin,
+    amazonUrl: primary.amazonUrl,
+    title: primary.title,
+    brand: primary.brand,
+    price: primary.price,
+    upc: primary.upc,
+    features: primary.features,
+    sku: primary.sku,
+    rating: primary.rating,
+    reviewCount: primary.reviewCount,
+    images: primary.images,
+    extras: savedExtras,
+    skipped,
+  });
+}

@@ -10,6 +10,8 @@ export type AmazonProductDraft = {
   features: string[];
   imageUrls: string[];
   upc: string;
+  rating: number | null;
+  reviewCount: number | null;
 };
 
 function decodeEntities(value: string): string {
@@ -386,6 +388,43 @@ function upcFromHtml(html: string): string {
   return row;
 }
 
+function numberFromUnknown(value: unknown): number | null {
+  if (value == null || value === "") return null;
+  const n = Number(String(value).replace(/,/g, "").trim());
+  return Number.isFinite(n) ? n : null;
+}
+
+/** Star rating and review count from an Amazon product page. */
+export function parseAmazonReviews(html: string): {
+  rating: number | null;
+  reviewCount: number | null;
+} {
+  const ld = jsonLdProducts(html)[0] || {};
+  const agg =
+    ld.aggregateRating && typeof ld.aggregateRating === "object"
+      ? (ld.aggregateRating as Record<string, unknown>)
+      : {};
+  let rating =
+    numberFromUnknown(agg.ratingValue) ??
+    numberFromUnknown(
+      html.match(/"averageStarRating"\s*:\s*"?([0-9.]+)"?/i)?.[1],
+    ) ??
+    numberFromUnknown(
+      html.match(/([0-9.]+)\s+out of\s+5\s+stars/i)?.[1],
+    );
+  let reviewCount =
+    numberFromUnknown(agg.reviewCount ?? agg.ratingCount) ??
+    numberFromUnknown(
+      html.match(/"totalReviewCount"\s*:\s*"?([0-9,]+)"?/i)?.[1],
+    ) ??
+    numberFromUnknown(
+      html.match(/id="acrCustomerReviewText"[^>]*>\s*([0-9,]+)/i)?.[1],
+    );
+  if (rating != null && (rating < 0 || rating > 5)) rating = null;
+  if (reviewCount != null && reviewCount < 0) reviewCount = null;
+  return { rating, reviewCount };
+}
+
 function titleFromHtml(html: string): string {
   return stripTags(
     html.match(/id="productTitle"[^>]*>\s*([\s\S]*?)<\/span>/i)?.[1] ||
@@ -430,6 +469,8 @@ export function parseAmazonProductPage(
     attr(html, "og:image"),
   ]).slice(0, DEFAULT_VALUES.maxImages);
 
+  const reviews = parseAmazonReviews(html);
+
   return {
     asin: meta.asin,
     url: meta.url,
@@ -439,6 +480,8 @@ export function parseAmazonProductPage(
     features: featureBullets(html),
     imageUrls,
     upc: upcFromHtml(html),
+    rating: reviews.rating,
+    reviewCount: reviews.reviewCount,
   };
 }
 

@@ -23,6 +23,7 @@ export function PhotosScreen({
   onConditionChange,
   onContinue,
   onCatalogImport,
+  onAmazonAutoImport,
   catalogImporting = false,
   sourceListing,
 }: {
@@ -40,7 +41,11 @@ export function PhotosScreen({
   onConditionChange: (condition: string) => void;
   onContinue: () => void;
   onCatalogImport?: (url: string) => Promise<boolean | void>;
-  catalogImporting?: false | "amazon" | "homedepot";
+  onAmazonAutoImport?: (
+    asins: string[],
+    ebayPrice: number,
+  ) => Promise<boolean | void>;
+  catalogImporting?: false | "amazon" | "homedepot" | "amazon-auto";
   sourceListing?: ProductListing;
   onPhotoIntakeSessionChange?: (session: unknown) => void;
 }) {
@@ -55,6 +60,7 @@ export function PhotosScreen({
         <CatalogImportDock
           importing={catalogImporting}
           onImport={onCatalogImport}
+          onAutoImport={onAmazonAutoImport}
         />
       ) : null}
       <div className="relative min-h-0 flex-1">

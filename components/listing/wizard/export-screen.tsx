@@ -21,7 +21,9 @@ import { resolveListingPackage } from "@/lib/ebay/package-shipping";
 import { humanizeEbayPublishError } from "@/lib/ebay/infer-voltage";
 import { displayNameFromEbayUsername } from "@/lib/ebay/store-display-name";
 import type { ProductListing } from "@/types/product";
+import type { StoreBranding } from "@/config/store-branding";
 import { AmazonMark } from "@/components/brand/store-marks";
+import { cn } from "@/lib/utils";
 
 const LIVE_STAGES = [
   "Saving your listing",

@@ -387,6 +387,7 @@ export function ExportScreen({
   amazonPublishError = null,
   amazonApprovalUrl = null,
   amazonRestrictedBrand = null,
+  amazonRestrictionsDebug = null,
   amazonPublishResult = null,
 }: {
   listing: ProductListing;
@@ -423,6 +424,7 @@ export function ExportScreen({
   amazonPublishError?: string | null;
   amazonApprovalUrl?: string | null;
   amazonRestrictedBrand?: string | null;
+  amazonRestrictionsDebug?: unknown;
   amazonPublishResult?: {
     asin?: string;
     sku?: string;
@@ -767,6 +769,16 @@ export function ExportScreen({
                       creating a new product page.
                     </p>
                   )}
+                  {amazonRestrictionsDebug ? (
+                    <details className="mt-2 rounded-xl border border-border/70 bg-background p-2">
+                      <summary className="cursor-pointer text-[12px] font-medium text-muted-foreground">
+                        Amazon restriction response
+                      </summary>
+                      <pre className="mt-2 max-h-56 overflow-auto whitespace-pre-wrap break-all text-[11px] leading-5 text-muted-foreground">
+                        {JSON.stringify(amazonRestrictionsDebug, null, 2)}
+                      </pre>
+                    </details>
+                  ) : null}
                 </div>
               </div>
             </div>

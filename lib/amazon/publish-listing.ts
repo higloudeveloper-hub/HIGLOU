@@ -21,7 +21,7 @@ import {
   getAmazonProductTypeSchema,
   putAmazonListingOffer,
   AmazonPublishBlockedError,
-  type AmazonListingRestriction,
+  type AmazonRestrictionsCheck,
 } from "@/lib/amazon/sp-api";
 import { getAmazonSpConfig } from "@/lib/amazon/sp-config";
 
@@ -37,6 +37,7 @@ export type AmazonPublishResult = {
   sellerCentralUrl: string;
   title: string;
   mode: "attach" | "create";
+  restrictionsDebug?: unknown;
 };
 
 const NO_EXACT_MATCH =
@@ -103,9 +104,9 @@ export async function publishAmazonOffer(opts: {
     opts.listing.conditionId,
   );
 
-  let restrictions: AmazonListingRestriction[] = [];
+  let restrictionsCheck: AmazonRestrictionsCheck | null = null;
   try {
-    restrictions = await getAmazonListingsRestrictions({
+    restrictionsCheck = await getAmazonListingsRestrictions({
       accessToken: opts.accessToken,
       sellerId: opts.sellingPartnerId,
       marketplaceId: cfg.marketplaceId,
@@ -118,12 +119,24 @@ export async function publishAmazonOffer(opts: {
       throw error;
     }
   }
+  const restrictionsDebug = restrictionsCheck
+    ? {
+        query: restrictionsCheck.query,
+        restrictions: restrictionsCheck.raw,
+      }
+    : null;
   const blocked = amazonRestrictionBlock(
-    restrictions,
+    restrictionsCheck?.restrictions || [],
     asin,
     catalog.brand || opts.listing.brand,
+    conditionType,
   );
-  if (blocked) throw new AmazonPublishBlockedError(blocked);
+  if (blocked) {
+    throw new AmazonPublishBlockedError({
+      ...blocked,
+      restrictionsDebug,
+    });
+  }
 
   const schema = await getAmazonProductTypeSchema({
     accessToken: opts.accessToken,
@@ -201,6 +214,7 @@ export async function publishAmazonOffer(opts: {
     status: result.status,
     title: catalogTitle,
     mode: "attach",
+    restrictionsDebug,
     sellerCentralUrl: `https://sellercentral.amazon.com/inventory/ref=xx_invmgr_dnav_xx?tbla_myitable=sort:%7B%22sortOrder%22%3A%22DESCENDING%22%2C%22sortedColumnId%22%3A%22date%22%7D&search:${encodeURIComponent(sku)}`,
   };
 }

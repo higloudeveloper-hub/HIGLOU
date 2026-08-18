@@ -156,6 +156,7 @@ export type AmazonListingRestrictionReason = {
   reasonCode: string;
   message: string;
   approvalUrl?: string;
+  links?: Array<Record<string, unknown>>;
 };
 
 export type AmazonListingRestriction = {
@@ -164,12 +165,31 @@ export type AmazonListingRestriction = {
   reasons: AmazonListingRestrictionReason[];
 };
 
+export type AmazonRestrictionsCheck = {
+  query: {
+    asin: string;
+    sellerId: string;
+    marketplaceIds: string;
+    conditionType: string;
+  };
+  restrictions: AmazonListingRestriction[];
+  raw: unknown;
+};
+
+const AMAZON_BLOCKING_REASON_CODES = new Set([
+  "APPROVAL_REQUIRED",
+  "NOT_ELIGIBLE",
+  "ASIN_NOT_FOUND",
+]);
+
 export type AmazonRestrictionBlock = {
   code: "AMAZON_APPROVAL_REQUIRED" | "AMAZON_RESTRICTED";
   message: string;
   approvalUrl: string;
   asin?: string;
   brand?: string;
+  reasonCode?: string;
+  restrictionsDebug?: unknown;
 };
 
 export function amazonPublishBlockFromError(
@@ -182,6 +202,8 @@ export function amazonPublishBlockFromError(
       approvalUrl: error.approvalUrl,
       asin: error.asin,
       brand: error.brand,
+      reasonCode: error.reasonCode,
+      restrictionsDebug: error.restrictionsDebug,
     };
   }
   const message = error instanceof Error ? error.message : String(error || "");
@@ -208,6 +230,8 @@ export class AmazonPublishBlockedError extends Error {
   approvalUrl: string;
   asin?: string;
   brand?: string;
+  reasonCode?: string;
+  restrictionsDebug?: unknown;
 
   constructor(block: AmazonRestrictionBlock) {
     super(block.message);
@@ -216,6 +240,8 @@ export class AmazonPublishBlockedError extends Error {
     this.approvalUrl = block.approvalUrl;
     this.asin = block.asin;
     this.brand = block.brand;
+    this.reasonCode = block.reasonCode;
+    this.restrictionsDebug = block.restrictionsDebug;
   }
 }
 
@@ -231,17 +257,31 @@ export function amazonRestrictionBlock(
   restrictions: AmazonListingRestriction[],
   asin?: string,
   brand?: string,
+  conditionType = "new_new",
 ): AmazonRestrictionBlock | null {
-  const reasons = restrictions.flatMap((row) => row.reasons || []);
-  if (!reasons.length) return null;
-  const codes = reasons.map((row) => row.reasonCode.toUpperCase());
+  const wanted = String(conditionType || "new_new").trim() || "new_new";
+  const applicable = restrictions.filter((row) => {
+    const rowCondition = String(row.conditionType || "").trim();
+    return !rowCondition || rowCondition === wanted;
+  });
+  const reasons = applicable.flatMap((row) => row.reasons || []);
+  const blocking = reasons.filter((reason) =>
+    AMAZON_BLOCKING_REASON_CODES.has(String(reason.reasonCode || "").toUpperCase()),
+  );
+  if (!blocking.length) return null;
+
+  const approval =
+    blocking.find((reason) => /APPROVAL_REQUIRED/i.test(reason.reasonCode)) ||
+    blocking[0];
+  const code = String(approval.reasonCode || "").toUpperCase();
   const approvalUrl =
-    reasons.find((row) => row.approvalUrl)?.approvalUrl ||
-    amazonApprovalUrlForAsin(asin);
+    approval.approvalUrl || amazonApprovalUrlForAsin(asin);
   const gatedBrand = String(brand || "").trim();
-  if (codes.some((code) => /APPROVAL_REQUIRED|BRAND/.test(code))) {
+
+  if (code === "APPROVAL_REQUIRED") {
     return {
       code: "AMAZON_APPROVAL_REQUIRED",
+      reasonCode: code,
       message: gatedBrand
         ? `Approval required. Amazon restricted the brand ${gatedBrand} for this seller account.`
         : "Approval required. Amazon gated this brand for this seller account.",
@@ -250,43 +290,22 @@ export function amazonRestrictionBlock(
       brand: gatedBrand || undefined,
     };
   }
-  if (codes.some((code) => /NOT_ELIGIBLE|SELLER/.test(code))) {
+  if (code === "ASIN_NOT_FOUND") {
     return {
       code: "AMAZON_RESTRICTED",
-      message: gatedBrand
-        ? `Your Amazon seller account cannot sell ${gatedBrand}.`
-        : "Your Amazon seller account cannot sell this ASIN.",
+      reasonCode: code,
+      message: `Amazon does not recognize ASIN ${asin || ""} in this marketplace.`,
       approvalUrl,
       asin,
       brand: gatedBrand || undefined,
     };
   }
-  if (codes.some((code) => /CONDITION/.test(code))) {
-    return {
-      code: "AMAZON_RESTRICTED",
-      message: "Amazon does not allow this condition on this ASIN.",
-      approvalUrl,
-      asin,
-      brand: gatedBrand || undefined,
-    };
-  }
-  if (codes.some((code) => /HAZMAT|COMPLIANCE/.test(code))) {
-    return {
-      code: "AMAZON_RESTRICTED",
-      message: "Amazon needs compliance or hazmat details before this ASIN can be sold.",
-      approvalUrl,
-      asin,
-      brand: gatedBrand || undefined,
-    };
-  }
-  const amazonText = reasons
-    .map((row) => row.message)
-    .filter(Boolean)
-    .slice(0, 2)
-    .join(" · ");
   return {
     code: "AMAZON_RESTRICTED",
-    message: amazonText || "Amazon restricted this ASIN for this seller account.",
+    reasonCode: code,
+    message: gatedBrand
+      ? `Your Amazon seller account cannot sell ${gatedBrand}.`
+      : "Your Amazon seller account cannot sell this ASIN.",
     approvalUrl,
     asin,
     brand: gatedBrand || undefined,
@@ -305,7 +324,13 @@ export async function getAmazonListingsRestrictions(opts: {
   marketplaceId: string;
   asin: string;
   conditionType: string;
-}): Promise<AmazonListingRestriction[]> {
+}): Promise<AmazonRestrictionsCheck> {
+  const query = {
+    asin: opts.asin,
+    sellerId: opts.sellerId,
+    marketplaceIds: opts.marketplaceId,
+    conditionType: opts.conditionType,
+  };
   const params = new URLSearchParams({
     asin: opts.asin,
     sellerId: opts.sellerId,
@@ -319,31 +344,39 @@ export async function getAmazonListingsRestrictions(opts: {
   );
   if (!ok) {
     const detail = amazonIssuesText(json);
-    if (status === 404) return [];
+    if (status === 404) {
+      return { query, restrictions: [], raw: json };
+    }
     throw new Error(
       detail || `Amazon listing restriction check failed (${status})`,
     );
   }
   const rows = (json.restrictions as Array<Record<string, unknown>>) || [];
-  return rows.map((row) => ({
-    marketplaceId: String(row.marketplaceId || opts.marketplaceId),
-    conditionType: String(row.conditionType || opts.conditionType),
-    reasons: (
-      (row.reasons as Array<Record<string, unknown>> | undefined) || []
-    ).map((reason) => {
-      const links = (reason.links as Array<Record<string, unknown>> | undefined) || [];
-      const approval = links.find((link) =>
-        /approv|selling.?application/i.test(
-          `${link.title || ""} ${link.resource || ""}`,
-        ),
-      );
-      return {
-        reasonCode: String(reason.reasonCode || ""),
-        message: String(reason.message || ""),
-        approvalUrl: String(approval?.resource || links[0]?.resource || ""),
-      };
-    }),
-  }));
+  return {
+    query,
+    raw: json,
+    restrictions: rows.map((row) => ({
+      marketplaceId: String(row.marketplaceId || opts.marketplaceId),
+      conditionType: String(row.conditionType || opts.conditionType),
+      reasons: (
+        (row.reasons as Array<Record<string, unknown>> | undefined) || []
+      ).map((reason) => {
+        const links =
+          (reason.links as Array<Record<string, unknown>> | undefined) || [];
+        const approval = links.find((link) =>
+          /approv|selling.?application/i.test(
+            `${link.title || ""} ${link.resource || ""}`,
+          ),
+        );
+        return {
+          reasonCode: String(reason.reasonCode || ""),
+          message: String(reason.message || ""),
+          approvalUrl: String(approval?.resource || links[0]?.resource || ""),
+          links,
+        };
+      }),
+    })),
+  };
 }
 
 export function amazonIncompleteListingReason(

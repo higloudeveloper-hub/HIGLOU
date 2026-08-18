@@ -299,6 +299,9 @@ export function NewListingWorkspace({
   const [amazonRestrictedBrand, setAmazonRestrictedBrand] = useState<
     string | null
   >(null);
+  const [amazonRestrictionsDebug, setAmazonRestrictionsDebug] = useState<
+    unknown | null
+  >(null);
   const [amazonPublishResult, setAmazonPublishResult] = useState<{
     asin?: string;
     sku?: string;
@@ -1836,6 +1839,7 @@ export function NewListingWorkspace({
     setAmazonPublishResult(null);
     setAmazonApprovalUrl(null);
     setAmazonRestrictedBrand(null);
+    setAmazonRestrictionsDebug(null);
     setPublishingAmazon(true);
     try {
       await persistDraft({ quiet: true, draft: fresh });
@@ -1895,6 +1899,8 @@ export function NewListingWorkspace({
         mode?: "attach" | "create";
         approvalUrl?: string;
         brand?: string;
+        reasonCode?: string;
+        restrictionsDebug?: unknown;
       } | null;
       if (!response.ok) {
         if (body?.code === "AMAZON_NOT_CONNECTED") {
@@ -1917,6 +1923,7 @@ export function NewListingWorkspace({
           const brand = String(body.brand || fresh.brand || "").trim();
           setAmazonApprovalUrl(approvalUrl || null);
           setAmazonRestrictedBrand(brand || null);
+          setAmazonRestrictionsDebug(body.restrictionsDebug ?? null);
           setAmazonPublishError(null);
           toast("Amazon: Approval required", {
             description: brand
@@ -1927,6 +1934,7 @@ export function NewListingWorkspace({
         }
         throw new Error(body?.error || "Amazon publish failed");
       }
+      setAmazonRestrictionsDebug(body?.restrictionsDebug ?? null);
       setAmazonPublishResult({
         asin: body?.asin,
         sku: body?.sku,
@@ -2167,6 +2175,7 @@ export function NewListingWorkspace({
           amazonPublishError={amazonPublishError}
           amazonApprovalUrl={amazonApprovalUrl}
           amazonRestrictedBrand={amazonRestrictedBrand}
+          amazonRestrictionsDebug={amazonRestrictionsDebug}
           amazonPublishResult={amazonPublishResult}
         />
       ) : null}

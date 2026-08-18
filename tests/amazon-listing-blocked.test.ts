@@ -106,4 +106,47 @@ describe("Amazon listing suppression", () => {
       amazonRestrictionBlock(restrictions, "B0BVHK7GTF", "Tekton")?.message,
     ).toMatch(/restricted the brand Tekton/i);
   });
+
+  it("does not treat a generic listing limitation as a brand block", () => {
+    expect(
+      amazonRestrictionBlock(
+        [
+          {
+            marketplaceId: "ATVPDKIKX0DER",
+            conditionType: "new_new",
+            reasons: [
+              {
+                reasonCode: "",
+                message: "This product has other listing limitations",
+              },
+            ],
+          },
+        ],
+        "B0DCNN1J3F",
+        "Generic",
+      ),
+    ).toBeNull();
+  });
+
+  it("ignores used-condition restrictions when selling new", () => {
+    expect(
+      amazonRestrictionBlock(
+        [
+          {
+            marketplaceId: "ATVPDKIKX0DER",
+            conditionType: "used_good",
+            reasons: [
+              {
+                reasonCode: "APPROVAL_REQUIRED",
+                message: "You cannot list the product in this condition.",
+              },
+            ],
+          },
+        ],
+        "B0DCNN1J3F",
+        "Generic",
+        "new_new",
+      ),
+    ).toBeNull();
+  });
 });

@@ -2,6 +2,7 @@ import {
   amazonBrandGatingReason,
   amazonIncompleteListingReason,
   amazonListingBlockedReason,
+  amazonRestrictionBlock,
   amazonRestrictionBlockMessage,
 } from "@/lib/amazon/sp-api";
 import { describe, expect, it } from "vitest";
@@ -72,36 +73,37 @@ describe("Amazon listing suppression", () => {
   });
 
   it("turns listing restrictions into Approval required", () => {
+    const restrictions = [
+      {
+        marketplaceId: "ATVPDKIKX0DER",
+        conditionType: "new_new",
+        reasons: [
+          {
+            reasonCode: "APPROVAL_REQUIRED",
+            message: "You need approval to list in this brand.",
+            approvalUrl:
+              "https://sellercentral.amazon.com/hz/approvalrequest/restrictions/approve?asin=B0BVHK7GTF",
+          },
+        ],
+      },
+    ];
+    expect(amazonRestrictionBlockMessage(restrictions)).toMatch(
+      /Approval required/i,
+    );
+    expect(amazonRestrictionBlockMessage(restrictions)).not.toMatch(
+      /sellercentral\.amazon\.com/,
+    );
+    expect(amazonRestrictionBlock(restrictions, "B0BVHK7GTF", "Tekton")).toEqual(
+      expect.objectContaining({
+        code: "AMAZON_APPROVAL_REQUIRED",
+        brand: "Tekton",
+        asin: "B0BVHK7GTF",
+        approvalUrl:
+          "https://sellercentral.amazon.com/hz/approvalrequest/restrictions/approve?asin=B0BVHK7GTF",
+      }),
+    );
     expect(
-      amazonRestrictionBlockMessage([
-        {
-          marketplaceId: "ATVPDKIKX0DER",
-          conditionType: "new_new",
-          reasons: [
-            {
-              reasonCode: "APPROVAL_REQUIRED",
-              message: "You need approval to list in this brand.",
-              approvalUrl: "https://sellercentral.amazon.com/hz/approval",
-            },
-          ],
-        },
-      ]),
-    ).toMatch(/Approval required/i);
-    expect(
-      amazonRestrictionBlockMessage([
-        {
-          marketplaceId: "ATVPDKIKX0DER",
-          conditionType: "new_new",
-          reasons: [
-            {
-              reasonCode: "APPROVAL_REQUIRED",
-              message: "You need approval to list in this brand.",
-              approvalUrl:
-                "https://sellercentral.amazon.com/hz/approvalrequest/restrictions/approve?asin=B0BVHK7GTF",
-            },
-          ],
-        },
-      ]),
-    ).not.toMatch(/sellercentral\.amazon\.com/);
+      amazonRestrictionBlock(restrictions, "B0BVHK7GTF", "Tekton")?.message,
+    ).toMatch(/restricted the brand Tekton/i);
   });
 });

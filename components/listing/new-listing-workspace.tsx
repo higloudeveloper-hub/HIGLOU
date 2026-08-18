@@ -296,6 +296,9 @@ export function NewListingWorkspace({
   const [amazonApprovalUrl, setAmazonApprovalUrl] = useState<string | null>(
     null,
   );
+  const [amazonRestrictedBrand, setAmazonRestrictedBrand] = useState<
+    string | null
+  >(null);
   const [amazonPublishResult, setAmazonPublishResult] = useState<{
     asin?: string;
     sku?: string;
@@ -1832,6 +1835,7 @@ export function NewListingWorkspace({
     setAmazonPublishError(null);
     setAmazonPublishResult(null);
     setAmazonApprovalUrl(null);
+    setAmazonRestrictedBrand(null);
     setPublishingAmazon(true);
     try {
       await persistDraft({ quiet: true, draft: fresh });
@@ -1890,6 +1894,7 @@ export function NewListingWorkspace({
         sellerCentralUrl?: string;
         mode?: "attach" | "create";
         approvalUrl?: string;
+        brand?: string;
       } | null;
       if (!response.ok) {
         if (body?.code === "AMAZON_NOT_CONNECTED") {
@@ -1909,18 +1914,14 @@ export function NewListingWorkspace({
           body?.code === "AMAZON_RESTRICTED"
         ) {
           const approvalUrl = String(body.approvalUrl || "").trim();
+          const brand = String(body.brand || fresh.brand || "").trim();
           setAmazonApprovalUrl(approvalUrl || null);
-          setAmazonPublishError(body.error || "Approval required");
-          toast.error("Approval required", {
-            description: "Amazon gated this brand. Request approval, then publish again.",
-            action: approvalUrl
-              ? {
-                  label: "Open Seller Central",
-                  onClick: () => {
-                    window.open(approvalUrl, "_blank", "noreferrer");
-                  },
-                }
-              : undefined,
+          setAmazonRestrictedBrand(brand || null);
+          setAmazonPublishError(null);
+          toast("Amazon: Approval required", {
+            description: brand
+              ? `${brand} is restricted on this seller account. Request approval, then publish again. eBay is unaffected.`
+              : "Request approval in Seller Central, then publish again. eBay is unaffected.",
           });
           return;
         }
@@ -2165,6 +2166,7 @@ export function NewListingWorkspace({
           publishingAmazon={publishingAmazon}
           amazonPublishError={amazonPublishError}
           amazonApprovalUrl={amazonApprovalUrl}
+          amazonRestrictedBrand={amazonRestrictedBrand}
           amazonPublishResult={amazonPublishResult}
         />
       ) : null}

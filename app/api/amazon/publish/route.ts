@@ -128,6 +128,7 @@ export async function POST(request: Request) {
           code: blocked.code,
           approvalUrl: blocked.approvalUrl,
           asin: blocked.asin || "",
+          brand: blocked.brand || "",
         },
         { status: 422 },
       );

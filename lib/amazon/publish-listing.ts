@@ -118,7 +118,11 @@ export async function publishAmazonOffer(opts: {
       throw error;
     }
   }
-  const blocked = amazonRestrictionBlock(restrictions, asin);
+  const blocked = amazonRestrictionBlock(
+    restrictions,
+    asin,
+    catalog.brand || opts.listing.brand,
+  );
   if (blocked) throw new AmazonPublishBlockedError(blocked);
 
   const schema = await getAmazonProductTypeSchema({

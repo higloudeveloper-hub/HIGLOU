@@ -169,6 +169,7 @@ export type AmazonRestrictionBlock = {
   message: string;
   approvalUrl: string;
   asin?: string;
+  brand?: string;
 };
 
 export function amazonPublishBlockFromError(
@@ -180,6 +181,7 @@ export function amazonPublishBlockFromError(
       message: error.message,
       approvalUrl: error.approvalUrl,
       asin: error.asin,
+      brand: error.brand,
     };
   }
   const message = error instanceof Error ? error.message : String(error || "");
@@ -205,6 +207,7 @@ export class AmazonPublishBlockedError extends Error {
   code: AmazonRestrictionBlock["code"];
   approvalUrl: string;
   asin?: string;
+  brand?: string;
 
   constructor(block: AmazonRestrictionBlock) {
     super(block.message);
@@ -212,6 +215,7 @@ export class AmazonPublishBlockedError extends Error {
     this.code = block.code;
     this.approvalUrl = block.approvalUrl;
     this.asin = block.asin;
+    this.brand = block.brand;
   }
 }
 
@@ -226,6 +230,7 @@ export function amazonApprovalUrlForAsin(asin?: string): string {
 export function amazonRestrictionBlock(
   restrictions: AmazonListingRestriction[],
   asin?: string,
+  brand?: string,
 ): AmazonRestrictionBlock | null {
   const reasons = restrictions.flatMap((row) => row.reasons || []);
   if (!reasons.length) return null;
@@ -233,20 +238,27 @@ export function amazonRestrictionBlock(
   const approvalUrl =
     reasons.find((row) => row.approvalUrl)?.approvalUrl ||
     amazonApprovalUrlForAsin(asin);
+  const gatedBrand = String(brand || "").trim();
   if (codes.some((code) => /APPROVAL_REQUIRED|BRAND/.test(code))) {
     return {
       code: "AMAZON_APPROVAL_REQUIRED",
-      message: "Approval required. Amazon gated this brand for this seller account.",
+      message: gatedBrand
+        ? `Approval required. Amazon restricted the brand ${gatedBrand} for this seller account.`
+        : "Approval required. Amazon gated this brand for this seller account.",
       approvalUrl,
       asin,
+      brand: gatedBrand || undefined,
     };
   }
   if (codes.some((code) => /NOT_ELIGIBLE|SELLER/.test(code))) {
     return {
       code: "AMAZON_RESTRICTED",
-      message: "Your Amazon seller account cannot sell this ASIN.",
+      message: gatedBrand
+        ? `Your Amazon seller account cannot sell ${gatedBrand}.`
+        : "Your Amazon seller account cannot sell this ASIN.",
       approvalUrl,
       asin,
+      brand: gatedBrand || undefined,
     };
   }
   if (codes.some((code) => /CONDITION/.test(code))) {
@@ -255,6 +267,7 @@ export function amazonRestrictionBlock(
       message: "Amazon does not allow this condition on this ASIN.",
       approvalUrl,
       asin,
+      brand: gatedBrand || undefined,
     };
   }
   if (codes.some((code) => /HAZMAT|COMPLIANCE/.test(code))) {
@@ -263,6 +276,7 @@ export function amazonRestrictionBlock(
       message: "Amazon needs compliance or hazmat details before this ASIN can be sold.",
       approvalUrl,
       asin,
+      brand: gatedBrand || undefined,
     };
   }
   const amazonText = reasons
@@ -275,6 +289,7 @@ export function amazonRestrictionBlock(
     message: amazonText || "Amazon restricted this ASIN for this seller account.",
     approvalUrl,
     asin,
+    brand: gatedBrand || undefined,
   };
 }
 

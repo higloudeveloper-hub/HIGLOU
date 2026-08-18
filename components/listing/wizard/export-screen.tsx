@@ -386,6 +386,7 @@ export function ExportScreen({
   publishingAmazon = false,
   amazonPublishError = null,
   amazonApprovalUrl = null,
+  amazonRestrictedBrand = null,
   amazonPublishResult = null,
 }: {
   listing: ProductListing;
@@ -421,6 +422,7 @@ export function ExportScreen({
   publishingAmazon?: boolean;
   amazonPublishError?: string | null;
   amazonApprovalUrl?: string | null;
+  amazonRestrictedBrand?: string | null;
   amazonPublishResult?: {
     asin?: string;
     sku?: string;
@@ -666,20 +668,41 @@ export function ExportScreen({
                 ) : null}
 
                 <div className="mt-4 rounded-2xl border border-border/80 bg-muted/30 p-3">
-                  <p className="text-[11px] font-semibold tracking-[0.14em] text-muted-foreground uppercase">
-                    Amazon
-                  </p>
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-[11px] font-semibold tracking-[0.14em] text-muted-foreground uppercase">
+                      Amazon
+                    </p>
+                    {amazonApprovalUrl ? (
+                      <span className="rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-900">
+                        Approval required
+                      </span>
+                    ) : amazonPublishResult?.asin ? (
+                      <span className="rounded-full border border-success/30 bg-success-soft px-2 py-0.5 text-[11px] font-medium text-success">
+                        Offer live
+                      </span>
+                    ) : null}
+                  </div>
                   {amazonConnected ? (
                     amazonApprovalUrl ? (
-                      <a
-                        href={amazonApprovalUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="mt-2 inline-flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-[#141414] text-[15px] font-semibold text-white transition hover:-translate-y-px"
-                      >
-                        <AmazonMark invert className="h-4" />
-                        Approval required
-                      </a>
+                      <>
+                        <button
+                          type="button"
+                          disabled
+                          className="mt-2 inline-flex h-12 w-full cursor-not-allowed items-center justify-center gap-2 rounded-2xl bg-[#141414] text-[15px] font-semibold text-white opacity-40"
+                        >
+                          <AmazonMark invert className="h-4" />
+                          Publish to Amazon
+                        </button>
+                        <a
+                          href={amazonApprovalUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="mt-2 inline-flex h-12 w-full items-center justify-center gap-2 rounded-2xl border border-border bg-surface text-[15px] font-semibold hover:bg-muted"
+                        >
+                          <AmazonMark className="h-4" />
+                          Request approval on Amazon
+                        </a>
+                      </>
                     ) : (
                     <button
                       type="button"
@@ -727,8 +750,11 @@ export function ExportScreen({
                     </p>
                   ) : amazonApprovalUrl ? (
                     <p className="mt-1.5 text-[12px] text-muted-foreground">
-                      Amazon gated this brand. Request approval in Seller
-                      Central, then publish again.
+                      {amazonRestrictedBrand
+                        ? `${amazonRestrictedBrand} is restricted on this Amazon seller account.`
+                        : "This brand is restricted on this Amazon seller account."}{" "}
+                      eBay and Don Baratón can still publish. Do not keep
+                      retrying Amazon until Seller Central approves it.
                     </p>
                   ) : amazonPublishError ? (
                     <p className="mt-1.5 text-[12px] text-amber-800">

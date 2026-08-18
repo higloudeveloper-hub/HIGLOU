@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { amazonAsinFromListing, amazonListingUrl } from "@/lib/amazon/asin";
+import { AmazonSourceLink } from "@/components/listing/amazon-source-link";
 import { toast } from "sonner";
 import { CONDITION_OPTIONS } from "@/config/condition-map";
 import { DEFAULT_VALUES } from "@/config/default-values";
@@ -1946,16 +1947,19 @@ export function NewListingWorkspace({
         if (index === 2) setStep("review");
       }}
       headerActions={
-        showChrome ? (
-          <button
-            type="button"
-            onClick={() => void saveDraft()}
-            disabled={loadingProduct}
-            className="hidden h-9 items-center rounded-full border border-border bg-surface px-4 text-sm font-medium sm:inline-flex"
-          >
-            Save Draft
-          </button>
-        ) : undefined
+        <>
+          <AmazonSourceLink listing={listing} className="shrink-0" />
+          {showChrome ? (
+            <button
+              type="button"
+              onClick={() => void saveDraft()}
+              disabled={loadingProduct}
+              className="hidden h-9 items-center rounded-full border border-border bg-surface px-4 text-sm font-medium sm:inline-flex"
+            >
+              Save Draft
+            </button>
+          ) : null}
+        </>
       }
     >
       {loadingProduct ? (

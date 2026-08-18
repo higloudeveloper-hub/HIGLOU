@@ -127,10 +127,8 @@ export function PhotosScreen({
                 ? "Reading Home Depot…"
                 : "Reading Amazon…"
               : "Drop a photo, or import — then delete, add, or reorder"}
-          {sourceListing ? (
-            <AmazonSourceLink listing={sourceListing} className="ml-1" />
-          ) : null}
         </span>
+        {sourceListing ? <AmazonSourceLink listing={sourceListing} /> : null}
         <button
           type="button"
           disabled={!canContinue}

@@ -49,6 +49,20 @@ describe("Amazon seller publish stays on Higlou", () => {
     expect(exportScreen).toMatch(/AmazonSourceLink/);
   });
 
+  it("keeps a one-click Amazon source button on listings and in the wizard", () => {
+    const link = readRepo("components/listing/amazon-source-link.tsx");
+    const workspace = readRepo("components/listing/new-listing-workspace.tsx");
+    const listings = readRepo("app/listings/page.tsx");
+    const card = readRepo("components/studio/listing-card.tsx");
+    expect(link).toMatch(/Open on Amazon/);
+    expect(workspace).toMatch(/headerActions/);
+    expect(workspace).toMatch(/AmazonSourceLink listing=\{listing\}/);
+    expect(listings).toMatch(/amazonListingUrl/);
+    expect(listings).toMatch(/amazonHref/);
+    expect(card).toMatch(/amazonHref/);
+    expect(card).toMatch(/Open on Amazon/);
+  });
+
   it("creates a new Amazon product when the exact model is not in the catalog", () => {
     const publish = readRepo("lib/amazon/publish-listing.ts");
     const resolve = readRepo("lib/amazon/catalog-resolve.ts");

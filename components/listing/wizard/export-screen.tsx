@@ -556,10 +556,10 @@ export function ExportScreen({
               <p className="mt-2 text-[12px] text-muted-foreground">
                 {photoCount} photo{photoCount === 1 ? "" : "s"}
                 {productName ? ` · ${productName}` : ""}
-                <span className="block">
-                  <AmazonSourceLink listing={listing} />
-                </span>
               </p>
+              <div className="mt-3">
+                <AmazonSourceLink listing={listing} />
+              </div>
             </div>
 
             <div className="flex flex-col p-5 sm:p-6">

@@ -8,6 +8,7 @@ import { EmptyPanel, SkeletonBlock } from "@/components/ui/studio";
 import { ListingPipeline } from "@/components/studio/listing-pipeline";
 import { ListingCard } from "@/components/studio/listing-card";
 import { NewListingButton } from "@/components/brand/new-listing-button";
+import { amazonListingUrl } from "@/lib/amazon/asin";
 import { formatRelativeTime } from "@/lib/format-relative-time";
 import { cn } from "@/lib/utils";
 
@@ -16,6 +17,7 @@ type ProductRow = {
   title: string;
   brand: string;
   sku: string;
+  amazonAsin?: string | null;
   status: string;
   price: number | null;
   updatedAt: string;
@@ -81,7 +83,7 @@ export default function ListingsPage() {
       if (filter === "draft" && ready.ready) return false;
       if (filter === "ready" && !ready.ready) return false;
       if (!q) return true;
-      const hay = [p.title, p.brand, p.sku, p.categoryName, p.status]
+      const hay = [p.title, p.brand, p.sku, p.amazonAsin, p.categoryName, p.status]
         .filter(Boolean)
         .join(" ")
         .toLowerCase();
@@ -214,6 +216,12 @@ export default function ListingsPage() {
                       badge={ready.label}
                       badgeTone={ready.ready ? "ready" : "muted"}
                       priority={i < 4}
+                      amazonHref={
+                        amazonListingUrl({
+                          sku: product.sku,
+                          amazonAsin: product.amazonAsin || "",
+                        }) || null
+                      }
                     />
                   );
                 })}

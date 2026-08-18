@@ -1,6 +1,7 @@
 "use client";
 
-import { amazonListingUrl } from "@/lib/amazon/asin";
+import { ExternalLink } from "lucide-react";
+import { amazonAsinFromListing, amazonListingUrl } from "@/lib/amazon/asin";
 import type { ProductListing } from "@/types/product";
 import { cn } from "@/lib/utils";
 
@@ -22,17 +23,27 @@ export function AmazonSourceLink({
     itemSpecifics: listing.itemSpecifics,
   });
   if (!href) return null;
+  const asin = amazonAsinFromListing({
+    amazonAsin: listing.amazonAsin,
+    sku: listing.sku,
+    description: listing.descriptionHtml,
+    itemSpecifics: listing.itemSpecifics,
+  });
   return (
     <a
       href={href}
       target="_blank"
       rel="noreferrer"
       className={cn(
-        "text-[12px] text-[#707070] underline underline-offset-2 hover:text-[#141414]",
+        "inline-flex h-9 items-center gap-1.5 rounded-md border border-[#ccc] bg-white px-3 text-[13px] font-semibold text-[#141414] transition hover:border-[#141414]",
         className,
       )}
     >
-      Amazon listing
+      Open on Amazon
+      <ExternalLink className="size-3.5" />
+      {asin ? (
+        <span className="hidden font-medium text-[#707070] sm:inline">{asin}</span>
+      ) : null}
     </a>
   );
 }

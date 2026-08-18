@@ -10,6 +10,8 @@ type ProductRow = {
   id: string;
   title: string;
   brand: string;
+  sku?: string;
+  amazonAsin?: string | null;
   status: string;
   updatedAt: string;
   coverUrl?: string | null;

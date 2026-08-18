@@ -8,6 +8,7 @@ import { MarketPromos } from "@/components/studio/market-promos";
 import { NewListingButton } from "@/components/brand/new-listing-button";
 import { HomeWallet } from "@/components/studio/home-wallet";
 import { ReadyGrabGhost } from "@/components/studio/ready-grab-ghost";
+import { amazonListingUrl } from "@/lib/amazon/asin";
 import { formatRelativeTime } from "@/lib/format-relative-time";
 import {
   READY_LISTINGS,
@@ -19,6 +20,8 @@ export type HomeDraft = {
   id: string;
   title: string;
   brand?: string | null;
+  sku?: string | null;
+  amazonAsin?: string | null;
   status?: string;
   updatedAt?: string;
   coverUrl?: string | null;
@@ -152,6 +155,12 @@ export function MoneyMachineHome({
                         badge={ready.label}
                         badgeTone={ready.ready ? "ready" : "muted"}
                         priority={i < 2}
+                        amazonHref={
+                          amazonListingUrl({
+                            sku: draft.sku || "",
+                            amazonAsin: draft.amazonAsin || "",
+                          }) || null
+                        }
                       />
                     );
                   })}

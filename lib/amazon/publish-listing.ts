@@ -1,7 +1,6 @@
 import { sanitizeEbayUpc } from "@/lib/ebay/inventory-api";
 import { resolveAmazonCatalogMatch } from "@/lib/amazon/catalog-resolve";
 import {
-  amazonExistingAsinOfferAttributes,
   amazonHasBrandLockIssue,
   amazonListingHasPrice,
   buildAmazonListingAttributes,
@@ -96,18 +95,15 @@ export async function publishAmazonOffer(opts: {
     );
   }
 
-  const attaching = !creating && /^[A-Z0-9]{10}$/i.test(asin);
-  let requirements: "LISTING" | "LISTING_OFFER_ONLY" = "LISTING";
-
   const schema = await getAmazonProductTypeSchema({
     accessToken: opts.accessToken,
     marketplaceId: cfg.marketplaceId,
     sellerId: opts.sellingPartnerId,
     productType,
-    requirements,
+    requirements: "LISTING",
   });
 
-  let attributes = buildAmazonListingAttributes({
+  const attributes = buildAmazonListingAttributes({
     marketplaceId: cfg.marketplaceId,
     asin,
     listing: opts.listing,
@@ -116,20 +112,13 @@ export async function publishAmazonOffer(opts: {
   });
 
   const productTypeName = schema?.productType || productType;
-  const putBase: {
-    accessToken: string;
-    sellerId: string;
-    sku: string;
-    marketplaceId: string;
-    productType: string;
-    requirements: "LISTING" | "LISTING_OFFER_ONLY";
-  } = {
+  const putBase = {
     accessToken: opts.accessToken,
     sellerId: opts.sellingPartnerId,
     sku,
     marketplaceId: cfg.marketplaceId,
     productType: productTypeName,
-    requirements,
+    requirements: "LISTING" as const,
   };
 
   let readyAttributes = attributes;
@@ -149,28 +138,11 @@ export async function publishAmazonOffer(opts: {
     });
     const unlockedBrand = amazonBrandGatingReason(unlocked.issues);
     if (unlockedBrand) throw new Error(unlockedBrand);
-    if (amazonHasBrandLockIssue(unlocked.issues) && attaching) {
-      readyAttributes = amazonExistingAsinOfferAttributes(readyAttributes);
-      putBase.requirements = "LISTING_OFFER_ONLY";
-      const offerOnly = await putAmazonListingOffer({
-        ...putBase,
-        attributes: readyAttributes,
-        mode: "VALIDATION_PREVIEW",
-      });
-      const offerBrand = amazonBrandGatingReason(offerOnly.issues);
-      if (offerBrand) throw new Error(offerBrand);
-      const stillOffer = amazonIncompleteListingReason(
-        offerOnly.issues,
-        offerOnly.status,
-      );
-      if (stillOffer) throw new Error(stillOffer);
-    } else {
-      const stillLock = amazonIncompleteListingReason(
-        unlocked.issues,
-        unlocked.status,
-      );
-      if (stillLock) throw new Error(stillLock);
-    }
+    const stillLock = amazonIncompleteListingReason(
+      unlocked.issues,
+      unlocked.status,
+    );
+    if (stillLock) throw new Error(stillLock);
   } else if (
     /^INVALID$/i.test(preview.status) ||
     amazonIncompleteListingReason(preview.issues)

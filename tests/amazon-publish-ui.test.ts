@@ -59,11 +59,11 @@ describe("Amazon seller publish stays on Higlou", () => {
     expect(publish).toMatch(/externally_assigned_product_identifier|upc/);
   });
 
-  it("attaches existing Amazon products with photos, and only drops brand on 5995", () => {
+  it("publishes a complete Amazon listing, never a price-only offer", () => {
     const publish = readRepo("lib/amazon/publish-listing.ts");
+    expect(publish).toMatch(/requirements: "LISTING"/);
+    expect(publish).not.toMatch(/LISTING_OFFER_ONLY/);
     expect(publish).toMatch(/dropAmazonBrandAttributes/);
-    expect(publish).toMatch(/LISTING_OFFER_ONLY/);
-    expect(publish).toMatch(/amazonHasBrandLockIssue/);
   });
 
   it("does not ask Amazon for identifiers when submitting a live offer", () => {

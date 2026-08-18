@@ -714,7 +714,8 @@ export function ExportScreen({
                     </p>
                   ) : (
                     <p className="mt-1.5 text-[12px] text-muted-foreground">
-                      Finds the exact Amazon catalog product, fills every required field, then goes live only if Amazon says it is valid.
+                      Publishes a complete Amazon listing with photos, title, and
+                      price — not a price-only offer.
                     </p>
                   )}
                 </div>

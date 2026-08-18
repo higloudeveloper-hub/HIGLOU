@@ -7,11 +7,14 @@ const IPHONE_UA =
 
 /** Edge IP pool — Amazon often captchas Node/Vercel serverless. */
 export async function GET(request: Request) {
-  const q = (new URL(request.url).searchParams.get("q") || "").trim();
+  const url = new URL(request.url);
+  const q = (url.searchParams.get("q") || "").trim();
   if (q.length < 2 || q.length > 200) {
     return NextResponse.json({ error: "Type a product to search." }, { status: 400 });
   }
-  const params = new URLSearchParams({ k: q, s: "review-rank" });
+  const sort = url.searchParams.get("s") === "featured" ? "featured" : "review-rank";
+  const params = new URLSearchParams({ k: q });
+  if (sort === "review-rank") params.set("s", "review-rank");
   try {
     const res = await fetch(`https://www.amazon.com/s?${params.toString()}`, {
       headers: {

@@ -25,6 +25,7 @@ const bodySchema = z.object({
     .default("amazon_to_ebay"),
   onlySellable: z.boolean().optional().default(true),
   cost: z.number().positive().max(100000).optional(),
+  seed: z.coerce.number().int().optional().default(0),
 });
 
 export async function POST(request: Request) {
@@ -75,6 +76,13 @@ export async function POST(request: Request) {
 
   try {
     const tokens = await loadWinnerMarketTokens(auth.supabase, auth.user.id);
+    const owned = await auth.supabase
+      .from("products")
+      .select("amazon_asin")
+      .eq("user_id", auth.user.id);
+    const excludeAsins = (owned.data || [])
+      .map((row) => String(row.amazon_asin || "").trim().toUpperCase())
+      .filter((id) => /^[A-Z0-9]{10}$/.test(id));
     const found = await findAmazonWinners({
       query,
       category,
@@ -89,6 +97,8 @@ export async function POST(request: Request) {
       mode: body.mode,
       onlySellable: onlySellableForMode(body.mode, body.onlySellable),
       supplierCost: body.cost,
+      seed: body.seed,
+      excludeAsins,
     });
     if (!found.products.length) {
       return NextResponse.json(
@@ -104,6 +114,7 @@ export async function POST(request: Request) {
       products: found.products,
       sources: found.sources,
       filteredOut: found.filteredOut,
+      queries: found.queries,
     });
   } catch (error) {
     const message =

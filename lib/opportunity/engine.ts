@@ -17,6 +17,10 @@ import type { KeepaSnapshot } from "@/lib/keepa/parse";
 import { searchEbayLivePrices } from "@/lib/ebay/live-prices";
 import { opportunitySearchText } from "@/lib/opportunity/categories";
 import {
+  isCrowdedBestseller,
+  pickCategoryQueries,
+} from "@/lib/opportunity/niches";
+import {
   estimateEbayReferralFee,
   estimateNetProfit,
 } from "@/lib/opportunity/profit";
@@ -224,10 +228,13 @@ export async function findOpportunities(opts: {
   marketplaceId?: string;
   sellingPartnerId?: string;
   ebayToken?: string;
+  seed?: number;
+  excludeAsins?: string[];
 }): Promise<{
   products: OpportunityProduct[];
   sources: OpportunitySources;
   filteredOut: number;
+  queries: string[];
 }> {
   const mode = opts.mode || "amazon_to_ebay";
   const onlySellable = opts.onlySellable !== false;
@@ -243,8 +250,23 @@ export async function findOpportunities(opts: {
     category ||
     fromId.category ||
     query;
+  const keepaOn = isKeepaConfigured();
+  const exclude = new Set(
+    (opts.excludeAsins || [])
+      .map((id) => id.trim().toUpperCase())
+      .filter((id) => /^[A-Z0-9]{10}$/.test(id)),
+  );
+  const queries = keepaOn
+    ? [keywords].filter(Boolean)
+    : pickCategoryQueries({
+        categoryId: opts.categoryId,
+        extra: query,
+        generic: keywords,
+        seed: opts.seed,
+        count: 3,
+      });
   const asin = parseAmazonLink(query)?.asin || "";
-  if (!query && !category && !fromId.category && !asin && !keepaRoot) {
+  if (!query && !category && !fromId.category && !asin && !keepaRoot && !queries.length) {
     throw new Error("Pick a category or type the product you want Higlou to find.");
   }
 
@@ -255,10 +277,36 @@ export async function findOpportunities(opts: {
     ebayLive: false,
   };
 
-  let asins: string[] = asin ? [asin] : [];
+  let asins: string[] = asin && !exclude.has(asin.toUpperCase()) ? [asin] : [];
   const seeds = new Map<string, OpportunityProduct>();
 
-  if (isKeepaConfigured()) {
+  const takeHit = (hit: {
+    asin: string;
+    title?: string;
+    brand?: string;
+    imageUrl?: string;
+    salesRank?: number | null;
+    salesRankLabel?: string;
+    rating?: number | null;
+    reviewCount?: number | null;
+    amazonPrice?: number | null;
+  }) => {
+    const id = String(hit.asin || "").toUpperCase();
+    if (!/^[A-Z0-9]{10}$/.test(id) || exclude.has(id)) return;
+    const prev = seeds.get(id) || emptyProduct(id, mode);
+    prev.title = hit.title || prev.title;
+    prev.brand = hit.brand || prev.brand;
+    prev.imageUrl = hit.imageUrl || prev.imageUrl;
+    if (hit.salesRank != null) prev.salesRank = hit.salesRank;
+    if (hit.salesRankLabel) prev.salesRankLabel = hit.salesRankLabel;
+    prev.rating = hit.rating ?? prev.rating;
+    prev.reviewCount = hit.reviewCount ?? prev.reviewCount;
+    prev.amazonPrice = hit.amazonPrice ?? prev.amazonPrice;
+    seeds.set(id, prev);
+    asins.push(id);
+  };
+
+  if (keepaOn) {
     try {
       const found = keepaRoot || keywords
         ? await keepaFindAsins({
@@ -269,76 +317,73 @@ export async function findOpportunities(opts: {
         : [];
       const searched =
         keywords && found.length < 8 ? await keepaSearchAsins(keywords) : [];
-      asins = [...new Set([...asins, ...found, ...searched])];
+      for (const id of [...found, ...searched]) takeHit({ asin: id });
       sources.keepa = asins.length > 0;
     } catch {
       sources.keepa = false;
     }
   }
 
-  if (asins.length < 8 && opts.amazonToken && opts.marketplaceId && (keywords || asin)) {
+  const searchTerms = queries.length ? queries : [keywords].filter(Boolean);
+
+  if (asins.length < 12 && opts.amazonToken && opts.marketplaceId) {
+    const amazonToken = opts.amazonToken;
+    const marketplaceId = opts.marketplaceId;
     try {
-      const catalog = asin
-        ? await searchAmazonCatalogWinners({
-            accessToken: opts.amazonToken,
-            marketplaceId: opts.marketplaceId,
-            identifiers: asin,
-            identifiersType: "ASIN",
-          })
-        : [];
-      const searched = keywords
-        ? await searchAmazonCatalogWinners({
-            accessToken: opts.amazonToken,
-            marketplaceId: opts.marketplaceId,
-            keywords,
-          })
-        : [];
-      for (const hit of [...catalog, ...searched]) {
-        const row = emptyProduct(hit.asin, mode);
-        row.title = hit.title;
-        row.brand = hit.brand;
-        row.imageUrl = hit.imageUrl;
-        row.salesRank = hit.salesRank;
-        row.salesRankLabel = hit.salesRankLabel;
-        row.rating = hit.rating;
-        row.reviewCount = hit.reviewCount;
-        row.amazonPrice = hit.amazonPrice;
-        seeds.set(hit.asin, row);
+      if (asin) {
+        const catalog = await searchAmazonCatalogWinners({
+          accessToken: amazonToken,
+          marketplaceId,
+          identifiers: asin,
+          identifiersType: "ASIN",
+        }).catch(() => []);
+        catalog.forEach(takeHit);
       }
-      asins = [
-        ...asins,
-        ...catalog.map((hit) => hit.asin),
-        ...searched.map((hit) => hit.asin),
-      ];
-      sources.amazonCatalog = catalog.length + searched.length > 0;
+      const catalogChunks = await mapLimit(searchTerms, 2, async (term) => {
+        try {
+          return await searchAmazonCatalogWinners({
+            accessToken: amazonToken,
+            marketplaceId,
+            keywords: term,
+          });
+        } catch {
+          return [];
+        }
+      });
+      catalogChunks.flat().forEach(takeHit);
+      sources.amazonCatalog = catalogChunks.some((rows) => rows.length > 0);
     } catch {
       sources.amazonCatalog = false;
     }
   }
 
-  if (asins.length < 8 && keywords) {
-    const pageHits = await searchAmazonWinnersPage({
-      keywords,
-      pageOrigin: opts.pageOrigin,
-    }).catch(() => []);
-    for (const hit of pageHits) {
-      const prev = seeds.get(hit.asin) || emptyProduct(hit.asin, mode);
-      prev.title = hit.title || prev.title;
-      prev.imageUrl = hit.imageUrl || prev.imageUrl;
-      prev.rating = hit.rating ?? prev.rating;
-      prev.reviewCount = hit.reviewCount ?? prev.reviewCount;
-      prev.amazonPrice = hit.amazonPrice ?? prev.amazonPrice;
-      seeds.set(hit.asin, prev);
-    }
-    asins = [...asins, ...pageHits.map((hit) => hit.asin)];
+  if (asins.length < 12 && searchTerms.length) {
+    const pageChunks = await mapLimit(searchTerms.slice(0, 3), 2, async (term) =>
+      searchAmazonWinnersPage({
+        keywords: term,
+        pageOrigin: opts.pageOrigin,
+        sort: keepaOn ? "review-rank" : "featured",
+      }).catch(() => []),
+    );
+    pageChunks.flat().forEach(takeHit);
   }
 
   asins = [...new Set(asins.map((id) => id.toUpperCase()))].filter((id) =>
-    /^[A-Z0-9]{10}$/.test(id),
+    /^[A-Z0-9]{10}$/.test(id) && !exclude.has(id),
   );
+  if (!keepaOn) {
+    const lean = asins.filter((id) => {
+      const hit = seeds.get(id);
+      if (!hit || hit.reviewCount == null) return true;
+      return !isCrowdedBestseller(hit.reviewCount);
+    });
+    if (lean.length >= Math.max(limit, 3)) asins = lean;
+  }
   if (!asins.length) {
     throw new Error(
-      "No products passed the first Keepa filters. Try another category.",
+      keepaOn
+        ? "No products passed the first Keepa filters. Try another category."
+        : "No products found for this slice. Try Find different products or type a product name.",
     );
   }
 
@@ -471,5 +516,6 @@ export async function findOpportunities(opts: {
     products: ranked,
     sources,
     filteredOut: Math.max(0, asins.length - ranked.length),
+    queries: searchTerms,
   };
 }

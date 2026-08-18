@@ -128,6 +128,8 @@ export function AmazonAutoImportPanel({
   const [hits, setHits] = useState<OpportunityProduct[]>([]);
   const [sources, setSources] = useState<WinnerSources | null>(null);
   const [picked, setPicked] = useState<string[]>([]);
+  const [round, setRound] = useState(0);
+  const [queries, setQueries] = useState<string[]>([]);
 
   const steps = searchStepsFor(mode);
   const activeMode = OPPORTUNITY_MODES.find((row) => row.id === mode);
@@ -159,15 +161,19 @@ export function AmazonAutoImportPanel({
     setHits([]);
     setPicked([]);
     setSources(null);
+    setQueries([]);
     setError(null);
     if (next === "amazon") setOnlySellable(true);
   };
 
   const search = async () => {
     if (disabled || !canSearch) return;
+    const nextRound = round + 1;
+    setRound(nextRound);
     setSearching(true);
     setHits([]);
     setSources(null);
+    setQueries([]);
     setPicked([]);
     setError(null);
     try {
@@ -181,6 +187,7 @@ export function AmazonAutoImportPanel({
           mode,
           onlySellable: mode === "amazon_to_ebay" ? false : onlySellable,
           cost: costValue,
+          seed: nextRound - 1,
         }),
       });
       const body = (await response.json().catch(() => null)) as {
@@ -188,18 +195,22 @@ export function AmazonAutoImportPanel({
         error?: string;
         products?: OpportunityProduct[];
         sources?: WinnerSources;
+        queries?: string[];
       } | null;
       if (!response.ok || !body?.ok || !body.products?.length) {
         setHits([]);
         setSources(null);
+        setQueries([]);
         setError(body?.error || "Amazon search failed.");
         return;
       }
       setHits(body.products.slice(0, limit));
       setSources(body.sources || null);
+      setQueries(body.queries || []);
     } catch (err) {
       setHits([]);
       setSources(null);
+      setQueries([]);
       setError(err instanceof Error ? err.message : "Amazon search failed.");
     } finally {
       setSearching(false);
@@ -393,7 +404,9 @@ export function AmazonAutoImportPanel({
           </>
         )}{" "}
         Add <span className="font-medium">KEEPA_API_KEY</span> on the server for
-        history and BSR.
+        live BSR and sales history. Without Keepa, Higlou searches specific
+        product types in the category — not the same Amazon bestsellers every
+        time.
       </p>
 
       {error ? (
@@ -478,21 +491,43 @@ export function AmazonAutoImportPanel({
                   ? ". eBay figures are active listings, not sold."
                   : ""}
               </p>
+              {sources && !sources.keepa ? (
+                <p className="mt-1.5 border border-[#e5e5e5] bg-[#fafafa] px-2 py-1.5 text-[12px] text-[#141414]">
+                  Keepa is not connected. This round searched{" "}
+                  {queries.length
+                    ? queries.join(", ")
+                    : "specific product types in this category"}
+                  . Household bestsellers with 10k+ reviews are skipped. Click
+                  Find different products for another slice.
+                </p>
+              ) : null}
             </div>
-            <button
-              type="button"
-              disabled={disabled}
-              onClick={() =>
-                setPicked(
-                  picked.length === hits.length
-                    ? []
-                    : hits.map((hit) => hit.asin),
-                )
-              }
-              className="text-[12px] font-medium text-[#141414] underline-offset-2 hover:underline"
-            >
-              {picked.length === hits.length ? "Clear" : "Select all"}
-            </button>
+            <div className="flex shrink-0 items-center gap-3">
+              {sources && !sources.keepa ? (
+                <button
+                  type="button"
+                  disabled={disabled}
+                  onClick={() => void search()}
+                  className="text-[12px] font-medium text-[#141414] underline-offset-2 hover:underline"
+                >
+                  Find different products
+                </button>
+              ) : null}
+              <button
+                type="button"
+                disabled={disabled}
+                onClick={() =>
+                  setPicked(
+                    picked.length === hits.length
+                      ? []
+                      : hits.map((hit) => hit.asin),
+                  )
+                }
+                className="text-[12px] font-medium text-[#141414] underline-offset-2 hover:underline"
+              >
+                {picked.length === hits.length ? "Clear" : "Select all"}
+              </button>
+            </div>
           </div>
           <ul className="mt-2 grid max-h-[36rem] grid-cols-1 gap-2 overflow-y-auto sm:grid-cols-2">
             {hits.map((hit) => {

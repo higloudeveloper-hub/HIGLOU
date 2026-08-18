@@ -16,6 +16,8 @@ export async function findAmazonWinners(opts: {
   mode?: OpportunityMode;
   onlySellable?: boolean;
   supplierCost?: number | null;
+  seed?: number;
+  excludeAsins?: string[];
 }) {
   return findOpportunities(opts);
 }

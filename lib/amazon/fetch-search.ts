@@ -22,7 +22,10 @@ function headersFor(userAgent: string): Record<string, string> {
   };
 }
 
-export function amazonSearchUrl(keywords: string, sort: "review-rank" | "featured" = "review-rank"): string {
+export function amazonSearchUrl(
+  keywords: string,
+  sort: "review-rank" | "featured" = "review-rank",
+): string {
   const k = String(keywords || "").trim();
   const params = new URLSearchParams({ k });
   if (sort === "review-rank") params.set("s", "review-rank");
@@ -52,10 +55,15 @@ async function fetchViaReader(url: string): Promise<string> {
   return res.text();
 }
 
-async function fetchViaEdge(origin: string, keywords: string): Promise<string> {
+async function fetchViaEdge(
+  origin: string,
+  keywords: string,
+  sort: "review-rank" | "featured",
+): Promise<string> {
   try {
     const pageUrl = new URL("/api/amazon/search-page", origin);
     pageUrl.searchParams.set("q", keywords);
+    if (sort === "featured") pageUrl.searchParams.set("s", "featured");
     const res = await fetch(pageUrl, {
       cache: "no-store",
       signal: AbortSignal.timeout(FETCH_MS),
@@ -79,14 +87,16 @@ function richer(current: AmazonWinnerHit[], nextHtml: string): AmazonWinnerHit[]
   return next.length > current.length ? next : current;
 }
 
-/** Public Amazon search. No seller account. Sorted by customer reviews. */
+/** Public Amazon search. No seller account. Featured = mixed results, not the same review-rank bestsellers. */
 export async function searchAmazonWinnersPage(opts: {
   keywords: string;
   pageOrigin?: string;
+  sort?: "review-rank" | "featured";
 }): Promise<AmazonWinnerHit[]> {
   const keywords = String(opts.keywords || "").trim();
   if (!keywords) return [];
-  const url = amazonSearchUrl(keywords, "review-rank");
+  const sort = opts.sort || "review-rank";
+  const url = amazonSearchUrl(keywords, sort);
   let hits: AmazonWinnerHit[] = [];
 
   try {
@@ -95,7 +105,7 @@ export async function searchAmazonWinnersPage(opts: {
     /* try other paths */
   }
   if (hits.length < 4 && opts.pageOrigin) {
-    hits = richer(hits, await fetchViaEdge(opts.pageOrigin, keywords));
+    hits = richer(hits, await fetchViaEdge(opts.pageOrigin, keywords, sort));
   }
   if (hits.length < 4) {
     try {

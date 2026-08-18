@@ -17,6 +17,7 @@ const KIT_RE =
 const BARE_RE = /\b(tool only|bare tool|herramienta sola)\b/i;
 const RENEWED_RE = /\b(renewed|refurbished|reacondicionado)\b/i;
 const MODEL_TOKEN_RE = /\b[A-Z]{1,8}\d[A-Z0-9\-]{1,16}\b/gi;
+const NUMERIC_MODEL_RE = /\b\d{6,10}\b/g;
 const FINISH_RE = /(^|[^A-Z])(PC|SN|PN|SS|BN|RB|CZ|BL|WH|BNK)([^A-Z]|$)/i;
 const SKIP_TOKENS = new Set([
   "MAX",
@@ -64,8 +65,10 @@ export function listingLooksBareTool(text: string): boolean {
 }
 
 export function extractModelTokens(text: string): string[] {
-  const matches = String(text || "").toUpperCase().match(MODEL_TOKEN_RE) || [];
-  const tokens = matches
+  const raw = String(text || "").toUpperCase();
+  const alpha = raw.match(MODEL_TOKEN_RE) || [];
+  const numeric = raw.match(NUMERIC_MODEL_RE) || [];
+  const tokens = [...alpha, ...numeric]
     .map((token) => token.replace(/[^A-Z0-9-]/g, ""))
     .filter((token) => {
       const tight = compact(token);
@@ -85,6 +88,9 @@ function stripPackageSuffix(model: string): string {
 export function resolveAmazonModelCode(hints: AmazonMatchHints): string {
   const field = String(hints.model || hints.mpn || "").trim();
   const tight = compact(field);
+  if (field && !/\s/.test(field) && /^\d{6,12}$/.test(tight)) {
+    return field;
+  }
   if (
     field &&
     !/\s/.test(field) &&
@@ -213,4 +219,23 @@ export function pickAmazonCatalogMatch(
     .filter((row) => row.score >= 45)
     .sort((a, b) => b.score - a.score || a.index - b.index);
   return ranked[0]?.hit || null;
+}
+
+export function pickExactAmazonCatalog(
+  hits: AmazonCatalogHit[],
+  hints: AmazonMatchHints,
+): AmazonCatalogHit | null {
+  const exact = hits.filter((hit) => listingModelMatchesHit(hit, hints));
+  return pickAmazonCatalogMatch(exact, hints);
+}
+
+export function pickSoleBarcodeCatalogHit(
+  hits: AmazonCatalogHit[],
+  hints: AmazonMatchHints,
+): AmazonCatalogHit | null {
+  if (hits.length !== 1) return pickExactAmazonCatalog(hits, hints);
+  const hit = hits[0];
+  if (!hit?.asin) return null;
+  if (String(hints.brand || "").trim() && !brandMatches(hints, hit)) return null;
+  return hit;
 }

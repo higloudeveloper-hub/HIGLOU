@@ -59,10 +59,16 @@ export async function publishAmazonOffer(opts: {
       asin: opts.listing.asin || asinFromHiglouSku(opts.listing.sku),
     },
   });
-  const asin = resolved.asin;
+  const creating = resolved.mode === "create";
+  if (creating && String(upc || "").replace(/\D/g, "").length < 12) {
+    throw new Error(
+      "Amazon does not have this exact model yet. Add a UPC so Higlou can create it as a new Amazon product, instead of listing a similar one.",
+    );
+  }
+  let asin = resolved.asin;
   let productType = resolved.productType || "PRODUCT";
   let catalogTitle = resolved.title || opts.listing.title;
-  const catalog = resolved.catalog;
+  const catalog = creating ? null : resolved.catalog;
 
   if (catalog?.productType) productType = catalog.productType;
   if (catalog?.title) catalogTitle = catalog.title;
@@ -74,6 +80,11 @@ export async function publishAmazonOffer(opts: {
       itemName: catalogTitle || opts.listing.title,
     });
     if (guessed) productType = guessed;
+  }
+  if (creating && (!productType || productType === "PRODUCT")) {
+    throw new Error(
+      "Amazon does not have this exact model yet, and could not pick a product type from the title. Add a clearer title, then publish again to create it as a new Amazon product.",
+    );
   }
 
   const schema = await getAmazonProductTypeSchema({
@@ -148,6 +159,7 @@ export async function publishAmazonOffer(opts: {
       sku: result.sku || sku,
       marketplaceId: cfg.marketplaceId,
     });
+    if (live.asin) asin = live.asin;
     const blocked =
       amazonBrandGatingReason(live.issues) || amazonListingBlockedReason(live.issues);
     if (blocked) throw new Error(blocked);

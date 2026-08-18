@@ -348,6 +348,35 @@ describe("Amazon complete listing attributes", () => {
     expect(dims[0].length.unit).toBe("inches");
   });
 
+  it("creates a new Amazon listing from Higlou facts and UPC when there is no ASIN", () => {
+    const attributes = buildAmazonListingAttributes({
+      marketplaceId: AMAZON_US_MARKETPLACE_ID,
+      schema: thermostatSchema,
+      listing: {
+        title: "Defiant Max Detect 240 Black Motion Sensing Flood Light",
+        brand: "Defiant",
+        model: "17000148",
+        upc: "047113170014",
+        price: 50,
+        quantity: 1,
+        description: "Wired outdoor three-head LED motion security flood light.",
+        features: ["Motion sensing", "Three LED heads"],
+        images: ["https://images.example.com/defiant.jpg"],
+      },
+    });
+    expect(attributes.merchant_suggested_asin).toBeUndefined();
+    expect(
+      (attributes.externally_assigned_product_identifier as Array<{ value: string; type: string }>)[0],
+    ).toEqual(
+      expect.objectContaining({
+        type: "upc",
+        value: "047113170014",
+      }),
+    );
+    expect((attributes.item_name as Array<{ value: string }>)[0].value).toMatch(/Defiant/);
+    expect((attributes.model_number as Array<{ value: string }>)[0].value).toBe("17000148");
+  });
+
   it("maps Amazon display-name battery issues to snake_case and does not copy incomplete lithium", () => {
     const drillSchema = {
       productType: "DRILL",

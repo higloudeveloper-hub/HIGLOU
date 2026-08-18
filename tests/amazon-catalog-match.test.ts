@@ -4,6 +4,7 @@ import {
   extractModelCode,
   listingLooksBareTool,
   pickAmazonCatalogMatch,
+  pickExactAmazonCatalog,
   scoreAmazonCatalogHit,
 } from "@/lib/amazon/catalog-match";
 
@@ -163,5 +164,40 @@ describe("Amazon catalog auto-match", () => {
     expect(
       listingLooksBareTool("Ryobi ONE+ 18V Cordless Right Angle Drill - Tool Only"),
     ).toBe(true);
+  });
+
+  it("matches numeric Home Depot models like Defiant 17000148", () => {
+    expect(
+      extractModelCode("Defiant Max Detect 240 17000148"),
+    ).toBe("17000148");
+    const hit = {
+      asin: "B0EXAMPLE01",
+      title: "Defiant 240-Degree Black Motion LED Security Light",
+      identifiers: ["17000148"],
+    };
+    expect(
+      scoreAmazonCatalogHit(hit, {
+        brand: "Defiant",
+        model: "17000148",
+        title: "Defiant Max Detect 240 Black Motion Sensing Wired Outdoor",
+      }),
+    ).toBeGreaterThanOrEqual(45);
+    expect(
+      pickExactAmazonCatalog(
+        [
+          hit,
+          {
+            asin: "B0SIMILAR99",
+            title: "Defiant 180-Degree Motion Security Light",
+            identifiers: ["12345678"],
+          },
+        ],
+        {
+          brand: "Defiant",
+          model: "17000148",
+          title: "Defiant Max Detect 240 Black Motion Sensing",
+        },
+      )?.asin,
+    ).toBe("B0EXAMPLE01");
   });
 });

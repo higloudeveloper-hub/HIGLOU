@@ -409,6 +409,7 @@ export async function getAmazonListingItem(opts: {
 }): Promise<{
   sku: string;
   status: string;
+  asin: string;
   issues: AmazonSpIssue[];
   attributes: Record<string, unknown>;
 }> {
@@ -430,6 +431,7 @@ export async function getAmazonListingItem(opts: {
   return {
     sku: String(json.sku || opts.sku),
     status: String(summaries[0]?.status || json.status || ""),
+    asin: String(summaries[0]?.asin || ""),
     issues,
     attributes: (json.attributes as Record<string, unknown>) || {},
   };

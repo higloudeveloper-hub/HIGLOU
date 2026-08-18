@@ -36,6 +36,16 @@ describe("Amazon seller publish stays on Higlou", () => {
     expect(resolve).toMatch(/hydrateHits/);
   });
 
+  it("creates a new Amazon product when the exact model is not in the catalog", () => {
+    const publish = readRepo("lib/amazon/publish-listing.ts");
+    const resolve = readRepo("lib/amazon/catalog-resolve.ts");
+    expect(resolve).toMatch(/mode: "create"/);
+    expect(resolve).not.toMatch(/Higlou will not publish a different product/);
+    expect(publish).toMatch(/creating = resolved.mode === "create"/);
+    expect(publish).toMatch(/create it as a new Amazon product/);
+    expect(publish).toMatch(/externally_assigned_product_identifier|upc/);
+  });
+
   it("does not ask Amazon for identifiers when submitting a live offer", () => {
     const api = readRepo("lib/amazon/sp-api.ts");
     expect(api).toMatch(/includedData: "issues"/);

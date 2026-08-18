@@ -42,26 +42,26 @@ export function amazonConditionType(condition?: string, conditionId?: string): s
 }
 
 export function catalogIdentifierType(upc: string): "UPC" | "EAN" | "GTIN" | null {
-  const value = sanitizeEbayUpc(upc);
+  const value = sanitizeEbayUpc(upc) || String(upc || "").replace(/\D/g, "");
   if (!value) return null;
   if (value.length === 12) return "UPC";
   if (value.length === 13) return "EAN";
   if (value.length === 14) return "GTIN";
-  return "UPC";
+  return null;
 }
 
 export function amazonOfferAttributes(opts: {
   marketplaceId: string;
-  asin: string;
+  asin?: string;
+  upc?: string;
   conditionType: string;
   price: number;
   quantity: number;
   handlingDays: number;
 }) {
   const marketplace_id = opts.marketplaceId;
-  return {
+  const offer = {
     condition_type: [{ value: opts.conditionType, marketplace_id }],
-    merchant_suggested_asin: [{ value: opts.asin, marketplace_id }],
     fulfillment_availability: [
       {
         fulfillment_channel_code: "DEFAULT",
@@ -82,4 +82,26 @@ export function amazonOfferAttributes(opts: {
       },
     ],
   };
+  const asin = String(opts.asin || "").trim().toUpperCase();
+  if (/^[A-Z0-9]{10}$/.test(asin)) {
+    return {
+      ...offer,
+      merchant_suggested_asin: [{ value: asin, marketplace_id }],
+    };
+  }
+  const upc = sanitizeEbayUpc(opts.upc || "") || String(opts.upc || "").replace(/\D/g, "");
+  const idType = catalogIdentifierType(upc);
+  if (upc && idType) {
+    return {
+      ...offer,
+      externally_assigned_product_identifier: [
+        {
+          type: idType.toLowerCase(),
+          value: upc,
+          marketplace_id,
+        },
+      ],
+    };
+  }
+  return offer;
 }

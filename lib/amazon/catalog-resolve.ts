@@ -1,7 +1,7 @@
 import {
   amazonCatalogQueries,
-  listingModelMatchesHit,
-  pickAmazonCatalogMatch,
+  pickExactAmazonCatalog,
+  pickSoleBarcodeCatalogHit,
   type AmazonCatalogHit,
   type AmazonMatchHints,
 } from "@/lib/amazon/catalog-match";
@@ -18,6 +18,7 @@ export type AmazonResolveInput = AmazonMatchHints & {
 };
 
 export type AmazonResolveResult = {
+  mode: "existing" | "create";
   asin: string;
   productType: string;
   title: string;
@@ -192,13 +193,12 @@ export async function resolveAmazonCatalogMatch(opts: {
     ]);
   }
 
-  addHits(
-    await searchByBarcodes({
-      accessToken: opts.accessToken,
-      marketplaceId: opts.marketplaceId,
-      upc: opts.listing.upc,
-    }),
-  );
+  const barcodeHits = await searchByBarcodes({
+    accessToken: opts.accessToken,
+    marketplaceId: opts.marketplaceId,
+    upc: opts.listing.upc,
+  });
+  addHits(barcodeHits);
 
   const queries = amazonCatalogQueries(hints);
   if (queries.length) {
@@ -211,33 +211,33 @@ export async function resolveAmazonCatalogMatch(opts: {
     );
   }
 
-  if (!collected.length) {
-    throw new Error(
-      "Amazon has no catalog match for this product. Higlou can only offer items Amazon already sells.",
-    );
-  }
+  const createResult = (): AmazonResolveResult => ({
+    mode: "create",
+    asin: "",
+    productType: "PRODUCT",
+    title: String(opts.listing.title || ""),
+    catalog: null,
+  });
+
+  if (!collected.length) return createResult();
 
   const hydrated = await hydrateHits({
     accessToken: opts.accessToken,
     marketplaceId: opts.marketplaceId,
     hits: collected,
   });
-  const exact = hydrated.hits.filter((hit) => listingModelMatchesHit(hit, hints));
-  const match = pickAmazonCatalogMatch(exact.length ? exact : [], hints);
-  if (!match) {
-    const model = [opts.listing.brand, opts.listing.model || opts.listing.mpn]
-      .filter(Boolean)
-      .join(" ")
-      .trim();
-    throw new Error(
-      model
-        ? `Amazon has similar items, but not this exact model (${model}). Higlou will not publish a different product.`
-        : "Amazon has no exact catalog match for this product.",
-    );
-  }
+  const barcodeAsins = new Set(barcodeHits.map((hit) => hit.asin));
+  const hydratedBarcode = hydrated.hits.filter((hit) => barcodeAsins.has(hit.asin));
+  const barcodeMatch =
+    pickExactAmazonCatalog(hydratedBarcode, hints) ||
+    pickSoleBarcodeCatalogHit(hydratedBarcode, hints);
+  const match =
+    barcodeMatch || pickExactAmazonCatalog(hydrated.hits, hints);
+  if (!match) return createResult();
 
   const catalog = hydrated.catalogs.get(match.asin) || null;
   return {
+    mode: "existing",
     asin: match.asin,
     productType: catalog?.productType || match.productType || "PRODUCT",
     title: catalog?.title || match.title,

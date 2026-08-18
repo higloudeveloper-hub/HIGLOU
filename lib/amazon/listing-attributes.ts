@@ -848,7 +848,7 @@ export function amazonListingHasPrice(attributes: Record<string, unknown>): bool
 
 export function buildAmazonListingAttributes(opts: {
   marketplaceId: string;
-  asin: string;
+  asin?: string;
   listing: AmazonListingDraft;
   catalog?: AmazonCatalogSnapshot | null;
   schema?: AmazonProductTypeSchema | null;
@@ -856,6 +856,7 @@ export function buildAmazonListingAttributes(opts: {
   const offer = amazonOfferAttributes({
     marketplaceId: opts.marketplaceId,
     asin: opts.asin,
+    upc: opts.listing.upc,
     conditionType: amazonConditionType(
       opts.listing.condition,
       opts.listing.conditionId,
@@ -918,10 +919,19 @@ export function buildAmazonListingAttributes(opts: {
     catalog: opts.catalog,
   });
 
-  return finalizeAmazonListingAttributes({
+  const finalized = finalizeAmazonListingAttributes({
     attributes: filled,
     listing: opts.listing,
     marketplaceId: opts.marketplaceId,
     schema: opts.schema,
   });
+  if ("merchant_suggested_asin" in offer) {
+    finalized.merchant_suggested_asin = offer.merchant_suggested_asin;
+    delete finalized.externally_assigned_product_identifier;
+  } else if ("externally_assigned_product_identifier" in offer) {
+    finalized.externally_assigned_product_identifier =
+      offer.externally_assigned_product_identifier;
+    delete finalized.merchant_suggested_asin;
+  }
+  return finalized;
 }

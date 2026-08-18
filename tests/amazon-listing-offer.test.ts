@@ -40,6 +40,23 @@ describe("Amazon listing offer helpers", () => {
     expect(attrs.fulfillment_availability[0].quantity).toBe(2);
   });
 
+  it("uses UPC identity when Amazon has no existing ASIN", () => {
+    const attrs = amazonOfferAttributes({
+      marketplaceId: AMAZON_US_MARKETPLACE_ID,
+      upc: "012345678905",
+      conditionType: "new_new",
+      price: 50,
+      quantity: 1,
+      handlingDays: 2,
+    });
+    expect(attrs.merchant_suggested_asin).toBeUndefined();
+    expect(attrs.externally_assigned_product_identifier?.[0]).toEqual({
+      type: "upc",
+      value: "012345678905",
+      marketplace_id: AMAZON_US_MARKETPLACE_ID,
+    });
+  });
+
   it("classifies 12-digit UPC vs 13-digit EAN", () => {
     expect(catalogIdentifierType("012345678905")).toBe("UPC");
   });

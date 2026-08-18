@@ -9,6 +9,41 @@ import {
 import type { AmazonWinnerHit } from "@/lib/amazon/winner-rank";
 import { cn } from "@/lib/utils";
 
+type WinnerSources = { amazonCatalog: boolean; ebayLive: boolean };
+
+function money(n: number | null | undefined) {
+  if (n == null || n <= 0) return "";
+  return `$${n.toFixed(2)}`;
+}
+
+function opportunityLabel(value: AmazonWinnerHit["opportunity"]) {
+  if (value === "now") return "Now";
+  if (value === "watch") return "Watch";
+  return "Thin";
+}
+
+function hitMeta(hit: AmazonWinnerHit) {
+  const parts: string[] = [];
+  parts.push(opportunityLabel(hit.opportunity));
+  if (hit.salesRank && hit.salesRankLabel !== "Amazon search") {
+    parts.push(`BSR ${hit.salesRank.toLocaleString()}`);
+  }
+  if (hit.rating) parts.push(`${hit.rating.toFixed(1)} stars`);
+  else parts.push("No rating yet");
+  if (hit.reviewCount) parts.push(`${hit.reviewCount.toLocaleString()} reviews`);
+  const amazon = money(hit.amazonPrice);
+  if (amazon) parts.push(`Amazon ${amazon}`);
+  const ebay = money(hit.ebayPrice);
+  if (ebay) {
+    parts.push(
+      hit.ebayCount
+        ? `eBay ${ebay} (${hit.ebayCount})`
+        : `eBay ${ebay}`,
+    );
+  }
+  return parts.join(" · ");
+}
+
 export function AmazonAutoImportPanel({
   busy = false,
   onImport,
@@ -23,6 +58,7 @@ export function AmazonAutoImportPanel({
   const [importing, setImporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [hits, setHits] = useState<AmazonWinnerHit[]>([]);
+  const [sources, setSources] = useState<WinnerSources | null>(null);
   const [picked, setPicked] = useState<string[]>([]);
 
   const disabled = busy || searching || importing;
@@ -47,17 +83,21 @@ export function AmazonAutoImportPanel({
         ok?: boolean;
         error?: string;
         products?: AmazonWinnerHit[];
+        sources?: WinnerSources;
       } | null;
       if (!response.ok || !body?.ok || !body.products?.length) {
         setHits([]);
+        setSources(null);
         setPicked([]);
         setError(body?.error || "Amazon search failed.");
         return;
       }
       setHits(body.products.slice(0, limit));
+      setSources(body.sources || null);
       setPicked([]);
     } catch (err) {
       setHits([]);
+      setSources(null);
       setPicked([]);
       setError(err instanceof Error ? err.message : "Amazon search failed.");
     } finally {
@@ -73,6 +113,7 @@ export function AmazonAutoImportPanel({
       const ok = await onImport(selected.map((hit) => hit.asin));
       if (ok !== false) {
         setHits([]);
+        setSources(null);
         setPicked([]);
       }
     } catch (err) {
@@ -85,8 +126,8 @@ export function AmazonAutoImportPanel({
   return (
     <div className="mt-3 border-t border-[#e5e5e5] pt-3">
       <p className="text-[13px] text-[#707070]">
-        Pick a category and how many to find. Higlou shows the best-reviewed
-        winners, then you choose which to import for eBay.
+        Pick a category and how many to find. Higlou ranks Amazon sellers
+        against live eBay prices so you can see what is worth importing now.
       </p>
 
       <div className="mt-2 grid gap-2 sm:grid-cols-[1fr_88px]">
@@ -145,6 +186,18 @@ export function AmazonAutoImportPanel({
         </button>
       </div>
 
+      <p className="mt-2 text-[12px] text-[#707070]">
+        For live Best Sellers Rank and eBay prices, connect{" "}
+        <a href="/settings#amazon-store" className="underline underline-offset-2">
+          Amazon
+        </a>{" "}
+        and{" "}
+        <a href="/settings#ebay-store" className="underline underline-offset-2">
+          eBay
+        </a>{" "}
+        in Settings. Search still works without them.
+      </p>
+
       {error ? (
         <p className="mt-2 text-[13px] text-destructive">{error}</p>
       ) : null}
@@ -153,8 +206,16 @@ export function AmazonAutoImportPanel({
         <div className="mt-3">
           <div className="flex items-center justify-between gap-2">
             <p className="text-[12px] text-[#707070]">
-              {hits.length} winner{hits.length === 1 ? "" : "s"}. Pick the ones
-              to import.
+              {hits.length} winner{hits.length === 1 ? "" : "s"}
+              {sources?.amazonCatalog && sources.ebayLive
+                ? " with live Amazon rank and eBay prices"
+                : sources?.amazonCatalog
+                  ? " with live Amazon rank"
+                  : sources?.ebayLive
+                    ? " with live eBay prices"
+                    : ""}
+              . Now means Amazon is moving and eBay pays more. Pick which to
+              import.
             </p>
             <button
               type="button"
@@ -171,7 +232,7 @@ export function AmazonAutoImportPanel({
               {picked.length === hits.length ? "Clear" : "Select all"}
             </button>
           </div>
-          <ul className="mt-2 max-h-64 divide-y divide-[#eee] overflow-y-auto border border-[#e5e5e5]">
+          <ul className="mt-2 max-h-80 divide-y divide-[#eee] overflow-y-auto border border-[#e5e5e5]">
             {hits.map((hit) => {
               const checked = picked.includes(hit.asin);
               return (
@@ -207,17 +268,10 @@ export function AmazonAutoImportPanel({
                       <span
                         className={cn(
                           "mt-0.5 block text-[12px] text-[#707070]",
+                          hit.opportunity === "now" && "text-[#141414]",
                         )}
                       >
-                        {hit.rating
-                          ? `${hit.rating.toFixed(1)} stars`
-                          : "No rating yet"}
-                        {hit.reviewCount
-                          ? ` · ${hit.reviewCount.toLocaleString()} reviews`
-                          : ""}
-                        {hit.amazonPrice
-                          ? ` · Amazon $${hit.amazonPrice.toFixed(2)}`
-                          : ""}
+                        {hitMeta(hit)}
                       </span>
                     </span>
                   </label>

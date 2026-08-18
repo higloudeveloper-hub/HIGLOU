@@ -555,6 +555,53 @@ export async function searchAmazonCatalogWinners(opts: {
   return winnerHitsFromCatalogPayload(json);
 }
 
+function numberAmount(value: unknown): number | null {
+  if (value == null || value === "") return null;
+  if (typeof value === "object") {
+    const row = value as Record<string, unknown>;
+    return numberAmount(row.Amount ?? row.amount ?? row.value);
+  }
+  const n = Number(value);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+/** Live Amazon offer price for an ASIN. Product Pricing API. */
+export async function getAmazonLowestNewPrice(opts: {
+  accessToken: string;
+  marketplaceId: string;
+  asin: string;
+}): Promise<number | null> {
+  const asin = opts.asin.trim().toUpperCase();
+  if (!/^[A-Z0-9]{10}$/.test(asin)) return null;
+  const params = new URLSearchParams({
+    MarketplaceId: opts.marketplaceId,
+    ItemCondition: "New",
+  });
+  const { ok, json } = await amazonFetch(
+    opts.accessToken,
+    `/products/pricing/v0/items/${encodeURIComponent(asin)}/offers?${params.toString()}`,
+  );
+  if (!ok) return null;
+  const amounts: number[] = [];
+  const walk = (value: unknown) => {
+    if (!value) return;
+    if (Array.isArray(value)) {
+      value.forEach(walk);
+      return;
+    }
+    if (typeof value !== "object") return;
+    const row = value as Record<string, unknown>;
+    const landed = numberAmount(row.LandedPrice ?? row.landedPrice);
+    const listing = numberAmount(row.ListingPrice ?? row.listingPrice);
+    if (landed) amounts.push(landed);
+    if (listing) amounts.push(listing);
+    Object.values(row).forEach(walk);
+  };
+  walk(json.payload ?? json);
+  if (!amounts.length) return null;
+  return Math.min(...amounts);
+}
+
 export function amazonListingBlockedReason(
   issues: AmazonSpIssue[] | undefined,
 ): string {

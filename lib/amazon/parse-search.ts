@@ -32,6 +32,9 @@ function emptyHit(asin: string, index: number): AmazonWinnerHit {
     rating: null,
     reviewCount: null,
     amazonPrice: null,
+    ebayPrice: null,
+    ebayCount: null,
+    opportunity: "thin",
   };
 }
 

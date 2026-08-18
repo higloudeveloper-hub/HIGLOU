@@ -7,6 +7,7 @@ import {
   clientKeyFromRequest,
 } from "@/lib/api/rate-limit";
 import { findAmazonWinners } from "@/lib/amazon/find-winners";
+import { loadWinnerMarketTokens } from "@/lib/amazon/winner-tokens";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -63,13 +64,17 @@ export async function POST(request: Request) {
   }
 
   try {
-    const products = await findAmazonWinners({
+    const tokens = await loadWinnerMarketTokens(auth.supabase, auth.user.id);
+    const found = await findAmazonWinners({
       query,
       category,
       limit: body.limit,
       pageOrigin: new URL(request.url).origin,
+      amazonToken: tokens.amazonToken,
+      marketplaceId: tokens.marketplaceId,
+      ebayToken: tokens.ebayToken,
     });
-    if (!products.length) {
+    if (!found.products.length) {
       return NextResponse.json(
         {
           error:
@@ -78,7 +83,11 @@ export async function POST(request: Request) {
         { status: 404 },
       );
     }
-    return NextResponse.json({ ok: true, products });
+    return NextResponse.json({
+      ok: true,
+      products: found.products,
+      sources: found.sources,
+    });
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Amazon search failed";

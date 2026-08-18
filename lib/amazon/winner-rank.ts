@@ -10,6 +10,9 @@ export type AmazonWinnerHit = {
   rating: number | null;
   reviewCount: number | null;
   amazonPrice: number | null;
+  ebayPrice: number | null;
+  ebayCount: number | null;
+  opportunity: "now" | "watch" | "thin";
 };
 
 const STOP = new Set([
@@ -137,6 +140,9 @@ export function winnerHitsFromCatalogPayload(
       rating: null,
       reviewCount: null,
       amazonPrice: null,
+      ebayPrice: null,
+      ebayCount: null,
+      opportunity: "thin",
     });
   }
   return hits;

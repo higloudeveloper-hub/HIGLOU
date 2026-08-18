@@ -18,6 +18,10 @@ import {
   parseAmazonSearchHtml,
   parseAmazonSearchMarkdown,
 } from "@/lib/amazon/parse-search";
+import {
+  scoreAmazonOpportunity,
+  sortByOpportunity,
+} from "@/lib/amazon/opportunity";
 
 function readRepo(relative: string): string {
   return readFileSync(resolve(process.cwd(), relative), "utf8");
@@ -94,6 +98,54 @@ describe("Amazon auto-import ranking", () => {
       3,
     );
     expect(picked.map((row) => row.asin)).toEqual(["B0GOOD0001", "B0GOOD0002"]);
+  });
+
+  it("marks Now when Amazon is selling and eBay pays more", () => {
+    expect(
+      scoreAmazonOpportunity({
+        salesRank: 1200,
+        salesRankLabel: "Beauty",
+        rating: 4.6,
+        reviewCount: 400,
+        amazonPrice: 20,
+        ebayPrice: 32,
+      }).label,
+    ).toBe("now");
+    expect(
+      scoreAmazonOpportunity({
+        salesRank: 1,
+        salesRankLabel: "Amazon search",
+        rating: 4.6,
+        reviewCount: 400,
+        amazonPrice: 20,
+        ebayPrice: 32,
+      }).label,
+    ).toBe("watch");
+    expect(
+      sortByOpportunity([
+        {
+          asin: "B0THIN0001",
+          opportunity: "thin" as const,
+          salesRank: 2,
+          rating: 4,
+          reviewCount: 10,
+        },
+        {
+          asin: "B0NOW00001",
+          opportunity: "now" as const,
+          salesRank: 90,
+          rating: 4.5,
+          reviewCount: 80,
+        },
+        {
+          asin: "B0WATCH001",
+          opportunity: "watch" as const,
+          salesRank: 8,
+          rating: 4.4,
+          reviewCount: 40,
+        },
+      ]).map((row) => row.asin),
+    ).toEqual(["B0NOW00001", "B0WATCH001", "B0THIN0001"]);
   });
 
   it("sets an eBay price above Amazon so there is margin", () => {
@@ -206,18 +258,26 @@ describe("Amazon auto-import stays an eBay draft flow", () => {
     expect(panel).toMatch(/How many/);
     expect(panel).toMatch(/type="checkbox"/);
     expect(panel).toMatch(/Import \$\{selected\.length\} for eBay/);
+    expect(panel).toMatch(/settings#amazon-store/);
+    expect(panel).toMatch(/settings#ebay-store/);
+    expect(panel).toMatch(/live eBay prices/);
     expect(categories).toMatch(/Beauty/);
     expect(categories).toMatch(/Tools & Home/);
     expect(workspace).toMatch(/importAmazonWinners/);
     expect(workspace).toMatch(/JSON\.stringify\(\{ asins: next \}\)/);
+    expect(search).toMatch(/loadWinnerMarketTokens/);
     expect(search).toMatch(/limit: body\.limit/);
+    expect(search).not.toMatch(/status: 409/);
     expect(importRoute).toMatch(/ebayProfitPrice/);
     expect(importRoute).toMatch(/status: "Uploaded"/);
     expect(importRoute).not.toMatch(/publishAmazonOffer/);
     expect(importRoute).not.toMatch(/AMAZON_NOT_CONNECTED/);
-    expect(importRoute).not.toMatch(/getValidAmazonAccessToken/);
     const find = readRepo("lib/amazon/find-winners.ts");
     expect(find).toMatch(/searchAmazonWinnersPage/);
-    expect(find).not.toMatch(/accessToken/);
+    expect(find).toMatch(/searchAmazonCatalogWinners/);
+    expect(find).toMatch(/searchEbayLivePrices/);
+    const tokens = readRepo("lib/amazon/winner-tokens.ts");
+    expect(tokens).toMatch(/getValidAmazonAccessToken/);
+    expect(tokens).toMatch(/getValidAccessToken/);
   });
 });

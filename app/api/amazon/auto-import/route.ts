@@ -10,6 +10,7 @@ import {
 import { fetchAmazonProduct } from "@/lib/amazon/fetch-product";
 import { mirrorAmazonImages } from "@/lib/amazon/mirror-images";
 import { findAmazonWinners } from "@/lib/amazon/find-winners";
+import { loadWinnerMarketTokens } from "@/lib/amazon/winner-tokens";
 import { ebayProfitPrice } from "@/lib/amazon/winner-rank";
 import {
   productBodySchema,
@@ -165,13 +166,17 @@ export async function POST(request: Request) {
       );
     }
     try {
-      const winners = await findAmazonWinners({
+      const tokens = await loadWinnerMarketTokens(auth.supabase, auth.user.id);
+      const found = await findAmazonWinners({
         query,
         category,
         limit: 5,
         pageOrigin: new URL(request.url).origin,
+        amazonToken: tokens.amazonToken,
+        marketplaceId: tokens.marketplaceId,
+        ebayToken: tokens.ebayToken,
       });
-      asins = winners.map((hit) => hit.asin);
+      asins = found.products.map((hit) => hit.asin);
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Amazon search failed";

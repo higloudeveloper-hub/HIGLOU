@@ -9,6 +9,17 @@ import {
 } from "@/lib/api/rate-limit";
 import { fetchAmazonProduct } from "@/lib/amazon/fetch-product";
 import { mirrorAmazonImages } from "@/lib/amazon/mirror-images";
+import { findAmazonWinners } from "@/lib/amazon/find-winners";
+import { ebayProfitPrice } from "@/lib/amazon/winner-rank";
+import {
+  amazonSpMissingReason,
+  getAmazonSpConfig,
+  isAmazonSpConfigured,
+} from "@/lib/amazon/sp-config";
+import {
+  getAmazonConnectionPublic,
+  getValidAmazonAccessToken,
+} from "@/lib/amazon/sp-oauth";
 import {
   productBodySchema,
   syncRelated,
@@ -19,9 +30,10 @@ export const runtime = "nodejs";
 export const maxDuration = 60;
 
 const bodySchema = z.object({
-  asins: z.array(z.string().min(10).max(12)).min(1).max(5),
-  ebayPrice: z.number().positive().max(100000),
+  query: z.string().max(200).optional().default(""),
   category: z.string().max(120).optional().default(""),
+  asins: z.array(z.string().min(10).max(12)).max(5).optional().default([]),
+  ebayPrice: z.number().positive().max(100000).optional(),
 });
 
 type ImportedListing = {
@@ -29,7 +41,7 @@ type ImportedListing = {
   amazonUrl: string;
   title: string;
   brand: string;
-  price: number;
+    price: number | null;
   upc: string;
   features: string[];
   sku: string;
@@ -58,7 +70,7 @@ type ImportedListing = {
 
 async function importAsin(
   asin: string,
-  ebayPrice: number,
+  ebayPrice: number | undefined,
   userId: string,
   pageOrigin: string,
 ): Promise<ImportedListing> {
@@ -73,6 +85,7 @@ async function importAsin(
   if (!images.length) {
     throw new Error("Amazon photos could not be saved.");
   }
+  const price = ebayProfitPrice(product.price, ebayPrice);
   const dbImages = images.map((img, index) => ({
     publicUrl: img.publicUrl,
     storagePath: img.storagePath,
@@ -87,7 +100,7 @@ async function importAsin(
     amazonUrl: product.url,
     title: product.title,
     brand: product.brand,
-    price: ebayPrice,
+    price,
     upc: product.upc,
     features: product.features,
     sku: `AMZ-${product.asin}`,
@@ -138,22 +151,76 @@ export async function POST(request: Request) {
     body = bodySchema.parse(await request.json());
   } catch {
     return NextResponse.json(
-      { error: "Send JSON { asins, ebayPrice }." },
+      { error: "Send JSON { query } or { asins }." },
       { status: 400 },
     );
   }
 
-  const asins = [
+  let asins = [
     ...new Set(
-      body.asins
+      (body.asins || [])
         .map((value) => value.trim().toUpperCase())
         .filter((value) => /^[A-Z0-9]{10}$/.test(value)),
     ),
   ].slice(0, 5);
+  const query = body.query.trim();
+  const category = body.category.trim();
+
+  if (!asins.length) {
+    if (!query && !category) {
+      return NextResponse.json(
+        { error: "Type the product you want Higlou to find." },
+        { status: 400 },
+      );
+    }
+    if (!isAmazonSpConfigured()) {
+      return NextResponse.json(
+        { error: amazonSpMissingReason(), code: "AMAZON_NOT_CONFIGURED" },
+        { status: 503 },
+      );
+    }
+    const connection = await getAmazonConnectionPublic(
+      auth.supabase,
+      auth.user.id,
+    );
+    if (!connection.connected) {
+      return NextResponse.json(
+        {
+          error:
+            "Connect your Amazon seller account in Settings to search the catalog.",
+          code: "AMAZON_NOT_CONNECTED",
+        },
+        { status: 409 },
+      );
+    }
+    try {
+      const { token } = await getValidAmazonAccessToken(
+        auth.supabase,
+        auth.user.id,
+      );
+      const cfg = getAmazonSpConfig();
+      const winners = await findAmazonWinners({
+        accessToken: token,
+        marketplaceId: cfg.marketplaceId,
+        query,
+        category,
+        limit: 3,
+      });
+      asins = winners.map((hit) => hit.asin);
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Amazon search failed";
+      return NextResponse.json({ error: message }, { status: 422 });
+    }
+  }
+
   if (!asins.length) {
     return NextResponse.json(
-      { error: "Pick at least one Amazon product." },
-      { status: 400 },
+      {
+        error:
+          "Amazon found no well-reviewed winners for that. Try a clearer product name.",
+      },
+      { status: 404 },
     );
   }
 
@@ -199,7 +266,7 @@ export async function POST(request: Request) {
         categoryName: body.category,
         condition: "New",
         conditionId: "NEW",
-        price: body.ebayPrice,
+        price: extra.price,
         quantity: 1,
         features: extra.features,
         status: "Uploaded",

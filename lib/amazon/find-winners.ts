@@ -1,9 +1,12 @@
 import { parseAmazonLink } from "@/lib/amazon/asin";
-import { parseAmazonReviews } from "@/lib/amazon/parse-product";
+import {
+  isCaptchaPage,
+  parseAmazonProductPage,
+} from "@/lib/amazon/parse-product";
 import { searchAmazonCatalogWinners } from "@/lib/amazon/sp-api";
 import {
   amazonWinnerKeywords,
-  pickAmazonWinners,
+  pickReviewedWinners,
   sortAmazonWinners,
   type AmazonWinnerHit,
 } from "@/lib/amazon/winner-rank";
@@ -54,11 +57,17 @@ async function enrichWinnerReviews(
           signal: AbortSignal.timeout(8000),
         });
         const html = await res.text();
-        const reviews = parseAmazonReviews(html);
+        if (!html || isCaptchaPage(html)) return hit;
+        const draft = parseAmazonProductPage(html, {
+          asin: hit.asin,
+          url: `https://www.amazon.com/dp/${hit.asin}`,
+        });
         return {
           ...hit,
-          rating: reviews.rating,
-          reviewCount: reviews.reviewCount,
+          title: hit.title || draft.title,
+          rating: draft.rating,
+          reviewCount: draft.reviewCount,
+          amazonPrice: draft.price,
         };
       } catch {
         return hit;
@@ -73,6 +82,7 @@ export async function findAmazonWinners(opts: {
   marketplaceId: string;
   query: string;
   category?: string;
+  limit?: number;
 }): Promise<AmazonWinnerHit[]> {
   const query = String(opts.query || "").trim();
   const category = String(opts.category || "").trim();
@@ -143,5 +153,5 @@ export async function findAmazonWinners(opts: {
 
   const ranked = sortAmazonWinners(hits);
   const withReviews = await enrichWinnerReviews(ranked);
-  return pickAmazonWinners(withReviews, 12);
+  return pickReviewedWinners(withReviews, opts.limit ?? 12);
 }

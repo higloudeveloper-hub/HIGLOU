@@ -18,11 +18,13 @@ export function CatalogImportDock({
 }: {
   importing?: false | CatalogStore | "amazon-auto";
   onImport: (url: string) => Promise<boolean | void>;
-  onAutoImport?: (asins: string[], ebayPrice: number) => Promise<boolean | void>;
+  onAutoImport?: (query: string) => Promise<boolean | void>;
 }) {
   const [url, setUrl] = useState("");
   const [picked, setPicked] = useState<CatalogStore | null>(null);
-  const [mode, setMode] = useState<"link" | "winners">("link");
+  const [mode, setMode] = useState<"link" | "winners">(
+    onAutoImport ? "winners" : "link",
+  );
   const inputRef = useRef<HTMLInputElement>(null);
   const detected = detectCatalogStore(url);
   const active = detected || picked;
@@ -43,6 +45,10 @@ export function CatalogImportDock({
 
   const choose = (store: CatalogStore) => {
     setPicked(store);
+    if (store === "amazon" && onAutoImport) {
+      setMode("winners");
+      return;
+    }
     setMode("link");
     inputRef.current?.focus();
   };
@@ -53,12 +59,12 @@ export function CatalogImportDock({
         Import from Amazon or Home Depot
       </p>
       <p className="mt-0.5 text-[13px] text-[#707070]">
-        Paste a product link, or find Amazon bestsellers and set your eBay price.
+        Paste a product link, or type what you want and import the best-reviewed Amazon winners.
       </p>
 
       <div className="mt-3 grid grid-cols-3 gap-2 sm:gap-3">
         <StoreCard
-          active={active === "amazon" && mode === "link"}
+          active={active === "amazon" || mode === "winners"}
           busy={importing === "amazon" || importing === "amazon-auto"}
           disabled={busy}
           onClick={() => choose("amazon")}
@@ -147,7 +153,7 @@ export function CatalogImportDock({
                 : "border-transparent text-[#707070]",
             )}
           >
-            Find Amazon bestsellers
+            Find winners
           </button>
         ) : null}
       </div>

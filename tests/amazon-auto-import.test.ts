@@ -3,8 +3,10 @@ import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   amazonWinnerKeywords,
+  ebayProfitPrice,
   isWeakAmazonReview,
   pickAmazonWinners,
+  pickReviewedWinners,
   sortAmazonWinners,
   winnerHitsFromCatalogPayload,
 } from "@/lib/amazon/winner-rank";
@@ -23,7 +25,7 @@ describe("Amazon auto-import ranking", () => {
     ).not.toMatch(/B0BVHK7GTF/);
   });
 
-  it("ranks best-selling and well-reviewed products first", () => {
+  it("ranks best-reviewed winners ahead of weak reviews", () => {
     const ranked = sortAmazonWinners([
       {
         asin: "B0LOWREV01",
@@ -62,6 +64,25 @@ describe("Amazon auto-import ranking", () => {
     );
     expect(picked.map((row) => row.asin)).not.toContain("B0WEAK0001");
     expect(picked).toHaveLength(3);
+  });
+
+  it("one-click pick keeps only 4-star winners with real review volume", () => {
+    const picked = pickReviewedWinners(
+      [
+        { asin: "B0WEAK0001", salesRank: 2, rating: 3.8, reviewCount: 900 },
+        { asin: "B0GOOD0001", salesRank: 40, rating: 4.7, reviewCount: 300 },
+        { asin: "B0GOOD0002", salesRank: 55, rating: 4.5, reviewCount: 80 },
+        { asin: "B0THIN0001", salesRank: 8, rating: 4.9, reviewCount: 3 },
+      ],
+      3,
+    );
+    expect(picked.map((row) => row.asin)).toEqual(["B0GOOD0001", "B0GOOD0002"]);
+  });
+
+  it("sets an eBay price above Amazon so there is margin", () => {
+    expect(ebayProfitPrice(20)).toBe(25.99);
+    expect(ebayProfitPrice(10, 18)).toBe(18);
+    expect(ebayProfitPrice(null)).toBeNull();
   });
 
   it("reads sales rank and main image from catalog payload", () => {
@@ -113,22 +134,22 @@ describe("Amazon auto-import ranking", () => {
 });
 
 describe("Amazon auto-import stays an eBay draft flow", () => {
-  it("lets the seller set an eBay price and does not publish to Amazon", () => {
+  it("finds winners in one click and does not publish to Amazon", () => {
     const dock = readRepo("components/listing/wizard/catalog-import-dock.tsx");
     const panel = readRepo("components/listing/wizard/amazon-auto-import.tsx");
     const workspace = readRepo("components/listing/new-listing-workspace.tsx");
-    const search = readRepo("app/api/amazon/auto-import/search/route.ts");
     const importRoute = readRepo("app/api/amazon/auto-import/route.ts");
-    expect(dock).toMatch(/Find Amazon bestsellers/);
-    expect(panel).toMatch(/Your price/);
-    expect(panel).toMatch(/Import \$\{selected\.length\} for eBay/);
+    expect(dock).toMatch(/Find winners/);
+    expect(panel).toMatch(/Find winners/);
+    expect(panel).toMatch(/best-reviewed Amazon winners/);
+    expect(panel).not.toMatch(/checkbox/);
     expect(workspace).toMatch(/importAmazonWinners/);
-    expect(workspace).toMatch(/price: ebayPrice/);
-    expect(search).toMatch(/findAmazonWinners/);
-    expect(importRoute).toMatch(/ebayPrice/);
+    expect(workspace).toMatch(/JSON\.stringify\(\{ query: next \}\)/);
+    expect(importRoute).toMatch(/findAmazonWinners/);
+    expect(importRoute).toMatch(/limit: 3/);
+    expect(importRoute).toMatch(/ebayProfitPrice/);
     expect(importRoute).toMatch(/status: "Uploaded"/);
     expect(importRoute).not.toMatch(/publishAmazonOffer/);
     expect(importRoute).not.toMatch(/\/listings\/2021-08-01/);
-    expect(search).not.toMatch(/putAmazonListingOffer/);
   });
 });

@@ -1144,18 +1144,17 @@ export function NewListingWorkspace({
     }
   };
 
-  const importAmazonWinners = async (
-    asins: string[],
-    ebayPrice: number,
-  ): Promise<boolean> => {
+  const importAmazonWinners = async (query: string): Promise<boolean> => {
     if (catalogImporting || analyzing) return false;
+    const next = query.trim();
+    if (!next) return false;
     setCatalogImporting("amazon-auto");
     setAnalysisError(null);
     try {
       const response = await fetch("/api/amazon/auto-import", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ asins, ebayPrice }),
+        body: JSON.stringify({ query: next }),
       });
       const body = (await response.json().catch(() => null)) as {
         ok?: boolean;
@@ -1191,7 +1190,7 @@ export function NewListingWorkspace({
         title: (body.title || listing.title).slice(0, 80),
         brand: body.brand || listing.brand,
         model: body.model || listing.model,
-        price: ebayPrice,
+        price: body.price ?? listing.price,
         upc: body.upc || listing.upc,
         sku: body.sku || listing.sku,
         amazonAsin: importedAsin || listing.amazonAsin,
@@ -1222,8 +1221,8 @@ export function NewListingWorkspace({
       const skippedCount = body.skipped?.length || 0;
       toast.success(
         extraCount
-          ? `Imported ${1 + extraCount} Amazon products at $${ebayPrice.toFixed(2)} for eBay. ${extraCount} more saved in Listings.`
-          : "Amazon photos loaded — set the gallery, then Continue.",
+          ? `Imported ${1 + extraCount} best-reviewed Amazon winners for eBay. ${extraCount} more saved in Listings.`
+          : "Best-reviewed Amazon winner loaded for eBay.",
       );
       if (skippedCount) {
         toast.message(

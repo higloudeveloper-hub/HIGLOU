@@ -9,6 +9,7 @@ export type AmazonWinnerHit = {
   browseNodeName: string;
   rating: number | null;
   reviewCount: number | null;
+  amazonPrice: number | null;
 };
 
 const STOP = new Set([
@@ -135,6 +136,7 @@ export function winnerHitsFromCatalogPayload(
       browseNodeName: browse?.displayName ? String(browse.displayName) : "",
       rating: null,
       reviewCount: null,
+      amazonPrice: null,
     });
   }
   return hits;
@@ -154,8 +156,8 @@ export function amazonWinnerScore(hit: {
       ? (hit.rating / 5) *
         (Math.log10(1 + (hit.reviewCount || 0)) / Math.log10(10_001))
       : 0;
-  if (sales > 0 && reviews > 0) return 0.55 * sales + 0.45 * reviews;
-  return sales || reviews;
+  if (sales > 0 && reviews > 0) return 0.35 * sales + 0.65 * reviews;
+  return reviews || sales;
 }
 
 export function sortAmazonWinners<
@@ -182,8 +184,8 @@ export function isWeakAmazonReview(hit: {
   reviewCount: number | null;
 }): boolean {
   if (hit.rating == null) return false;
-  if ((hit.reviewCount || 0) < 15) return false;
-  return hit.rating < 3.7;
+  if ((hit.reviewCount || 0) < 10) return false;
+  return hit.rating < 4;
 }
 
 export function pickAmazonWinners<
@@ -196,6 +198,37 @@ export function pickAmazonWinners<
 >(hits: T[], limit = 12): T[] {
   const ranked = sortAmazonWinners(hits);
   const strong = ranked.filter((hit) => !isWeakAmazonReview(hit));
-  const pool = strong.length >= 3 ? strong : ranked;
+  const pool = strong.length >= 1 ? strong : ranked;
   return pool.slice(0, limit);
+}
+
+/** Best-reviewed winners first. Used by one-click auto-import. */
+export function pickReviewedWinners<
+  T extends {
+    asin: string;
+    salesRank: number | null;
+    rating: number | null;
+    reviewCount: number | null;
+  },
+>(hits: T[], limit = 3): T[] {
+  const ranked = sortAmazonWinners(hits);
+  const reviewed = ranked.filter((hit) => {
+    if (hit.rating == null || hit.rating < 4) return false;
+    return (hit.reviewCount || 0) >= 10;
+  });
+  if (reviewed.length) return reviewed.slice(0, limit);
+  return pickAmazonWinners(ranked, limit);
+}
+
+/** eBay price above Amazon so the listing has room for fees and profit. */
+export function ebayProfitPrice(
+  amazonPrice: number | null,
+  override?: number | null,
+): number | null {
+  if (override && override > 0) return Math.round(override * 100) / 100;
+  if (!amazonPrice || amazonPrice <= 0) return null;
+  const marked = amazonPrice * 1.3;
+  const price = Math.ceil(marked) - 0.01;
+  const floor = amazonPrice + 2;
+  return Math.round(Math.max(floor, price) * 100) / 100;
 }

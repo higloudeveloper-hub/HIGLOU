@@ -56,8 +56,12 @@ export async function publishAmazonOffer(opts: {
       model: opts.listing.model,
       mpn: opts.listing.mpn,
       upc,
-      asin: amazonAsinFromListing(opts.listing),
+      asin: amazonAsinFromListing({
+        ...opts.listing,
+        description: opts.listing.description,
+      }),
       sku: opts.listing.sku,
+      description: opts.listing.description,
       itemSpecifics: opts.listing.itemSpecifics,
     },
   });

@@ -49,5 +49,18 @@ describe("parseAmazonLink", () => {
         itemSpecifics: [{ label: "ASIN", value: "B0D123ABCD" }],
       }),
     ).toBe("B0D123ABCD");
+    expect(
+      amazonAsinFromListing({
+        amazonAsin: "B0D123ABCD",
+        sku: "MILWAUKEE-HAT",
+      }),
+    ).toBe("B0D123ABCD");
+    expect(
+      amazonAsinFromListing({
+        sku: "MILWAUKEE-HAT",
+        description:
+          '<p>Imported from <a href="https://www.amazon.com/dp/B08MESHHAT">Amazon</a></p>',
+      }),
+    ).toBe("B08MESHHAT");
   });
 });

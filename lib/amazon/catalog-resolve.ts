@@ -2,6 +2,7 @@ import {
   amazonCatalogQueries,
   pickExactAmazonCatalog,
   pickSoleBarcodeCatalogHit,
+  pickTitleAmazonCatalog,
   type AmazonCatalogHit,
   type AmazonMatchHints,
 } from "@/lib/amazon/catalog-match";
@@ -16,7 +17,9 @@ import {
 export type AmazonResolveInput = AmazonMatchHints & {
   upc?: string;
   asin?: string;
+  amazonAsin?: string;
   sku?: string;
+  description?: string;
   itemSpecifics?: Array<{ label?: string; key?: string; value?: string }>;
 };
 
@@ -151,7 +154,7 @@ async function hydrateHits(opts: {
 }> {
   const catalogs = new Map<string, AmazonCatalogSnapshot>();
   const hits: AmazonCatalogHit[] = [];
-  for (const hit of opts.hits.slice(0, 8)) {
+  for (const hit of opts.hits.slice(0, 12)) {
     const catalog = await getAmazonCatalogItem({
       accessToken: opts.accessToken,
       marketplaceId: opts.marketplaceId,
@@ -238,7 +241,9 @@ export async function resolveAmazonCatalogMatch(opts: {
     pickExactAmazonCatalog(hydratedBarcode, hints) ||
     pickSoleBarcodeCatalogHit(hydratedBarcode, hints);
   const match =
-    barcodeMatch || pickExactAmazonCatalog(hydrated.hits, hints);
+    barcodeMatch ||
+    pickExactAmazonCatalog(hydrated.hits, hints) ||
+    pickTitleAmazonCatalog(hydrated.hits, hints);
   if (!match) return createResult();
 
   const catalog = hydrated.catalogs.get(match.asin) || null;

@@ -41,6 +41,7 @@ export interface ProductListing {
   mpn: string;
   upc: string;
   sku: string;
+  amazonAsin?: string;
   productType: string;
   categoryId: string;
   categoryName: string;

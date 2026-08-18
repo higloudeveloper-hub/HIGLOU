@@ -49,6 +49,7 @@ const fieldMap: Record<string, string> = {
   collection: "collection",
   model: "model",
   sku: "sku",
+  amazonAsin: "amazon_asin",
   upc: "upc",
   mpn: "mpn",
   categoryId: "category_id",

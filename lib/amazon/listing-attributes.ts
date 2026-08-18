@@ -31,6 +31,8 @@ export type AmazonListingDraft = {
   packageWidthIn?: number | null;
   packageDepthIn?: number | null;
   sku?: string;
+  asin?: string;
+  amazonAsin?: string;
 };
 
 export type AmazonProductTypeSchema = {

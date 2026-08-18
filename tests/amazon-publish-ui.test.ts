@@ -34,6 +34,7 @@ describe("Amazon seller publish stays on Higlou", () => {
     expect(publish).toMatch(/resolveAmazonCatalogMatch/);
     expect(resolve).toMatch(/searchAmazonCatalogForListing/);
     expect(resolve).toMatch(/hydrateHits/);
+    expect(resolve).toMatch(/pickTitleAmazonCatalog/);
   });
 
   it("uses the imported Amazon ASIN instead of searching by brand", () => {
@@ -41,7 +42,7 @@ describe("Amazon seller publish stays on Higlou", () => {
     const workspace = readRepo("components/listing/new-listing-workspace.tsx");
     expect(resolve).toMatch(/importedAsin/);
     expect(resolve).toMatch(/amazonAsinFromListing/);
-    expect(workspace).toMatch(/amazonAsinFromListing\(fresh\)/);
+    expect(workspace).toMatch(/amazonAsinFromListing\(\{/);
     expect(workspace).toMatch(/label: "ASIN"/);
   });
 

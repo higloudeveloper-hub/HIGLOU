@@ -18,6 +18,7 @@ const BARE_RE = /\b(tool only|bare tool|herramienta sola)\b/i;
 const RENEWED_RE = /\b(renewed|refurbished|reacondicionado)\b/i;
 const MODEL_TOKEN_RE = /\b[A-Z]{1,8}\d[A-Z0-9\-]{1,16}\b/gi;
 const NUMERIC_MODEL_RE = /\b\d{6,10}\b/g;
+const HYPHEN_CATALOG_RE = /\b\d{2,3}-\d{2,3}-\d{3,5}\b/g;
 const FINISH_RE = /(^|[^A-Z])(PC|SN|PN|SS|BN|RB|CZ|BL|WH|BNK)([^A-Z]|$)/i;
 const SKIP_TOKENS = new Set([
   "MAX",
@@ -68,7 +69,8 @@ export function extractModelTokens(text: string): string[] {
   const raw = String(text || "").toUpperCase();
   const alpha = raw.match(MODEL_TOKEN_RE) || [];
   const numeric = raw.match(NUMERIC_MODEL_RE) || [];
-  const tokens = [...alpha, ...numeric]
+  const hyphen = raw.match(HYPHEN_CATALOG_RE) || [];
+  const tokens = [...alpha, ...numeric, ...hyphen]
     .map((token) => token.replace(/[^A-Z0-9-]/g, ""))
     .filter((token) => {
       const tight = compact(token);
@@ -90,6 +92,9 @@ export function resolveAmazonModelCode(hints: AmazonMatchHints): string {
   const tight = compact(field);
   const brand = compact(hints.brand || "");
   const fieldIsBrand = Boolean(brand && tight === brand);
+  if (field && !fieldIsBrand && /^\d{2,3}-\d{2,3}-\d{3,5}$/i.test(field)) {
+    return field.toUpperCase();
+  }
   if (field && !/\s/.test(field) && /^\d{6,12}$/.test(tight) && !fieldIsBrand) {
     return field;
   }
@@ -110,13 +115,14 @@ export function resolveAmazonModelCode(hints: AmazonMatchHints): string {
 export function amazonCatalogQueries(hints: AmazonMatchHints): string[] {
   const brand = String(hints.brand || "").trim();
   const model = resolveAmazonModelCode(hints);
-  const queries = [
-    [brand, model].filter(Boolean).join(" "),
-    model,
-    model.replace(/-/g, ""),
-    String(hints.title || "").replace(/\s+/g, " ").trim().slice(0, 80),
-  ].filter((query) => query.length >= 4);
-  return [...new Set(queries)];
+  const title = String(hints.title || "").replace(/\s+/g, " ").trim().slice(0, 80);
+  const brandModel = [brand, model].filter(Boolean).join(" ");
+  // Never search the brand alone — "Milwaukee" fills the result cap with
+  // similar hard hats and Higlou never runs the real product title.
+  const queries = model
+    ? [brandModel, model, model.replace(/-/g, ""), title]
+    : [title];
+  return [...new Set(queries.filter((query) => query.length >= 4))];
 }
 
 export function amazonSearchKeywords(hints: AmazonMatchHints): string {
@@ -241,4 +247,56 @@ export function pickSoleBarcodeCatalogHit(
   if (!hit?.asin) return null;
   if (String(hints.brand || "").trim() && !brandMatches(hints, hit)) return null;
   return hit;
+}
+
+const TITLE_STOP = new Set([
+  "with",
+  "and",
+  "the",
+  "for",
+  "from",
+  "new",
+  "only",
+]);
+
+function titleTokens(text: string): string[] {
+  return String(text || "")
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter((token) => token.length >= 4 && !TITLE_STOP.has(token));
+}
+
+export function scoreAmazonTitleHit(
+  hit: AmazonCatalogHit,
+  hints: AmazonMatchHints,
+): number {
+  if (resolveAmazonModelCode(hints)) return 0;
+  if (!brandMatches(hints, hit)) return 0;
+  if (RENEWED_RE.test(String(hit.title || ""))) return 0;
+  const listingTokens = titleTokens(hints.title || "").filter(
+    (token) => compact(token) !== compact(hints.brand || ""),
+  );
+  if (listingTokens.length < 3) return 0;
+  const hitText = hitHaystack(hit).toLowerCase();
+  const matched = listingTokens.filter((token) => hitText.includes(token));
+  if (matched.length < 3) return 0;
+  const required = listingTokens.filter((token) => token.length >= 5);
+  if (required.some((token) => !hitText.includes(token))) return 0;
+  return Math.round((matched.length / listingTokens.length) * 100);
+}
+
+export function pickTitleAmazonCatalog(
+  hits: AmazonCatalogHit[],
+  hints: AmazonMatchHints,
+): AmazonCatalogHit | null {
+  if (resolveAmazonModelCode(hints)) return null;
+  const ranked = hits
+    .map((hit, index) => ({
+      hit,
+      index,
+      score: scoreAmazonTitleHit(hit, hints),
+    }))
+    .filter((row) => row.score >= 60)
+    .sort((a, b) => b.score - a.score || a.index - b.index);
+  return ranked[0]?.hit || null;
 }

@@ -171,6 +171,7 @@ function dbRowToListing(
     collection: String(mapped.collection || ""),
     model: String(mapped.model || ""),
     sku: String(mapped.sku || ""),
+    amazonAsin: String(mapped.amazonAsin || ""),
     upc: String(mapped.upc || ""),
     mpn: String(mapped.mpn || ""),
     categoryId: String(mapped.categoryId || ""),

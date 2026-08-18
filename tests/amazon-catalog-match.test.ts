@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
+  amazonCatalogQueries,
   amazonSearchKeywords,
   extractModelCode,
   listingLooksBareTool,
   pickAmazonCatalogMatch,
   pickExactAmazonCatalog,
+  pickTitleAmazonCatalog,
   resolveAmazonModelCode,
   scoreAmazonCatalogHit,
 } from "@/lib/amazon/catalog-match";
@@ -210,5 +212,84 @@ describe("Amazon catalog auto-match", () => {
         },
       )?.asin,
     ).toBe("B0EXAMPLE01");
+  });
+
+  it("reads Milwaukee hyphen catalog numbers like 48-73-1410", () => {
+    expect(extractModelCode("Milwaukee BOLT 48-73-1410 Metal Mesh")).toBe(
+      "48-73-1410",
+    );
+    expect(
+      resolveAmazonModelCode({
+        brand: "Milwaukee",
+        model: "48-73-1410",
+        title: "Milwaukee Metal Mesh Face Shield with Hard Hat",
+      }),
+    ).toBe("48-73-1410");
+    expect(
+      pickExactAmazonCatalog(
+        [
+          {
+            asin: "B08MESHSHLD",
+            title: "Milwaukee BOLT Metal Mesh Face Shield",
+            identifiers: ["48-73-1410"],
+          },
+          {
+            asin: "B00HARDHAT9",
+            title: "Milwaukee Hard Hat White Type 1",
+          },
+        ],
+        {
+          brand: "Milwaukee",
+          model: "48-73-1410",
+          title: "Milwaukee Metal Mesh Face Shield with Hard Hat",
+        },
+      )?.asin,
+    ).toBe("B08MESHSHLD");
+  });
+
+  it("matches an Amazon-imported Milwaukee by title when no model or UPC is left", () => {
+    const hints = {
+      brand: "Milwaukee",
+      model: "Milwaukee",
+      title: "Milwaukee Metal Mesh Face Shield with Hard Hat",
+    };
+    expect(resolveAmazonModelCode(hints)).toBe("");
+    expect(amazonCatalogQueries(hints)).toEqual([
+      "Milwaukee Metal Mesh Face Shield with Hard Hat",
+    ]);
+    expect(
+      pickTitleAmazonCatalog(
+        [
+          {
+            asin: "B00HARDHAT9",
+            title: "Milwaukee Hard Hat with Ratchet Suspension, White",
+          },
+          {
+            asin: "B08MESHSHLD",
+            title: "Milwaukee BOLT Metal Mesh Face Shield with Hard Hat",
+          },
+        ],
+        hints,
+      )?.asin,
+    ).toBe("B08MESHSHLD");
+  });
+
+  it("does not title-match a Ryobi P241 onto a different drill", () => {
+    expect(
+      pickTitleAmazonCatalog(
+        [
+          {
+            asin: "B08XF7BWQ4",
+            title:
+              "RYOBI ONE+ HP 18V Brushless Cordless Compact 3/8 in. Right Angle Drill (Tool Only)",
+          },
+        ],
+        {
+          brand: "Ryobi",
+          model: "P241",
+          title: "Ryobi ONE+ 18V Cordless Right Angle Drill - Tool Only",
+        },
+      ),
+    ).toBeNull();
   });
 });

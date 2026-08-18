@@ -108,10 +108,14 @@ export function parseAmazonLink(input: string): ParsedAmazonLink | null {
 /** ASIN the seller already gave Higlou: import, AMZ-SKU, or item specific. */
 export function amazonAsinFromListing(listing: {
   asin?: string;
+  amazonAsin?: string;
   sku?: string;
+  description?: string;
   itemSpecifics?: Array<{ label?: string; key?: string; value?: string }>;
 }): string {
-  const direct = String(listing.asin || "").trim().toUpperCase();
+  const direct = String(listing.asin || listing.amazonAsin || "")
+    .trim()
+    .toUpperCase();
   if (looksLikeAsin(direct)) return direct;
   const sku = String(listing.sku || "").trim();
   const amz = sku.match(/^AMZ-([A-Z0-9]{10})$/i);
@@ -124,5 +128,9 @@ export function amazonAsinFromListing(listing: {
     const value = String(row.value || "").trim().toUpperCase();
     if (looksLikeAsin(value)) return value;
   }
+  const fromCopy = String(listing.description || "").match(
+    /\/(?:dp|gp\/product)\/([A-Z0-9]{10})/i,
+  );
+  if (fromCopy?.[1] && looksLikeAsin(fromCopy[1])) return fromCopy[1].toUpperCase();
   return "";
 }

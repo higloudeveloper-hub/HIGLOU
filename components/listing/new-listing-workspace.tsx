@@ -661,7 +661,11 @@ export function NewListingWorkspace({
             confidence: field.confidence,
           }))
         : prev.itemSpecifics;
-    const importedAsin = amazonAsinFromListing(prev);
+    const importedAsin = /^HD-/i.test(prev.sku)
+      ? (/^[A-Z0-9]{10}$/i.test(String(prev.amazonAsin || "").trim())
+          ? String(prev.amazonAsin).trim().toUpperCase()
+          : "")
+      : amazonAsinFromListing(prev);
     const itemSpecifics =
       importedAsin &&
       !mappedSpecifics.some((field) =>
@@ -1072,9 +1076,10 @@ export function NewListingWorkspace({
 
       const newCondition = "New";
       const match = CONDITION_OPTIONS.find((c) => c.label === newCondition);
-      const importedAsin = String(body.asin || "")
-        .trim()
-        .toUpperCase();
+      const fromHomeDepot = store === "homedepot";
+      const importedAsin = fromHomeDepot
+        ? ""
+        : String(body.asin || "").trim().toUpperCase();
       const withoutAsin = listing.itemSpecifics.filter(
         (field) => !/^(asin|amazon\s*asin)$/i.test(field.label.replace(/^C:/, "")),
       );
@@ -1084,15 +1089,18 @@ export function NewListingWorkspace({
         brand: body.brand || listing.brand,
         model: body.model || listing.model,
         price: body.price ?? listing.price,
-        upc: body.upc || listing.upc,
+        upc: fromHomeDepot ? body.upc || "" : body.upc || listing.upc,
         sku: body.sku || listing.sku,
-        amazonAsin: importedAsin || listing.amazonAsin,
-        amazonUrl:
-          String(body.amazonUrl || "").trim() ||
-          listing.amazonUrl ||
-          (importedAsin ? `https://www.amazon.com/dp/${importedAsin}` : ""),
+        amazonAsin: fromHomeDepot ? "" : importedAsin || listing.amazonAsin,
+        amazonUrl: fromHomeDepot
+          ? ""
+          : String(body.amazonUrl || "").trim() ||
+            listing.amazonUrl ||
+            (importedAsin ? `https://www.amazon.com/dp/${importedAsin}` : ""),
         features: body.features?.length ? body.features : listing.features,
         images: body.images,
+        descriptionHtml: fromHomeDepot ? "" : listing.descriptionHtml,
+        descriptionSummary: fromHomeDepot ? "" : listing.descriptionSummary,
         itemSpecifics: importedAsin
           ? [
               {
@@ -1102,7 +1110,9 @@ export function NewListingWorkspace({
               },
               ...withoutAsin,
             ]
-          : listing.itemSpecifics,
+          : fromHomeDepot
+            ? withoutAsin
+            : listing.itemSpecifics,
         condition: newCondition,
         conditionId: match?.conditionId ?? listing.conditionId,
         status: "Uploaded",
@@ -1150,12 +1160,16 @@ export function NewListingWorkspace({
         collection: String(current.collection || ""),
         model: String(current.model || ""),
         sku: String(current.sku || ""),
-        amazonAsin: amazonAsinFromListing({
-          asin: current.amazonAsin,
-          sku: current.sku,
-          itemSpecifics: current.itemSpecifics,
-          description: current.descriptionHtml,
-        }),
+        amazonAsin: amazonAsinFromListing(
+          /^HD-/i.test(current.sku)
+            ? { asin: current.amazonAsin, sku: current.sku }
+            : {
+                asin: current.amazonAsin,
+                sku: current.sku,
+                itemSpecifics: current.itemSpecifics,
+                description: current.descriptionHtml,
+              },
+        ),
         upc: String(current.upc || ""),
         mpn: String(current.mpn || ""),
         categoryId: String(current.categoryId || ""),
@@ -1827,11 +1841,15 @@ export function NewListingWorkspace({
             sku: fresh.sku,
             title: fresh.title,
             upc: fresh.upc,
-            asin: amazonAsinFromListing({
-              ...fresh,
-              asin: fresh.amazonAsin,
-              description: fresh.descriptionHtml,
-            }),
+            asin: amazonAsinFromListing(
+              /^HD-/i.test(fresh.sku)
+                ? { asin: fresh.amazonAsin, sku: fresh.sku }
+                : {
+                    ...fresh,
+                    asin: fresh.amazonAsin,
+                    description: fresh.descriptionHtml,
+                  },
+            ),
             brand: fresh.brand,
             model: fresh.model || fresh.collection,
             mpn: fresh.mpn,

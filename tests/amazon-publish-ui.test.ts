@@ -43,7 +43,7 @@ describe("Amazon seller publish stays on Higlou", () => {
     const exportScreen = readRepo("components/listing/wizard/export-screen.tsx");
     expect(resolve).toMatch(/importedAsin/);
     expect(resolve).toMatch(/amazonAsinFromListing/);
-    expect(workspace).toMatch(/amazonAsinFromListing\(\{/);
+    expect(workspace).toMatch(/amazonAsinFromListing\(/);
     expect(workspace).toMatch(/amazonUrl/);
     expect(workspace).toMatch(/sourceListing/);
     expect(exportScreen).toMatch(/AmazonSourceLink/);

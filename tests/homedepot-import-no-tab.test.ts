@@ -22,6 +22,18 @@ describe("Home Depot import stays on Higlou", () => {
     expect(photos).not.toMatch(/hdCapturePending/);
   });
 
+  it("does not keep a previous Amazon ASIN when importing from Home Depot", () => {
+    const workspace = readRepo("components/listing/new-listing-workspace.tsx");
+    expect(workspace).toMatch(/fromHomeDepot = store === "homedepot"/);
+    expect(workspace).toMatch(/amazonAsin: fromHomeDepot \? ""/);
+    expect(workspace).toMatch(/upc: fromHomeDepot \? body\.upc \|\| ""/);
+    expect(workspace).toMatch(/fromHomeDepot\s*\?\s*withoutAsin/);
+    expect(workspace).toMatch(/descriptionHtml: fromHomeDepot \? ""/);
+    expect(workspace).toMatch(/\/\^HD-\/i\.test\(fresh\.sku\)/);
+    expect(workspace).toMatch(/\/\^HD-\/i\.test\(current\.sku\)/);
+    expect(workspace).toMatch(/\/\^HD-\/i\.test\(prev\.sku\)/);
+  });
+
   it("keeps every owned gallery angle instead of capping at the first Bing thumb", () => {
     const html = [
       "64",

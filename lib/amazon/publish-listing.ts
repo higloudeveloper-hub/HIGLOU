@@ -6,6 +6,7 @@ import {
 import {
   amazonListingHasPrice,
   buildAmazonListingAttributes,
+  fillAmazonAttributesFromIssues,
   type AmazonListingDraft,
 } from "@/lib/amazon/listing-attributes";
 import {
@@ -14,6 +15,8 @@ import {
   catalogIdentifierType,
 } from "@/lib/amazon/listing-offer";
 import {
+  amazonBrandGatingReason,
+  amazonIncompleteListingReason,
   amazonListingBlockedReason,
   getAmazonCatalogItem,
   getAmazonListingItem,
@@ -143,14 +146,53 @@ export async function publishAmazonOffer(opts: {
     schema,
   });
 
-  const result = await putAmazonListingOffer({
+  const productTypeName = schema?.productType || productType;
+  const putBase = {
     accessToken: opts.accessToken,
     sellerId: opts.sellingPartnerId,
     sku,
     marketplaceId: cfg.marketplaceId,
-    productType: schema?.productType || productType,
-    requirements: "LISTING",
-    attributes,
+    productType: productTypeName,
+    requirements: "LISTING" as const,
+  };
+
+  let readyAttributes = attributes;
+  const preview = await putAmazonListingOffer({
+    ...putBase,
+    attributes: readyAttributes,
+    mode: "VALIDATION_PREVIEW",
+  });
+  const previewBrand = amazonBrandGatingReason(preview.issues);
+  if (previewBrand) throw new Error(previewBrand);
+  if (/^INVALID$/i.test(preview.status) || amazonIncompleteListingReason(preview.issues)) {
+    const fixed = fillAmazonAttributesFromIssues({
+      attributes: readyAttributes,
+      issues: preview.issues,
+      listing: opts.listing,
+      marketplaceId: cfg.marketplaceId,
+      schema,
+      catalog,
+    });
+    if (fixed.filled.length) {
+      readyAttributes = fixed.attributes;
+      const again = await putAmazonListingOffer({
+        ...putBase,
+        attributes: readyAttributes,
+        mode: "VALIDATION_PREVIEW",
+      });
+      const againBrand = amazonBrandGatingReason(again.issues);
+      if (againBrand) throw new Error(againBrand);
+      const still = amazonIncompleteListingReason(again.issues, again.status);
+      if (still) throw new Error(still);
+    } else {
+      const still = amazonIncompleteListingReason(preview.issues, preview.status);
+      if (still) throw new Error(still);
+    }
+  }
+
+  const result = await putAmazonListingOffer({
+    ...putBase,
+    attributes: readyAttributes,
   });
 
   try {
@@ -160,8 +202,11 @@ export async function publishAmazonOffer(opts: {
       sku: result.sku || sku,
       marketplaceId: cfg.marketplaceId,
     });
-    const blocked = amazonListingBlockedReason(live.issues);
+    const blocked =
+      amazonBrandGatingReason(live.issues) || amazonListingBlockedReason(live.issues);
     if (blocked) throw new Error(blocked);
+    const incomplete = amazonIncompleteListingReason(live.issues, live.status);
+    if (incomplete) throw new Error(incomplete);
     const liveAttrs = live.attributes || {};
     const hasFacts = Boolean(liveAttrs.item_name || liveAttrs.brand || liveAttrs.bullet_point);
     if (hasFacts && !amazonListingHasPrice(liveAttrs)) {
@@ -172,8 +217,10 @@ export async function publishAmazonOffer(opts: {
   } catch (error) {
     if (
       error instanceof Error &&
-      /blocked this brand|suppressed|not the price/i.test(error.message)
+      /listing lookup failed|not found|404/i.test(error.message)
     ) {
+      /* Amazon sometimes accepts first and the GET is not ready yet */
+    } else {
       throw error;
     }
   }

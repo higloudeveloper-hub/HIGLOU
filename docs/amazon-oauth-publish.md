@@ -27,7 +27,7 @@ Token encryption reuses `EBAY_TOKEN_ENCRYPTION_KEY` unless `AMAZON_TOKEN_ENCRYPT
 1. Amazon Developer Console → your app → **Ver** authorizations → copy **Ficha de actualización**
 2. Higlou Settings → Stores → paste token → **Save Amazon token**
 3. On Export: **Publish to Amazon**
-4. Higlou matches the Amazon catalog, copies the product facts Amazon already has, and submits a full listing (price, quantity, description, photos, and required attributes for that product type).
+4. Higlou matches the Amazon catalog, copies product facts, asks Amazon what is still missing, fills those fields, and goes live only if Amazon returns VALID.
 
 ## Key files
 

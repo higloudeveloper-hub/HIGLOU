@@ -4,6 +4,7 @@ import {
   buildAmazonListingAttributes,
   copyAmazonCatalogAttributes,
   countryOfOriginCode,
+  fillAmazonAttributesFromIssues,
   fillAmazonRequiredAttributes,
   stripAmazonHtml,
 } from "@/lib/amazon/listing-attributes";
@@ -153,6 +154,37 @@ describe("Amazon complete listing attributes", () => {
       (attributes.main_product_image_locator as Array<{ media_location: string }>)[0].media_location,
     ).toMatch(/^https:/);
     expect(attributes.generic_keyword).toBeTruthy();
+  });
+
+  it("fills Amazon missing-attribute issues so the listing can go up complete", () => {
+    const { attributes, filled } = fillAmazonAttributesFromIssues({
+      marketplaceId: AMAZON_US_MARKETPLACE_ID,
+      schema: thermostatSchema,
+      listing: {
+        title: "Honeywell Home RTH2CWF-N Smart Thermostat",
+        brand: "Honeywell",
+        model: "RTH2CWF-N",
+        price: 70,
+        quantity: 1,
+        countryOfManufacture: "United States",
+      },
+      attributes: { brand: [{ value: "Honeywell Home" }] },
+      issues: [
+        {
+          message: "The attribute 'country_of_origin' is required.",
+          attributeNames: ["country_of_origin"],
+        },
+        {
+          message: "A value for product_description is required.",
+          attributeNames: ["product_description"],
+        },
+      ],
+    });
+    expect(filled).toEqual(expect.arrayContaining(["country_of_origin"]));
+    expect((attributes.country_of_origin as Array<{ value: string }>)[0].value).toBe("US");
+    expect((attributes.product_description as Array<{ value: string }>)[0].value).toMatch(
+      /RTH2CWF-N/,
+    );
   });
 
   it("fills required gaps when Amazon catalog omits them", () => {

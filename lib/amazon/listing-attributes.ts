@@ -159,13 +159,13 @@ export function copyAmazonCatalogAttributes(
 
 function pickEnum(prop: Record<string, unknown> | null, preferred: string[]): string {
   const options = valueEnum(prop);
-  if (!options.length) return preferred[0] || "";
+  if (!options.length) return "";
   for (const want of preferred) {
     const hit = options.find((option) => option.toLowerCase() === want.toLowerCase());
     if (hit) return hit;
   }
   const notApplicable = options.find((option) => /not\s*applicable/i.test(option));
-  return notApplicable || options[0];
+  return notApplicable || "";
 }
 
 function listingBullets(listing: AmazonListingDraft): string[] {
@@ -220,6 +220,139 @@ function applyImages(
     if (!keepKey(key, allowed)) return;
     attributes[key] = [{ media_location: url, marketplace_id: marketplaceId }];
   });
+}
+
+function valueType(prop: Record<string, unknown> | null): string {
+  const items = (prop?.items || {}) as {
+    properties?: { value?: { type?: string } };
+  };
+  return String(items.properties?.value?.type || "");
+}
+
+export function defaultAmazonAttribute(opts: {
+  name: string;
+  listing: AmazonListingDraft;
+  marketplaceId: string;
+  schema?: AmazonProductTypeSchema | null;
+}): unknown | null {
+  const { name, listing, marketplaceId, schema } = opts;
+  const prop = propertyOf(schema, name);
+  if (name === "country_of_origin") {
+    return [
+      {
+        value: countryOfOriginCode(listing.countryOfManufacture),
+        marketplace_id: marketplaceId,
+      },
+    ];
+  }
+  if (name === "generic_keyword") {
+    return amazonTextAttribute(
+      [listing.title, listing.brand, listing.model, listing.categoryName]
+        .filter(Boolean)
+        .join(" ")
+        .slice(0, 250),
+      marketplaceId,
+      prop,
+    );
+  }
+  if (name === "product_description") {
+    return amazonTextAttribute(listingDescription(listing), marketplaceId, prop);
+  }
+  if (name === "item_name") {
+    return amazonTextAttribute(listing.title, marketplaceId, prop);
+  }
+  if (name === "brand" || name === "manufacturer") {
+    if (!listing.brand) return null;
+    return amazonTextAttribute(listing.brand, marketplaceId, prop);
+  }
+  if (name === "model_name" || name === "model_number") {
+    const model = listing.model || listing.mpn || "";
+    if (!model) return null;
+    return amazonTextAttribute(model, marketplaceId, prop);
+  }
+  if (name === "color") {
+    const color = listingColor(listing);
+    if (!color) return null;
+    return amazonTextAttribute(color, marketplaceId, prop);
+  }
+  if (name === "required_product_compliance_certificate") {
+    return [
+      {
+        value: pickEnum(prop, ["Not Applicable"]) || "Not Applicable",
+        marketplace_id: marketplaceId,
+      },
+    ];
+  }
+  if (name === "supplier_declared_dg_hz_regulation") {
+    return [
+      {
+        value: pickEnum(prop, ["not_applicable"]) || "not_applicable",
+        marketplace_id: marketplaceId,
+      },
+    ];
+  }
+  if (/batteries_(required|included)/.test(name) || valueType(prop) === "boolean") {
+    return [{ value: false, marketplace_id: marketplaceId }];
+  }
+  const enumerated = pickEnum(prop, ["Not Applicable", "not_applicable"]);
+  if (enumerated) {
+    return [{ value: enumerated, marketplace_id: marketplaceId }];
+  }
+  return null;
+}
+
+export function fillAmazonAttributesFromIssues(opts: {
+  attributes: Record<string, unknown>;
+  issues: Array<{ message?: string; attributeNames?: string[] }>;
+  listing: AmazonListingDraft;
+  marketplaceId: string;
+  schema?: AmazonProductTypeSchema | null;
+  catalog?: AmazonCatalogSnapshot | null;
+}): { attributes: Record<string, unknown>; filled: string[] } {
+  const before = { ...opts.attributes };
+  let attributes = fillAmazonRequiredAttributes({
+    attributes: opts.attributes,
+    listing: opts.listing,
+    marketplaceId: opts.marketplaceId,
+    schema: opts.schema,
+    catalog: opts.catalog,
+  });
+  const filled: string[] = [];
+  const names = new Set<string>();
+  for (const issue of opts.issues || []) {
+    for (const name of issue.attributeNames || []) {
+      if (name) names.add(String(name));
+    }
+    const quoted = String(issue.message || "").match(/'([a-z][a-z0-9_]{2,})'/i);
+    if (quoted?.[1]) names.add(quoted[1]);
+  }
+  for (const name of names) {
+    if (!before[name] && attributes[name]) filled.push(name);
+    if (attributes[name]) continue;
+    const catalogValue = opts.catalog?.attributes?.[name];
+    if (catalogValue != null) {
+      attributes[name] = catalogValue;
+      filled.push(name);
+      continue;
+    }
+    const fallback = defaultAmazonAttribute({
+      name,
+      listing: opts.listing,
+      marketplaceId: opts.marketplaceId,
+      schema: opts.schema,
+    });
+    if (fallback) {
+      attributes[name] = fallback;
+      filled.push(name);
+    }
+  }
+  const allowed = schemaKeys(opts.schema);
+  if (!allowed) return { attributes, filled };
+  const trimmed: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(attributes)) {
+    if (allowed.has(key)) trimmed[key] = value;
+  }
+  return { attributes: trimmed, filled };
 }
 
 export function fillAmazonRequiredAttributes(opts: {
@@ -323,11 +456,13 @@ export function fillAmazonRequiredAttributes(opts: {
 
   for (const name of required) {
     if (attributes[name]) continue;
-    if (name === "country_of_origin") {
-      attributes[name] = [
-        { value: "US", marketplace_id: marketplaceId },
-      ];
-    }
+    const fallback = defaultAmazonAttribute({
+      name,
+      listing,
+      marketplaceId,
+      schema,
+    });
+    if (fallback) attributes[name] = fallback;
   }
 
   return attributes;

@@ -25,6 +25,7 @@ describe("Amazon seller publish stays on Higlou", () => {
   it("does not ask Amazon for identifiers when submitting a live offer", () => {
     const api = readRepo("lib/amazon/sp-api.ts");
     expect(api).toMatch(/includedData: "issues"/);
+    expect(api).toMatch(/VALIDATION_PREVIEW/);
     expect(api).not.toMatch(/includedData: "issues,identifiers"/);
   });
 });

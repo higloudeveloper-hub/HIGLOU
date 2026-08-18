@@ -97,6 +97,56 @@ export function amazonIssuesText(payload: Record<string, unknown>): string {
     .join(" · ");
 }
 
+export function amazonErrorIssues(issues: AmazonSpIssue[] | undefined): AmazonSpIssue[] {
+  return (Array.isArray(issues) ? issues : []).filter((issue) => {
+    const severity = String(issue.severity || "");
+    const categories = (issue.categories || []).join(" ");
+    return (
+      /error|invalid/i.test(severity) ||
+      /MISSING_ATTRIBUTE|INVALID_ATTRIBUTE|MISSING_PRICE|INVALID_PRICE/i.test(categories)
+    );
+  });
+}
+
+export function amazonBrandGatingReason(issues: AmazonSpIssue[] | undefined): string {
+  const list = Array.isArray(issues) ? issues : [];
+  const blocked = list.find((issue) => {
+    const categories = (issue.categories || []).join(" ");
+    const message = String(issue.message || "");
+    const actions = (issue.enforcements?.actions || [])
+      .map((action) => String(action.action || ""))
+      .join(" ");
+    return (
+      /QUALIFICATION_REQUIRED/i.test(categories) ||
+      /LISTING_SUPPRESSED/i.test(actions) ||
+      /approval to list in this brand/i.test(message)
+    );
+  });
+  if (!blocked) return "";
+  if (/approval to list in this brand/i.test(String(blocked.message || ""))) {
+    return "Amazon blocked this brand. Open Seller Central → Selling applications and request approval. Until Amazon approves it, the offer will not show in Inventory.";
+  }
+  return String(blocked.message || "").trim() || "Amazon suppressed this listing.";
+}
+
+export function amazonIncompleteListingReason(
+  issues: AmazonSpIssue[] | undefined,
+  status?: string,
+): string {
+  const brand = amazonBrandGatingReason(issues);
+  if (brand) return brand;
+  const errors = amazonErrorIssues(issues);
+  const text = amazonIssuesText({ issues: errors });
+  if (/^INVALID$/i.test(String(status || "")) && text) {
+    return `Amazon says this listing is not ready: ${text}`;
+  }
+  if (text) return `Amazon still needs: ${text}`;
+  if (/^INVALID$/i.test(String(status || ""))) {
+    return "Amazon rejected this listing as incomplete.";
+  }
+  return "";
+}
+
 export type AmazonCatalogHit = {
   asin: string;
   title: string;
@@ -389,11 +439,16 @@ export async function putAmazonListingOffer(opts: {
   productType: string;
   attributes: Record<string, unknown>;
   requirements?: "LISTING" | "LISTING_OFFER_ONLY";
+  mode?: "DEFAULT" | "VALIDATION_PREVIEW";
 }): Promise<{ sku: string; status: string; issues: AmazonSpIssue[] }> {
   const params = new URLSearchParams({
     marketplaceIds: opts.marketplaceId,
     includedData: "issues",
+    issueLocale: "en_US",
   });
+  if (opts.mode === "VALIDATION_PREVIEW") {
+    params.set("mode", "VALIDATION_PREVIEW");
+  }
   const { ok, status, json } = await amazonFetch(
     opts.accessToken,
     `/listings/2021-08-01/items/${encodeURIComponent(opts.sellerId)}/${encodeURIComponent(opts.sku)}?${params.toString()}`,
@@ -407,16 +462,26 @@ export async function putAmazonListingOffer(opts: {
     },
   );
   const issues = (json.issues as AmazonSpIssue[] | undefined) || [];
-  if (!ok) {
+  const listingStatus = String(json.status || (ok ? "ACCEPTED" : "INVALID"));
+  if (opts.mode === "VALIDATION_PREVIEW") {
+    return {
+      sku: String(json.sku || opts.sku),
+      status: listingStatus,
+      issues: issues.length ? issues : ((json.errors as AmazonSpIssue[]) || []),
+    };
+  }
+  if (!ok || /^INVALID$/i.test(listingStatus)) {
     throw new Error(
-      amazonIssuesText(json) || `Amazon listing failed (${status})`,
+      amazonIncompleteListingReason(issues, listingStatus) ||
+        amazonIssuesText(json) ||
+        `Amazon listing failed (${status})`,
     );
   }
-  const blocked = amazonListingBlockedReason(issues);
+  const blocked = amazonBrandGatingReason(issues) || amazonListingBlockedReason(issues);
   if (blocked) throw new Error(blocked);
   return {
     sku: String(json.sku || opts.sku),
-    status: String(json.status || "ACCEPTED"),
+    status: listingStatus,
     issues,
   };
 }

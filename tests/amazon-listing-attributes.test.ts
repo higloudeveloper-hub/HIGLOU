@@ -136,6 +136,7 @@ describe("Amazon complete listing attributes", () => {
 
     expect(attributes.skip_offer).toBeUndefined();
     expect(amazonListingHasPrice(attributes)).toBe(true);
+    expect(amazonListingHasPrice({ list_price: [{ value: 79.98 }] })).toBe(false);
     expect(
       (attributes.purchasable_offer as Array<{ our_price: Array<{ schedule: Array<{ value_with_tax: number }> }> }>)[0]
         .our_price[0].schedule[0].value_with_tax,

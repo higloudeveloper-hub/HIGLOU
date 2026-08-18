@@ -191,10 +191,9 @@ export async function publishAmazonOffer(opts: {
     const incomplete = amazonIncompleteListingReason(live.issues, live.status);
     if (incomplete) throw new Error(incomplete);
     const liveAttrs = live.attributes || {};
-    const hasFacts = Boolean(liveAttrs.item_name || liveAttrs.brand || liveAttrs.bullet_point);
-    if (hasFacts && !amazonListingHasPrice(liveAttrs)) {
+    if (!amazonListingHasPrice(liveAttrs)) {
       throw new Error(
-        "Amazon saved the product facts but not the price. Open Seller Central → Inventory and set your price on this SKU.",
+        "Amazon saved the product but not the sellable offer. Seller Central will show Falta la oferta and $0.00. Publish to Amazon again. If this is a gated brand like Google, request approval in Seller Central → Selling applications.",
       );
     }
   } catch (error) {

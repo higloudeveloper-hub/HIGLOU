@@ -1429,9 +1429,7 @@ export function amazonListingHasPrice(attributes: Record<string, unknown>): bool
     | Array<{ our_price?: Array<{ schedule?: Array<{ value_with_tax?: number }> }> }>
     | undefined;
   const price = offer?.[0]?.our_price?.[0]?.schedule?.[0]?.value_with_tax;
-  if (Number(price) > 0) return true;
-  const list = attributes.list_price as Array<{ value?: number }> | undefined;
-  return Number(list?.[0]?.value) > 0;
+  return Number(price) > 0;
 }
 
 export function buildAmazonListingAttributes(opts: {

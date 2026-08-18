@@ -77,7 +77,8 @@ describe("Amazon seller publish stays on Higlou", () => {
     const publish = readRepo("lib/amazon/publish-listing.ts");
     expect(publish).toMatch(/requirements: "LISTING"/);
     expect(publish).not.toMatch(/LISTING_OFFER_ONLY/);
-    expect(publish).toMatch(/dropAmazonBrandAttributes/);
+    expect(publish).toMatch(/Falta la oferta/);
+    expect(publish).toMatch(/amazonListingHasPrice/);
   });
 
   it("does not ask Amazon for identifiers when submitting a live offer", () => {

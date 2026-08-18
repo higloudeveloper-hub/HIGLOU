@@ -37,6 +37,7 @@ describe("Amazon listing offer helpers", () => {
     expect(attrs.purchasable_offer[0].our_price[0].schedule[0].value_with_tax).toBe(
       19.9,
     );
+    expect(attrs.purchasable_offer[0]).not.toHaveProperty("audience");
     expect(attrs.fulfillment_availability[0].quantity).toBe(2);
   });
 

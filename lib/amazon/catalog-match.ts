@@ -2,6 +2,7 @@ export type AmazonCatalogHit = {
   asin: string;
   title: string;
   productType?: string;
+  identifiers?: string[];
 };
 
 export type AmazonMatchHints = {
@@ -11,12 +12,22 @@ export type AmazonMatchHints = {
   mpn?: string;
 };
 
-const MODEL_CODE_RE = /^[A-Z]{2,6}\d{2,5}[A-Z0-9]{0,6}$/;
 const KIT_RE =
   /\b(kit|combo|batter(?:y|ies)|charger included|pack of|2\s*ah|4\s*ah|5\s*ah)\b/i;
 const BARE_RE = /\b(tool only|bare tool|herramienta sola)\b/i;
 const RENEWED_RE = /\b(renewed|refurbished|reacondicionado)\b/i;
-const MODEL_RE = /\b([A-Z]{2,6}\d{2,5}[A-Z0-9]{0,6})\b/gi;
+const MODEL_TOKEN_RE = /\b[A-Z]{1,8}\d[A-Z0-9\-]{1,16}\b/gi;
+const FINISH_RE = /(^|[^A-Z])(PC|SN|PN|SS|BN|RB|CZ|BL|WH|BNK)([^A-Z]|$)/i;
+const SKIP_TOKENS = new Set([
+  "MAX",
+  "XR",
+  "LED",
+  "USB",
+  "AH",
+  "VMAX",
+  "WIFI",
+  "HOME",
+]);
 
 function compact(value: string): string {
   return String(value || "")
@@ -30,44 +41,88 @@ function haystack(hints: AmazonMatchHints): string {
     .join(" ");
 }
 
+function hitHaystack(hit: AmazonCatalogHit): string {
+  return [hit.title, ...(hit.identifiers || [])].filter(Boolean).join(" ");
+}
+
 export function listingLooksLikeKit(text: string): boolean {
   return KIT_RE.test(text);
 }
 
+export function extractModelTokens(text: string): string[] {
+  const matches = String(text || "").toUpperCase().match(MODEL_TOKEN_RE) || [];
+  const tokens = matches
+    .map((token) => token.replace(/[^A-Z0-9-]/g, ""))
+    .filter((token) => {
+      const tight = compact(token);
+      return tight.length >= 4 && !SKIP_TOKENS.has(tight);
+    });
+  return [...new Set(tokens)];
+}
+
 export function extractModelCode(text: string): string {
-  const matches = String(text || "").toUpperCase().match(MODEL_RE) || [];
-  const skip = new Set(["MAX", "XR", "LED", "USB", "AH", "VMAX"]);
-  const codes = matches
-    .map((code) => code.replace(/[^A-Z0-9]/g, ""))
-    .filter((code) => MODEL_CODE_RE.test(code) && !skip.has(code));
-  return codes.sort((a, b) => b.length - a.length)[0] || "";
+  return extractModelTokens(text).sort((a, b) => compact(b).length - compact(a).length)[0] || "";
+}
+
+function stripPackageSuffix(model: string): string {
+  return String(model || "").replace(/[-\/][NU]$/i, "");
 }
 
 export function resolveAmazonModelCode(hints: AmazonMatchHints): string {
-  const fromFields = compact(hints.model || hints.mpn || "");
-  if (MODEL_CODE_RE.test(fromFields)) return fromFields;
-  return extractModelCode(haystack(hints));
+  const field = String(hints.model || hints.mpn || "").trim();
+  const tight = compact(field);
+  if (
+    field &&
+    !/\s/.test(field) &&
+    /[A-Z]/i.test(field) &&
+    /\d/.test(field) &&
+    tight.length >= 4 &&
+    tight.length <= 18
+  ) {
+    return stripPackageSuffix(field);
+  }
+  return stripPackageSuffix(extractModelCode(haystack(hints)));
+}
+
+export function amazonCatalogQueries(hints: AmazonMatchHints): string[] {
+  const brand = String(hints.brand || "").trim();
+  const model = resolveAmazonModelCode(hints);
+  const queries = [
+    [brand, model].filter(Boolean).join(" "),
+    model,
+    model.replace(/-/g, ""),
+    String(hints.title || "").replace(/\s+/g, " ").trim().slice(0, 80),
+  ].filter((query) => query.length >= 4);
+  return [...new Set(queries)];
 }
 
 export function amazonSearchKeywords(hints: AmazonMatchHints): string {
-  const brand = String(hints.brand || "").trim();
-  const model = resolveAmazonModelCode(hints);
-  const parts = [brand, model].filter(Boolean);
-  if (parts.length) return parts.join(" ");
-  return String(hints.title || "")
-    .replace(/\s+/g, " ")
-    .trim()
-    .slice(0, 80);
+  return amazonCatalogQueries(hints)[0] || "";
 }
 
-function modelParts(model: string): { family: string; pack: string } {
-  const raw = compact(model);
-  const match = raw.match(/^([A-Z]+\d+)(.*)$/);
-  return { family: match?.[1] || raw, pack: match?.[2] || "" };
+function listingFinish(model: string): string {
+  const match = compact(model).match(/(PC|SN|PN|SS|BN|RB|CZ|BL|WH)$/);
+  return match?.[1] || "";
 }
 
-function isKitPack(pack: string): boolean {
-  return /^[A-Z]\d/.test(pack);
+function hitFinish(text: string): string {
+  const match = String(text || "").toUpperCase().match(FINISH_RE);
+  return match?.[2] || "";
+}
+
+function hasConflictingModel(hitText: string, listingModel: string): boolean {
+  const listing = compact(listingModel);
+  if (listing.length < 4) return false;
+  return extractModelTokens(hitText).some((token) => {
+    const tight = compact(token);
+    if (tight.length < 6) return false;
+    if (listing.includes(tight) || tight.includes(listing)) return false;
+    const listingCore = listing.replace(/(PC|SN|PN|SS|BN)$/, "");
+    const tokenCore = tight.replace(/(PC|SN|PN|SS|BN)$/, "");
+    if (listingCore && tokenCore.startsWith(listingCore)) return false;
+    if (listingCore && listingCore.startsWith(tokenCore)) return false;
+    return true;
+  });
 }
 
 export function scoreAmazonCatalogHit(
@@ -76,31 +131,34 @@ export function scoreAmazonCatalogHit(
 ): number {
   const listingText = haystack(hints);
   const title = String(hit.title || "");
-  const titleCompact = compact(title);
+  const blob = compact(hitHaystack(hit));
   const brand = compact(hints.brand || "");
-  const model = resolveAmazonModelCode(hints);
+  const model = compact(resolveAmazonModelCode(hints));
   if (!model) return 0;
-  const { family, pack } = modelParts(model);
-  if (!family || !titleCompact.includes(family)) return 0;
-  if (brand && !compact(title).includes(brand) && !/DEWALT|DE WALT/i.test(title)) {
-    if (brand.length >= 4 && !title.toLowerCase().includes(String(hints.brand || "").toLowerCase())) {
-      return 0;
-    }
+  const brandOk =
+    !brand ||
+    blob.includes(brand) ||
+    title.toLowerCase().includes(String(hints.brand || "").toLowerCase());
+  if (!brandOk) return 0;
+  if (hasConflictingModel(hitHaystack(hit), model)) return 0;
+
+  const finish = listingFinish(resolveAmazonModelCode(hints));
+  const otherFinish = hitFinish(hitHaystack(hit));
+  if (finish && otherFinish && finish !== otherFinish) return 0;
+
+  let score = 20;
+  if (blob.includes(model)) score += 50;
+  else if (model.length >= 5 && blob.includes(model.slice(0, Math.max(5, model.length - 1)))) {
+    score += 35;
+  } else {
+    score += 12;
   }
-
-  let score = 40;
-  const hitModel = extractModelCode(title);
-  const hitParts = modelParts(hitModel || family);
-  if (hitParts.family === family) score += 20;
-  if (pack && hitParts.pack === pack) score += 25;
-  if (!pack && !isKitPack(hitParts.pack)) score += 15;
-  if (!pack && hitParts.pack.length === 1) score += 8;
-
+  if (finish && (otherFinish === finish || blob.includes(finish))) score += 12;
   const listingKit = listingLooksLikeKit(listingText);
-  const hitKit = listingLooksLikeKit(title) || isKitPack(hitParts.pack);
-  if (listingKit === hitKit) score += 20;
-  else score -= 35;
-  if (BARE_RE.test(title) && !listingKit) score += 12;
+  const hitKit = listingLooksLikeKit(title);
+  if (listingKit === hitKit) score += 16;
+  else score -= 30;
+  if (BARE_RE.test(title) && !listingKit) score += 10;
   if (RENEWED_RE.test(title)) score -= 50;
   return score;
 }
@@ -110,19 +168,12 @@ export function pickAmazonCatalogMatch(
   hints: AmazonMatchHints,
 ): AmazonCatalogHit | null {
   const ranked = hits
-    .map((hit) => ({ hit, score: scoreAmazonCatalogHit(hit, hints) }))
-    .filter((row) => row.score >= 50)
-    .sort((a, b) => b.score - a.score);
-  if (!ranked.length) return null;
-  const best = ranked[0];
-  const second = ranked[1];
-  if (second && best.score - second.score < 8 && best.hit.asin !== second.hit.asin) {
-    const listingKit = listingLooksLikeKit(haystack(hints));
-    const bestKit = listingLooksLikeKit(best.hit.title);
-    if (bestKit !== listingKit && listingLooksLikeKit(second.hit.title) === listingKit) {
-      return second.hit;
-    }
-    if (best.score === second.score) return null;
-  }
-  return best.hit;
+    .map((hit, index) => ({
+      hit,
+      index,
+      score: scoreAmazonCatalogHit(hit, hints),
+    }))
+    .filter((row) => row.score >= 45)
+    .sort((a, b) => b.score - a.score || a.index - b.index);
+  return ranked[0]?.hit || null;
 }

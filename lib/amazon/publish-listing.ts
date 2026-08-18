@@ -1,6 +1,6 @@
 import { sanitizeEbayUpc } from "@/lib/ebay/inventory-api";
 import {
-  amazonSearchKeywords,
+  amazonCatalogQueries,
   pickAmazonCatalogMatch,
 } from "@/lib/amazon/catalog-match";
 import {
@@ -15,7 +15,7 @@ import {
   getAmazonListingItem,
   putAmazonListingOffer,
   searchAmazonCatalogByIdentifier,
-  searchAmazonCatalogByKeywords,
+  searchAmazonCatalogForListing,
 } from "@/lib/amazon/sp-api";
 import { getAmazonSpConfig } from "@/lib/amazon/sp-config";
 
@@ -88,13 +88,12 @@ export async function publishAmazonOffer(opts: {
       model: opts.listing.model,
       mpn: opts.listing.mpn,
     };
-    const keywords = amazonSearchKeywords(hints);
-    if (keywords) {
-      const hits = await searchAmazonCatalogByKeywords({
+    const queries = amazonCatalogQueries(hints);
+    if (queries.length) {
+      const hits = await searchAmazonCatalogForListing({
         accessToken: opts.accessToken,
         marketplaceId: cfg.marketplaceId,
-        keywords,
-        brand: opts.listing.brand,
+        queries,
       });
       const match = pickAmazonCatalogMatch(hits, hints);
       if (match) {

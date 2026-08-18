@@ -129,10 +129,25 @@ function catalogHitsFromPayload(json: Record<string, unknown>): AmazonCatalogHit
     .map((item) => {
       const summaries = (item.summaries as Array<Record<string, unknown>>) || [];
       const types = (item.productTypes as Array<Record<string, unknown>>) || [];
+      const identifiers: string[] = [];
+      const walk = (value: unknown) => {
+        if (!value) return;
+        if (Array.isArray(value)) {
+          value.forEach(walk);
+          return;
+        }
+        if (typeof value === "object") {
+          const row = value as Record<string, unknown>;
+          if (typeof row.identifier === "string") identifiers.push(row.identifier);
+          Object.values(row).forEach(walk);
+        }
+      };
+      walk(item.identifiers);
       return {
         asin: String(item.asin || summaries[0]?.asin || "").toUpperCase(),
         title: String(summaries[0]?.itemName || ""),
         productType: String(types[0]?.productType || "PRODUCT"),
+        identifiers,
       };
     })
     .filter((row) => /^[A-Z0-9]{10}$/.test(row.asin));
@@ -152,8 +167,6 @@ export async function searchAmazonCatalogByKeywords(opts: {
     includedData: "summaries,identifiers,productTypes",
     pageSize: "20",
   });
-  const brand = String(opts.brand || "").trim();
-  if (brand) params.append("brandNames", brand);
   const { ok, json } = await amazonFetch(
     opts.accessToken,
     `/catalog/2022-04-01/items?${params.toString()}`,
@@ -162,15 +175,30 @@ export async function searchAmazonCatalogByKeywords(opts: {
     const detail = amazonIssuesText(json) || "Amazon catalog search failed";
     throw new Error(detail);
   }
-  const hits = catalogHitsFromPayload(json);
-  if (hits.length || !brand) return hits;
-  params.delete("brandNames");
-  const retry = await amazonFetch(
-    opts.accessToken,
-    `/catalog/2022-04-01/items?${params.toString()}`,
-  );
-  if (!retry.ok) return hits;
-  return catalogHitsFromPayload(retry.json);
+  return catalogHitsFromPayload(json);
+}
+
+export async function searchAmazonCatalogForListing(opts: {
+  accessToken: string;
+  marketplaceId: string;
+  queries: string[];
+}): Promise<AmazonCatalogHit[]> {
+  const seen = new Set<string>();
+  const hits: AmazonCatalogHit[] = [];
+  for (const query of opts.queries.slice(0, 4)) {
+    const batch = await searchAmazonCatalogByKeywords({
+      accessToken: opts.accessToken,
+      marketplaceId: opts.marketplaceId,
+      keywords: query,
+    });
+    for (const hit of batch) {
+      if (seen.has(hit.asin)) continue;
+      seen.add(hit.asin);
+      hits.push(hit);
+    }
+    if (hits.length >= 12) break;
+  }
+  return hits;
 }
 
 export function amazonListingBlockedReason(

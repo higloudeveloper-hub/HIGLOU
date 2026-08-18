@@ -73,6 +73,52 @@ describe("Amazon catalog auto-match", () => {
     ).toBe("DeWalt DCF630");
   });
 
+  it("matches Honeywell RTH2CWF-N to the X2S catalog title", () => {
+    const match = pickAmazonCatalogMatch(
+      [
+        {
+          asin: "B0DSGCDMPT",
+          title: "Honeywell Home X2S Smart Wi-Fi Thermostat, Gray",
+        },
+        {
+          asin: "B09X69FSMB",
+          title: "Honeywell Home T5 Smart Wi-Fi Thermostat",
+        },
+        {
+          asin: "B09TBGGLQB",
+          title: "Honeywell Home RTH9600WF Smart Color Thermostat",
+        },
+      ],
+      {
+        brand: "Honeywell",
+        model: "RTH2CWF-N",
+        title: "Honeywell Home RTH2CWF-N Smart Thermostat",
+      },
+    );
+    expect(match?.asin).toBe("B0DSGCDMPT");
+  });
+
+  it("matches Delta LDL18-PC and not the SN finish", () => {
+    const match = pickAmazonCatalogMatch(
+      [
+        {
+          asin: "B00NOARV9Q",
+          title: "Delta Lyndall 18 in Wall Mount Towel Bar Bath Hardware Accessory",
+        },
+        {
+          asin: "B00NOT2WAU",
+          title: "Delta Ldl18-SN Towel Bar Quick Click Mounting",
+        },
+      ],
+      {
+        brand: "Delta",
+        model: "LDL18-PC",
+        title: 'Delta LDL18-PC Chrome Towel Bar 22.56"',
+      },
+    );
+    expect(match?.asin).toBe("B00NOARV9Q");
+  });
+
   it("picks the kit when the Higlou listing is a kit", () => {
     const match = pickAmazonCatalogMatch(hits, {
       brand: "DeWalt",

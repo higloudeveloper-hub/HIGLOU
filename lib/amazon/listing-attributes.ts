@@ -98,8 +98,6 @@ export function dropAmazonBrandAttributes(
   attributes: Record<string, unknown>,
 ): Record<string, unknown> {
   const out = { ...attributes };
-  delete out.brand;
-  delete out.manufacturer;
   return out;
 }
 
@@ -345,6 +343,41 @@ export function applyAmazonCatalogIdentity(opts: {
   setIdentity("brand", amazonCatalogBrand(catalog));
   setIdentity("manufacturer", amazonCatalogManufacturer(catalog));
   return { attributes, filled };
+}
+
+/** On 5995, copy the catalog brand instead of omitting Brand Name. */
+export function lockAmazonBrandAttributes(opts: {
+  attributes: Record<string, unknown>;
+  listing: AmazonListingDraft;
+  catalog?: AmazonCatalogSnapshot | null;
+  marketplaceId: string;
+  schema?: AmazonProductTypeSchema | null;
+}): Record<string, unknown> {
+  const locked = applyAmazonCatalogIdentity({
+    attributes: opts.attributes,
+    catalog: opts.catalog,
+    marketplaceId: opts.marketplaceId,
+    schema: opts.schema,
+  }).attributes;
+  const brand =
+    amazonCatalogBrand(opts.catalog) || String(opts.listing.brand || "").trim();
+  const manufacturer =
+    amazonCatalogManufacturer(opts.catalog) || brand;
+  if (brand && !amazonAttributeText(locked.brand)) {
+    locked.brand = amazonTextAttribute(
+      brand,
+      opts.marketplaceId,
+      propertyOf(opts.schema, "brand"),
+    );
+  }
+  if (manufacturer && !amazonAttributeText(locked.manufacturer)) {
+    locked.manufacturer = amazonTextAttribute(
+      manufacturer,
+      opts.marketplaceId,
+      propertyOf(opts.schema, "manufacturer"),
+    );
+  }
+  return locked;
 }
 
 export function amazonTextAttribute(
@@ -994,6 +1027,7 @@ export function issueAttributeKeys(issue: {
         .replace(/^_|_$/g, ""),
     );
   }
+  if (names.has("brand_name")) names.add("brand");
   if (/part\s*number/i.test(message)) names.add("part_number");
   if (
     /5995/.test(message) ||
@@ -1248,7 +1282,13 @@ export function fillAmazonAttributesFromIssues(opts: {
 }): { attributes: Record<string, unknown>; filled: string[] } {
   if (amazonHasBrandLockIssue(opts.issues)) {
     return {
-      attributes: dropAmazonBrandAttributes(opts.attributes),
+      attributes: lockAmazonBrandAttributes({
+        attributes: opts.attributes,
+        listing: opts.listing,
+        catalog: opts.catalog,
+        marketplaceId: opts.marketplaceId,
+        schema: opts.schema,
+      }),
       filled: ["brand", "manufacturer"],
     };
   }
@@ -1309,7 +1349,7 @@ export function fillAmazonAttributesFromIssues(opts: {
       filled.push(name);
       continue;
     }
-    if (identity && attributes[name]) continue;
+    if (identity && amazonAttributeText(attributes[name])) continue;
     const fallback = defaultAmazonAttribute({
       name,
       listing: opts.listing,
@@ -1319,6 +1359,15 @@ export function fillAmazonAttributesFromIssues(opts: {
     });
     if (fallback) {
       attributes[name] = fallback;
+      filled.push(name);
+    }
+  }
+  for (const name of ["brand", "manufacturer"]) {
+    if (
+      !amazonAttributeText(before[name]) &&
+      amazonAttributeText(attributes[name]) &&
+      !filled.includes(name)
+    ) {
       filled.push(name);
     }
   }
@@ -1367,7 +1416,8 @@ export function fillAmazonRequiredAttributes(opts: {
       ];
 
   const setText = (name: string, value: string) => {
-    if (!value || attributes[name]) return;
+    if (!value) return;
+    if (amazonAttributeText(attributes[name])) return;
     attributes[name] = amazonTextAttribute(
       value,
       marketplaceId,

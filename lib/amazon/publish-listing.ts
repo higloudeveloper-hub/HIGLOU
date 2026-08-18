@@ -4,7 +4,7 @@ import {
   amazonHasBrandLockIssue,
   amazonListingHasPrice,
   buildAmazonListingAttributes,
-  dropAmazonBrandAttributes,
+  lockAmazonBrandAttributes,
   fillAmazonAttributesFromIssues,
   type AmazonListingDraft,
 } from "@/lib/amazon/listing-attributes";
@@ -130,7 +130,13 @@ export async function publishAmazonOffer(opts: {
   const previewBrand = amazonBrandGatingReason(preview.issues);
   if (previewBrand) throw new Error(previewBrand);
   if (amazonHasBrandLockIssue(preview.issues)) {
-    readyAttributes = dropAmazonBrandAttributes(readyAttributes);
+    readyAttributes = lockAmazonBrandAttributes({
+      attributes: readyAttributes,
+      listing: opts.listing,
+      catalog,
+      marketplaceId: cfg.marketplaceId,
+      schema,
+    });
     const unlocked = await putAmazonListingOffer({
       ...putBase,
       attributes: readyAttributes,

@@ -218,7 +218,7 @@ describe("Amazon complete listing attributes", () => {
     expect(amazonListingHasPrice(attributes)).toBe(true);
   });
 
-  it("drops brand after Amazon 5995 but keeps photos and price", () => {
+  it("locks the catalog brand after Amazon 5995 instead of omitting Brand Name", () => {
     const { attributes, filled } = fillAmazonAttributesFromIssues({
       marketplaceId: AMAZON_US_MARKETPLACE_ID,
       schema: thermostatSchema,
@@ -266,8 +266,7 @@ describe("Amazon complete listing attributes", () => {
       ],
     });
     expect(filled).toEqual(expect.arrayContaining(["brand"]));
-    expect(attributes.brand).toBeUndefined();
-    expect(attributes.manufacturer).toBeUndefined();
+    expect((attributes.brand as Array<{ value: string }>)[0].value).toBe("Google");
     expect(
       (attributes.merchant_suggested_asin as Array<{ value: string }>)[0].value,
     ).toBe("B08NESTHAT");
@@ -275,6 +274,29 @@ describe("Amazon complete listing attributes", () => {
       (attributes.main_product_image_locator as Array<{ media_location: string }>)[0]
         .media_location,
     ).toMatch(/nest\.jpg/);
+  });
+
+  it("fills missing Brand Name and Manufacturer from the Higlou listing", () => {
+    const { attributes, filled } = fillAmazonAttributesFromIssues({
+      marketplaceId: AMAZON_US_MARKETPLACE_ID,
+      schema: thermostatSchema,
+      listing: {
+        title: "Hi-Spec Network Cable Testing & Wiring Tool Kit Set - 9 Piece",
+        brand: "Hi-Spec",
+        price: 66,
+        quantity: 1,
+      },
+      attributes: {},
+      issues: [
+        { message: "'Brand Name' is required but missing." },
+        { message: "'Manufacturer' is required but missing." },
+      ],
+    });
+    expect(filled).toEqual(expect.arrayContaining(["brand", "manufacturer"]));
+    expect((attributes.brand as Array<{ value: string }>)[0].value).toBe("Hi-Spec");
+    expect((attributes.manufacturer as Array<{ value: string }>)[0].value).toBe(
+      "Hi-Spec",
+    );
   });
 
   it("fills Amazon missing-attribute issues so the listing can go up complete", () => {

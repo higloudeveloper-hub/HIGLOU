@@ -207,4 +207,222 @@ describe("Amazon complete listing attributes", () => {
     expect((filled.color as Array<{ value: string }>)[0].value).toBe("Chrome");
     expect((filled.country_of_origin as Array<{ value: string }>)[0].value).toBe("CN");
   });
+
+  it("trims duplicate color and sends a tool-only battery pack for a Ryobi drill", () => {
+    const drillSchema = {
+      productType: "DRILL",
+      required: [
+        "brand",
+        "bullet_point",
+        "country_of_origin",
+        "included_components",
+        "item_length_width_height",
+        "item_name",
+        "manufacturer",
+        "model_name",
+        "model_number",
+        "power_source_type",
+        "product_description",
+        "supplier_declared_dg_hz_regulation",
+        "unit_count",
+        "voltage",
+      ],
+      properties: {
+        brand: {},
+        bullet_point: {},
+        color: { maxUniqueItems: 1 },
+        country_of_origin: {},
+        contains_battery_or_cell: {
+          items: { properties: { value: { type: "boolean" } } },
+        },
+        batteries_included: {
+          items: { properties: { value: { type: "boolean" } } },
+        },
+        batteries_required: {
+          items: { properties: { value: { type: "boolean" } } },
+        },
+        battery: {},
+        lithium_battery: {},
+        included_components: {},
+        item_length_width_height: {
+          items: {
+            properties: {
+              length: { properties: { unit: { enum: ["inches"] } } },
+              width: {},
+              height: {},
+            },
+          },
+        },
+        item_name: {},
+        manufacturer: {},
+        model_name: {},
+        model_number: {},
+        power_source_type: {
+          items: {
+            properties: { value: { enum: ["battery", "corded_electric"] } },
+          },
+        },
+        product_description: {},
+        supplier_declared_dg_hz_regulation: {
+          items: {
+            properties: { value: { enum: ["not_applicable", "other"] } },
+          },
+        },
+        unit_count: {
+          items: { properties: { type: { enum: ["count"] } } },
+        },
+        voltage: {
+          items: { properties: { unit: { enum: ["volts"] } } },
+        },
+        merchant_suggested_asin: {},
+        condition_type: {},
+        fulfillment_availability: {},
+        purchasable_offer: {},
+        list_price: {},
+        main_product_image_locator: {},
+      },
+    };
+
+    const attributes = buildAmazonListingAttributes({
+      marketplaceId: AMAZON_US_MARKETPLACE_ID,
+      asin: "B008E76BZ4",
+      schema: drillSchema,
+      catalog: {
+        asin: "B008E76BZ4",
+        title: "ONEAND 18V Cordless Right Angle Drill",
+        productType: "DRILL",
+        images: [],
+        attributes: {
+          brand: [{ value: "Ryobi", language_tag: "en_US" }],
+          color: [
+            { value: "Green", language_tag: "en_US" },
+            { value: "Yellow", language_tag: "en_US" },
+          ],
+          battery: [{ weight: [{ value: 0 }] }],
+          lithium_battery: [{ energy_content: [{ value: 0 }] }],
+          model_number: [{ value: "#P241", language_tag: "en_US" }],
+        },
+      },
+      listing: {
+        title: "Ryobi ONE+ 18V Cordless Right Angle Drill - Tool Only",
+        brand: "Ryobi",
+        model: "P241",
+        price: 55,
+        quantity: 1,
+        description: "Ryobi ONE+ right angle drill, tool only, no battery included.",
+        features: ["18V ONE+ platform", "Right angle head"],
+        images: ["https://images.example.com/p241.jpg"],
+        packageLengthIn: 12,
+        packageWidthIn: 4,
+        packageDepthIn: 3,
+      },
+    });
+
+    expect((attributes.color as unknown[]).length).toBe(1);
+    expect((attributes.color as Array<{ value: string }>)[0].value).toBe("Green");
+    expect(attributes.battery).toBeUndefined();
+    expect(attributes.lithium_battery).toBeUndefined();
+    expect(
+      (attributes.contains_battery_or_cell as Array<{ value: boolean }>)[0].value,
+    ).toBe(false);
+    expect(
+      (attributes.batteries_included as Array<{ value: boolean }>)[0].value,
+    ).toBe(false);
+    expect(
+      (attributes.batteries_required as Array<{ value: boolean }>)[0].value,
+    ).toBe(true);
+    expect((attributes.voltage as Array<{ value: number; unit: string }>)[0]).toEqual(
+      expect.objectContaining({ value: 18, unit: "volts" }),
+    );
+    expect(
+      (attributes.power_source_type as Array<{ value: string }>)[0].value,
+    ).toBe("battery");
+    expect(
+      (attributes.included_components as Array<{ value: string }>)[0].value,
+    ).toMatch(/tool only/i);
+    expect((attributes.unit_count as Array<{ value: number }>)[0].value).toBe(1);
+    const dims = attributes.item_length_width_height as Array<{
+      length: { value: number; unit: string };
+    }>;
+    expect(dims[0].length.value).toBe(12);
+    expect(dims[0].length.unit).toBe("inches");
+  });
+
+  it("maps Amazon display-name battery issues to snake_case and does not copy incomplete lithium", () => {
+    const drillSchema = {
+      productType: "DRILL",
+      required: ["item_name"],
+      properties: {
+        item_name: {},
+        contains_battery_or_cell: {
+          items: { properties: { value: { type: "boolean" } } },
+        },
+        batteries_included: {
+          items: { properties: { value: { type: "boolean" } } },
+        },
+        batteries_required: {
+          items: { properties: { value: { type: "boolean" } } },
+        },
+        battery: {},
+        lithium_battery: {},
+        color: { maxUniqueItems: 1 },
+        merchant_suggested_asin: {},
+        condition_type: {},
+        fulfillment_availability: {},
+        purchasable_offer: {},
+        list_price: {},
+      },
+    };
+    const { attributes } = fillAmazonAttributesFromIssues({
+      marketplaceId: AMAZON_US_MARKETPLACE_ID,
+      schema: drillSchema,
+      listing: {
+        title: "Ryobi ONE+ 18V Cordless Right Angle Drill - Tool Only",
+        brand: "Ryobi",
+        model: "P241",
+        price: 55,
+        quantity: 1,
+      },
+      catalog: {
+        asin: "B008E76BZ4",
+        title: "ONEAND P241",
+        productType: "DRILL",
+        images: [],
+        attributes: {
+          battery: [{ weight: [{ value: 1 }] }],
+          lithium_battery: [{ energy_content: [{ value: 2 }] }],
+          color: [{ value: "Green" }, { value: "Yellow" }],
+        },
+      },
+      attributes: {
+        color: [{ value: "Green" }, { value: "Yellow" }],
+        battery: [{ weight: [{ value: 1 }] }],
+      },
+      issues: [
+        {
+          message: "'Contains Battery or Cell' is required but missing.",
+        },
+        {
+          message:
+            "A maximum of 1 occurrence(s) is/are allowed for the attribute Color but it currently occurs 2 times.",
+        },
+        {
+          message: "'Battery Weight Unit' is required but missing.",
+          attributeNames: ["battery"],
+        },
+        {
+          message: "'Lithium Battery Energy Content Unit' is required but missing.",
+        },
+      ],
+    });
+    expect((attributes.color as unknown[]).length).toBe(1);
+    expect(attributes.battery).toBeUndefined();
+    expect(attributes.lithium_battery).toBeUndefined();
+    expect(
+      (attributes.contains_battery_or_cell as Array<{ value: boolean }>)[0].value,
+    ).toBe(false);
+    expect(
+      (attributes.batteries_required as Array<{ value: boolean }>)[0].value,
+    ).toBe(true);
+  });
 });

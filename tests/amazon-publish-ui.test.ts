@@ -22,6 +22,12 @@ describe("Amazon seller publish stays on Higlou", () => {
     expect(exportScreen).toMatch(/onPublishToAmazon/);
   });
 
+  it("sends package dimensions with Publish to Amazon", () => {
+    const workspace = readRepo("components/listing/new-listing-workspace.tsx");
+    expect(workspace).toMatch(/\/api\/amazon\/publish/);
+    expect(workspace).toMatch(/packageLengthIn: fresh\.packageLengthIn/);
+  });
+
   it("falls back from a Home Depot UPC miss to brand and model search", () => {
     const publish = readRepo("lib/amazon/publish-listing.ts");
     const resolve = readRepo("lib/amazon/catalog-resolve.ts");

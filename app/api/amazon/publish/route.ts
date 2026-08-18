@@ -37,6 +37,9 @@ const bodySchema = z.object({
     material: z.string().optional().default(""),
     countryOfManufacture: z.string().optional().default(""),
     categoryName: z.string().optional().default(""),
+    packageLengthIn: z.number().positive().nullable().optional(),
+    packageWidthIn: z.number().positive().nullable().optional(),
+    packageDepthIn: z.number().positive().nullable().optional(),
     itemSpecifics: z
       .array(
         z.object({

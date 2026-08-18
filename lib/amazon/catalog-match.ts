@@ -59,6 +59,10 @@ export function listingLooksLikeKit(text: string): boolean {
   return KIT_RE.test(text);
 }
 
+export function listingLooksBareTool(text: string): boolean {
+  return BARE_RE.test(text);
+}
+
 export function extractModelTokens(text: string): string[] {
   const matches = String(text || "").toUpperCase().match(MODEL_TOKEN_RE) || [];
   const tokens = matches

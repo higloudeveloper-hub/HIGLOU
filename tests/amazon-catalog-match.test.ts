@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   amazonSearchKeywords,
   extractModelCode,
+  listingLooksBareTool,
   pickAmazonCatalogMatch,
   scoreAmazonCatalogHit,
 } from "@/lib/amazon/catalog-match";
@@ -156,5 +157,11 @@ describe("Amazon catalog auto-match", () => {
       title: "DeWalt DCF630 kit with 2 batteries and charger",
     });
     expect(match?.asin).toBe("B0BPYBS82C");
+  });
+
+  it("treats Tool Only as a bare tool, not a kit", () => {
+    expect(
+      listingLooksBareTool("Ryobi ONE+ 18V Cordless Right Angle Drill - Tool Only"),
+    ).toBe(true);
   });
 });

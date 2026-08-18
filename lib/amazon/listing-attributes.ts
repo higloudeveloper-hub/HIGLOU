@@ -1,7 +1,12 @@
 import {
+  listingLooksBareTool,
+  listingLooksLikeKit,
+} from "@/lib/amazon/catalog-match";
+import {
   amazonConditionType,
   amazonOfferAttributes,
 } from "@/lib/amazon/listing-offer";
+import { inferVoltageFromText } from "@/lib/ebay/infer-voltage";
 
 export type AmazonListingDraft = {
   title: string;
@@ -22,6 +27,9 @@ export type AmazonListingDraft = {
   condition?: string;
   conditionId?: string;
   handlingTime?: number;
+  packageLengthIn?: number | null;
+  packageWidthIn?: number | null;
+  packageDepthIn?: number | null;
 };
 
 export type AmazonProductTypeSchema = {
@@ -47,6 +55,8 @@ const SKIP_CATALOG_KEYS = new Set([
   "merchant_suggested_asin",
   "list_price",
 ]);
+
+const SAFETY_OBJECT_KEYS = new Set(["battery", "lithium_battery", "hazmat"]);
 
 const COUNTRY_ISO: Record<string, string> = {
   usa: "US",
@@ -152,7 +162,341 @@ export function copyAmazonCatalogAttributes(
   for (const [key, value] of Object.entries(catalog || {})) {
     if (SKIP_CATALOG_KEYS.has(key) || !keepKey(key, allowed)) continue;
     if (value == null) continue;
+    if (SAFETY_OBJECT_KEYS.has(key) && amazonSafetyObjectIncomplete(value)) continue;
     out[key] = value;
+  }
+  return out;
+}
+
+function listingBlob(listing: AmazonListingDraft): string {
+  return [
+    listing.title,
+    listing.description,
+    listing.brand,
+    listing.model,
+    listing.categoryName,
+    ...(listing.features || []),
+    ...(listing.itemSpecifics || []).map(
+      (row) => `${row.label || row.key || ""} ${row.value || ""}`,
+    ),
+  ]
+    .filter(Boolean)
+    .join(" ");
+}
+
+export function amazonListingIsCordless(listing: AmazonListingDraft): boolean {
+  const text = listingBlob(listing);
+  if (
+    /\b(cordless|one\+|one\s*plus|m18|m12|20v\s*max|bare tool|tool only)\b/i.test(
+      text,
+    )
+  ) {
+    return true;
+  }
+  return Boolean(inferVoltageFromText(text));
+}
+
+export function amazonBatteryIntent(listing: AmazonListingDraft): {
+  cordless: boolean;
+  bare: boolean;
+  kit: boolean;
+  containsCell: boolean;
+  batteriesIncluded: boolean;
+  batteriesRequired: boolean;
+} {
+  const text = listingBlob(listing);
+  const cordless = amazonListingIsCordless(listing);
+  const bare = listingLooksBareTool(text);
+  const kit = !bare && listingLooksLikeKit(text);
+  const containsCell = Boolean(cordless && kit && !bare);
+  return {
+    cordless,
+    bare,
+    kit,
+    containsCell,
+    batteriesIncluded: containsCell,
+    batteriesRequired: cordless,
+  };
+}
+
+function nestedEnum(prop: Record<string, unknown> | null, field: string): string[] {
+  const items = (prop?.items || {}) as {
+    properties?: Record<string, { enum?: string[] }>;
+  };
+  const options = items.properties?.[field]?.enum;
+  return Array.isArray(options) ? options.map(String) : [];
+}
+
+function objectFieldEnum(
+  shape: Record<string, unknown> | undefined,
+  field: string,
+): string[] {
+  if (!shape) return [];
+  const direct = (
+    shape.properties as Record<string, { enum?: string[] }> | undefined
+  )?.[field]?.enum;
+  if (Array.isArray(direct)) return direct.map(String);
+  return nestedEnum({ items: shape } as Record<string, unknown>, field);
+}
+
+function pickFromEnums(options: string[], preferred: string[]): string {
+  if (!options.length) return preferred[0] || "";
+  for (const want of preferred) {
+    const hit = options.find((option) => option.toLowerCase() === want.toLowerCase());
+    if (hit) return hit;
+  }
+  return options[0] || preferred[0] || "";
+}
+
+function maxUniqueItems(prop: Record<string, unknown> | null): number | null {
+  const n = Number(prop?.maxUniqueItems);
+  return Number.isFinite(n) && n > 0 ? Math.floor(n) : null;
+}
+
+export function amazonSafetyObjectIncomplete(value: unknown): boolean {
+  const visit = (node: unknown): boolean => {
+    if (!node || typeof node !== "object") return false;
+    if (Array.isArray(node)) return node.some(visit);
+    const row = node as Record<string, unknown>;
+    for (const [key, child] of Object.entries(row)) {
+      if (/weight|energy/i.test(key)) {
+        const parts = Array.isArray(child) ? child : child ? [child] : [];
+        for (const part of parts) {
+          if (!part || typeof part !== "object") continue;
+          const item = part as Record<string, unknown>;
+          const hasValue = item.value != null && item.value !== "";
+          const hasUnit = Boolean(item.unit);
+          if ((hasValue || "value" in item) && !hasUnit) return true;
+        }
+      }
+      if (visit(child)) return true;
+    }
+    return false;
+  };
+  return visit(value);
+}
+
+export function trimAmazonAttributesToSchema(
+  attributes: Record<string, unknown>,
+  schema?: AmazonProductTypeSchema | null,
+): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(attributes)) {
+    if (!Array.isArray(value)) {
+      out[key] = value;
+      continue;
+    }
+    const max =
+      maxUniqueItems(propertyOf(schema, key)) ?? (key === "color" ? 1 : null);
+    out[key] = max != null ? value.slice(0, max) : value;
+  }
+  return out;
+}
+
+export function dropIncompleteAmazonSafetyAttributes(
+  attributes: Record<string, unknown>,
+): Record<string, unknown> {
+  const out = { ...attributes };
+  for (const key of SAFETY_OBJECT_KEYS) {
+    if (out[key] == null) continue;
+    if (amazonSafetyObjectIncomplete(out[key])) delete out[key];
+  }
+  return out;
+}
+
+function booleanAttribute(value: boolean, marketplaceId: string) {
+  return [{ value, marketplace_id: marketplaceId }];
+}
+
+export function applyAmazonBatteryPack(
+  attributes: Record<string, unknown>,
+  listing: AmazonListingDraft,
+  marketplaceId: string,
+  schema?: AmazonProductTypeSchema | null,
+): Record<string, unknown> {
+  const intent = amazonBatteryIntent(listing);
+  const out = dropIncompleteAmazonSafetyAttributes({ ...attributes });
+  const setIfKnown = (name: string, value: boolean) => {
+    if (!keepKey(name, schemaKeys(schema))) return;
+    out[name] = booleanAttribute(value, marketplaceId);
+  };
+  setIfKnown("contains_battery_or_cell", intent.containsCell);
+  setIfKnown("batteries_included", intent.batteriesIncluded);
+  setIfKnown("batteries_required", intent.batteriesRequired);
+  if (!intent.containsCell) {
+    delete out.battery;
+    delete out.lithium_battery;
+  }
+  return out;
+}
+
+function voltageNumber(listing: AmazonListingDraft): number | null {
+  const formatted = inferVoltageFromText(listingBlob(listing));
+  if (!formatted) return null;
+  const n = Number(String(formatted).replace(/[^\d.]/g, ""));
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+function includedComponentsValue(listing: AmazonListingDraft): string {
+  const specific = listing.itemSpecifics?.find((row) =>
+    /included\s*component/i.test(String(row.label || row.key || "")),
+  );
+  const fromSpecific = String(specific?.value || "").trim();
+  if (fromSpecific) return fromSpecific.slice(0, 500);
+  const intent = amazonBatteryIntent(listing);
+  if (intent.bare) return "Tool only";
+  if (intent.kit) return "Tool, battery, and charger";
+  return listing.title.slice(0, 120);
+}
+
+function packageInches(listing: AmazonListingDraft): {
+  length: number;
+  width: number;
+  height: number;
+} | null {
+  const length = Number(listing.packageLengthIn);
+  const width = Number(listing.packageWidthIn);
+  const height = Number(listing.packageDepthIn);
+  if (![length, width, height].every((n) => Number.isFinite(n) && n > 0)) {
+    return null;
+  }
+  return { length, width, height };
+}
+
+function dimensionPart(
+  shape: Record<string, unknown> | undefined,
+  value: number,
+  unit: string,
+) {
+  if (shape?.type === "array" || shape?.items) {
+    return [{ value, unit }];
+  }
+  return { value, unit };
+}
+
+function fillSchemaDrivenDefaults(
+  attributes: Record<string, unknown>,
+  listing: AmazonListingDraft,
+  marketplaceId: string,
+  schema?: AmazonProductTypeSchema | null,
+) {
+  const allowed = schemaKeys(schema);
+  const set = (name: string, value: unknown) => {
+    if (attributes[name] || !keepKey(name, allowed)) return;
+    attributes[name] = value;
+  };
+
+  const volts = voltageNumber(listing);
+  if (volts != null) {
+    const prop = propertyOf(schema, "voltage");
+    const unit = pickFromEnums(nestedEnum(prop, "unit"), ["volts", "v"]);
+    set("voltage", [
+      {
+        value: volts,
+        ...(unit ? { unit } : {}),
+        marketplace_id: marketplaceId,
+      },
+    ]);
+  }
+
+  const powerProp = propertyOf(schema, "power_source_type");
+  const cordless = amazonListingIsCordless(listing);
+  const power = pickEnum(
+    powerProp,
+    cordless
+      ? ["battery", "battery_powered", "dc"]
+      : ["corded_electric", "ac", "not_applicable"],
+  );
+  if (power) set("power_source_type", [{ value: power, marketplace_id: marketplaceId }]);
+
+  const included = includedComponentsValue(listing);
+  if (included) {
+    set(
+      "included_components",
+      amazonTextAttribute(
+        included,
+        marketplaceId,
+        propertyOf(schema, "included_components"),
+      ),
+    );
+  }
+
+  const unitCountProp = propertyOf(schema, "unit_count");
+  const unitType = pickFromEnums(nestedEnum(unitCountProp, "type"), [
+    "count",
+    "each",
+  ]);
+  set("unit_count", [
+    {
+      value: 1,
+      ...(unitType ? { type: unitType } : {}),
+      marketplace_id: marketplaceId,
+    },
+  ]);
+
+  const dims = packageInches(listing);
+  if (dims) {
+    const dimProp = propertyOf(schema, "item_length_width_height");
+    const dimItems = (dimProp?.items || {}) as {
+      properties?: Record<string, Record<string, unknown>>;
+    };
+    const unit =
+      pickFromEnums(objectFieldEnum(dimItems.properties?.length, "unit"), [
+        "inches",
+        "in",
+      ]) || "inches";
+    set("item_length_width_height", [
+      {
+        length: dimensionPart(dimItems.properties?.length, dims.length, unit),
+        width: dimensionPart(dimItems.properties?.width, dims.width, unit),
+        height: dimensionPart(dimItems.properties?.height, dims.height, unit),
+        marketplace_id: marketplaceId,
+      },
+    ]);
+  }
+}
+
+export function issueAttributeKeys(issue: {
+  message?: string;
+  attributeNames?: string[];
+}): string[] {
+  const names = new Set<string>();
+  for (const name of issue.attributeNames || []) {
+    if (name) names.add(String(name));
+  }
+  const message = String(issue.message || "");
+  for (const match of message.matchAll(/'([^']+)'/g)) {
+    const raw = String(match[1] || "").trim();
+    if (!raw) continue;
+    names.add(raw);
+    names.add(
+      raw
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "_")
+        .replace(/^_|_$/g, ""),
+    );
+  }
+  return [...names];
+}
+
+export function finalizeAmazonListingAttributes(opts: {
+  attributes: Record<string, unknown>;
+  listing: AmazonListingDraft;
+  marketplaceId: string;
+  schema?: AmazonProductTypeSchema | null;
+}): Record<string, unknown> {
+  const withSafety = applyAmazonBatteryPack(
+    opts.attributes,
+    opts.listing,
+    opts.marketplaceId,
+    opts.schema,
+  );
+  const trimmed = trimAmazonAttributesToSchema(withSafety, opts.schema);
+  const allowed = schemaKeys(opts.schema);
+  if (!allowed) return trimmed;
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(trimmed)) {
+    if (allowed.has(key)) out[key] = value;
   }
   return out;
 }
@@ -291,7 +635,25 @@ export function defaultAmazonAttribute(opts: {
       },
     ];
   }
-  if (/batteries_(required|included)/.test(name) || valueType(prop) === "boolean") {
+  if (name === "contains_battery_or_cell") {
+    return booleanAttribute(
+      amazonBatteryIntent(listing).containsCell,
+      marketplaceId,
+    );
+  }
+  if (name === "batteries_included") {
+    return booleanAttribute(
+      amazonBatteryIntent(listing).batteriesIncluded,
+      marketplaceId,
+    );
+  }
+  if (name === "batteries_required") {
+    return booleanAttribute(
+      amazonBatteryIntent(listing).batteriesRequired,
+      marketplaceId,
+    );
+  }
+  if (valueType(prop) === "boolean") {
     return [{ value: false, marketplace_id: marketplaceId }];
   }
   const enumerated = pickEnum(prop, ["Not Applicable", "not_applicable"]);
@@ -320,17 +682,16 @@ export function fillAmazonAttributesFromIssues(opts: {
   const filled: string[] = [];
   const names = new Set<string>();
   for (const issue of opts.issues || []) {
-    for (const name of issue.attributeNames || []) {
-      if (name) names.add(String(name));
-    }
-    const quoted = String(issue.message || "").match(/'([a-z][a-z0-9_]{2,})'/i);
-    if (quoted?.[1]) names.add(quoted[1]);
+    for (const name of issueAttributeKeys(issue)) names.add(name);
   }
   for (const name of names) {
     if (!before[name] && attributes[name]) filled.push(name);
     if (attributes[name]) continue;
     const catalogValue = opts.catalog?.attributes?.[name];
-    if (catalogValue != null) {
+    if (
+      catalogValue != null &&
+      !(SAFETY_OBJECT_KEYS.has(name) && amazonSafetyObjectIncomplete(catalogValue))
+    ) {
       attributes[name] = catalogValue;
       filled.push(name);
       continue;
@@ -346,13 +707,13 @@ export function fillAmazonAttributesFromIssues(opts: {
       filled.push(name);
     }
   }
-  const allowed = schemaKeys(opts.schema);
-  if (!allowed) return { attributes, filled };
-  const trimmed: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(attributes)) {
-    if (allowed.has(key)) trimmed[key] = value;
-  }
-  return { attributes: trimmed, filled };
+  const finalized = finalizeAmazonListingAttributes({
+    attributes,
+    listing: opts.listing,
+    marketplaceId: opts.marketplaceId,
+    schema: opts.schema,
+  });
+  return { attributes: finalized, filled };
 }
 
 export function fillAmazonRequiredAttributes(opts: {
@@ -454,6 +815,8 @@ export function fillAmazonRequiredAttributes(opts: {
     ];
   }
 
+  fillSchemaDrivenDefaults(attributes, listing, marketplaceId, schema);
+
   for (const name of required) {
     if (attributes[name]) continue;
     const fallback = defaultAmazonAttribute({
@@ -465,7 +828,12 @@ export function fillAmazonRequiredAttributes(opts: {
     if (fallback) attributes[name] = fallback;
   }
 
-  return attributes;
+  return finalizeAmazonListingAttributes({
+    attributes,
+    listing,
+    marketplaceId,
+    schema,
+  });
 }
 
 export function amazonListingHasPrice(attributes: Record<string, unknown>): boolean {
@@ -550,11 +918,10 @@ export function buildAmazonListingAttributes(opts: {
     catalog: opts.catalog,
   });
 
-  const allowed = schemaKeys(opts.schema);
-  if (!allowed) return filled;
-  const trimmed: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(filled)) {
-    if (allowed.has(key)) trimmed[key] = value;
-  }
-  return trimmed;
+  return finalizeAmazonListingAttributes({
+    attributes: filled,
+    listing: opts.listing,
+    marketplaceId: opts.marketplaceId,
+    schema: opts.schema,
+  });
 }

@@ -1789,6 +1789,9 @@ export function NewListingWorkspace({
             material: fresh.materials[0] || "",
             countryOfManufacture: fresh.countryOfManufacture || fresh.country,
             categoryName: fresh.categoryName,
+            packageLengthIn: fresh.packageLengthIn ?? undefined,
+            packageWidthIn: fresh.packageWidthIn ?? undefined,
+            packageDepthIn: fresh.packageDepthIn ?? undefined,
             itemSpecifics: fresh.itemSpecifics.map((field) => ({
               label: field.label,
               key: field.key,

@@ -1780,6 +1780,20 @@ export function NewListingWorkspace({
             condition: fresh.condition,
             conditionId: fresh.conditionId,
             handlingTime: fresh.handlingTime || DEFAULT_VALUES.handlingTime,
+            description: fresh.descriptionSummary || fresh.descriptionHtml,
+            features: fresh.features,
+            images: fresh.images
+              .map((image) => image.url)
+              .filter((url) => /^https:\/\//i.test(url)),
+            color: fresh.colors[0] || "",
+            material: fresh.materials[0] || "",
+            countryOfManufacture: fresh.countryOfManufacture || fresh.country,
+            categoryName: fresh.categoryName,
+            itemSpecifics: fresh.itemSpecifics.map((field) => ({
+              label: field.label,
+              key: field.key,
+              value: field.value,
+            })),
           },
         }),
       });

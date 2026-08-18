@@ -710,7 +710,7 @@ export function ExportScreen({
                     </p>
                   ) : (
                     <p className="mt-1.5 text-[12px] text-muted-foreground">
-                      Matches Amazon catalog by UPC or ASIN, then lists your offer.
+                      Sends your price, photos, description, and the attributes Amazon requires.
                     </p>
                   )}
                 </div>

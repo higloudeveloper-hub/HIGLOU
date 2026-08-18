@@ -1,3 +1,7 @@
+import type {
+  AmazonCatalogSnapshot,
+  AmazonProductTypeSchema,
+} from "@/lib/amazon/listing-attributes";
 import {
   sellingPartnerIdFromAccessToken,
   sellingPartnerIdFromPayload,
@@ -97,6 +101,7 @@ export type AmazonCatalogHit = {
   asin: string;
   title: string;
   productType: string;
+  identifiers?: string[];
 };
 
 export async function searchAmazonCatalogByIdentifier(opts: {
@@ -225,15 +230,137 @@ export function amazonListingBlockedReason(
   return message || "Amazon suppressed this listing.";
 }
 
+function catalogImagesFromPayload(json: Record<string, unknown>): string[] {
+  const urls: string[] = [];
+  const walk = (value: unknown) => {
+    if (!value) return;
+    if (Array.isArray(value)) {
+      value.forEach(walk);
+      return;
+    }
+    if (typeof value === "object") {
+      const row = value as Record<string, unknown>;
+      const link = String(row.link || row.url || "");
+      if (/^https:\/\//i.test(link)) urls.push(link);
+      Object.values(row).forEach(walk);
+    }
+  };
+  walk(json.images);
+  return [...new Set(urls)];
+}
+
+export async function getAmazonCatalogItem(opts: {
+  accessToken: string;
+  marketplaceId: string;
+  asin: string;
+}): Promise<AmazonCatalogSnapshot | null> {
+  const asin = opts.asin.trim().toUpperCase();
+  if (!/^[A-Z0-9]{10}$/.test(asin)) return null;
+  const params = new URLSearchParams({
+    marketplaceIds: opts.marketplaceId,
+    includedData:
+      "summaries,attributes,images,identifiers,productTypes,classifications",
+  });
+  const { ok, json } = await amazonFetch(
+    opts.accessToken,
+    `/catalog/2022-04-01/items/${encodeURIComponent(asin)}?${params.toString()}`,
+  );
+  if (!ok) return null;
+  const summaries = (json.summaries as Array<Record<string, unknown>>) || [];
+  const types = (json.productTypes as Array<Record<string, unknown>>) || [];
+  const browse = summaries[0]?.browseClassification as
+    | { classificationId?: string }
+    | undefined;
+  return {
+    asin,
+    title: String(summaries[0]?.itemName || ""),
+    productType: String(types[0]?.productType || "PRODUCT"),
+    attributes: (json.attributes as Record<string, unknown>) || {},
+    images: catalogImagesFromPayload(json),
+    browseNodeId: browse?.classificationId
+      ? String(browse.classificationId)
+      : undefined,
+  };
+}
+
+export async function searchAmazonProductType(opts: {
+  accessToken: string;
+  marketplaceId: string;
+  itemName: string;
+}): Promise<string> {
+  const itemName = String(opts.itemName || "").trim();
+  if (!itemName) return "";
+  const params = new URLSearchParams({
+    marketplaceIds: opts.marketplaceId,
+    itemName,
+  });
+  const { ok, json } = await amazonFetch(
+    opts.accessToken,
+    `/definitions/2020-09-01/productTypes?${params.toString()}`,
+  );
+  if (!ok) return "";
+  const types = (json.productTypes as Array<Record<string, unknown>>) || [];
+  const named = types.find((row) => {
+    const name = String(row.name || row.productType || "");
+    return name && name !== "PRODUCT";
+  });
+  return String(named?.name || named?.productType || "");
+}
+
+export async function getAmazonProductTypeSchema(opts: {
+  accessToken: string;
+  marketplaceId: string;
+  sellerId: string;
+  productType: string;
+  requirements?: "LISTING" | "LISTING_OFFER_ONLY";
+}): Promise<AmazonProductTypeSchema | null> {
+  const productType = String(opts.productType || "PRODUCT").trim() || "PRODUCT";
+  const requirements = opts.requirements || "LISTING";
+  const params = new URLSearchParams({
+    marketplaceIds: opts.marketplaceId,
+    sellerId: opts.sellerId,
+    locale: "en_US",
+    productTypeVersion: "LATEST",
+    requirements,
+  });
+  if (requirements === "LISTING") params.set("parentageLevel", "NONE");
+  const { ok, json } = await amazonFetch(
+    opts.accessToken,
+    `/definitions/2020-09-01/productTypes/${encodeURIComponent(productType)}?${params.toString()}`,
+  );
+  if (!ok) return null;
+  const schema = json.schema as { link?: { resource?: string } } | undefined;
+  const url = schema?.link?.resource || "";
+  if (!url) return null;
+  const schemaJson = (await fetch(url, { cache: "no-store" }).then((res) =>
+    res.json(),
+  )) as {
+    required?: string[];
+    properties?: Record<string, Record<string, unknown>>;
+  };
+  return {
+    productType,
+    required: Array.isArray(schemaJson.required)
+      ? schemaJson.required.map(String)
+      : [],
+    properties: schemaJson.properties || {},
+  };
+}
+
 export async function getAmazonListingItem(opts: {
   accessToken: string;
   sellerId: string;
   sku: string;
   marketplaceId: string;
-}): Promise<{ sku: string; status: string; issues: AmazonSpIssue[] }> {
+}): Promise<{
+  sku: string;
+  status: string;
+  issues: AmazonSpIssue[];
+  attributes: Record<string, unknown>;
+}> {
   const params = new URLSearchParams({
     marketplaceIds: opts.marketplaceId,
-    includedData: "summaries,issues",
+    includedData: "summaries,issues,attributes",
   });
   const { ok, status, json } = await amazonFetch(
     opts.accessToken,
@@ -250,6 +377,7 @@ export async function getAmazonListingItem(opts: {
     sku: String(json.sku || opts.sku),
     status: String(summaries[0]?.status || json.status || ""),
     issues,
+    attributes: (json.attributes as Record<string, unknown>) || {},
   };
 }
 
@@ -260,6 +388,7 @@ export async function putAmazonListingOffer(opts: {
   marketplaceId: string;
   productType: string;
   attributes: Record<string, unknown>;
+  requirements?: "LISTING" | "LISTING_OFFER_ONLY";
 }): Promise<{ sku: string; status: string; issues: AmazonSpIssue[] }> {
   const params = new URLSearchParams({
     marketplaceIds: opts.marketplaceId,
@@ -272,7 +401,7 @@ export async function putAmazonListingOffer(opts: {
       method: "PUT",
       body: JSON.stringify({
         productType: opts.productType || "PRODUCT",
-        requirements: "LISTING_OFFER_ONLY",
+        requirements: opts.requirements || "LISTING",
         attributes: opts.attributes,
       }),
     },

@@ -30,6 +30,23 @@ const bodySchema = z.object({
     condition: z.string().optional().default("New"),
     conditionId: z.string().optional().default("1000"),
     handlingTime: z.number().int().min(1).max(30).optional().default(2),
+    description: z.string().optional().default(""),
+    features: z.array(z.string()).optional().default([]),
+    images: z.array(z.string()).optional().default([]),
+    color: z.string().optional().default(""),
+    material: z.string().optional().default(""),
+    countryOfManufacture: z.string().optional().default(""),
+    categoryName: z.string().optional().default(""),
+    itemSpecifics: z
+      .array(
+        z.object({
+          label: z.string().optional(),
+          key: z.string().optional(),
+          value: z.string().optional(),
+        }),
+      )
+      .optional()
+      .default([]),
   }),
 });
 

@@ -4,34 +4,30 @@ import {
   pickAmazonCatalogMatch,
 } from "@/lib/amazon/catalog-match";
 import {
-  amazonConditionType,
-  amazonOfferAttributes,
+  amazonListingHasPrice,
+  buildAmazonListingAttributes,
+  type AmazonListingDraft,
+} from "@/lib/amazon/listing-attributes";
+import {
   amazonSkuFromListing,
   asinFromHiglouSku,
   catalogIdentifierType,
 } from "@/lib/amazon/listing-offer";
 import {
   amazonListingBlockedReason,
+  getAmazonCatalogItem,
   getAmazonListingItem,
+  getAmazonProductTypeSchema,
   putAmazonListingOffer,
   searchAmazonCatalogByIdentifier,
   searchAmazonCatalogForListing,
+  searchAmazonProductType,
 } from "@/lib/amazon/sp-api";
 import { getAmazonSpConfig } from "@/lib/amazon/sp-config";
 
-export type AmazonPublishInput = {
+export type AmazonPublishInput = AmazonListingDraft & {
   sku: string;
-  title: string;
-  upc?: string;
   asin?: string;
-  brand?: string;
-  model?: string;
-  mpn?: string;
-  price: number;
-  quantity: number;
-  condition?: string;
-  conditionId?: string;
-  handlingTime?: number;
 };
 
 export type AmazonPublishResult = {
@@ -114,23 +110,47 @@ export async function publishAmazonOffer(opts: {
     throw new Error("Set a price before publishing to Amazon.");
   }
 
+  const catalog = await getAmazonCatalogItem({
+    accessToken: opts.accessToken,
+    marketplaceId: cfg.marketplaceId,
+    asin,
+  });
+  if (catalog?.productType) productType = catalog.productType;
+  if (catalog?.title) catalogTitle = catalog.title;
+
+  if (!productType || productType === "PRODUCT") {
+    const guessed = await searchAmazonProductType({
+      accessToken: opts.accessToken,
+      marketplaceId: cfg.marketplaceId,
+      itemName: catalogTitle || opts.listing.title,
+    });
+    if (guessed) productType = guessed;
+  }
+
+  const schema = await getAmazonProductTypeSchema({
+    accessToken: opts.accessToken,
+    marketplaceId: cfg.marketplaceId,
+    sellerId: opts.sellingPartnerId,
+    productType,
+    requirements: "LISTING",
+  });
+
+  const attributes = buildAmazonListingAttributes({
+    marketplaceId: cfg.marketplaceId,
+    asin,
+    listing: opts.listing,
+    catalog,
+    schema,
+  });
+
   const result = await putAmazonListingOffer({
     accessToken: opts.accessToken,
     sellerId: opts.sellingPartnerId,
     sku,
     marketplaceId: cfg.marketplaceId,
-    productType,
-    attributes: amazonOfferAttributes({
-      marketplaceId: cfg.marketplaceId,
-      asin,
-      conditionType: amazonConditionType(
-        opts.listing.condition,
-        opts.listing.conditionId,
-      ),
-      price: opts.listing.price,
-      quantity: Math.max(1, Math.floor(opts.listing.quantity || 1)),
-      handlingDays: Math.max(1, Math.floor(opts.listing.handlingTime || 2)),
-    }),
+    productType: schema?.productType || productType,
+    requirements: "LISTING",
+    attributes,
   });
 
   try {
@@ -142,8 +162,18 @@ export async function publishAmazonOffer(opts: {
     });
     const blocked = amazonListingBlockedReason(live.issues);
     if (blocked) throw new Error(blocked);
+    const liveAttrs = live.attributes || {};
+    const hasFacts = Boolean(liveAttrs.item_name || liveAttrs.brand || liveAttrs.bullet_point);
+    if (hasFacts && !amazonListingHasPrice(liveAttrs)) {
+      throw new Error(
+        "Amazon saved the product facts but not the price. Open Seller Central → Inventory and set your price on this SKU.",
+      );
+    }
   } catch (error) {
-    if (error instanceof Error && /blocked this brand|suppressed/i.test(error.message)) {
+    if (
+      error instanceof Error &&
+      /blocked this brand|suppressed|not the price/i.test(error.message)
+    ) {
       throw error;
     }
   }

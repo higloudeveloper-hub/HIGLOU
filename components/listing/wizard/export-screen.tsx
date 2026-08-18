@@ -21,8 +21,7 @@ import { resolveListingPackage } from "@/lib/ebay/package-shipping";
 import { humanizeEbayPublishError } from "@/lib/ebay/infer-voltage";
 import { displayNameFromEbayUsername } from "@/lib/ebay/store-display-name";
 import type { ProductListing } from "@/types/product";
-import type { StoreBranding } from "@/config/store-branding";
-import { cn } from "@/lib/utils";
+import { AmazonMark } from "@/components/brand/store-marks";
 
 const LIVE_STAGES = [
   "Saving your listing",
@@ -378,6 +377,12 @@ export function ExportScreen({
   ebayPublishError = null,
   onRetryEbayPublish,
   onDismissEbayPublish,
+  amazonConnected = false,
+  amazonConfigured = false,
+  onPublishToAmazon,
+  publishingAmazon = false,
+  amazonPublishError = null,
+  amazonPublishResult = null,
 }: {
   listing: ProductListing;
   productName?: string;
@@ -406,6 +411,16 @@ export function ExportScreen({
   ebayPublishError?: string | null;
   onRetryEbayPublish?: () => void;
   onDismissEbayPublish?: () => void;
+  amazonConnected?: boolean;
+  amazonConfigured?: boolean;
+  onPublishToAmazon?: () => void;
+  publishingAmazon?: boolean;
+  amazonPublishError?: string | null;
+  amazonPublishResult?: {
+    asin?: string;
+    sku?: string;
+    sellerCentralUrl?: string;
+  } | null;
 }) {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [exporting, setExporting] = useState(false);
@@ -640,6 +655,63 @@ export function ExportScreen({
                     </p>
                   </div>
                 ) : null}
+
+                <div className="mt-4 rounded-2xl border border-border/80 bg-muted/30 p-3">
+                  <p className="text-[11px] font-semibold tracking-[0.14em] text-muted-foreground uppercase">
+                    Amazon
+                  </p>
+                  {amazonConnected ? (
+                    <button
+                      type="button"
+                      disabled={exportDisabled || publishingAmazon || !onPublishToAmazon}
+                      onClick={() => onPublishToAmazon?.()}
+                      className="mt-2 inline-flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-[#141414] text-[15px] font-semibold text-white transition hover:-translate-y-px disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0"
+                    >
+                      {publishingAmazon ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <AmazonMark invert className="h-4" />
+                      )}
+                      {publishingAmazon ? "Publishing to Amazon…" : "Publish to Amazon"}
+                    </button>
+                  ) : (
+                    <a
+                      href="/settings#amazon-store"
+                      className="mt-2 inline-flex h-12 w-full items-center justify-center gap-2 rounded-2xl border border-border bg-surface text-[15px] font-semibold hover:bg-muted"
+                    >
+                      <AmazonMark className="h-4" />
+                      {amazonConfigured
+                        ? "Connect Amazon seller"
+                        : "Set up Amazon in Settings"}
+                    </a>
+                  )}
+                  {amazonPublishResult?.asin ? (
+                    <p className="mt-1.5 text-[12px] text-muted-foreground">
+                      Live on ASIN {amazonPublishResult.asin}
+                      {amazonPublishResult.sellerCentralUrl ? (
+                        <>
+                          {" · "}
+                          <a
+                            href={amazonPublishResult.sellerCentralUrl}
+                            className="underline"
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            Seller Central
+                          </a>
+                        </>
+                      ) : null}
+                    </p>
+                  ) : amazonPublishError ? (
+                    <p className="mt-1.5 text-[12px] text-amber-800">
+                      {amazonPublishError}
+                    </p>
+                  ) : (
+                    <p className="mt-1.5 text-[12px] text-muted-foreground">
+                      Matches Amazon catalog by UPC or ASIN, then lists your offer.
+                    </p>
+                  )}
+                </div>
               </div>
             </div>
           </div>

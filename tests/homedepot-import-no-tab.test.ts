@@ -16,6 +16,7 @@ describe("Home Depot import stays on Higlou", () => {
     expect(workspace).not.toMatch(/Bring all photos/);
     expect(workspace).not.toMatch(/hdCapturePending/);
     expect(workspace).toMatch(/fetchHomeDepotOfficialGalleryInBrowser/);
+    expect(workspace).toMatch(/\/api\/amazon\/publish/);
     expect(photos).not.toMatch(/window\.open/);
     expect(photos).not.toMatch(/Bring all photos/);
     expect(photos).not.toMatch(/hdCapturePending/);

@@ -1,0 +1,103 @@
+import { NextResponse } from "next/server";
+import { z } from "zod";
+import { requireUser } from "@/lib/auth/require-user";
+import {
+  amazonSpMissingReason,
+  isAmazonSpConfigured,
+} from "@/lib/amazon/sp-config";
+import {
+  getAmazonConnectionPublic,
+  getValidAmazonAccessToken,
+} from "@/lib/amazon/sp-oauth";
+import { publishAmazonOffer } from "@/lib/amazon/publish-listing";
+import { createAdminClient } from "@/lib/supabase/admin";
+
+export const runtime = "nodejs";
+export const maxDuration = 60;
+
+const bodySchema = z.object({
+  productId: z.string().uuid().optional(),
+  listing: z.object({
+    sku: z.string().min(1),
+    title: z.string().min(1),
+    upc: z.string().optional().default(""),
+    asin: z.string().optional().default(""),
+    price: z.number().positive(),
+    quantity: z.number().int().min(1).default(1),
+    condition: z.string().optional().default("New"),
+    conditionId: z.string().optional().default("1000"),
+    handlingTime: z.number().int().min(1).max(30).optional().default(2),
+  }),
+});
+
+export async function POST(request: Request) {
+  const auth = await requireUser();
+  if (!auth.ok) return auth.response;
+
+  if (!isAmazonSpConfigured()) {
+    return NextResponse.json(
+      { error: amazonSpMissingReason(), code: "AMAZON_NOT_CONFIGURED" },
+      { status: 503 },
+    );
+  }
+
+  const connection = await getAmazonConnectionPublic(
+    auth.supabase,
+    auth.user.id,
+  );
+  if (!connection.connected) {
+    return NextResponse.json(
+      {
+        error: "Connect your Amazon seller account in Settings first.",
+        code: "AMAZON_NOT_CONNECTED",
+      },
+      { status: 409 },
+    );
+  }
+
+  let parsed: z.infer<typeof bodySchema>;
+  try {
+    parsed = bodySchema.parse(await request.json());
+  } catch {
+    return NextResponse.json(
+      { error: "Send the listing SKU, title, price, and UPC or ASIN." },
+      { status: 400 },
+    );
+  }
+
+  try {
+    const creds = await getValidAmazonAccessToken(auth.supabase, auth.user.id);
+    const result = await publishAmazonOffer({
+      accessToken: creds.token,
+      sellingPartnerId: creds.sellingPartnerId,
+      listing: parsed.listing,
+    });
+
+    if (parsed.productId) {
+      try {
+        const admin = createAdminClient();
+        await admin
+          .from("products")
+          .update({
+            amazon_sku: result.sku,
+            amazon_asin: result.asin,
+            amazon_status: result.status,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", parsed.productId)
+          .eq("user_id", auth.user.id);
+      } catch {
+        /* listing can still succeed if the extra columns are not migrated yet */
+      }
+    }
+
+    return NextResponse.json({
+      ok: true,
+      ...result,
+    });
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Amazon publish failed";
+    return NextResponse.json({ error: message }, { status: 422 });
+  }
+}

@@ -272,6 +272,19 @@ export function NewListingWorkspace({
     ebayUsername: null,
     ebayStoreName: null,
   });
+  const [amazonConnection, setAmazonConnection] = useState<{
+    connected: boolean;
+    configured: boolean;
+  }>({ connected: false, configured: false });
+  const [publishingAmazon, setPublishingAmazon] = useState(false);
+  const [amazonPublishError, setAmazonPublishError] = useState<string | null>(
+    null,
+  );
+  const [amazonPublishResult, setAmazonPublishResult] = useState<{
+    asin?: string;
+    sku?: string;
+    sellerCentralUrl?: string;
+  } | null>(null);
   const [isOwnerAccount, setIsOwnerAccount] = useState(false);
   const brandingDirtyRef = useRef(false);
   const ebayNameLockRef = useRef(false);
@@ -398,6 +411,23 @@ export function NewListingWorkspace({
         });
         if (body.connection.connected && username) {
           applyEbayStoreName(displayNameFromEbayUsername(username), username);
+        }
+      } catch {
+        /* optional */
+      }
+      if (cancelled) return;
+      try {
+        const amzRes = await fetch("/api/amazon/connection");
+        if (amzRes.ok) {
+          const amzBody = (await amzRes.json()) as {
+            connection?: { connected?: boolean; configured?: boolean };
+          };
+          if (!cancelled && amzBody.connection) {
+            setAmazonConnection({
+              connected: Boolean(amzBody.connection.connected),
+              configured: Boolean(amzBody.connection.configured),
+            });
+          }
         }
       } catch {
         /* optional */
@@ -1718,6 +1748,80 @@ export function NewListingWorkspace({
     }
   };
 
+  const publishToAmazon = async () => {
+    const fresh = withFreshDescription(listing, storeBranding);
+    if (fresh.price == null || Number(fresh.price) <= 0) {
+      const message = "Set a price before publishing to Amazon.";
+      setAmazonPublishError(message);
+      toast.error(message);
+      return;
+    }
+    setAmazonPublishError(null);
+    setAmazonPublishResult(null);
+    setPublishingAmazon(true);
+    try {
+      await persistDraft({ quiet: true, draft: fresh });
+      const productId = /^[0-9a-f-]{36}$/i.test(fresh.id) ? fresh.id : undefined;
+      const response = await fetch("/api/amazon/publish", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          productId,
+          listing: {
+            sku: fresh.sku,
+            title: fresh.title,
+            upc: fresh.upc,
+            asin: fresh.sku.match(/^AMZ-([A-Z0-9]{10})$/i)?.[1] || "",
+            price: fresh.price,
+            quantity: fresh.quantity,
+            condition: fresh.condition,
+            conditionId: fresh.conditionId,
+            handlingTime: fresh.handlingTime || DEFAULT_VALUES.handlingTime,
+          },
+        }),
+      });
+      const body = (await response.json().catch(() => null)) as {
+        error?: string;
+        code?: string;
+        asin?: string;
+        sku?: string;
+        sellerCentralUrl?: string;
+      } | null;
+      if (!response.ok) {
+        if (body?.code === "AMAZON_NOT_CONNECTED") {
+          setAmazonPublishError("Connect Amazon in Settings first");
+          toast.error("Connect Amazon in Settings first", {
+            action: {
+              label: "Open Settings",
+              onClick: () => {
+                window.location.href = "/settings#amazon-store";
+              },
+            },
+          });
+          return;
+        }
+        throw new Error(body?.error || "Amazon publish failed");
+      }
+      setAmazonPublishResult({
+        asin: body?.asin,
+        sku: body?.sku,
+        sellerCentralUrl: body?.sellerCentralUrl,
+      });
+      toast.success("Published to Amazon", {
+        description: body?.asin
+          ? `ASIN ${body.asin} · SKU ${body.sku || fresh.sku}`
+          : `SKU ${body?.sku || fresh.sku}`,
+      });
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Amazon publish failed";
+      setAmazonPublishError(message);
+      toast.error(message);
+    } finally {
+      setPublishingAmazon(false);
+    }
+  };
+
   const startNewProduct = () => {
     setListing(createEmptyListing());
     setStep("photos");
@@ -1926,6 +2030,12 @@ export function NewListingWorkspace({
             setEbayPublishResult(null);
             setEbayPublishMode(null);
           }}
+          amazonConnected={amazonConnection.connected}
+          amazonConfigured={amazonConnection.configured}
+          onPublishToAmazon={() => void publishToAmazon()}
+          publishingAmazon={publishingAmazon}
+          amazonPublishError={amazonPublishError}
+          amazonPublishResult={amazonPublishResult}
         />
       ) : null}
 

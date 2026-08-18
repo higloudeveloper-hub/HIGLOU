@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { motion } from "motion/react";
 import { usePrefersReducedMotion } from "@/components/listing/wizard/use-prefers-reduced-motion";
 import { LiveDot } from "@/components/ui/studio";
-import { EbayMark } from "@/components/brand/store-marks";
+import { EbayMark, AmazonMark } from "@/components/brand/store-marks";
 import { cn } from "@/lib/utils";
 
 function SignalBars({
@@ -87,6 +87,7 @@ export function StoreLinkLive({
   pingMs,
   pinging,
   live,
+  channel = "ebay",
 }: {
   storeName: string;
   username?: string | null;
@@ -94,6 +95,7 @@ export function StoreLinkLive({
   pingMs: number | null;
   pinging: boolean;
   live: boolean;
+  channel?: "ebay" | "amazon";
 }) {
   const reduce = usePrefersReducedMotion();
   const strength = !live ? 0 : pinging ? 3 : pingMs != null && pingMs < 800 ? 5 : 4;
@@ -131,7 +133,11 @@ export function StoreLinkLive({
           </span>
           <FiberBar live={live} pinging={pinging} reduce={reduce} />
           <span className="rounded-full bg-white px-2.5 py-1 text-[13px] leading-none">
-            <EbayMark className="h-3.5" />
+            {channel === "amazon" ? (
+              <AmazonMark className="h-3.5" />
+            ) : (
+              <EbayMark className="h-3.5" />
+            )}
           </span>
         </div>
 

@@ -8,6 +8,7 @@ import { StoreBrandingForm } from "@/components/settings/store-branding-form";
 import { EbayTemplateForm } from "@/components/settings/ebay-template-form";
 import { EbayPoliciesForm } from "@/components/settings/ebay-policies-form";
 import { EbayConnectForm } from "@/components/settings/ebay-connect-form";
+import { AmazonConnectForm } from "@/components/settings/amazon-connect-form";
 import { EbayStoreOrganizeForm } from "@/components/settings/ebay-store-organize-form";
 import { EbaySetupStory } from "@/components/settings/ebay-setup-story";
 import { AiSettingsForm } from "@/components/settings/ai-settings-form";
@@ -19,13 +20,14 @@ import { cn } from "@/lib/utils";
 type Tab = "ebay" | "brand" | "tools";
 
 const TABS: { id: Tab; label: string; hint: string }[] = [
-  { id: "ebay", label: "eBay", hint: "Connect & policies" },
+  { id: "ebay", label: "Stores", hint: "eBay & Amazon" },
   { id: "brand", label: "Look", hint: "Store branding" },
   { id: "tools", label: "Tools", hint: "AI, folders, CSV" },
 ];
 
 function tabFromHash(hash: string): Tab {
   if (hash === "#branding") return "brand";
+  if (hash === "#amazon-store") return "ebay";
   if (
     hash === "#organize-store" ||
     hash === "#ai" ||
@@ -62,7 +64,7 @@ export function SettingsStudio() {
     <StudioFrame
       kicker="Store"
       title="Settings"
-      hint="Connect eBay, lock policies, then Higlou can publish."
+      hint="Connect eBay and Amazon, lock policies, then Higlou can publish."
       scroll
     >
       <div className="sticky top-0 z-10 border-b border-[#e5e5e5] bg-white px-5 py-2">
@@ -116,6 +118,16 @@ export function SettingsStudio() {
 
               <section id="ebay-store" className="scroll-mt-24">
                 <EbayConnectForm onStoreChange={setStore} />
+              </section>
+
+              <section id="amazon-store" className="scroll-mt-24 space-y-3">
+                <div>
+                  <h2 className="text-lg font-semibold tracking-tight">Amazon</h2>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Connect Seller Central to offer your Higlou listings on Amazon.
+                  </p>
+                </div>
+                <AmazonConnectForm />
               </section>
 
               <section id="policies" className="scroll-mt-24 space-y-4">

@@ -18,6 +18,7 @@ import type {
   OpportunityProduct,
 } from "@/lib/opportunity/types";
 import { cn } from "@/lib/utils";
+import { usePrefersReducedMotion } from "@/components/listing/wizard/use-prefers-reduced-motion";
 
 type WinnerSources = {
   keepa?: boolean;
@@ -34,6 +35,8 @@ type SearchBody = {
   queries?: string[];
 };
 
+const EASE = [0.22, 1, 0.36, 1] as const;
+
 function money(n: number | null | undefined) {
   if (n == null) return "—";
   return `$${n.toFixed(2)}`;
@@ -42,6 +45,10 @@ function money(n: number | null | undefined) {
 function pct(n: number | null | undefined) {
   if (n == null) return "—";
   return `${Math.round(n * 100)}%`;
+}
+
+function signedMoney(n: number) {
+  return `${n >= 0 ? "+" : "−"}$${Math.abs(n).toFixed(2)}`;
 }
 
 function eligibilityCopy(hit: OpportunityProduct, mode: OpportunityMode) {
@@ -56,10 +63,10 @@ function eligibilityCopy(hit: OpportunityProduct, mode: OpportunityMode) {
 function heroFor(hit: OpportunityProduct, mode: OpportunityMode) {
   const ebay = hit.ebayActiveMedian ?? hit.ebayPrice;
   if (hit.netProfit != null) {
-    const sign = hit.netProfit >= 0 ? "+" : "−";
     return {
       kicker: mode === "amazon" ? "Est. Amazon profit" : "Est. eBay profit",
-      value: `${sign}$${Math.abs(hit.netProfit).toFixed(2)}`,
+      value: signedMoney(hit.netProfit),
+      amount: hit.netProfit,
       detail:
         hit.roi != null
           ? `${Math.round(hit.roi * 100)}% ROI · Amazon ${money(hit.amazonPrice)} → eBay ${money(ebay)}`
@@ -70,6 +77,7 @@ function heroFor(hit: OpportunityProduct, mode: OpportunityMode) {
     return {
       kicker: "eBay asking price",
       value: money(ebay),
+      amount: null as number | null,
       detail: hit.amazonPrice
         ? `Amazon cost ${money(hit.amazonPrice)} · scoring profit`
         : "Analyzing Amazon cost and eBay fees",
@@ -78,9 +86,56 @@ function heroFor(hit: OpportunityProduct, mode: OpportunityMode) {
   return {
     kicker: "Scoring",
     value: `${hit.score}/100`,
+    amount: null as number | null,
     detail: "Reading live prices",
   };
 }
+
+function useCountToward(target: number, reduce: boolean) {
+  const [n, setN] = useState(reduce ? target : 0);
+  const current = useRef(reduce ? target : 0);
+
+  useEffect(() => {
+    if (reduce) {
+      current.current = target;
+      setN(target);
+      return;
+    }
+    const from = current.current;
+    const start = performance.now();
+    const dur = 780;
+    let raf = 0;
+    const tick = (now: number) => {
+      const t = Math.min(1, (now - start) / dur);
+      const val = from + (target - from) * (1 - (1 - t) ** 3);
+      current.current = val;
+      setN(val);
+      if (t < 1) raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [target, reduce]);
+
+  return n;
+}
+
+function MoneyTicker({
+  value,
+  className,
+  signed = true,
+}: {
+  value: number;
+  className?: string;
+  signed?: boolean;
+}) {
+  const reduce = usePrefersReducedMotion();
+  const n = useCountToward(value, reduce);
+  const shown = signed ? signedMoney(n) : money(n);
+  return (
+    <span className={cn("tabular-nums tracking-tight", className)}>{shown}</span>
+  );
+}
+
 function Metric({ label, value }: { label: string; value: string }) {
   return (
     <div className="border border-[#eee] bg-[#fafafa] px-2 py-2">
@@ -89,6 +144,44 @@ function Metric({ label, value }: { label: string; value: string }) {
       </p>
       <p className="mt-0.5 truncate text-[13px] font-medium tabular-nums text-[#141414]">
         {value}
+      </p>
+    </div>
+  );
+}
+
+function SpreadTrack({
+  amazon,
+  ebay,
+  featured,
+}: {
+  amazon: number | null;
+  ebay: number | null;
+  featured?: boolean;
+}) {
+  const reduce = usePrefersReducedMotion();
+  if (amazon == null || ebay == null || ebay <= 0) return null;
+  const costPct = Math.min(92, Math.max(8, (amazon / ebay) * 100));
+  return (
+    <div className={featured ? "mt-4" : "mt-3"}>
+      <div className="flex items-baseline justify-between gap-3 text-[11px] text-[#707070]">
+        <span>Amazon {money(amazon)}</span>
+        <span>eBay {money(ebay)}</span>
+      </div>
+      <div
+        className={cn(
+          "relative mt-1.5 overflow-hidden bg-[#ececec]",
+          featured ? "h-2" : "h-1.5",
+        )}
+      >
+        <motion.span
+          className="absolute inset-y-0 left-0 bg-[#141414]"
+          initial={reduce ? false : { width: "100%" }}
+          animate={{ width: `${costPct}%` }}
+          transition={{ duration: 0.9, ease: EASE, delay: reduce ? 0 : 0.12 }}
+        />
+      </div>
+      <p className="mt-1 text-[11px] text-[#707070]">
+        Spread {signedMoney(ebay - amazon)} before fees
       </p>
     </div>
   );
@@ -145,6 +238,127 @@ function metricsFor(hit: OpportunityProduct, mode: OpportunityMode) {
   ] as const;
 }
 
+function WinnerCard({
+  hit,
+  mode,
+  checked,
+  fresh,
+  featured,
+  locked,
+  onToggle,
+}: {
+  hit: OpportunityProduct;
+  mode: OpportunityMode;
+  checked: boolean;
+  fresh: boolean;
+  featured?: boolean;
+  locked: boolean;
+  onToggle: () => void;
+}) {
+  const hero = heroFor(hit, mode);
+  const ebay = hit.ebayActiveMedian ?? hit.ebayPrice;
+
+  return (
+    <motion.li
+      layout
+      initial={{ opacity: 0, y: 18, scale: 0.985 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      exit={{ opacity: 0, y: 8 }}
+      whileHover={locked ? undefined : { y: -3 }}
+      transition={{ duration: 0.38, ease: EASE }}
+      className={featured ? "sm:col-span-2" : undefined}
+    >
+      <label
+        className={cn(
+          "group relative flex h-full cursor-pointer overflow-hidden border bg-white transition-shadow",
+          featured
+            ? "flex-col sm:flex-row"
+            : "flex-col",
+          checked
+            ? "border-[#141414] shadow-[0_12px_32px_rgba(20,20,20,0.08)]"
+            : "border-[#e5e5e5] hover:border-[#141414] hover:shadow-[0_10px_28px_rgba(20,20,20,0.06)]",
+        )}
+      >
+        {fresh ? (
+          <span className="absolute top-2 left-2 z-10 bg-white/95 px-2 py-0.5 text-[10px] font-semibold tracking-[0.14em] text-[#141414] uppercase">
+            Just found
+          </span>
+        ) : null}
+        <span
+          className={cn(
+            "relative shrink-0 bg-[#f6f6f6]",
+            featured ? "h-56 sm:h-auto sm:w-[280px]" : "h-44",
+          )}
+        >
+          {hit.imageUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={hit.imageUrl}
+              alt=""
+              className="h-full w-full object-contain p-4 transition duration-500 group-hover:scale-[1.04]"
+            />
+          ) : (
+            <span className="block h-full w-full bg-[#f4f4f4]" />
+          )}
+          <input
+            type="checkbox"
+            checked={checked}
+            disabled={locked}
+            onChange={onToggle}
+            className="absolute top-2 right-2 size-4 accent-[#141414]"
+          />
+        </span>
+        <span className="flex min-w-0 flex-1 flex-col p-3 sm:p-4">
+          <span
+            className={cn(
+              "font-medium leading-snug text-[#141414]",
+              featured ? "line-clamp-2 text-[18px]" : "line-clamp-2 text-[14px]",
+            )}
+          >
+            {hit.title || hit.asin}
+          </span>
+          <span className="mt-1 block text-[12px] text-[#707070]">
+            {eligibilityCopy(hit, mode)}
+            {hit.brand ? ` · ${hit.brand}` : ""}
+          </span>
+          <span className="mt-auto pt-3">
+            <span className="block text-[10px] font-medium uppercase tracking-wide text-[#707070]">
+              {hero.kicker}
+            </span>
+            {hero.amount != null ? (
+              <MoneyTicker
+                value={hero.amount}
+                className={cn(
+                  "mt-0.5 block font-semibold text-[#141414]",
+                  featured ? "text-[40px] leading-none" : "text-[28px] leading-none",
+                )}
+              />
+            ) : (
+              <span
+                className={cn(
+                  "mt-0.5 block font-semibold tabular-nums tracking-tight text-[#141414]",
+                  featured ? "text-[40px] leading-none" : "text-[28px] leading-none",
+                )}
+              >
+                {hero.value}
+              </span>
+            )}
+            <span className="mt-1 block text-[12px] text-[#707070]">
+              {hero.detail}
+            </span>
+            <SpreadTrack amazon={hit.amazonPrice} ebay={ebay} featured={featured} />
+          </span>
+          <span className="mt-3 grid grid-cols-3 gap-1">
+            {metricsFor(hit, mode).map(([label, value]) => (
+              <Metric key={label} label={label} value={value} />
+            ))}
+          </span>
+        </span>
+      </label>
+    </motion.li>
+  );
+}
+
 async function requestOpportunities(payload: {
   query: string;
   categoryId: string;
@@ -189,6 +403,7 @@ export function AmazonAutoImportPanel({
     mode: OpportunityMode,
   ) => Promise<boolean | void>;
 }) {
+  const reduce = usePrefersReducedMotion();
   const [view, setView] = useState<"live" | "manual">("live");
   const [liveOn, setLiveOn] = useState(true);
   const [scanStep, setScanStep] = useState(0);
@@ -227,6 +442,25 @@ export function AmazonAutoImportPanel({
     Number.isFinite(supplierCost) && supplierCost > 0 ? supplierCost : undefined;
   const needsCost = mode === "amazon" || mode === "supplier";
   const canManualSearch = Boolean(categoryId || extra.trim().length >= 2);
+  const sessionProfit = useMemo(
+    () => hits.reduce((sum, hit) => sum + (hit.netProfit ?? 0), 0),
+    [hits],
+  );
+  const selectedProfit = useMemo(
+    () => selected.reduce((sum, hit) => sum + (hit.netProfit ?? 0), 0),
+    [selected],
+  );
+  const featuredAsin =
+    view === "live" && hits.length
+      ? freshAsins.find((asin) => hits.some((hit) => hit.asin === asin)) ||
+        hits[0].asin
+      : undefined;
+  const featured = featuredAsin
+    ? hits.find((hit) => hit.asin === featuredAsin)
+    : undefined;
+  const rest = featured
+    ? hits.filter((hit) => hit.asin !== featured.asin)
+    : hits;
 
   useEffect(() => {
     liveHitsRef.current = liveHits;
@@ -383,6 +617,12 @@ export function AmazonAutoImportPanel({
     }
   };
 
+  const toggleAsin = (asin: string) => {
+    setPicked((prev) =>
+      prev.includes(asin) ? prev.filter((id) => id !== asin) : [...prev, asin],
+    );
+  };
+
   return (
     <div>
       <p className="text-[11px] font-medium uppercase tracking-wide text-[#707070]">
@@ -398,10 +638,10 @@ export function AmazonAutoImportPanel({
               disabled={locked}
               onClick={() => chooseMode(row.id)}
               className={cn(
-                "px-3 py-2.5 text-left",
+                "px-3 py-2.5 text-left transition",
                 on
                   ? "bg-[#141414] text-white"
-                  : "border border-[#ccc] bg-white text-[#141414]",
+                  : "border border-[#ccc] bg-white text-[#141414] hover:border-[#141414]",
               )}
             >
               <span className="block text-[13px] font-medium">{row.label}</span>
@@ -484,25 +724,56 @@ export function AmazonAutoImportPanel({
             ) : null}
           </div>
           <div
-            className="mt-3 border border-[#e5e5e5] bg-[#fafafa] px-3 py-3"
+            className="relative mt-3 overflow-hidden border border-[#e5e5e5] bg-white"
             aria-live="polite"
           >
-            <p className="flex items-center gap-2 text-[11px] font-medium uppercase tracking-wide text-[#707070]">
-              {liveOn ? (
-                <Loader2 className="size-3.5 animate-spin text-[#141414]" />
-              ) : null}
-              {liveOn ? "Analyzing live" : "Live scan stopped"}
-            </p>
-            <p className="mt-1 text-[16px] font-semibold tracking-tight text-[#141414]">
-              {liveOn ? scanLabel : "Start live scan to keep finding winners"}
-            </p>
-            <p className="mt-0.5 text-[13px] text-[#707070]">
-              {liveOn
-                ? queries.length
-                  ? `Now reading ${queries.join(" · ")}`
-                  : "Opening Amazon and eBay asking prices"
-                : "Products stay in the list until you import them."}
-            </p>
+            {liveOn && !reduce ? (
+              <motion.span
+                className="pointer-events-none absolute inset-y-0 w-1/3 bg-[#141414]/[0.04]"
+                animate={{ left: ["-33%", "100%"] }}
+                transition={{ duration: 2.2, repeat: Infinity, ease: "linear" }}
+              />
+            ) : null}
+            <div className="relative grid gap-4 px-4 py-4 sm:grid-cols-[1fr_auto] sm:items-end">
+              <div>
+                <p className="flex items-center gap-2 text-[11px] font-medium uppercase tracking-wide text-[#707070]">
+                  {liveOn ? (
+                    <>
+                      <span className="relative flex size-2">
+                        <span className="absolute inset-0 animate-ping bg-[#141414]/35" />
+                        <span className="relative size-2 bg-[#141414]" />
+                      </span>
+                      <Loader2 className="size-3.5 animate-spin text-[#141414]" />
+                      Analyzing live
+                    </>
+                  ) : (
+                    "Live scan stopped"
+                  )}
+                </p>
+                <p className="mt-1 text-[22px] font-semibold tracking-tight text-[#141414]">
+                  {liveOn ? scanLabel : "Start live scan to keep finding winners"}
+                </p>
+                <p className="mt-0.5 text-[13px] text-[#707070]">
+                  {liveOn
+                    ? queries.length
+                      ? `Now reading ${queries.join(" · ")}`
+                      : "Opening Amazon and eBay asking prices"
+                    : "Products stay in the list until you import them."}
+                </p>
+              </div>
+              <div className="text-left sm:text-right">
+                <p className="text-[10px] font-medium uppercase tracking-wide text-[#707070]">
+                  Session spread
+                </p>
+                <MoneyTicker
+                  value={sessionProfit}
+                  className="mt-0.5 block text-[34px] font-semibold leading-none text-[#141414]"
+                />
+                <p className="mt-1 text-[12px] text-[#707070]">
+                  {hits.length} opportunit{hits.length === 1 ? "y" : "ies"} on the board
+                </p>
+              </div>
+            </div>
           </div>
         </div>
       ) : (
@@ -650,9 +921,29 @@ export function AmazonAutoImportPanel({
         <p className="mt-2 text-[13px] text-destructive">{error}</p>
       ) : null}
 
+      {view === "live" && liveOn && !hits.length ? (
+        <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2">
+          {[0, 1, 2, 3].map((slot) => (
+            <div
+              key={slot}
+              className="relative h-48 overflow-hidden border border-[#ececec] bg-white"
+            >
+              <motion.span
+                className="absolute inset-0 bg-gradient-to-r from-transparent via-[#f4f4f4] to-transparent"
+                animate={reduce ? undefined : { x: ["-100%", "100%"] }}
+                transition={{ duration: 1.6, repeat: Infinity, ease: "linear", delay: slot * 0.18 }}
+              />
+              <p className="absolute bottom-3 left-3 text-[12px] text-[#8a8a8a]">
+                Waiting for a winner
+              </p>
+            </div>
+          ))}
+        </div>
+      ) : null}
+
       {hits.length ? (
-        <div className="mt-3">
-          <div className="flex items-center justify-between gap-2">
+        <div className="mt-4">
+          <div className="flex items-end justify-between gap-2">
             <div>
               <p className="text-[11px] font-medium uppercase tracking-wide text-[#707070]">
                 {view === "live" ? "Live opportunities" : activeMode?.to}
@@ -687,97 +978,56 @@ export function AmazonAutoImportPanel({
               {picked.length === hits.length ? "Clear" : "Select all"}
             </button>
           </div>
-          <ul className="mt-2 grid max-h-[40rem] grid-cols-1 gap-2 overflow-y-auto sm:grid-cols-2">
+          <ul className="mt-3 grid max-h-[46rem] grid-cols-1 gap-3 overflow-y-auto sm:grid-cols-2">
             <AnimatePresence initial={false}>
-              {hits.map((hit) => {
-                const checked = picked.includes(hit.asin);
-                const fresh = freshAsins.includes(hit.asin);
-                const hero = heroFor(hit, mode);
-                return (
-                  <motion.li
-                    key={hit.asin}
-                    layout
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
-                  >
-                    <label
-                      className={cn(
-                        "flex h-full cursor-pointer flex-col border bg-white p-2",
-                        checked
-                          ? "border-[#141414]"
-                          : "border-[#e5e5e5] hover:border-[#141414]",
-                      )}
-                    >
-                      {fresh ? (
-                        <span className="mb-1 text-[10px] font-semibold tracking-[0.14em] text-[#707070] uppercase">
-                          Just found
-                        </span>
-                      ) : null}
-                      <span className="flex items-start gap-2">
-                        <input
-                          type="checkbox"
-                          checked={checked}
-                          disabled={locked}
-                          onChange={() => {
-                            setPicked((prev) =>
-                              prev.includes(hit.asin)
-                                ? prev.filter((id) => id !== hit.asin)
-                                : [...prev, hit.asin],
-                            );
-                          }}
-                          className="mt-1 size-4 accent-[#141414]"
-                        />
-                        {hit.imageUrl ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img
-                            src={hit.imageUrl}
-                            alt=""
-                            className="h-24 w-24 shrink-0 object-contain"
-                          />
-                        ) : (
-                          <span className="h-24 w-24 shrink-0 bg-[#f4f4f4]" />
-                        )}
-                        <span className="min-w-0 flex-1">
-                          <span className="line-clamp-2 text-[13px] font-medium leading-snug text-[#141414]">
-                            {hit.title || hit.asin}
-                          </span>
-                          <span className="mt-1 block text-[12px] text-[#707070]">
-                            {eligibilityCopy(hit, mode)}
-                            {hit.brand ? ` · ${hit.brand}` : ""}
-                          </span>
-                          <span className="mt-2 block">
-                            <span className="block text-[10px] font-medium uppercase tracking-wide text-[#707070]">
-                              {hero.kicker}
-                            </span>
-                            <span className="block text-[22px] font-semibold tracking-tight tabular-nums text-[#141414]">
-                              {hero.value}
-                            </span>
-                            <span className="block text-[12px] text-[#707070]">
-                              {hero.detail}
-                            </span>
-                          </span>
-                        </span>
-                      </span>
-                      <span className="mt-2 grid grid-cols-3 gap-1">
-                        {metricsFor(hit, mode).map(([label, value]) => (
-                          <Metric key={label} label={label} value={value} />
-                        ))}
-                      </span>
-                    </label>
-                  </motion.li>
-                );
-              })}
+              {featured ? (
+                <WinnerCard
+                  key={featured.asin}
+                  hit={featured}
+                  mode={mode}
+                  checked={picked.includes(featured.asin)}
+                  fresh={freshAsins.includes(featured.asin)}
+                  featured
+                  locked={locked}
+                  onToggle={() => toggleAsin(featured.asin)}
+                />
+              ) : null}
+              {rest.map((hit) => (
+                <WinnerCard
+                  key={hit.asin}
+                  hit={hit}
+                  mode={mode}
+                  checked={picked.includes(hit.asin)}
+                  fresh={freshAsins.includes(hit.asin)}
+                  locked={locked}
+                  onToggle={() => toggleAsin(hit.asin)}
+                />
+              ))}
             </AnimatePresence>
           </ul>
-          <button
-            type="button"
-            disabled={locked || !selected.length}
-            onClick={() => void importSelected()}
-            className="mt-2 h-11 w-full bg-[#141414] text-[14px] font-medium text-white disabled:opacity-40"
-          >
-            {importActionLabel(mode, selected.length, importing)}
-          </button>
+          <div className="sticky bottom-0 z-10 mt-3 border border-[#e5e5e5] bg-white/95 p-3 backdrop-blur-sm">
+            <div className="mb-2 flex items-baseline justify-between gap-3">
+              <p className="text-[12px] text-[#707070]">
+                {selected.length
+                  ? `${selected.length} selected`
+                  : "Tap a card to import it ready for eBay"}
+              </p>
+              {selected.length ? (
+                <MoneyTicker
+                  value={selectedProfit}
+                  className="text-[20px] font-semibold text-[#141414]"
+                />
+              ) : null}
+            </div>
+            <button
+              type="button"
+              disabled={locked || !selected.length}
+              onClick={() => void importSelected()}
+              className="h-12 w-full bg-[#141414] text-[15px] font-medium text-white disabled:opacity-40"
+            >
+              {importActionLabel(mode, selected.length, importing)}
+            </button>
+          </div>
         </div>
       ) : null}
     </div>

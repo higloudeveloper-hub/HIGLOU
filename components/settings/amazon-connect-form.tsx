@@ -26,6 +26,7 @@ export function AmazonConnectForm() {
   const [pingMs, setPingMs] = useState<number | null>(null);
   const [pinging, setPinging] = useState(false);
   const [refreshToken, setRefreshToken] = useState("");
+  const [sellingPartnerId, setSellingPartnerId] = useState("");
 
   const load = async (opts?: { silent?: boolean }) => {
     try {
@@ -79,11 +80,15 @@ export function AmazonConnectForm() {
       const res = await fetch("/api/amazon/self-authorize", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ refreshToken }),
+        body: JSON.stringify({
+          refreshToken,
+          sellingPartnerId: sellingPartnerId.trim() || undefined,
+        }),
       });
       const body = (await res.json().catch(() => null)) as { error?: string } | null;
       if (!res.ok) throw new Error(body?.error || "Could not save Amazon token");
       setRefreshToken("");
+      setSellingPartnerId("");
       toast.success("Amazon seller connected");
       await load();
     } catch (error) {
@@ -170,6 +175,13 @@ export function AmazonConnectForm() {
             className="min-h-24 font-mono text-[12px]"
             disabled={!configured || busy}
           />
+          <input
+            value={sellingPartnerId}
+            onChange={(event) => setSellingPartnerId(event.target.value)}
+            placeholder="Merchant token (starts with A, from Seller Central)"
+            className="h-10 w-full rounded-lg border border-input bg-transparent px-2.5 font-mono text-[12px] outline-none focus-visible:border-ring"
+            disabled={!configured || busy}
+          />
           <div className="flex flex-wrap gap-2">
             <Button
               type="button"
@@ -194,8 +206,9 @@ export function AmazonConnectForm() {
 
       <p className="text-[12px] text-muted-foreground">
         Private Amazon apps do not use login links. Copy the refresh token from
-        Amazon (Ficha de actualización) and paste it here. Higlou then puts
-        offers on products Amazon already sells.
+        Amazon (Ficha de actualización) and paste it here. If Amazon does not
+        return a seller id, also paste your Merchant token from Seller Central
+        (Settings → Account Info → Merchant token). It starts with A.
       </p>
     </div>
   );

@@ -132,7 +132,7 @@ export async function saveAmazonSelfAuthorizeToken(
     (await resolveAmazonSellingPartnerId(tokens.access_token));
   if (!sellingPartnerId) {
     throw new Error(
-      "Amazon connected the token but did not return a seller id. Add AMAZON_SELLING_PARTNER_ID (Merchant token from Seller Central).",
+      "Amazon connected the token but did not return a seller id. Paste your Merchant token from Seller Central (Settings, Account Info). It starts with A.",
     );
   }
 

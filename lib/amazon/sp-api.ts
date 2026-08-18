@@ -50,6 +50,28 @@ export async function resolveAmazonSellingPartnerId(
     const found = sellingPartnerIdFromPayload(json);
     if (found) return found;
   }
+
+  const cfg = getAmazonSpConfig();
+  const { json: feeJson } = await amazonFetch(
+    accessToken,
+    "/products/fees/v0/items/B08N5WRWNW/feesEstimate",
+    {
+      method: "POST",
+      body: JSON.stringify({
+        FeesEstimateRequest: {
+          MarketplaceId: cfg.marketplaceId,
+          IsAmazonFulfilled: false,
+          PriceToEstimateFees: {
+            ListingPrice: { CurrencyCode: "USD", Amount: 10 },
+          },
+          Identifier: "higlou-seller-id",
+        },
+      }),
+    },
+  );
+  const fromFees = sellingPartnerIdFromPayload(feeJson);
+  if (fromFees) return fromFees;
+
   return fromEnv;
 }
 

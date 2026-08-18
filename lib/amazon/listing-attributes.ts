@@ -340,10 +340,101 @@ export function amazonBatteryIntent(listing: AmazonListingDraft): {
 
 function nestedEnum(prop: Record<string, unknown> | null, field: string): string[] {
   const items = (prop?.items || {}) as {
-    properties?: Record<string, { enum?: string[] }>;
+    properties?: Record<string, Record<string, unknown>>;
   };
-  const options = items.properties?.[field]?.enum;
-  return Array.isArray(options) ? options.map(String) : [];
+  const fieldProp = items.properties?.[field];
+  if (!fieldProp) return [];
+  if (Array.isArray(fieldProp.enum)) return fieldProp.enum.map(String);
+  const nestedItems = (fieldProp.items || {}) as {
+    properties?: { value?: { enum?: string[] } };
+  };
+  if (Array.isArray(nestedItems.properties?.value?.enum)) {
+    return nestedItems.properties.value.enum.map(String);
+  }
+  const nestedProps = (fieldProp.properties || {}) as {
+    value?: { enum?: string[] };
+  };
+  if (Array.isArray(nestedProps.value?.enum)) {
+    return nestedProps.value.enum.map(String);
+  }
+  return [];
+}
+
+function fieldTypeIsArray(
+  prop: Record<string, unknown> | null,
+  field: string,
+): boolean {
+  const items = (prop?.items || {}) as {
+    properties?: Record<string, Record<string, unknown>>;
+  };
+  const fieldProp = items.properties?.[field];
+  if (!fieldProp) return false;
+  return Boolean(fieldProp.items) || fieldProp.type === "array";
+}
+
+function amazonUnitCountRows(
+  schema: AmazonProductTypeSchema | null | undefined,
+  marketplaceId: string,
+): Array<Record<string, unknown>> | null {
+  const prop = propertyOf(schema, "unit_count");
+  const allowed = schemaKeys(schema);
+  if (!prop && !keepKey("unit_count", allowed)) return null;
+  const typeOptions = nestedEnum(prop, "type");
+  const type = pickFromEnums(typeOptions, [
+    "count",
+    "Count",
+    "each",
+    "item",
+    "kit",
+    "piece",
+  ]);
+  const row: Record<string, unknown> = {
+    value: 1,
+    marketplace_id: marketplaceId,
+  };
+  if (type) {
+    row.type = fieldTypeIsArray(prop, "type") ? [{ value: type }] : type;
+  }
+  return [row];
+}
+
+function amazonUnitCountTypeRows(
+  schema: AmazonProductTypeSchema | null | undefined,
+  marketplaceId: string,
+): Array<Record<string, unknown>> | null {
+  const allowed = schemaKeys(schema);
+  if (!keepKey("unit_count_type", allowed)) return null;
+  const prop = propertyOf(schema, "unit_count_type");
+  const type =
+    pickEnum(prop, ["count", "Count", "each", "item", "kit"]) ||
+    pickFromEnums(valueEnum(prop), ["count", "Count"]);
+  if (!type) return null;
+  return [{ value: type, marketplace_id: marketplaceId }];
+}
+
+function amazonMeasurementAccuracyRows(
+  listing: AmazonListingDraft,
+  schema: AmazonProductTypeSchema | null | undefined,
+  catalog: AmazonCatalogSnapshot | null | undefined,
+  marketplaceId: string,
+): unknown | null {
+  const allowed = schemaKeys(schema);
+  if (!keepKey("measurement_accuracy", allowed)) return null;
+  const prop = propertyOf(schema, "measurement_accuracy");
+  const catalogValue = catalog?.attributes?.measurement_accuracy;
+  if (catalogValue != null && amazonAttributeText(catalogValue)) return catalogValue;
+  const fromSpecific = specificValue(listing, /measurement\s*accuracy/i);
+  const enumerated = pickEnum(prop, [
+    fromSpecific,
+    "Not Applicable",
+    "not_applicable",
+    "N/A",
+  ]);
+  if (enumerated) {
+    return [{ value: enumerated, marketplace_id: marketplaceId }];
+  }
+  const text = fromSpecific || "Not Applicable";
+  return amazonTextAttribute(text, marketplaceId, prop);
 }
 
 function objectFieldEnum(
@@ -643,6 +734,7 @@ function fillSchemaDrivenDefaults(
   listing: AmazonListingDraft,
   marketplaceId: string,
   schema?: AmazonProductTypeSchema | null,
+  catalog?: AmazonCatalogSnapshot | null,
 ) {
   const allowed = schemaKeys(schema);
   const set = (name: string, value: unknown) => {
@@ -685,18 +777,19 @@ function fillSchemaDrivenDefaults(
     );
   }
 
-  const unitCountProp = propertyOf(schema, "unit_count");
-  const unitType = pickFromEnums(nestedEnum(unitCountProp, "type"), [
-    "count",
-    "each",
-  ]);
-  set("unit_count", [
-    {
-      value: 1,
-      ...(unitType ? { type: unitType } : {}),
-      marketplace_id: marketplaceId,
-    },
-  ]);
+  const unitCount = amazonUnitCountRows(schema, marketplaceId);
+  if (unitCount) attributes.unit_count = unitCount;
+  const unitCountType = amazonUnitCountTypeRows(schema, marketplaceId);
+  if (unitCountType) attributes.unit_count_type = unitCountType;
+  const accuracy = amazonMeasurementAccuracyRows(
+    listing,
+    schema,
+    catalog,
+    marketplaceId,
+  );
+  if (accuracy && !attributes.measurement_accuracy) {
+    attributes.measurement_accuracy = accuracy;
+  }
 
   const dims = packageInches(listing);
   if (dims) {
@@ -765,6 +858,11 @@ export function issueAttributeKeys(issue: {
     names.add("material");
   }
   if (/contains\s*battery/i.test(message)) names.add("contains_battery_or_cell");
+  if (/measurement\s*accuracy/i.test(message)) names.add("measurement_accuracy");
+  if (/unit\s*count\s*type/i.test(message)) {
+    names.add("unit_count");
+    names.add("unit_count_type");
+  }
   return [...names];
 }
 
@@ -955,6 +1053,20 @@ export function defaultAmazonAttribute(opts: {
       marketplaceId,
     );
   }
+  if (name === "unit_count") {
+    return amazonUnitCountRows(schema, marketplaceId);
+  }
+  if (name === "unit_count_type") {
+    return amazonUnitCountTypeRows(schema, marketplaceId);
+  }
+  if (name === "measurement_accuracy") {
+    return amazonMeasurementAccuracyRows(
+      listing,
+      schema,
+      catalog,
+      marketplaceId,
+    );
+  }
   if (valueType(prop) === "boolean") {
     return [{ value: false, marketplace_id: marketplaceId }];
   }
@@ -992,13 +1104,23 @@ export function fillAmazonAttributesFromIssues(opts: {
   for (const issue of opts.issues || []) {
     for (const name of issueAttributeKeys(issue)) names.add(name);
   }
+  const REPLACE_INVALID = new Set([
+    "unit_count",
+    "unit_count_type",
+    "measurement_accuracy",
+  ]);
   for (const name of names) {
     const identity = CATALOG_IDENTITY_KEYS.has(name);
-    if (!identity && !before[name] && attributes[name]) filled.push(name);
-    if (!identity && attributes[name]) continue;
+    const replaceInvalid = REPLACE_INVALID.has(name);
+    if (!identity && !replaceInvalid && !before[name] && attributes[name]) {
+      filled.push(name);
+    }
+    if (!identity && attributes[name] && !replaceInvalid) continue;
     const catalogValue = opts.catalog?.attributes?.[name];
     if (
       catalogValue != null &&
+      name !== "unit_count" &&
+      name !== "unit_count_type" &&
       amazonAttributeText(catalogValue) &&
       !(SAFETY_OBJECT_KEYS.has(name) && amazonSafetyObjectIncomplete(catalogValue))
     ) {
@@ -1164,7 +1286,13 @@ export function fillAmazonRequiredAttributes(opts: {
     ];
   }
 
-  fillSchemaDrivenDefaults(attributes, listing, marketplaceId, schema);
+  fillSchemaDrivenDefaults(
+    attributes,
+    listing,
+    marketplaceId,
+    schema,
+    opts.catalog,
+  );
 
   for (const name of required) {
     if (attributes[name]) continue;

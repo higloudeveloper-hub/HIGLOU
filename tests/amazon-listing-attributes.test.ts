@@ -684,4 +684,103 @@ describe("Amazon complete listing attributes", () => {
       (attributes.contains_battery_or_cell as Array<{ value: string }>)[0].value,
     ).toBe("no");
   });
+
+  it("fills Measurement Accuracy and a valid Unit Count Type for a tester kit", () => {
+    const testerSchema = {
+      productType: "TESTER",
+      required: ["brand", "measurement_accuracy", "unit_count", "item_name"],
+      properties: {
+        brand: {},
+        item_name: {},
+        measurement_accuracy: {},
+        unit_count: {
+          items: {
+            properties: {
+              value: {},
+              type: {
+                items: {
+                  properties: {
+                    value: { enum: ["Count", "Ounce", "Pound"] },
+                  },
+                },
+              },
+            },
+          },
+        },
+        unit_count_type: {
+          items: {
+            properties: { value: { enum: ["Count", "Ounce"] } },
+          },
+        },
+        merchant_suggested_asin: {},
+        condition_type: {},
+        fulfillment_availability: {},
+        purchasable_offer: {},
+        list_price: {},
+      },
+    };
+
+    const attributes = buildAmazonListingAttributes({
+      marketplaceId: AMAZON_US_MARKETPLACE_ID,
+      asin: "B08HRPDBFF",
+      schema: testerSchema,
+      catalog: {
+        asin: "B08HRPDBFF",
+        title: "Hi-Spec Network Cable Testing Tool Kit",
+        productType: "TESTER",
+        images: [],
+        attributes: {
+          brand: [{ value: "Hi-Spec" }],
+          unit_count: [{ value: 1, type: "kit" }],
+        },
+      },
+      listing: {
+        title: "Hi-Spec Network Cable Testing & Wiring Tool Kit Set - 9 Piece",
+        brand: "Hi-Spec",
+        price: 66,
+        quantity: 1,
+        description: "Nine-piece network cable tester and wiring tool kit.",
+        images: ["https://images.example.com/kit.jpg"],
+      },
+    });
+    expect(
+      (attributes.measurement_accuracy as Array<{ value: string }>)[0].value,
+    ).toMatch(/not applicable/i);
+    const unit = (attributes.unit_count as Array<{
+      value: number;
+      type: Array<{ value: string }> | string;
+    }>)[0];
+    expect(unit.value).toBe(1);
+    expect(unit.type).toEqual([{ value: "Count" }]);
+    expect(
+      (attributes.unit_count_type as Array<{ value: string }>)[0].value,
+    ).toBe("Count");
+
+    const { attributes: fixed, filled } = fillAmazonAttributesFromIssues({
+      marketplaceId: AMAZON_US_MARKETPLACE_ID,
+      schema: testerSchema,
+      listing: {
+        title: "Hi-Spec Network Cable Testing & Wiring Tool Kit Set - 9 Piece",
+        brand: "Hi-Spec",
+        price: 66,
+        quantity: 1,
+      },
+      attributes: {
+        unit_count: [{ value: 1, type: "kit" }],
+      },
+      issues: [
+        { message: "'Measurement Accuracy' is required but missing." },
+        { message: "The provided value for 'Unit Count Type' is invalid." },
+      ],
+    });
+    expect(filled).toEqual(
+      expect.arrayContaining(["measurement_accuracy", "unit_count"]),
+    );
+    expect(
+      (fixed.measurement_accuracy as Array<{ value: string }>)[0].value,
+    ).toMatch(/not applicable/i);
+    expect(
+      (fixed.unit_count as Array<{ type: Array<{ value: string }> }>)[0].type,
+    ).toEqual([{ value: "Count" }]);
+  });
 });

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  amazonExistingAsinOfferAttributes,
   amazonListingHasPrice,
   buildAmazonListingAttributes,
   copyAmazonCatalogAttributes,
@@ -156,18 +157,20 @@ describe("Amazon complete listing attributes", () => {
     expect(attributes.generic_keyword).toBeTruthy();
   });
 
-  it("uses the Amazon catalog brand on an existing ASIN instead of Google Nest", () => {
-    const attributes = buildAmazonListingAttributes({
+  it("does not send brand when attaching a price to an existing Amazon ASIN", () => {
+    const full = buildAmazonListingAttributes({
       marketplaceId: AMAZON_US_MARKETPLACE_ID,
-      asin: "B08NESTSTAT",
+      asin: "B08NESTHAT",
       schema: thermostatSchema,
       catalog: {
-        asin: "B08NESTSTAT",
+        asin: "B08NESTHAT",
         title: "Google Nest Thermostat - Smart Wi-Fi Thermostat",
         productType: "HVAC_CONTROL_THERMOSTAT",
         images: [],
         brand: "Google",
-        attributes: {},
+        attributes: {
+          brand: [{ value: "Google", language_tag: "en_US" }],
+        },
       },
       listing: {
         title: "Google Nest Thermostat - Smart Wi-Fi Thermostat",
@@ -182,24 +185,27 @@ describe("Amazon complete listing attributes", () => {
         categoryName: "Programmable Thermostats - Google",
       },
     });
-    expect((attributes.brand as Array<{ value: string }>)[0].value).toBe("Google");
-    expect((attributes.manufacturer as Array<{ value: string }>)[0].value).toBe(
-      "Google",
-    );
+    const attributes = amazonExistingAsinOfferAttributes(full);
+    expect(attributes.brand).toBeUndefined();
+    expect(attributes.manufacturer).toBeUndefined();
+    expect(attributes.item_name).toBeUndefined();
+    expect(
+      (attributes.merchant_suggested_asin as Array<{ value: string }>)[0].value,
+    ).toBe("B08NESTHAT");
+    expect(amazonListingHasPrice(attributes)).toBe(true);
   });
 
-  it("replaces Amazon 5995 brand mismatch with the catalog brand", () => {
+  it("drops brand after Amazon 5995 instead of resending it", () => {
     const { attributes, filled } = fillAmazonAttributesFromIssues({
       marketplaceId: AMAZON_US_MARKETPLACE_ID,
       schema: thermostatSchema,
       catalog: {
-        asin: "B08NESTSTAT",
+        asin: "B08NESTHAT",
         title: "Google Nest Thermostat",
         productType: "HVAC_CONTROL_THERMOSTAT",
         images: [],
         attributes: {
           brand: [{ value: "Google", language_tag: "en_US" }],
-          manufacturer: [{ value: "Google", language_tag: "en_US" }],
         },
       },
       listing: {
@@ -209,7 +215,20 @@ describe("Amazon complete listing attributes", () => {
         quantity: 1,
         countryOfManufacture: "United States",
       },
-      attributes: { brand: [{ value: "Google Nest" }] },
+      attributes: {
+        brand: [{ value: "Google Nest" }],
+        merchant_suggested_asin: [
+          { value: "B08NESTHAT", marketplace_id: AMAZON_US_MARKETPLACE_ID },
+        ],
+        purchasable_offer: [
+          {
+            audience: "ALL",
+            currency: "USD",
+            marketplace_id: AMAZON_US_MARKETPLACE_ID,
+            our_price: [{ schedule: [{ value_with_tax: 80 }] }],
+          },
+        ],
+      },
       issues: [
         {
           message:
@@ -218,10 +237,11 @@ describe("Amazon complete listing attributes", () => {
       ],
     });
     expect(filled).toEqual(expect.arrayContaining(["brand"]));
-    expect((attributes.brand as Array<{ value: string }>)[0].value).toBe("Google");
-    expect((attributes.manufacturer as Array<{ value: string }>)[0].value).toBe(
-      "Google",
-    );
+    expect(attributes.brand).toBeUndefined();
+    expect(attributes.manufacturer).toBeUndefined();
+    expect(
+      (attributes.merchant_suggested_asin as Array<{ value: string }>)[0].value,
+    ).toBe("B08NESTHAT");
   });
 
   it("fills Amazon missing-attribute issues so the listing can go up complete", () => {

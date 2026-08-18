@@ -1,6 +1,8 @@
 import { sanitizeEbayUpc } from "@/lib/ebay/inventory-api";
 import { resolveAmazonCatalogMatch } from "@/lib/amazon/catalog-resolve";
 import {
+  amazonExistingAsinOfferAttributes,
+  amazonHasBrandLockIssue,
   amazonListingHasPrice,
   buildAmazonListingAttributes,
   fillAmazonAttributesFromIssues,
@@ -8,6 +10,8 @@ import {
 } from "@/lib/amazon/listing-attributes";
 import {
   amazonAsinFromListing,
+  amazonConditionType,
+  amazonOfferAttributes,
   amazonSkuFromListing,
 } from "@/lib/amazon/listing-offer";
 import {
@@ -93,21 +97,50 @@ export async function publishAmazonOffer(opts: {
     );
   }
 
+  const attaching = !creating && /^[A-Z0-9]{10}$/i.test(asin);
+  let requirements: "LISTING" | "LISTING_OFFER_ONLY" = attaching
+    ? "LISTING_OFFER_ONLY"
+    : "LISTING";
+
   const schema = await getAmazonProductTypeSchema({
     accessToken: opts.accessToken,
     marketplaceId: cfg.marketplaceId,
     sellerId: opts.sellingPartnerId,
     productType,
-    requirements: "LISTING",
+    requirements,
   });
 
-  const attributes = buildAmazonListingAttributes({
+  let attributes = buildAmazonListingAttributes({
     marketplaceId: cfg.marketplaceId,
     asin,
     listing: opts.listing,
     catalog,
     schema,
   });
+  if (attaching) {
+    const offer = amazonOfferAttributes({
+      marketplaceId: cfg.marketplaceId,
+      asin,
+      conditionType: amazonConditionType(
+        opts.listing.condition,
+        opts.listing.conditionId,
+      ),
+      price: opts.listing.price,
+      quantity: Math.max(1, Math.floor(opts.listing.quantity || 1)),
+      handlingDays: Math.max(1, Math.floor(opts.listing.handlingTime || 2)),
+    });
+    attributes = amazonExistingAsinOfferAttributes({
+      ...attributes,
+      ...offer,
+      list_price: [
+        {
+          value: Number(opts.listing.price.toFixed(2)),
+          currency: "USD",
+          marketplace_id: cfg.marketplaceId,
+        },
+      ],
+    });
+  }
 
   const productTypeName = schema?.productType || productType;
   const putBase = {
@@ -116,7 +149,7 @@ export async function publishAmazonOffer(opts: {
     sku,
     marketplaceId: cfg.marketplaceId,
     productType: productTypeName,
-    requirements: "LISTING" as const,
+    requirements,
   };
 
   let readyAttributes = attributes;
@@ -127,7 +160,31 @@ export async function publishAmazonOffer(opts: {
   });
   const previewBrand = amazonBrandGatingReason(preview.issues);
   if (previewBrand) throw new Error(previewBrand);
-  if (/^INVALID$/i.test(preview.status) || amazonIncompleteListingReason(preview.issues)) {
+  if (amazonHasBrandLockIssue(preview.issues)) {
+    readyAttributes = amazonExistingAsinOfferAttributes(readyAttributes);
+    putBase.requirements = "LISTING_OFFER_ONLY";
+    const unlocked = await putAmazonListingOffer({
+      ...putBase,
+      attributes: readyAttributes,
+      mode: "VALIDATION_PREVIEW",
+    });
+    const unlockedBrand = amazonBrandGatingReason(unlocked.issues);
+    if (unlockedBrand) throw new Error(unlockedBrand);
+    if (amazonHasBrandLockIssue(unlocked.issues)) {
+      throw new Error(
+        amazonIncompleteListingReason(unlocked.issues, unlocked.status) ||
+          "Amazon will not let this offer change the catalog brand. Higlou will only attach your price to the existing Amazon product.",
+      );
+    }
+    const stillLock = amazonIncompleteListingReason(
+      unlocked.issues,
+      unlocked.status,
+    );
+    if (stillLock) throw new Error(stillLock);
+  } else if (
+    /^INVALID$/i.test(preview.status) ||
+    amazonIncompleteListingReason(preview.issues)
+  ) {
     const fixed = fillAmazonAttributesFromIssues({
       attributes: readyAttributes,
       issues: preview.issues,

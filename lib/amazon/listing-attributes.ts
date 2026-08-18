@@ -54,6 +54,44 @@ export type AmazonCatalogSnapshot = {
 
 const CATALOG_IDENTITY_KEYS = new Set(["brand", "manufacturer"]);
 
+const AMAZON_OFFER_ATTRIBUTE_KEYS = [
+  "merchant_suggested_asin",
+  "condition_type",
+  "condition_note",
+  "fulfillment_availability",
+  "purchasable_offer",
+  "list_price",
+] as const;
+
+export function amazonIsBrandLockIssue(issue: {
+  code?: string;
+  message?: string;
+}): boolean {
+  const text = `${issue.code || ""} ${issue.message || ""}`;
+  return (
+    /\b5995\b/.test(text) ||
+    /may not change the brand name/i.test(text) ||
+    /brand name currently shown on the ASIN/i.test(text)
+  );
+}
+
+export function amazonHasBrandLockIssue(
+  issues: Array<{ code?: string; message?: string }> | undefined,
+): boolean {
+  return (issues || []).some((issue) => amazonIsBrandLockIssue(issue));
+}
+
+/** Existing ASINs already have a brand. Sending ours triggers Amazon 5995. */
+export function amazonExistingAsinOfferAttributes(
+  attributes: Record<string, unknown>,
+): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const key of AMAZON_OFFER_ATTRIBUTE_KEYS) {
+    if (attributes[key] != null) out[key] = attributes[key];
+  }
+  return out;
+}
+
 const SKIP_CATALOG_KEYS = new Set([
   "skip_offer",
   "purchasable_offer",
@@ -926,6 +964,13 @@ export function fillAmazonAttributesFromIssues(opts: {
   schema?: AmazonProductTypeSchema | null;
   catalog?: AmazonCatalogSnapshot | null;
 }): { attributes: Record<string, unknown>; filled: string[] } {
+  if (amazonHasBrandLockIssue(opts.issues)) {
+    const offer = amazonExistingAsinOfferAttributes(opts.attributes);
+    return {
+      attributes: offer,
+      filled: ["brand", "manufacturer"],
+    };
+  }
   const before = { ...opts.attributes };
   let attributes = fillAmazonRequiredAttributes({
     attributes: opts.attributes,

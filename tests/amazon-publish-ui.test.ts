@@ -56,6 +56,13 @@ describe("Amazon seller publish stays on Higlou", () => {
     expect(publish).toMatch(/externally_assigned_product_identifier|upc/);
   });
 
+  it("attaches existing Amazon products as an offer without changing brand", () => {
+    const publish = readRepo("lib/amazon/publish-listing.ts");
+    expect(publish).toMatch(/LISTING_OFFER_ONLY/);
+    expect(publish).toMatch(/amazonExistingAsinOfferAttributes/);
+    expect(publish).toMatch(/amazonHasBrandLockIssue/);
+  });
+
   it("does not ask Amazon for identifiers when submitting a live offer", () => {
     const api = readRepo("lib/amazon/sp-api.ts");
     expect(api).toMatch(/includedData: "issues"/);

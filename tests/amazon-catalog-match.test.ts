@@ -79,6 +79,7 @@ describe("Amazon catalog auto-match", () => {
         {
           asin: "B0DSGCDMPT",
           title: "Honeywell Home X2S Smart Wi-Fi Thermostat, Gray",
+          identifiers: ["RTH2CWF", "Honeywell Home"],
         },
         {
           asin: "B09X69FSMB",
@@ -104,6 +105,7 @@ describe("Amazon catalog auto-match", () => {
         {
           asin: "B00NOARV9Q",
           title: "Delta Lyndall 18 in Wall Mount Towel Bar Bath Hardware Accessory",
+          identifiers: ["LDL18-PC", "DELTA"],
         },
         {
           asin: "B00NOT2WAU",

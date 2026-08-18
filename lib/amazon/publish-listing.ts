@@ -1,8 +1,5 @@
 import { sanitizeEbayUpc } from "@/lib/ebay/inventory-api";
-import {
-  amazonCatalogQueries,
-  pickAmazonCatalogMatch,
-} from "@/lib/amazon/catalog-match";
+import { resolveAmazonCatalogMatch } from "@/lib/amazon/catalog-resolve";
 import {
   amazonListingHasPrice,
   buildAmazonListingAttributes,
@@ -12,18 +9,14 @@ import {
 import {
   amazonSkuFromListing,
   asinFromHiglouSku,
-  catalogIdentifierType,
 } from "@/lib/amazon/listing-offer";
 import {
   amazonBrandGatingReason,
   amazonIncompleteListingReason,
   amazonListingBlockedReason,
-  getAmazonCatalogItem,
   getAmazonListingItem,
   getAmazonProductTypeSchema,
   putAmazonListingOffer,
-  searchAmazonCatalogByIdentifier,
-  searchAmazonCatalogForListing,
   searchAmazonProductType,
 } from "@/lib/amazon/sp-api";
 import { getAmazonSpConfig } from "@/lib/amazon/sp-config";
@@ -48,72 +41,29 @@ export async function publishAmazonOffer(opts: {
 }): Promise<AmazonPublishResult> {
   const cfg = getAmazonSpConfig();
   const sku = amazonSkuFromListing(opts.listing.sku);
-  const directAsin = (
-    opts.listing.asin || asinFromHiglouSku(opts.listing.sku)
-  )
-    .trim()
-    .toUpperCase();
-  const upc = sanitizeEbayUpc(opts.listing.upc) || "";
-
-  let asin = /^[A-Z0-9]{10}$/.test(directAsin) ? directAsin : "";
-  let productType = "PRODUCT";
-  let catalogTitle = opts.listing.title;
-
-  if (!asin && upc) {
-    const kind = catalogIdentifierType(upc);
-    if (kind) {
-      const hits = await searchAmazonCatalogByIdentifier({
-        accessToken: opts.accessToken,
-        marketplaceId: cfg.marketplaceId,
-        identifier: upc,
-        identifierType: kind,
-      });
-      if (hits[0]) {
-        asin = hits[0].asin;
-        productType = hits[0].productType || "PRODUCT";
-        catalogTitle = hits[0].title || catalogTitle;
-      }
-    }
-  }
-
-  if (!asin) {
-    const hints = {
-      title: opts.listing.title,
-      brand: opts.listing.brand,
-      model: opts.listing.model,
-      mpn: opts.listing.mpn,
-    };
-    const queries = amazonCatalogQueries(hints);
-    if (queries.length) {
-      const hits = await searchAmazonCatalogForListing({
-        accessToken: opts.accessToken,
-        marketplaceId: cfg.marketplaceId,
-        queries,
-      });
-      const match = pickAmazonCatalogMatch(hits, hints);
-      if (match) {
-        asin = match.asin;
-        productType = match.productType || "PRODUCT";
-        catalogTitle = match.title || catalogTitle;
-      }
-    }
-  }
-
-  if (!asin) {
-    throw new Error(
-      "Amazon has no catalog match for this product. Higlou can only offer items Amazon already sells.",
-    );
-  }
+  const upc = sanitizeEbayUpc(opts.listing.upc) || opts.listing.upc || "";
 
   if (!Number.isFinite(opts.listing.price) || opts.listing.price <= 0) {
     throw new Error("Set a price before publishing to Amazon.");
   }
 
-  const catalog = await getAmazonCatalogItem({
+  const resolved = await resolveAmazonCatalogMatch({
     accessToken: opts.accessToken,
     marketplaceId: cfg.marketplaceId,
-    asin,
+    listing: {
+      title: opts.listing.title,
+      brand: opts.listing.brand,
+      model: opts.listing.model,
+      mpn: opts.listing.mpn,
+      upc,
+      asin: opts.listing.asin || asinFromHiglouSku(opts.listing.sku),
+    },
   });
+  const asin = resolved.asin;
+  let productType = resolved.productType || "PRODUCT";
+  let catalogTitle = resolved.title || opts.listing.title;
+  const catalog = resolved.catalog;
+
   if (catalog?.productType) productType = catalog.productType;
   if (catalog?.title) catalogTitle = catalog.title;
 

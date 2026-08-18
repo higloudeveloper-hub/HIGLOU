@@ -110,9 +110,38 @@ export function amazonSearchKeywords(hints: AmazonMatchHints): string {
   return amazonCatalogQueries(hints)[0] || "";
 }
 
-function listingFinish(model: string): string {
+function modelsCompatible(listingModel: string, amazonModel: string): boolean {
+  const listing = compact(stripPackageSuffix(listingModel));
+  const amazon = compact(stripPackageSuffix(amazonModel));
+  if (!listing || !amazon) return false;
+  if (listing === amazon) return true;
+  const listingFinish = listingFinishCode(listing);
+  const amazonFinish = listingFinishCode(amazon);
+  if (listingFinish && amazonFinish && listingFinish !== amazonFinish) return false;
+  const shorter = listing.length <= amazon.length ? listing : amazon;
+  const longer = listing.length <= amazon.length ? amazon : listing;
+  return shorter.length >= 5 && longer.startsWith(shorter);
+}
+
+function listingFinishCode(model: string): string {
   const match = compact(model).match(/(PC|SN|PN|SS|BN|RB|CZ|BL|WH)$/);
   return match?.[1] || "";
+}
+
+export function listingModelMatchesHit(
+  hit: AmazonCatalogHit,
+  hints: AmazonMatchHints,
+): boolean {
+  const model = compact(resolveAmazonModelCode(hints));
+  if (!model) return false;
+  const blob = compact(hitHaystack(hit));
+  if (blob.includes(model)) return true;
+  if (model.length >= 5 && blob.includes(model.slice(0, Math.max(5, model.length - 1)))) {
+    return true;
+  }
+  return extractModelTokens(hitHaystack(hit)).some((token) =>
+    modelsCompatible(model, token),
+  );
 }
 
 function hitFinish(text: string): string {
@@ -142,23 +171,18 @@ export function scoreAmazonCatalogHit(
   const listingText = haystack(hints);
   const title = String(hit.title || "");
   const blob = compact(hitHaystack(hit));
-  const brand = compact(hints.brand || "");
   const model = compact(resolveAmazonModelCode(hints));
-  if (!model) return 0;
+  if (!listingModelMatchesHit(hit, hints)) return 0;
   if (!brandMatches(hints, hit)) return 0;
   if (hasConflictingModel(hitHaystack(hit), model)) return 0;
 
-  const finish = listingFinish(resolveAmazonModelCode(hints));
+  const finish = listingFinishCode(resolveAmazonModelCode(hints));
   const otherFinish = hitFinish(hitHaystack(hit));
   if (finish && otherFinish && finish !== otherFinish) return 0;
 
   let score = 20;
   if (blob.includes(model)) score += 50;
-  else if (model.length >= 5 && blob.includes(model.slice(0, Math.max(5, model.length - 1)))) {
-    score += 35;
-  } else {
-    score += 12;
-  }
+  else score += 35;
   if (finish && (otherFinish === finish || blob.includes(finish))) score += 12;
   const listingKit = listingLooksLikeKit(listingText);
   const hitKit = listingLooksLikeKit(title);

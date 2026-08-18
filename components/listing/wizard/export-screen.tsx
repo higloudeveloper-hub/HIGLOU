@@ -710,7 +710,7 @@ export function ExportScreen({
                     </p>
                   ) : (
                     <p className="mt-1.5 text-[12px] text-muted-foreground">
-                      Sends a complete listing. Higlou asks Amazon what is missing, fills it, then goes live only if Amazon says it is valid.
+                      Finds the exact Amazon catalog product, fills every required field, then goes live only if Amazon says it is valid.
                     </p>
                   )}
                 </div>

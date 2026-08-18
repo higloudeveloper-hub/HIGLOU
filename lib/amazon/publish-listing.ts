@@ -36,6 +36,8 @@ export type AmazonPublishResult = {
   status: string;
   sellerCentralUrl: string;
   title: string;
+  /** attach = existing catalog ASIN; create = new Amazon product page */
+  mode: "attach" | "create";
 };
 
 export async function publishAmazonOffer(opts: {
@@ -227,6 +229,7 @@ export async function publishAmazonOffer(opts: {
     asin,
     status: result.status,
     title: catalogTitle,
+    mode: creating ? "create" : "attach",
     sellerCentralUrl: `https://sellercentral.amazon.com/inventory/ref=xx_invmgr_dnav_xx?tbla_myitable=sort:%7B%22sortOrder%22%3A%22DESCENDING%22%2C%22sortedColumnId%22%3A%22date%22%7D&search:${encodeURIComponent(sku)}`,
   };
 }

@@ -297,6 +297,7 @@ export function NewListingWorkspace({
     asin?: string;
     sku?: string;
     sellerCentralUrl?: string;
+    mode?: "attach" | "create";
   } | null>(null);
   const [isOwnerAccount, setIsOwnerAccount] = useState(false);
   const brandingDirtyRef = useRef(false);
@@ -1865,6 +1866,7 @@ export function NewListingWorkspace({
         asin?: string;
         sku?: string;
         sellerCentralUrl?: string;
+        mode?: "attach" | "create";
       } | null;
       if (!response.ok) {
         if (body?.code === "AMAZON_NOT_CONNECTED") {
@@ -1885,12 +1887,20 @@ export function NewListingWorkspace({
         asin: body?.asin,
         sku: body?.sku,
         sellerCentralUrl: body?.sellerCentralUrl,
+        mode: body?.mode,
       });
-      toast.success("Published to Amazon", {
-        description: body?.asin
-          ? `ASIN ${body.asin} · SKU ${body.sku || fresh.sku}`
-          : `SKU ${body?.sku || fresh.sku}`,
-      });
+      toast.success(
+        body?.mode === "create"
+          ? "Created a new Amazon product"
+          : "Published complete Amazon listing",
+        {
+          description: body?.asin
+            ? body.mode === "create"
+              ? `New catalog product ${body.asin}`
+              : `Attached to existing ASIN ${body.asin} with photos, price, and shipping`
+            : `SKU ${body?.sku || fresh.sku}`,
+        },
+      );
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Amazon publish failed";

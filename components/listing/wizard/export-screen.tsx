@@ -423,6 +423,7 @@ export function ExportScreen({
     asin?: string;
     sku?: string;
     sellerCentralUrl?: string;
+    mode?: "attach" | "create";
   } | null;
 }) {
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -693,7 +694,9 @@ export function ExportScreen({
                   )}
                   {amazonPublishResult?.asin ? (
                     <p className="mt-1.5 text-[12px] text-muted-foreground">
-                      Live on ASIN {amazonPublishResult.asin}
+                      {amazonPublishResult.mode === "create"
+                        ? `Created a new Amazon product ${amazonPublishResult.asin}.`
+                        : `Complete listing on existing ASIN ${amazonPublishResult.asin}. Seller Central still calls this an oferta because that product page already exists — Higlou sent photos, price, quantity, and shipping, not a price-only offer.`}
                       {amazonPublishResult.sellerCentralUrl ? (
                         <>
                           {" · "}
@@ -714,8 +717,10 @@ export function ExportScreen({
                     </p>
                   ) : (
                     <p className="mt-1.5 text-[12px] text-muted-foreground">
-                      Publishes a complete Amazon listing with photos, title, and
-                      price — not a price-only offer.
+                      Sends a complete listing: photos, title, price, quantity,
+                      and shipping template. If the ASIN already exists, Amazon
+                      attaches yours to that page and Seller Central will label
+                      it an oferta — that is not a price-only offer.
                     </p>
                   )}
                 </div>

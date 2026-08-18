@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseAmazonLink } from "@/lib/amazon/asin";
+import { amazonAsinFromListing, parseAmazonLink } from "@/lib/amazon/asin";
 
 describe("parseAmazonLink", () => {
   it("reads /dp/ASIN", () => {
@@ -33,5 +33,21 @@ describe("parseAmazonLink", () => {
   it("flags short links until they redirect", () => {
     const parsed = parseAmazonLink("https://amzn.to/abc123");
     expect(parsed?.short).toBe(true);
+  });
+
+  it("keeps the ASIN from an Amazon import SKU even if the model is just the brand", () => {
+    expect(
+      amazonAsinFromListing({
+        sku: "AMZ-B0D123ABCD",
+        asin: "",
+        itemSpecifics: [],
+      }),
+    ).toBe("B0D123ABCD");
+    expect(
+      amazonAsinFromListing({
+        sku: "KSIPZE-100FT",
+        itemSpecifics: [{ label: "ASIN", value: "B0D123ABCD" }],
+      }),
+    ).toBe("B0D123ABCD");
   });
 });

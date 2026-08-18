@@ -1,4 +1,4 @@
-import { parseAmazonLink } from "@/lib/amazon/asin";
+import { amazonAsinFromListing, parseAmazonLink } from "@/lib/amazon/asin";
 import { sanitizeEbayUpc } from "@/lib/ebay/inventory-api";
 
 export function amazonSkuFromListing(sku: string, fallbackId?: string): string {
@@ -18,6 +18,8 @@ export function asinFromHiglouSku(sku: string): string {
   const parsed = parseAmazonLink(raw);
   return parsed?.asin || "";
 }
+
+export { amazonAsinFromListing };
 
 export function amazonConditionType(condition?: string, conditionId?: string): string {
   const id = String(conditionId || "").trim();

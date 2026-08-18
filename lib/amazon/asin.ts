@@ -104,3 +104,25 @@ export function parseAmazonLink(input: string): ParsedAmazonLink | null {
     short,
   };
 }
+
+/** ASIN the seller already gave Higlou: import, AMZ-SKU, or item specific. */
+export function amazonAsinFromListing(listing: {
+  asin?: string;
+  sku?: string;
+  itemSpecifics?: Array<{ label?: string; key?: string; value?: string }>;
+}): string {
+  const direct = String(listing.asin || "").trim().toUpperCase();
+  if (looksLikeAsin(direct)) return direct;
+  const sku = String(listing.sku || "").trim();
+  const amz = sku.match(/^AMZ-([A-Z0-9]{10})$/i);
+  if (amz?.[1]) return amz[1].toUpperCase();
+  const fromSku = parseAmazonLink(sku)?.asin || "";
+  if (fromSku && looksLikeAsin(fromSku)) return fromSku;
+  for (const row of listing.itemSpecifics || []) {
+    const label = String(row.label || row.key || "").replace(/^C:/, "").trim();
+    if (!/^(asin|amazon\s*asin)$/i.test(label)) continue;
+    const value = String(row.value || "").trim().toUpperCase();
+    if (looksLikeAsin(value)) return value;
+  }
+  return "";
+}

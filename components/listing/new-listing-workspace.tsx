@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { amazonAsinFromListing } from "@/lib/amazon/asin";
 import { toast } from "sonner";
 import { CONDITION_OPTIONS } from "@/config/condition-map";
 import { DEFAULT_VALUES } from "@/config/default-values";
@@ -638,7 +638,7 @@ export function NewListingWorkspace({
           color: colors[0],
         });
 
-    const itemSpecifics =
+    const mappedSpecifics =
       analysis.itemSpecifics.length > 0
         ? analysis.itemSpecifics.map((field) => ({
             key: field.key.startsWith("C:") ? field.key : `C:${field.key}`,
@@ -647,6 +647,17 @@ export function NewListingWorkspace({
             confidence: field.confidence,
           }))
         : prev.itemSpecifics;
+    const importedAsin = amazonAsinFromListing(prev);
+    const itemSpecifics =
+      importedAsin &&
+      !mappedSpecifics.some((field) =>
+        /^(asin|amazon\s*asin)$/i.test(String(field.label || "").replace(/^C:/, "")),
+      )
+        ? [
+            { key: "C:ASIN", label: "ASIN", value: importedAsin },
+            ...mappedSpecifics,
+          ]
+        : mappedSpecifics;
 
     const category = resolveEbayCategory({
       categoryId: analysis.categoryId || prev.categoryId,
@@ -1032,6 +1043,7 @@ export function NewListingWorkspace({
         upc?: string;
         features?: string[];
         sku?: string;
+        asin?: string;
         images?: ProductImage[];
       } | null;
       if (!response.ok || !body?.ok || !body.images?.length) {
@@ -1043,6 +1055,12 @@ export function NewListingWorkspace({
 
       const newCondition = "New";
       const match = CONDITION_OPTIONS.find((c) => c.label === newCondition);
+      const importedAsin = String(body.asin || "")
+        .trim()
+        .toUpperCase();
+      const withoutAsin = listing.itemSpecifics.filter(
+        (field) => !/^(asin|amazon\s*asin)$/i.test(field.label.replace(/^C:/, "")),
+      );
       const seeded: ProductListing = {
         ...listing,
         title: (body.title || listing.title).slice(0, 80),
@@ -1053,6 +1071,16 @@ export function NewListingWorkspace({
         sku: body.sku || listing.sku,
         features: body.features?.length ? body.features : listing.features,
         images: body.images,
+        itemSpecifics: importedAsin
+          ? [
+              {
+                key: "C:ASIN",
+                label: "ASIN",
+                value: importedAsin,
+              },
+              ...withoutAsin,
+            ]
+          : listing.itemSpecifics,
         condition: newCondition,
         conditionId: match?.conditionId ?? listing.conditionId,
         status: "Uploaded",
@@ -1771,7 +1799,7 @@ export function NewListingWorkspace({
             sku: fresh.sku,
             title: fresh.title,
             upc: fresh.upc,
-            asin: fresh.sku.match(/^AMZ-([A-Z0-9]{10})$/i)?.[1] || "",
+            asin: amazonAsinFromListing(fresh),
             brand: fresh.brand,
             model: fresh.model || fresh.collection,
             mpn: fresh.mpn,

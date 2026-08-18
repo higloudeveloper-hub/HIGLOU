@@ -5,6 +5,7 @@ import {
   listingLooksBareTool,
   pickAmazonCatalogMatch,
   pickExactAmazonCatalog,
+  resolveAmazonModelCode,
   scoreAmazonCatalogHit,
 } from "@/lib/amazon/catalog-match";
 
@@ -164,6 +165,16 @@ describe("Amazon catalog auto-match", () => {
     expect(
       listingLooksBareTool("Ryobi ONE+ 18V Cordless Right Angle Drill - Tool Only"),
     ).toBe(true);
+  });
+
+  it("does not treat the brand name as the Amazon model", () => {
+    expect(
+      resolveAmazonModelCode({
+        brand: "KSIPZE",
+        model: "KSIPZE",
+        title: "KSIPZE 100FT RGB LED Strip Light with Remote and App Control",
+      }),
+    ).not.toBe("KSIPZE");
   });
 
   it("matches numeric Home Depot models like Defiant 17000148", () => {

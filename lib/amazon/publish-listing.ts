@@ -7,8 +7,8 @@ import {
   type AmazonListingDraft,
 } from "@/lib/amazon/listing-attributes";
 import {
+  amazonAsinFromListing,
   amazonSkuFromListing,
-  asinFromHiglouSku,
 } from "@/lib/amazon/listing-offer";
 import {
   amazonBrandGatingReason,
@@ -56,7 +56,9 @@ export async function publishAmazonOffer(opts: {
       model: opts.listing.model,
       mpn: opts.listing.mpn,
       upc,
-      asin: opts.listing.asin || asinFromHiglouSku(opts.listing.sku),
+      asin: amazonAsinFromListing(opts.listing),
+      sku: opts.listing.sku,
+      itemSpecifics: opts.listing.itemSpecifics,
     },
   });
   const creating = resolved.mode === "create";

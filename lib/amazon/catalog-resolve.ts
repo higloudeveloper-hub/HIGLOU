@@ -6,6 +6,7 @@ import {
   type AmazonMatchHints,
 } from "@/lib/amazon/catalog-match";
 import type { AmazonCatalogSnapshot } from "@/lib/amazon/listing-attributes";
+import { amazonAsinFromListing } from "@/lib/amazon/asin";
 import {
   getAmazonCatalogItem,
   searchAmazonCatalogByIdentifier,
@@ -15,6 +16,8 @@ import {
 export type AmazonResolveInput = AmazonMatchHints & {
   upc?: string;
   asin?: string;
+  sku?: string;
+  itemSpecifics?: Array<{ label?: string; key?: string; value?: string }>;
 };
 
 export type AmazonResolveResult = {
@@ -170,9 +173,22 @@ export async function resolveAmazonCatalogMatch(opts: {
   listing: AmazonResolveInput;
 }): Promise<AmazonResolveResult> {
   const hints = hintsFromListing(opts.listing);
-  const directAsin = String(opts.listing.asin || "")
-    .trim()
-    .toUpperCase();
+  const importedAsin = amazonAsinFromListing(opts.listing);
+  if (importedAsin) {
+    const catalog = await getAmazonCatalogItem({
+      accessToken: opts.accessToken,
+      marketplaceId: opts.marketplaceId,
+      asin: importedAsin,
+    });
+    return {
+      mode: "existing",
+      asin: catalog?.asin || importedAsin,
+      productType: catalog?.productType || "PRODUCT",
+      title: catalog?.title || String(opts.listing.title || ""),
+      catalog,
+    };
+  }
+
   const collected: AmazonCatalogHit[] = [];
   const seen = new Set<string>();
   const addHits = (batch: AmazonCatalogHit[]) => {
@@ -182,16 +198,6 @@ export async function resolveAmazonCatalogMatch(opts: {
       collected.push(hit);
     }
   };
-
-  if (/^[A-Z0-9]{10}$/.test(directAsin)) {
-    addHits([
-      {
-        asin: directAsin,
-        title: String(opts.listing.title || ""),
-        productType: "PRODUCT",
-      },
-    ]);
-  }
 
   const barcodeHits = await searchByBarcodes({
     accessToken: opts.accessToken,

@@ -88,11 +88,14 @@ function stripPackageSuffix(model: string): string {
 export function resolveAmazonModelCode(hints: AmazonMatchHints): string {
   const field = String(hints.model || hints.mpn || "").trim();
   const tight = compact(field);
-  if (field && !/\s/.test(field) && /^\d{6,12}$/.test(tight)) {
+  const brand = compact(hints.brand || "");
+  const fieldIsBrand = Boolean(brand && tight === brand);
+  if (field && !/\s/.test(field) && /^\d{6,12}$/.test(tight) && !fieldIsBrand) {
     return field;
   }
   if (
     field &&
+    !fieldIsBrand &&
     !/\s/.test(field) &&
     /[A-Z]/i.test(field) &&
     /\d/.test(field) &&

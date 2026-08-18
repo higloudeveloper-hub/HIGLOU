@@ -36,6 +36,15 @@ describe("Amazon seller publish stays on Higlou", () => {
     expect(resolve).toMatch(/hydrateHits/);
   });
 
+  it("uses the imported Amazon ASIN instead of searching by brand", () => {
+    const resolve = readRepo("lib/amazon/catalog-resolve.ts");
+    const workspace = readRepo("components/listing/new-listing-workspace.tsx");
+    expect(resolve).toMatch(/importedAsin/);
+    expect(resolve).toMatch(/amazonAsinFromListing/);
+    expect(workspace).toMatch(/amazonAsinFromListing\(fresh\)/);
+    expect(workspace).toMatch(/label: "ASIN"/);
+  });
+
   it("creates a new Amazon product when the exact model is not in the catalog", () => {
     const publish = readRepo("lib/amazon/publish-listing.ts");
     const resolve = readRepo("lib/amazon/catalog-resolve.ts");

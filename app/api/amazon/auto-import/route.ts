@@ -174,7 +174,10 @@ export async function POST(request: Request) {
         pageOrigin: new URL(request.url).origin,
         amazonToken: tokens.amazonToken,
         marketplaceId: tokens.marketplaceId,
+        sellingPartnerId: tokens.sellingPartnerId,
         ebayToken: tokens.ebayToken,
+        mode: "amazon_to_ebay",
+        onlySellable: true,
       });
       asins = found.products.map((hit) => hit.asin);
     } catch (error) {

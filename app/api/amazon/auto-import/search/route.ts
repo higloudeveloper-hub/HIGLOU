@@ -8,6 +8,7 @@ import {
 } from "@/lib/api/rate-limit";
 import { findAmazonWinners } from "@/lib/amazon/find-winners";
 import { loadWinnerMarketTokens } from "@/lib/amazon/winner-tokens";
+import { opportunitySearchText } from "@/lib/opportunity/categories";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -15,7 +16,14 @@ export const maxDuration = 60;
 const bodySchema = z.object({
   query: z.string().max(200).optional().default(""),
   category: z.string().max(120).optional().default(""),
+  categoryId: z.string().max(40).optional().default(""),
   limit: z.coerce.number().int().min(1).max(5).optional().default(5),
+  mode: z
+    .enum(["amazon", "amazon_to_ebay", "supplier"])
+    .optional()
+    .default("amazon_to_ebay"),
+  onlySellable: z.boolean().optional().default(true),
+  cost: z.number().positive().max(100000).optional(),
 });
 
 export async function POST(request: Request) {
@@ -54,11 +62,12 @@ export async function POST(request: Request) {
     );
   }
 
-  const query = body.query.trim();
-  const category = body.category.trim();
-  if (!query && !category) {
+  const fromId = opportunitySearchText(body.categoryId, body.query);
+  const query = body.query.trim() || fromId.query;
+  const category = body.category.trim() || fromId.category;
+  if (!query && !category && !fromId.keepaRoot) {
     return NextResponse.json(
-      { error: "Type the product you want Higlou to find." },
+      { error: "Pick a category or type the product you want Higlou to find." },
       { status: 400 },
     );
   }
@@ -68,17 +77,23 @@ export async function POST(request: Request) {
     const found = await findAmazonWinners({
       query,
       category,
+      categoryId: body.categoryId,
+      keepaRoot: fromId.keepaRoot,
       limit: body.limit,
       pageOrigin: new URL(request.url).origin,
       amazonToken: tokens.amazonToken,
       marketplaceId: tokens.marketplaceId,
+      sellingPartnerId: tokens.sellingPartnerId,
       ebayToken: tokens.ebayToken,
+      mode: body.mode,
+      onlySellable: body.onlySellable,
+      supplierCost: body.cost,
     });
     if (!found.products.length) {
       return NextResponse.json(
         {
           error:
-            "Amazon found no matching products. Try a clearer product name.",
+            "No products passed authorization, margin, and competition filters.",
         },
         { status: 404 },
       );
@@ -87,6 +102,7 @@ export async function POST(request: Request) {
       ok: true,
       products: found.products,
       sources: found.sources,
+      filteredOut: found.filteredOut,
     });
   } catch (error) {
     const message =

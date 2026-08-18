@@ -602,6 +602,61 @@ export async function getAmazonLowestNewPrice(opts: {
   return Math.min(...amounts);
 }
 
+export async function getAmazonFeesEstimate(opts: {
+  accessToken: string;
+  marketplaceId: string;
+  asin: string;
+  price: number;
+  fulfillment?: "FBA" | "FBM";
+}): Promise<number | null> {
+  const asin = opts.asin.trim().toUpperCase();
+  if (!/^[A-Z0-9]{10}$/.test(asin)) return null;
+  if (!opts.price || opts.price <= 0) return null;
+  const { ok, json } = await amazonFetch(
+    opts.accessToken,
+    `/products/fees/v0/items/${encodeURIComponent(asin)}/feesEstimate`,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        FeesEstimateRequest: {
+          MarketplaceId: opts.marketplaceId,
+          IsAmazonFulfilled: opts.fulfillment === "FBA",
+          Identifier: `higlou-${asin}`,
+          PriceToEstimateFees: {
+            ListingPrice: {
+              CurrencyCode: "USD",
+              Amount: Math.round(opts.price * 100) / 100,
+            },
+          },
+        },
+      }),
+    },
+  );
+  if (!ok) return null;
+  const amounts: number[] = [];
+  const walk = (value: unknown) => {
+    if (!value) return;
+    if (Array.isArray(value)) {
+      value.forEach(walk);
+      return;
+    }
+    if (typeof value !== "object") return;
+    const row = value as Record<string, unknown>;
+    const total = row.TotalFeesEstimate ?? row.totalFeesEstimate;
+    if (total && typeof total === "object") {
+      const amount = Number(
+        (total as { Amount?: unknown; amount?: unknown }).Amount ??
+          (total as { amount?: unknown }).amount,
+      );
+      if (Number.isFinite(amount) && amount >= 0) amounts.push(amount);
+    }
+    Object.values(row).forEach(walk);
+  };
+  walk(json.payload ?? json);
+  if (!amounts.length) return null;
+  return Math.round(Math.max(...amounts) * 100) / 100;
+}
+
 export function amazonListingBlockedReason(
   issues: AmazonSpIssue[] | undefined,
 ): string {

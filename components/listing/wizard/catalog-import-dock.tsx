@@ -59,8 +59,8 @@ export function CatalogImportDock({
         Import from Amazon or Home Depot
       </p>
       <p className="mt-0.5 text-[13px] text-[#707070]">
-        Pick a category. Higlou checks Amazon rank and live eBay prices, then
-        you choose which to import.
+        Keepa, Amazon authorization, and eBay asking prices. Only products you
+        can sell, with room to profit.
       </p>
 
       <div className="mt-3 grid grid-cols-3 gap-2 sm:gap-3">

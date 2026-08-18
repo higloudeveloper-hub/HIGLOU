@@ -12,11 +12,13 @@ export async function loadWinnerMarketTokens(
 ): Promise<{
   amazonToken?: string;
   marketplaceId?: string;
+  sellingPartnerId?: string;
   ebayToken?: string;
 }> {
   const out: {
     amazonToken?: string;
     marketplaceId?: string;
+    sellingPartnerId?: string;
     ebayToken?: string;
   } = {};
   try {
@@ -24,6 +26,7 @@ export async function loadWinnerMarketTokens(
     if (amazon.connected) {
       const creds = await getValidAmazonAccessToken(supabase, userId);
       out.amazonToken = creds.token;
+      out.sellingPartnerId = creds.sellingPartnerId;
       out.marketplaceId = getAmazonSpConfig().marketplaceId;
     }
   } catch {

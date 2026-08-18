@@ -33,7 +33,7 @@ describe("Amazon listing offer helpers", () => {
       quantity: 2,
       handlingDays: 2,
     });
-    expect(attrs.merchant_suggested_asin[0].value).toBe("B0CHS1BVBC");
+    expect(attrs.merchant_suggested_asin?.[0].value).toBe("B0CHS1BVBC");
     expect(attrs.purchasable_offer[0].our_price[0].schedule[0].value_with_tax).toBe(
       19.9,
     );

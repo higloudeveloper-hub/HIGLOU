@@ -60,7 +60,26 @@ export function amazonOfferAttributes(opts: {
   price: number;
   quantity: number;
   handlingDays: number;
-}) {
+}): {
+  condition_type: Array<{ value: string; marketplace_id: string }>;
+  fulfillment_availability: Array<{
+    fulfillment_channel_code: string;
+    quantity: number;
+    lead_time_to_ship_max_days: number;
+  }>;
+  purchasable_offer: Array<{
+    audience: string;
+    currency: string;
+    marketplace_id: string;
+    our_price: Array<{ schedule: Array<{ value_with_tax: number }> }>;
+  }>;
+  merchant_suggested_asin?: Array<{ value: string; marketplace_id: string }>;
+  externally_assigned_product_identifier?: Array<{
+    type: string;
+    value: string;
+    marketplace_id: string;
+  }>;
+} {
   const marketplace_id = opts.marketplaceId;
   const offer = {
     condition_type: [{ value: opts.conditionType, marketplace_id }],

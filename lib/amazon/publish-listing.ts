@@ -11,6 +11,8 @@ import {
   catalogIdentifierType,
 } from "@/lib/amazon/listing-offer";
 import {
+  amazonListingBlockedReason,
+  getAmazonListingItem,
   putAmazonListingOffer,
   searchAmazonCatalogByIdentifier,
   searchAmazonCatalogByKeywords,
@@ -131,6 +133,21 @@ export async function publishAmazonOffer(opts: {
       handlingDays: Math.max(1, Math.floor(opts.listing.handlingTime || 2)),
     }),
   });
+
+  try {
+    const live = await getAmazonListingItem({
+      accessToken: opts.accessToken,
+      sellerId: opts.sellingPartnerId,
+      sku: result.sku || sku,
+      marketplaceId: cfg.marketplaceId,
+    });
+    const blocked = amazonListingBlockedReason(live.issues);
+    if (blocked) throw new Error(blocked);
+  } catch (error) {
+    if (error instanceof Error && /blocked this brand|suppressed/i.test(error.message)) {
+      throw error;
+    }
+  }
 
   return {
     sku: result.sku,

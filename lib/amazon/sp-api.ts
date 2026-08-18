@@ -9,6 +9,10 @@ export type AmazonSpIssue = {
   message?: string;
   severity?: string;
   attributeNames?: string[];
+  categories?: string[];
+  enforcements?: {
+    actions?: Array<{ action?: string }>;
+  };
 };
 
 async function amazonFetch(
@@ -169,6 +173,58 @@ export async function searchAmazonCatalogByKeywords(opts: {
   return catalogHitsFromPayload(retry.json);
 }
 
+export function amazonListingBlockedReason(
+  issues: AmazonSpIssue[] | undefined,
+): string {
+  const list = Array.isArray(issues) ? issues : [];
+  const blocked = list.find((issue) => {
+    const severity = String(issue.severity || "");
+    const categories = (issue.categories || []).join(" ");
+    const actions = (issue.enforcements?.actions || [])
+      .map((action) => String(action.action || ""))
+      .join(" ");
+    return (
+      /error|invalid/i.test(severity) ||
+      /QUALIFICATION_REQUIRED/i.test(categories) ||
+      /LISTING_SUPPRESSED/i.test(actions)
+    );
+  });
+  if (!blocked) return "";
+  const message = String(blocked.message || "").trim();
+  if (/approval to list in this brand/i.test(message)) {
+    return "Amazon blocked this brand. Open Seller Central → Selling applications and request approval. Until Amazon approves it, the offer will not show in Inventory.";
+  }
+  return message || "Amazon suppressed this listing.";
+}
+
+export async function getAmazonListingItem(opts: {
+  accessToken: string;
+  sellerId: string;
+  sku: string;
+  marketplaceId: string;
+}): Promise<{ sku: string; status: string; issues: AmazonSpIssue[] }> {
+  const params = new URLSearchParams({
+    marketplaceIds: opts.marketplaceId,
+    includedData: "summaries,issues",
+  });
+  const { ok, status, json } = await amazonFetch(
+    opts.accessToken,
+    `/listings/2021-08-01/items/${encodeURIComponent(opts.sellerId)}/${encodeURIComponent(opts.sku)}?${params.toString()}`,
+  );
+  const issues = (json.issues as AmazonSpIssue[] | undefined) || [];
+  if (!ok) {
+    throw new Error(
+      amazonIssuesText(json) || `Amazon listing lookup failed (${status})`,
+    );
+  }
+  const summaries = (json.summaries as Array<Record<string, unknown>>) || [];
+  return {
+    sku: String(json.sku || opts.sku),
+    status: String(summaries[0]?.status || json.status || ""),
+    issues,
+  };
+}
+
 export async function putAmazonListingOffer(opts: {
   accessToken: string;
   sellerId: string;
@@ -199,17 +255,8 @@ export async function putAmazonListingOffer(opts: {
       amazonIssuesText(json) || `Amazon listing failed (${status})`,
     );
   }
-  const blocking = issues.filter((issue) =>
-    /error|invalid/i.test(String(issue.severity || "")),
-  );
-  if (blocking.length) {
-    throw new Error(
-      blocking
-        .map((issue) => issue.message || issue.code)
-        .filter(Boolean)
-        .join(" · ") || "Amazon rejected the listing",
-    );
-  }
+  const blocked = amazonListingBlockedReason(issues);
+  if (blocked) throw new Error(blocked);
   return {
     sku: String(json.sku || opts.sku),
     status: String(json.status || "ACCEPTED"),

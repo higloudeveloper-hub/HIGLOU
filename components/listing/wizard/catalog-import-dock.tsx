@@ -18,7 +18,7 @@ export function CatalogImportDock({
 }: {
   importing?: false | CatalogStore | "amazon-auto";
   onImport: (url: string) => Promise<boolean | void>;
-  onAutoImport?: (query: string) => Promise<boolean | void>;
+  onAutoImport?: (asins: string[]) => Promise<boolean | void>;
 }) {
   const [url, setUrl] = useState("");
   const [picked, setPicked] = useState<CatalogStore | null>(null);
@@ -59,7 +59,7 @@ export function CatalogImportDock({
         Import from Amazon or Home Depot
       </p>
       <p className="mt-0.5 text-[13px] text-[#707070]">
-        Paste a product link, or type what you want and import the best-reviewed Amazon winners.
+        Pick a category, see the winners, and choose which to import for eBay.
       </p>
 
       <div className="mt-3 grid grid-cols-3 gap-2 sm:gap-3">

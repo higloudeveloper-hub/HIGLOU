@@ -49,5 +49,5 @@ export async function findAmazonWinners(opts: {
       "Amazon found no products for that. Try a clearer name, like nailer or toner probe.",
     );
   }
-  return pickReviewedWinners(hits, opts.limit ?? 3);
+  return pickReviewedWinners(hits, opts.limit ?? 5);
 }

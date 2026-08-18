@@ -41,7 +41,7 @@ export function PhotosScreen({
   onConditionChange: (condition: string) => void;
   onContinue: () => void;
   onCatalogImport?: (url: string) => Promise<boolean | void>;
-  onAmazonAutoImport?: (query: string) => Promise<boolean | void>;
+  onAmazonAutoImport?: (asins: string[]) => Promise<boolean | void>;
   catalogImporting?: false | "amazon" | "homedepot" | "amazon-auto";
   sourceListing?: ProductListing;
   onPhotoIntakeSessionChange?: (session: unknown) => void;

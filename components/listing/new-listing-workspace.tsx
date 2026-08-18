@@ -1144,17 +1144,23 @@ export function NewListingWorkspace({
     }
   };
 
-  const importAmazonWinners = async (query: string): Promise<boolean> => {
+  const importAmazonWinners = async (asins: string[]): Promise<boolean> => {
     if (catalogImporting || analyzing) return false;
-    const next = query.trim();
-    if (!next) return false;
+    const next = [
+      ...new Set(
+        asins
+          .map((value) => value.trim().toUpperCase())
+          .filter((value) => /^[A-Z0-9]{10}$/.test(value)),
+      ),
+    ].slice(0, 5);
+    if (!next.length) return false;
     setCatalogImporting("amazon-auto");
     setAnalysisError(null);
     try {
       const response = await fetch("/api/amazon/auto-import", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query: next }),
+        body: JSON.stringify({ asins: next }),
       });
       const body = (await response.json().catch(() => null)) as {
         ok?: boolean;

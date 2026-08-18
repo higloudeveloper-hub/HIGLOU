@@ -14,6 +14,7 @@ export const maxDuration = 60;
 const bodySchema = z.object({
   query: z.string().max(200).optional().default(""),
   category: z.string().max(120).optional().default(""),
+  limit: z.coerce.number().int().min(1).max(5).optional().default(5),
 });
 
 export async function POST(request: Request) {
@@ -65,7 +66,7 @@ export async function POST(request: Request) {
     const products = await findAmazonWinners({
       query,
       category,
-      limit: 12,
+      limit: body.limit,
       pageOrigin: new URL(request.url).origin,
     });
     if (!products.length) {

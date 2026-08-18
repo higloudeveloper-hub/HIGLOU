@@ -168,7 +168,7 @@ export async function POST(request: Request) {
       const winners = await findAmazonWinners({
         query,
         category,
-        limit: 3,
+        limit: 5,
         pageOrigin: new URL(request.url).origin,
       });
       asins = winners.map((hit) => hit.asin);

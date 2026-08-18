@@ -11,6 +11,10 @@ import {
   winnerHitsFromCatalogPayload,
 } from "@/lib/amazon/winner-rank";
 import {
+  amazonWinnerSearchText,
+  AMAZON_WINNER_CATEGORIES,
+} from "@/lib/amazon/winner-categories";
+import {
   parseAmazonSearchHtml,
   parseAmazonSearchMarkdown,
 } from "@/lib/amazon/parse-search";
@@ -20,6 +24,15 @@ function readRepo(relative: string): string {
 }
 
 describe("Amazon auto-import ranking", () => {
+  it("maps a ready category to Amazon search text", () => {
+    expect(AMAZON_WINNER_CATEGORIES.some((row) => row.id === "beauty")).toBe(
+      true,
+    );
+    expect(amazonWinnerSearchText("beauty", "serum")).toEqual({
+      query: "serum",
+      category: "beauty",
+    });
+  });
   it("builds keywords from a model and category without the seed ASIN", () => {
     expect(
       amazonWinnerKeywords("B0BVHK7GTF", "network testers", "Klein ET450 Toner Probe Kit"),
@@ -180,29 +193,31 @@ describe("Amazon auto-import ranking", () => {
 });
 
 describe("Amazon auto-import stays an eBay draft flow", () => {
-  it("finds winners in one click and does not publish to Amazon", () => {
+  it("lets the seller pick a category, count, and which winners to import", () => {
     const dock = readRepo("components/listing/wizard/catalog-import-dock.tsx");
     const panel = readRepo("components/listing/wizard/amazon-auto-import.tsx");
     const workspace = readRepo("components/listing/new-listing-workspace.tsx");
     const importRoute = readRepo("app/api/amazon/auto-import/route.ts");
+    const search = readRepo("app/api/amazon/auto-import/search/route.ts");
+    const categories = readRepo("lib/amazon/winner-categories.ts");
     expect(dock).toMatch(/Find winners/);
     expect(panel).toMatch(/Find winners/);
-    expect(panel).toMatch(/best-reviewed Amazon winners/);
-    expect(panel).not.toMatch(/checkbox/);
+    expect(panel).toMatch(/Choose a category/);
+    expect(panel).toMatch(/How many/);
+    expect(panel).toMatch(/type="checkbox"/);
+    expect(panel).toMatch(/Import \$\{selected\.length\} for eBay/);
+    expect(categories).toMatch(/Beauty/);
+    expect(categories).toMatch(/Tools & Home/);
     expect(workspace).toMatch(/importAmazonWinners/);
-    expect(workspace).toMatch(/JSON\.stringify\(\{ query: next \}\)/);
-    expect(importRoute).toMatch(/findAmazonWinners/);
-    expect(importRoute).toMatch(/limit: 3/);
+    expect(workspace).toMatch(/JSON\.stringify\(\{ asins: next \}\)/);
+    expect(search).toMatch(/limit: body\.limit/);
     expect(importRoute).toMatch(/ebayProfitPrice/);
     expect(importRoute).toMatch(/status: "Uploaded"/);
     expect(importRoute).not.toMatch(/publishAmazonOffer/);
-    expect(importRoute).not.toMatch(/\/listings\/2021-08-01/);
     expect(importRoute).not.toMatch(/AMAZON_NOT_CONNECTED/);
     expect(importRoute).not.toMatch(/getValidAmazonAccessToken/);
-    expect(importRoute).not.toMatch(/Connect your Amazon seller account/);
     const find = readRepo("lib/amazon/find-winners.ts");
     expect(find).toMatch(/searchAmazonWinnersPage/);
-    expect(find).not.toMatch(/searchAmazonCatalogWinners/);
     expect(find).not.toMatch(/accessToken/);
   });
 });

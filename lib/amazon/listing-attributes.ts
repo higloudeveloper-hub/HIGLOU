@@ -30,6 +30,7 @@ export type AmazonListingDraft = {
   packageLengthIn?: number | null;
   packageWidthIn?: number | null;
   packageDepthIn?: number | null;
+  sku?: string;
 };
 
 export type AmazonProductTypeSchema = {
@@ -308,6 +309,26 @@ function booleanAttribute(value: boolean, marketplaceId: string) {
   return [{ value, marketplace_id: marketplaceId }];
 }
 
+function schemaFlagAttribute(
+  prop: Record<string, unknown> | null,
+  flag: boolean,
+  marketplaceId: string,
+): unknown | null {
+  const enums = valueEnum(prop);
+  if (enums.length) {
+    const preferred = flag
+      ? ["yes", "true", "y"]
+      : ["no", "false", "n", "does_not_contain", "not_applicable"];
+    const picked = pickFromEnums(enums, preferred);
+    if (!picked) return null;
+    return [{ value: picked, marketplace_id: marketplaceId }];
+  }
+  if (!prop || valueType(prop) === "boolean") {
+    return booleanAttribute(flag, marketplaceId);
+  }
+  return null;
+}
+
 export function applyAmazonBatteryPack(
   attributes: Record<string, unknown>,
   listing: AmazonListingDraft,
@@ -318,7 +339,13 @@ export function applyAmazonBatteryPack(
   const out = dropIncompleteAmazonSafetyAttributes({ ...attributes });
   const setIfKnown = (name: string, value: boolean) => {
     if (!keepKey(name, schemaKeys(schema))) return;
-    out[name] = booleanAttribute(value, marketplaceId);
+    const packed = schemaFlagAttribute(
+      propertyOf(schema, name),
+      value,
+      marketplaceId,
+    );
+    if (packed) out[name] = packed;
+    else delete out[name];
   };
   setIfKnown("contains_battery_or_cell", intent.containsCell);
   setIfKnown("batteries_included", intent.batteriesIncluded);
@@ -372,6 +399,125 @@ function dimensionPart(
     return [{ value, unit }];
   }
   return { value, unit };
+}
+
+function specificValue(
+  listing: AmazonListingDraft,
+  matcher: RegExp,
+): string {
+  const specific = listing.itemSpecifics?.find((row) =>
+    matcher.test(String(row.label || row.key || "").replace(/^C:/, "")),
+  );
+  return String(specific?.value || "").trim();
+}
+
+export function listingPartNumber(listing: AmazonListingDraft): string {
+  return (
+    specificValue(listing, /^(part\s*number|mpn|manufacturer\s*part)/i) ||
+    String(listing.mpn || "").trim() ||
+    String(listing.model || "").trim() ||
+    String(listing.sku || "")
+      .replace(/^(AMZ|HD)-/i, "")
+      .trim()
+  );
+}
+
+export function listingMaterial(listing: AmazonListingDraft): string {
+  const fromField = String(listing.material || "").trim();
+  if (fromField) return fromField;
+  const fromSpecific = specificValue(
+    listing,
+    /^(material|base\s*material|frame\s*material|tabletop\s*material)$/i,
+  );
+  if (fromSpecific) return fromSpecific;
+  const blob = listingBlob(listing);
+  const hit = blob.match(
+    /\b(hdpe|high[\s-]*density[\s-]*polyethylene|polyethylene|resin|rattan|wicker|acacia|teak|aluminum|aluminium|steel|iron|wood|plastic|glass|fabric|rattan)\b/i,
+  );
+  return hit?.[1] || "";
+}
+
+function materialNeedles(raw: string): string[] {
+  const text = String(raw || "").toLowerCase().replace(/[_-]+/g, " ").trim();
+  if (!text) return [];
+  const needles = [text, text.replace(/\s+/g, "_")];
+  if (/\bhdpe\b|high\s*density\s*polyethylene/.test(text)) {
+    needles.push(
+      "hdpe",
+      "high_density_polyethylene",
+      "high-density polyethylene",
+      "polyethylene",
+      "plastic",
+    );
+  }
+  if (/\bplastic\b|\bresin\b|\bpolyethylene\b/.test(text)) {
+    needles.push("plastic", "resin", "polyethylene");
+  }
+  return [...new Set(needles)];
+}
+
+function pickMaterial(options: string[], raw: string): string {
+  const needles = materialNeedles(raw);
+  if (!options.length) return needles[0] || raw;
+  for (const needle of needles) {
+    const hit = options.find(
+      (option) =>
+        option.toLowerCase() === needle.toLowerCase() ||
+        option.toLowerCase().replace(/[_-]+/g, " ") ===
+          needle.toLowerCase().replace(/[_-]+/g, " "),
+    );
+    if (hit) return hit;
+  }
+  return "";
+}
+
+function materialValuesMissing(value: unknown): boolean {
+  if (value == null) return true;
+  if (!Array.isArray(value) || !value.length) return true;
+  const first = value[0] as Record<string, unknown>;
+  if (Array.isArray(first.material)) {
+    const row = first.material[0] as { value?: unknown } | undefined;
+    return row?.value == null || row.value === "";
+  }
+  return first.value == null || first.value === "";
+}
+
+function fillMaterialAttributes(
+  attributes: Record<string, unknown>,
+  listing: AmazonListingDraft,
+  marketplaceId: string,
+  schema?: AmazonProductTypeSchema | null,
+) {
+  const raw = listingMaterial(listing);
+  if (!raw) return;
+  const allowed = schemaKeys(schema);
+  for (const name of [
+    "material",
+    "base_material",
+    "frame_material",
+    "tabletop_material",
+    "base",
+  ]) {
+    if (!keepKey(name, allowed)) continue;
+    if (!materialValuesMissing(attributes[name])) continue;
+    const prop = propertyOf(schema, name);
+    const items = (prop?.items || {}) as {
+      properties?: Record<string, Record<string, unknown>>;
+    };
+    const nestedMaterial = items.properties?.material || null;
+    if (nestedMaterial) {
+      const value = pickMaterial(valueEnum(nestedMaterial), raw) || raw;
+      attributes[name] = [
+        {
+          material: [{ value }],
+          marketplace_id: marketplaceId,
+        },
+      ];
+      continue;
+    }
+    const value = pickMaterial(valueEnum(prop), raw) || raw;
+    attributes[name] = [{ value, marketplace_id: marketplaceId }];
+  }
 }
 
 function fillSchemaDrivenDefaults(
@@ -454,6 +600,15 @@ function fillSchemaDrivenDefaults(
       },
     ]);
   }
+
+  const part = listingPartNumber(listing);
+  if (part) {
+    set(
+      "part_number",
+      amazonTextAttribute(part, marketplaceId, propertyOf(schema, "part_number")),
+    );
+  }
+  fillMaterialAttributes(attributes, listing, marketplaceId, schema);
 }
 
 export function issueAttributeKeys(issue: {
@@ -472,10 +627,18 @@ export function issueAttributeKeys(issue: {
     names.add(
       raw
         .toLowerCase()
+        .replace(/#\d+/g, "")
         .replace(/[^a-z0-9]+/g, "_")
         .replace(/^_|_$/g, ""),
     );
   }
+  if (/part\s*number/i.test(message)) names.add("part_number");
+  if (/base\s*material/i.test(message)) {
+    names.add("base");
+    names.add("base_material");
+    names.add("material");
+  }
+  if (/contains\s*battery/i.test(message)) names.add("contains_battery_or_cell");
   return [...names];
 }
 
@@ -609,8 +772,8 @@ export function defaultAmazonAttribute(opts: {
     if (!listing.brand) return null;
     return amazonTextAttribute(listing.brand, marketplaceId, prop);
   }
-  if (name === "model_name" || name === "model_number") {
-    const model = listing.model || listing.mpn || "";
+  if (name === "model_name" || name === "model_number" || name === "part_number") {
+    const model = listingPartNumber(listing);
     if (!model) return null;
     return amazonTextAttribute(model, marketplaceId, prop);
   }
@@ -618,6 +781,11 @@ export function defaultAmazonAttribute(opts: {
     const color = listingColor(listing);
     if (!color) return null;
     return amazonTextAttribute(color, marketplaceId, prop);
+  }
+  if (name === "material" || name === "base_material" || name === "base") {
+    const scratch: Record<string, unknown> = {};
+    fillMaterialAttributes(scratch, listing, marketplaceId, schema);
+    return scratch[name] || null;
   }
   if (name === "required_product_compliance_certificate") {
     return [
@@ -636,19 +804,22 @@ export function defaultAmazonAttribute(opts: {
     ];
   }
   if (name === "contains_battery_or_cell") {
-    return booleanAttribute(
+    return schemaFlagAttribute(
+      prop,
       amazonBatteryIntent(listing).containsCell,
       marketplaceId,
     );
   }
   if (name === "batteries_included") {
-    return booleanAttribute(
+    return schemaFlagAttribute(
+      prop,
       amazonBatteryIntent(listing).batteriesIncluded,
       marketplaceId,
     );
   }
   if (name === "batteries_required") {
-    return booleanAttribute(
+    return schemaFlagAttribute(
+      prop,
       amazonBatteryIntent(listing).batteriesRequired,
       marketplaceId,
     );
@@ -756,6 +927,7 @@ export function fillAmazonRequiredAttributes(opts: {
   setText("manufacturer", listing.brand || "");
   setText("model_name", listing.model || listing.mpn || "");
   setText("model_number", listing.model || listing.mpn || "");
+  setText("part_number", listingPartNumber(listing));
   setText("product_description", listingDescription(listing));
   setText(
     "generic_keyword",

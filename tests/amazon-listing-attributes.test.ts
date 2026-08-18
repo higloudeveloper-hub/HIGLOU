@@ -454,4 +454,136 @@ describe("Amazon complete listing attributes", () => {
       (attributes.batteries_required as Array<{ value: boolean }>)[0].value,
     ).toBe(true);
   });
+
+  it("fills part number, nested base material, and battery enum for outdoor furniture", () => {
+    const tableSchema = {
+      productType: "TABLE",
+      required: ["item_name", "part_number", "base", "contains_battery_or_cell"],
+      properties: {
+        item_name: {},
+        part_number: {},
+        brand: {},
+        manufacturer: {},
+        material: {},
+        base: {
+          items: {
+            properties: {
+              material: {
+                items: {
+                  properties: {
+                    value: {
+                      enum: ["high_density_polyethylene", "steel", "wood"],
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+        contains_battery_or_cell: {
+          items: {
+            properties: { value: { enum: ["yes", "no"] } },
+          },
+        },
+        merchant_suggested_asin: {},
+        condition_type: {},
+        fulfillment_availability: {},
+        purchasable_offer: {},
+        list_price: {},
+        main_product_image_locator: {},
+      },
+    };
+    const attributes = buildAmazonListingAttributes({
+      marketplaceId: AMAZON_US_MARKETPLACE_ID,
+      schema: tableSchema,
+      listing: {
+        title: "Blue Outdoor Side Table with Shelf - Weather Resistant HDPE",
+        brand: "Generic",
+        material: "HDPE",
+        sku: "HD-301460651",
+        price: 55,
+        quantity: 1,
+        description: "Weather resistant HDPE outdoor side table with a lower shelf.",
+        images: ["https://images.example.com/table.jpg"],
+      },
+    });
+    expect((attributes.part_number as Array<{ value: string }>)[0].value).toBe(
+      "301460651",
+    );
+    expect(
+      (attributes.base as Array<{ material: Array<{ value: string }> }>)[0]
+        .material[0].value,
+    ).toBe("high_density_polyethylene");
+    expect(
+      (attributes.contains_battery_or_cell as Array<{ value: string }>)[0].value,
+    ).toBe("no");
+  });
+
+  it("maps Amazon furniture validation issues to part number and base material", () => {
+    const tableSchema = {
+      productType: "TABLE",
+      required: ["item_name"],
+      properties: {
+        item_name: {},
+        part_number: {},
+        base: {
+          items: {
+            properties: {
+              material: {
+                items: {
+                  properties: {
+                    value: { enum: ["high_density_polyethylene", "steel"] },
+                  },
+                },
+              },
+            },
+          },
+        },
+        contains_battery_or_cell: {
+          items: { properties: { value: { enum: ["yes", "no"] } } },
+        },
+        merchant_suggested_asin: {},
+        condition_type: {},
+        fulfillment_availability: {},
+        purchasable_offer: {},
+        list_price: {},
+      },
+    };
+    const { attributes } = fillAmazonAttributesFromIssues({
+      marketplaceId: AMAZON_US_MARKETPLACE_ID,
+      schema: tableSchema,
+      listing: {
+        title: "Blue Outdoor Side Table with Shelf - Weather Resistant HDPE",
+        brand: "Generic",
+        material: "HDPE",
+        mpn: "ST-55",
+        price: 55,
+        quantity: 1,
+      },
+      attributes: {
+        contains_battery_or_cell: [{ value: false }],
+      },
+      issues: [
+        { message: "'Part Number' is required but missing." },
+        {
+          message:
+            "The field 'material#1.value' for the attribute 'Base Material' does not have enough values. The required minimum is '1' value(s).",
+        },
+        {
+          message:
+            "We can't accept the false you entered for Contains Battery or Cell.",
+        },
+      ],
+    });
+    expect((attributes.part_number as Array<{ value: string }>)[0].value).toBe(
+      "ST-55",
+    );
+    expect(
+      (attributes.base as Array<{ material: Array<{ value: string }> }>)[0]
+        .material[0].value,
+    ).toBe("high_density_polyethylene");
+    expect(
+      (attributes.contains_battery_or_cell as Array<{ value: string }>)[0].value,
+    ).toBe("no");
+  });
 });

@@ -134,3 +134,18 @@ export function amazonAsinFromListing(listing: {
   if (fromCopy?.[1] && looksLikeAsin(fromCopy[1])) return fromCopy[1].toUpperCase();
   return "";
 }
+
+/** Official Amazon product page for an imported listing. */
+export function amazonListingUrl(listing: {
+  amazonUrl?: string;
+  asin?: string;
+  amazonAsin?: string;
+  sku?: string;
+  description?: string;
+  itemSpecifics?: Array<{ label?: string; key?: string; value?: string }>;
+}): string {
+  const stored = parseAmazonLink(String(listing.amazonUrl || ""));
+  if (stored?.asin) return stored.canonicalUrl;
+  const asin = amazonAsinFromListing(listing);
+  return asin ? `https://www.amazon.com/dp/${asin}` : "";
+}

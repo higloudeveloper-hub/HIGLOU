@@ -92,6 +92,15 @@ export function amazonExistingAsinOfferAttributes(
   return out;
 }
 
+export function dropAmazonBrandAttributes(
+  attributes: Record<string, unknown>,
+): Record<string, unknown> {
+  const out = { ...attributes };
+  delete out.brand;
+  delete out.manufacturer;
+  return out;
+}
+
 const SKIP_CATALOG_KEYS = new Set([
   "skip_offer",
   "purchasable_offer",
@@ -965,9 +974,8 @@ export function fillAmazonAttributesFromIssues(opts: {
   catalog?: AmazonCatalogSnapshot | null;
 }): { attributes: Record<string, unknown>; filled: string[] } {
   if (amazonHasBrandLockIssue(opts.issues)) {
-    const offer = amazonExistingAsinOfferAttributes(opts.attributes);
     return {
-      attributes: offer,
+      attributes: dropAmazonBrandAttributes(opts.attributes),
       filled: ["brand", "manufacturer"],
     };
   }
@@ -1082,7 +1090,7 @@ export function fillAmazonRequiredAttributes(opts: {
     );
   };
 
-  setText("item_name", listing.title || opts.catalog?.title || "");
+  setText("item_name", opts.catalog?.title || listing.title || "");
   setText(
     "brand",
     amazonCatalogBrand(opts.catalog) || listing.brand || "",
@@ -1219,12 +1227,21 @@ export function buildAmazonListingAttributes(opts: {
     ],
   } as Record<string, unknown>;
 
-  if (opts.listing.title?.trim()) {
+  const attaching = /^[A-Z0-9]{10}$/i.test(String(opts.asin || ""));
+  if (!attaching && opts.listing.title?.trim()) {
     attributes.item_name = amazonTextAttribute(
       opts.listing.title.trim(),
       opts.marketplaceId,
       propertyOf(opts.schema, "item_name"),
     );
+  } else if (attaching && opts.catalog?.title?.trim()) {
+    if (!amazonAttributeText(attributes.item_name)) {
+      attributes.item_name = amazonTextAttribute(
+        opts.catalog.title.trim(),
+        opts.marketplaceId,
+        propertyOf(opts.schema, "item_name"),
+      );
+    }
   }
   const higlouDescription = stripAmazonHtml(opts.listing.description || "");
   if (higlouDescription.length >= 20) {

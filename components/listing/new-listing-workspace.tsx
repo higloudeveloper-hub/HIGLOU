@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { amazonAsinFromListing } from "@/lib/amazon/asin";
+import { amazonAsinFromListing, amazonListingUrl } from "@/lib/amazon/asin";
 import { toast } from "sonner";
 import { CONDITION_OPTIONS } from "@/config/condition-map";
 import { DEFAULT_VALUES } from "@/config/default-values";
@@ -144,6 +144,7 @@ function mapApiProductToListing(
     upc: String(product.upc ?? ""),
     sku: String(product.sku ?? ""),
     amazonAsin: String(product.amazonAsin ?? product.amazon_asin ?? ""),
+    amazonUrl: String(product.amazonUrl ?? product.amazon_url ?? ""),
     productType: String(product.productType ?? ""),
     categoryId: String(product.categoryId ?? ""),
     categoryName: String(product.categoryName ?? ""),
@@ -211,6 +212,15 @@ function mapApiProductToListing(
     createdAt: String(product.createdAt ?? base.createdAt),
     updatedAt: String(product.updatedAt ?? base.updatedAt),
   };
+
+  if (!mapped.amazonUrl) {
+    mapped.amazonUrl = amazonListingUrl({
+      amazonAsin: mapped.amazonAsin,
+      sku: mapped.sku,
+      description: mapped.descriptionHtml,
+      itemSpecifics: mapped.itemSpecifics,
+    });
+  }
 
   // Heal empty/stale HTML from DB so review + export show real copy.
   if (isWeakDescriptionHtml(mapped.descriptionHtml) && mapped.title.trim()) {
@@ -696,6 +706,7 @@ export function NewListingWorkspace({
       upc: analysis.upc || prev.upc,
       sku,
       amazonAsin: importedAsin || prev.amazonAsin || "",
+      amazonUrl: prev.amazonUrl || "",
       productType,
       type: productType,
       categoryId: category.categoryId,
@@ -1047,6 +1058,7 @@ export function NewListingWorkspace({
         features?: string[];
         sku?: string;
         asin?: string;
+        amazonUrl?: string;
         images?: ProductImage[];
       } | null;
       if (!response.ok || !body?.ok || !body.images?.length) {
@@ -1073,6 +1085,10 @@ export function NewListingWorkspace({
         upc: body.upc || listing.upc,
         sku: body.sku || listing.sku,
         amazonAsin: importedAsin || listing.amazonAsin,
+        amazonUrl:
+          String(body.amazonUrl || "").trim() ||
+          listing.amazonUrl ||
+          (importedAsin ? `https://www.amazon.com/dp/${importedAsin}` : ""),
         features: body.features?.length ? body.features : listing.features,
         images: body.images,
         itemSpecifics: importedAsin
@@ -1984,6 +2000,7 @@ export function NewListingWorkspace({
           }}
           onCatalogImport={importFromCatalog}
           catalogImporting={catalogImporting}
+          sourceListing={listing}
         />
       ) : null}
 

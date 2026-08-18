@@ -4,8 +4,9 @@ import { ArrowRight } from "lucide-react";
 import { ImageUploader } from "@/components/uploader/image-uploader";
 import { ListingPipeline } from "@/components/studio/listing-pipeline";
 import { CatalogImportDock } from "@/components/listing/wizard/catalog-import-dock";
+import { AmazonSourceLink } from "@/components/listing/amazon-source-link";
 import { CONDITION_OPTIONS } from "@/config/condition-map";
-import type { ProductImage } from "@/types/product";
+import type { ProductImage, ProductListing } from "@/types/product";
 import { cn } from "@/lib/utils";
 
 export function PhotosScreen({
@@ -23,6 +24,7 @@ export function PhotosScreen({
   onContinue,
   onCatalogImport,
   catalogImporting = false,
+  sourceListing,
 }: {
   images: ProductImage[];
   productId?: string;
@@ -39,6 +41,7 @@ export function PhotosScreen({
   onContinue: () => void;
   onCatalogImport?: (url: string) => Promise<boolean | void>;
   catalogImporting?: false | "amazon" | "homedepot";
+  sourceListing?: ProductListing;
   onPhotoIntakeSessionChange?: (session: unknown) => void;
 }) {
   const shots = images
@@ -124,6 +127,9 @@ export function PhotosScreen({
                 ? "Reading Home Depot…"
                 : "Reading Amazon…"
               : "Drop a photo, or import — then delete, add, or reorder"}
+          {sourceListing ? (
+            <AmazonSourceLink listing={sourceListing} className="ml-1" />
+          ) : null}
         </span>
         <button
           type="button"

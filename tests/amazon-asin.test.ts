@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { amazonAsinFromListing, parseAmazonLink } from "@/lib/amazon/asin";
+import { amazonAsinFromListing, amazonListingUrl, parseAmazonLink } from "@/lib/amazon/asin";
 
 describe("parseAmazonLink", () => {
   it("reads /dp/ASIN", () => {
@@ -62,5 +62,16 @@ describe("parseAmazonLink", () => {
           '<p>Imported from <a href="https://www.amazon.com/dp/B08MESHHAT">Amazon</a></p>',
       }),
     ).toBe("B08MESHHAT");
+  });
+
+  it("opens the official Amazon listing from an imported ASIN", () => {
+    expect(
+      amazonListingUrl({ sku: "AMZ-B08HRPDBFF" }),
+    ).toBe("https://www.amazon.com/dp/B08HRPDBFF");
+    expect(
+      amazonListingUrl({
+        amazonUrl: "https://www.amazon.com/Some-Title/dp/B0FS72NDGZ/ref=sr_1_1",
+      }),
+    ).toBe("https://www.amazon.com/dp/B0FS72NDGZ");
   });
 });

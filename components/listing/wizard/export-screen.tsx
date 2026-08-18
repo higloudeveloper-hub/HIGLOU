@@ -23,6 +23,7 @@ import { displayNameFromEbayUsername } from "@/lib/ebay/store-display-name";
 import type { ProductListing } from "@/types/product";
 import type { StoreBranding } from "@/config/store-branding";
 import { AmazonMark } from "@/components/brand/store-marks";
+import { AmazonSourceLink } from "@/components/listing/amazon-source-link";
 import { cn } from "@/lib/utils";
 
 const LIVE_STAGES = [
@@ -555,6 +556,9 @@ export function ExportScreen({
               <p className="mt-2 text-[12px] text-muted-foreground">
                 {photoCount} photo{photoCount === 1 ? "" : "s"}
                 {productName ? ` · ${productName}` : ""}
+                <span className="block">
+                  <AmazonSourceLink listing={listing} />
+                </span>
               </p>
             </div>
 

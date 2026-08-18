@@ -40,10 +40,13 @@ describe("Amazon seller publish stays on Higlou", () => {
   it("uses the imported Amazon ASIN instead of searching by brand", () => {
     const resolve = readRepo("lib/amazon/catalog-resolve.ts");
     const workspace = readRepo("components/listing/new-listing-workspace.tsx");
+    const exportScreen = readRepo("components/listing/wizard/export-screen.tsx");
     expect(resolve).toMatch(/importedAsin/);
     expect(resolve).toMatch(/amazonAsinFromListing/);
     expect(workspace).toMatch(/amazonAsinFromListing\(\{/);
-    expect(workspace).toMatch(/label: "ASIN"/);
+    expect(workspace).toMatch(/amazonUrl/);
+    expect(workspace).toMatch(/sourceListing/);
+    expect(exportScreen).toMatch(/AmazonSourceLink/);
   });
 
   it("creates a new Amazon product when the exact model is not in the catalog", () => {
@@ -56,10 +59,10 @@ describe("Amazon seller publish stays on Higlou", () => {
     expect(publish).toMatch(/externally_assigned_product_identifier|upc/);
   });
 
-  it("attaches existing Amazon products as an offer without changing brand", () => {
+  it("attaches existing Amazon products with photos, and only drops brand on 5995", () => {
     const publish = readRepo("lib/amazon/publish-listing.ts");
+    expect(publish).toMatch(/dropAmazonBrandAttributes/);
     expect(publish).toMatch(/LISTING_OFFER_ONLY/);
-    expect(publish).toMatch(/amazonExistingAsinOfferAttributes/);
     expect(publish).toMatch(/amazonHasBrandLockIssue/);
   });
 

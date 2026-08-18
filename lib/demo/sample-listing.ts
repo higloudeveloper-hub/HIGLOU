@@ -18,6 +18,7 @@ export function createEmptyListing(): ProductListing {
     upc: "",
     sku: "",
     amazonAsin: "",
+    amazonUrl: "",
     productType: "",
     categoryId: "",
     categoryName: "",

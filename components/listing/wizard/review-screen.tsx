@@ -54,6 +54,7 @@ import type { ProductImage, ProductListing } from "@/types/product";
 import type { StoreBranding } from "@/config/store-branding";
 import { cn } from "@/lib/utils";
 import { ImageUploader } from "@/components/uploader/image-uploader";
+import { AmazonSourceLink } from "@/components/listing/amazon-source-link";
 
 function FieldNote({
   attentionFields,
@@ -357,11 +358,10 @@ export function ReviewScreen({
                     {listing.brand ? (
                       <span className="text-[12px] text-muted-foreground">
                         Brand:{" "}
-                        <span className="font-medium text-foreground">
-                          {listing.brand}
-                        </span>
+                        <span className="text-foreground">{listing.brand}</span>
                       </span>
                     ) : null}
+                    <AmazonSourceLink listing={listing} />
                   </div>
                 </Field>
 

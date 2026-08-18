@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import {
-  amazonExistingAsinOfferAttributes,
   amazonListingHasPrice,
   buildAmazonListingAttributes,
   copyAmazonCatalogAttributes,
@@ -142,7 +141,7 @@ describe("Amazon complete listing attributes", () => {
         .our_price[0].schedule[0].value_with_tax,
     ).toBe(70);
     expect((attributes.list_price as Array<{ value: number }>)[0].value).toBe(70);
-    expect((attributes.item_name as Array<{ value: string }>)[0].value).toContain("RTH2CWF-N");
+    expect((attributes.item_name as Array<{ value: string }>)[0].value).toMatch(/X2S/);
     expect((attributes.brand as Array<{ value: string }>)[0].value).toBe("Honeywell Home");
     expect((attributes.color as Array<{ value: string }>)[0].value).toBe("Grey Buttons");
     expect((attributes.bullet_point as Array<{ value: string }>).length).toBeGreaterThanOrEqual(2);
@@ -157,8 +156,8 @@ describe("Amazon complete listing attributes", () => {
     expect(attributes.generic_keyword).toBeTruthy();
   });
 
-  it("does not send brand when attaching a price to an existing Amazon ASIN", () => {
-    const full = buildAmazonListingAttributes({
+  it("keeps Amazon catalog photos and brand when attaching to an existing ASIN", () => {
+    const attributes = buildAmazonListingAttributes({
       marketplaceId: AMAZON_US_MARKETPLACE_ID,
       asin: "B08NESTHAT",
       schema: thermostatSchema,
@@ -166,7 +165,7 @@ describe("Amazon complete listing attributes", () => {
         asin: "B08NESTHAT",
         title: "Google Nest Thermostat - Smart Wi-Fi Thermostat",
         productType: "HVAC_CONTROL_THERMOSTAT",
-        images: [],
+        images: ["https://images.example.com/nest-catalog.jpg"],
         brand: "Google",
         attributes: {
           brand: [{ value: "Google", language_tag: "en_US" }],
@@ -185,17 +184,18 @@ describe("Amazon complete listing attributes", () => {
         categoryName: "Programmable Thermostats - Google",
       },
     });
-    const attributes = amazonExistingAsinOfferAttributes(full);
-    expect(attributes.brand).toBeUndefined();
-    expect(attributes.manufacturer).toBeUndefined();
-    expect(attributes.item_name).toBeUndefined();
+    expect((attributes.brand as Array<{ value: string }>)[0].value).toBe("Google");
+    expect(
+      (attributes.main_product_image_locator as Array<{ media_location: string }>)[0]
+        .media_location,
+    ).toMatch(/^https:/);
     expect(
       (attributes.merchant_suggested_asin as Array<{ value: string }>)[0].value,
     ).toBe("B08NESTHAT");
     expect(amazonListingHasPrice(attributes)).toBe(true);
   });
 
-  it("drops brand after Amazon 5995 instead of resending it", () => {
+  it("drops brand after Amazon 5995 but keeps photos and price", () => {
     const { attributes, filled } = fillAmazonAttributesFromIssues({
       marketplaceId: AMAZON_US_MARKETPLACE_ID,
       schema: thermostatSchema,
@@ -228,6 +228,12 @@ describe("Amazon complete listing attributes", () => {
             our_price: [{ schedule: [{ value_with_tax: 80 }] }],
           },
         ],
+        main_product_image_locator: [
+          {
+            media_location: "https://images.example.com/nest.jpg",
+            marketplace_id: AMAZON_US_MARKETPLACE_ID,
+          },
+        ],
       },
       issues: [
         {
@@ -242,6 +248,10 @@ describe("Amazon complete listing attributes", () => {
     expect(
       (attributes.merchant_suggested_asin as Array<{ value: string }>)[0].value,
     ).toBe("B08NESTHAT");
+    expect(
+      (attributes.main_product_image_locator as Array<{ media_location: string }>)[0]
+        .media_location,
+    ).toMatch(/nest\.jpg/);
   });
 
   it("fills Amazon missing-attribute issues so the listing can go up complete", () => {

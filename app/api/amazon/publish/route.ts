@@ -10,6 +10,7 @@ import {
   getValidAmazonAccessToken,
 } from "@/lib/amazon/sp-oauth";
 import { publishAmazonOffer } from "@/lib/amazon/publish-listing";
+import { amazonPublishBlockFromError } from "@/lib/amazon/sp-api";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export const runtime = "nodejs";
@@ -119,6 +120,18 @@ export async function POST(request: Request) {
       ...result,
     });
   } catch (error) {
+    const blocked = amazonPublishBlockFromError(error);
+    if (blocked) {
+      return NextResponse.json(
+        {
+          error: blocked.message,
+          code: blocked.code,
+          approvalUrl: blocked.approvalUrl,
+          asin: blocked.asin || "",
+        },
+        { status: 422 },
+      );
+    }
     const message =
       error instanceof Error ? error.message : "Amazon publish failed";
     return NextResponse.json({ error: message }, { status: 422 });

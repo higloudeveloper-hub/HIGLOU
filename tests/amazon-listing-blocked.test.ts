@@ -87,5 +87,21 @@ describe("Amazon listing suppression", () => {
         },
       ]),
     ).toMatch(/Approval required/i);
+    expect(
+      amazonRestrictionBlockMessage([
+        {
+          marketplaceId: "ATVPDKIKX0DER",
+          conditionType: "new_new",
+          reasons: [
+            {
+              reasonCode: "APPROVAL_REQUIRED",
+              message: "You need approval to list in this brand.",
+              approvalUrl:
+                "https://sellercentral.amazon.com/hz/approvalrequest/restrictions/approve?asin=B0BVHK7GTF",
+            },
+          ],
+        },
+      ]),
+    ).not.toMatch(/sellercentral\.amazon\.com/);
   });
 });

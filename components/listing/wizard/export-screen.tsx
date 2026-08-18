@@ -385,6 +385,7 @@ export function ExportScreen({
   onPublishToAmazon,
   publishingAmazon = false,
   amazonPublishError = null,
+  amazonApprovalUrl = null,
   amazonPublishResult = null,
 }: {
   listing: ProductListing;
@@ -419,6 +420,7 @@ export function ExportScreen({
   onPublishToAmazon?: () => void;
   publishingAmazon?: boolean;
   amazonPublishError?: string | null;
+  amazonApprovalUrl?: string | null;
   amazonPublishResult?: {
     asin?: string;
     sku?: string;
@@ -668,6 +670,17 @@ export function ExportScreen({
                     Amazon
                   </p>
                   {amazonConnected ? (
+                    amazonApprovalUrl ? (
+                      <a
+                        href={amazonApprovalUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="mt-2 inline-flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-[#141414] text-[15px] font-semibold text-white transition hover:-translate-y-px"
+                      >
+                        <AmazonMark invert className="h-4" />
+                        Approval required
+                      </a>
+                    ) : (
                     <button
                       type="button"
                       disabled={exportDisabled || publishingAmazon || !onPublishToAmazon}
@@ -681,6 +694,7 @@ export function ExportScreen({
                       )}
                       {publishingAmazon ? "Publishing to Amazon…" : "Publish to Amazon"}
                     </button>
+                    )
                   ) : (
                     <a
                       href="/settings#amazon-store"
@@ -710,6 +724,11 @@ export function ExportScreen({
                           </a>
                         </>
                       ) : null}
+                    </p>
+                  ) : amazonApprovalUrl ? (
+                    <p className="mt-1.5 text-[12px] text-muted-foreground">
+                      Amazon gated this brand. Request approval in Seller
+                      Central, then publish again.
                     </p>
                   ) : amazonPublishError ? (
                     <p className="mt-1.5 text-[12px] text-amber-800">

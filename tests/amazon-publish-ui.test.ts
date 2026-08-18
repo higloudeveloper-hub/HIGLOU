@@ -85,6 +85,7 @@ describe("Amazon seller publish stays on Higlou", () => {
     expect(attributes).toMatch(/merchant_shipping_group/);
     expect(attributes).toMatch(/buildAmazonOfferOnlyAttributes/);
     expect(exportScreen).toMatch(/confirmed Amazon ASIN/);
+    expect(exportScreen).toMatch(/Approval required/);
   });
 
   it("does not ask Amazon for identifiers when submitting a live offer", () => {

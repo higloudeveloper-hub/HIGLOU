@@ -14,12 +14,13 @@ import {
   amazonBrandGatingReason,
   amazonIncompleteListingReason,
   amazonListingBlockedReason,
-  amazonRestrictionBlockMessage,
+  amazonRestrictionBlock,
   getAmazonCatalogItem,
   getAmazonListingItem,
   getAmazonListingsRestrictions,
   getAmazonProductTypeSchema,
   putAmazonListingOffer,
+  AmazonPublishBlockedError,
   type AmazonListingRestriction,
 } from "@/lib/amazon/sp-api";
 import { getAmazonSpConfig } from "@/lib/amazon/sp-config";
@@ -117,8 +118,8 @@ export async function publishAmazonOffer(opts: {
       throw error;
     }
   }
-  const restricted = amazonRestrictionBlockMessage(restrictions);
-  if (restricted) throw new Error(restricted);
+  const blocked = amazonRestrictionBlock(restrictions, asin);
+  if (blocked) throw new AmazonPublishBlockedError(blocked);
 
   const schema = await getAmazonProductTypeSchema({
     accessToken: opts.accessToken,

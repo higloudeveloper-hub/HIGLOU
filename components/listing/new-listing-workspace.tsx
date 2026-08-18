@@ -293,6 +293,9 @@ export function NewListingWorkspace({
   const [amazonPublishError, setAmazonPublishError] = useState<string | null>(
     null,
   );
+  const [amazonApprovalUrl, setAmazonApprovalUrl] = useState<string | null>(
+    null,
+  );
   const [amazonPublishResult, setAmazonPublishResult] = useState<{
     asin?: string;
     sku?: string;
@@ -1828,6 +1831,7 @@ export function NewListingWorkspace({
     }
     setAmazonPublishError(null);
     setAmazonPublishResult(null);
+    setAmazonApprovalUrl(null);
     setPublishingAmazon(true);
     try {
       await persistDraft({ quiet: true, draft: fresh });
@@ -1885,6 +1889,7 @@ export function NewListingWorkspace({
         sku?: string;
         sellerCentralUrl?: string;
         mode?: "attach" | "create";
+        approvalUrl?: string;
       } | null;
       if (!response.ok) {
         if (body?.code === "AMAZON_NOT_CONNECTED") {
@@ -1896,6 +1901,26 @@ export function NewListingWorkspace({
                 window.location.href = "/settings#amazon-store";
               },
             },
+          });
+          return;
+        }
+        if (
+          body?.code === "AMAZON_APPROVAL_REQUIRED" ||
+          body?.code === "AMAZON_RESTRICTED"
+        ) {
+          const approvalUrl = String(body.approvalUrl || "").trim();
+          setAmazonApprovalUrl(approvalUrl || null);
+          setAmazonPublishError(body.error || "Approval required");
+          toast.error("Approval required", {
+            description: "Amazon gated this brand. Request approval, then publish again.",
+            action: approvalUrl
+              ? {
+                  label: "Open Seller Central",
+                  onClick: () => {
+                    window.open(approvalUrl, "_blank", "noreferrer");
+                  },
+                }
+              : undefined,
           });
           return;
         }
@@ -2139,6 +2164,7 @@ export function NewListingWorkspace({
           onPublishToAmazon={() => void publishToAmazon()}
           publishingAmazon={publishingAmazon}
           amazonPublishError={amazonPublishError}
+          amazonApprovalUrl={amazonApprovalUrl}
           amazonPublishResult={amazonPublishResult}
         />
       ) : null}

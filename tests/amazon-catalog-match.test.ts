@@ -119,6 +119,34 @@ describe("Amazon catalog auto-match", () => {
     expect(match?.asin).toBe("B00NOARV9Q");
   });
 
+  it("matches Ryobi P241 even when Amazon titles it ONEAND and the Home Depot UPC is absent", () => {
+    const match = pickAmazonCatalogMatch(
+      [
+        {
+          asin: "B08XF7BWQ4",
+          title:
+            "RYOBI ONE+ HP 18V Brushless Cordless Compact 3/8 in. Right Angle Drill (Tool Only)",
+          identifiers: ["PSBRA02B"],
+        },
+        {
+          asin: "B008E76BZ4",
+          title: "ONEAND 18V Cordless 3/8 in. Right Angle Drill Tool-ONLY",
+          identifiers: ["#P241", "RYOBI"],
+        },
+        {
+          asin: "B084GW6W4H",
+          title: "RYOBI Right Angle Drill Attachment 1/2 TO 3/8",
+        },
+      ],
+      {
+        brand: "Ryobi",
+        model: "P241",
+        title: "Ryobi ONE+ 18V Cordless Right Angle Drill - Tool Only",
+      },
+    );
+    expect(match?.asin).toBe("B008E76BZ4");
+  });
+
   it("picks the kit when the Higlou listing is a kit", () => {
     const match = pickAmazonCatalogMatch(hits, {
       brand: "DeWalt",

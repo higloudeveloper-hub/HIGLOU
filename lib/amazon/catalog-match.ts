@@ -45,6 +45,16 @@ function hitHaystack(hit: AmazonCatalogHit): string {
   return [hit.title, ...(hit.identifiers || [])].filter(Boolean).join(" ");
 }
 
+function brandMatches(hints: AmazonMatchHints, hit: AmazonCatalogHit): boolean {
+  const brand = String(hints.brand || "").trim();
+  if (!brand) return true;
+  const text = hitHaystack(hit);
+  if (compact(text).includes(compact(brand))) return true;
+  if (text.toLowerCase().includes(brand.toLowerCase())) return true;
+  if (/^ryobi$/i.test(brand) && /oneand|one\+|one\s*plus/i.test(text)) return true;
+  return false;
+}
+
 export function listingLooksLikeKit(text: string): boolean {
   return KIT_RE.test(text);
 }
@@ -135,11 +145,7 @@ export function scoreAmazonCatalogHit(
   const brand = compact(hints.brand || "");
   const model = compact(resolveAmazonModelCode(hints));
   if (!model) return 0;
-  const brandOk =
-    !brand ||
-    blob.includes(brand) ||
-    title.toLowerCase().includes(String(hints.brand || "").toLowerCase());
-  if (!brandOk) return 0;
+  if (!brandMatches(hints, hit)) return 0;
   if (hasConflictingModel(hitHaystack(hit), model)) return 0;
 
   const finish = listingFinish(resolveAmazonModelCode(hints));
@@ -160,6 +166,9 @@ export function scoreAmazonCatalogHit(
   else score -= 30;
   if (BARE_RE.test(title) && !listingKit) score += 10;
   if (RENEWED_RE.test(title)) score -= 50;
+  if (/\battachment\b/i.test(title) && !/\battachment\b/i.test(listingText)) {
+    score -= 40;
+  }
   return score;
 }
 

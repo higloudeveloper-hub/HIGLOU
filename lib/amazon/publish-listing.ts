@@ -61,23 +61,19 @@ export async function publishAmazonOffer(opts: {
 
   if (!asin && upc) {
     const kind = catalogIdentifierType(upc);
-    if (!kind) {
-      throw new Error("The UPC is not a valid barcode. Check the number and try again.");
+    if (kind) {
+      const hits = await searchAmazonCatalogByIdentifier({
+        accessToken: opts.accessToken,
+        marketplaceId: cfg.marketplaceId,
+        identifier: upc,
+        identifierType: kind,
+      });
+      if (hits[0]) {
+        asin = hits[0].asin;
+        productType = hits[0].productType || "PRODUCT";
+        catalogTitle = hits[0].title || catalogTitle;
+      }
     }
-    const hits = await searchAmazonCatalogByIdentifier({
-      accessToken: opts.accessToken,
-      marketplaceId: cfg.marketplaceId,
-      identifier: upc,
-      identifierType: kind,
-    });
-    if (!hits.length) {
-      throw new Error(
-        "Amazon has no catalog match for that UPC. You can only offer products Amazon already sells, or import from an Amazon link first.",
-      );
-    }
-    asin = hits[0].asin;
-    productType = hits[0].productType || "PRODUCT";
-    catalogTitle = hits[0].title || catalogTitle;
   }
 
   if (!asin) {

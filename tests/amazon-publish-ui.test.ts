@@ -22,6 +22,12 @@ describe("Amazon seller publish stays on Higlou", () => {
     expect(exportScreen).toMatch(/onPublishToAmazon/);
   });
 
+  it("falls back from a Home Depot UPC miss to brand and model search", () => {
+    const publish = readRepo("lib/amazon/publish-listing.ts");
+    expect(publish).not.toMatch(/no catalog match for that UPC/);
+    expect(publish).toMatch(/searchAmazonCatalogForListing/);
+  });
+
   it("does not ask Amazon for identifiers when submitting a live offer", () => {
     const api = readRepo("lib/amazon/sp-api.ts");
     expect(api).toMatch(/includedData: "issues"/);

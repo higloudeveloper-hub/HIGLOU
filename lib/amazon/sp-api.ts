@@ -164,7 +164,7 @@ export async function searchAmazonCatalogByIdentifier(opts: {
     marketplaceIds: opts.marketplaceId,
     identifiers: opts.identifier,
     identifiersType: opts.identifierType,
-    includedData: "summaries,identifiers,productTypes",
+    includedData: "summaries,identifiers,productTypes,attributes",
     pageSize: "10",
   });
   const { ok, json } = await amazonFetch(
@@ -194,10 +194,14 @@ function catalogHitsFromPayload(json: Record<string, unknown>): AmazonCatalogHit
         if (typeof value === "object") {
           const row = value as Record<string, unknown>;
           if (typeof row.identifier === "string") identifiers.push(row.identifier);
+          if (typeof row.value === "string" && row.value.length <= 40) {
+            identifiers.push(row.value);
+          }
           Object.values(row).forEach(walk);
         }
       };
       walk(item.identifiers);
+      walk(item.attributes);
       return {
         asin: String(item.asin || summaries[0]?.asin || "").toUpperCase(),
         title: String(summaries[0]?.itemName || ""),
@@ -219,7 +223,7 @@ export async function searchAmazonCatalogByKeywords(opts: {
   const params = new URLSearchParams({
     marketplaceIds: opts.marketplaceId,
     keywords,
-    includedData: "summaries,identifiers,productTypes",
+    includedData: "summaries,identifiers,productTypes,attributes",
     pageSize: "20",
   });
   const { ok, json } = await amazonFetch(

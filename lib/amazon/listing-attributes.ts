@@ -48,7 +48,11 @@ export type AmazonCatalogSnapshot = {
   attributes: Record<string, unknown>;
   images: string[];
   browseNodeId?: string;
+  brand?: string;
+  manufacturer?: string;
 };
+
+const CATALOG_IDENTITY_KEYS = new Set(["brand", "manufacturer"]);
 
 const SKIP_CATALOG_KEYS = new Set([
   "skip_offer",
@@ -128,6 +132,71 @@ function valueEnum(prop: Record<string, unknown> | null): string[] {
   return Array.isArray(items.properties?.value?.enum)
     ? items.properties.value.enum.map(String)
     : [];
+}
+
+export function amazonAttributeText(value: unknown): string {
+  if (value == null) return "";
+  if (typeof value === "string") return value.trim();
+  if (typeof value === "number") return String(value);
+  if (Array.isArray(value)) return amazonAttributeText(value[0]);
+  if (typeof value === "object") {
+    const row = value as Record<string, unknown>;
+    return amazonAttributeText(row.value ?? row.brand ?? row.name);
+  }
+  return "";
+}
+
+export function amazonCatalogBrand(
+  catalog?: AmazonCatalogSnapshot | null,
+): string {
+  if (!catalog) return "";
+  return (
+    amazonAttributeText(catalog.attributes?.brand) ||
+    String(catalog.brand || "").trim() ||
+    amazonAttributeText(catalog.attributes?.manufacturer) ||
+    String(catalog.manufacturer || "").trim()
+  );
+}
+
+export function amazonCatalogManufacturer(
+  catalog?: AmazonCatalogSnapshot | null,
+): string {
+  if (!catalog) return "";
+  return (
+    amazonAttributeText(catalog.attributes?.manufacturer) ||
+    String(catalog.manufacturer || "").trim() ||
+    amazonCatalogBrand(catalog)
+  );
+}
+
+export function applyAmazonCatalogIdentity(opts: {
+  attributes: Record<string, unknown>;
+  catalog?: AmazonCatalogSnapshot | null;
+  marketplaceId: string;
+  schema?: AmazonProductTypeSchema | null;
+}): { attributes: Record<string, unknown>; filled: string[] } {
+  const attributes = { ...opts.attributes };
+  const filled: string[] = [];
+  const catalog = opts.catalog;
+  if (!catalog) return { attributes, filled };
+
+  const setIdentity = (name: "brand" | "manufacturer", value: string) => {
+    if (!value) return;
+    const catalogValue = catalog.attributes?.[name];
+    attributes[name] =
+      catalogValue != null && amazonAttributeText(catalogValue)
+        ? catalogValue
+        : amazonTextAttribute(
+            value,
+            opts.marketplaceId,
+            propertyOf(opts.schema, name),
+          );
+    filled.push(name);
+  };
+
+  setIdentity("brand", amazonCatalogBrand(catalog));
+  setIdentity("manufacturer", amazonCatalogManufacturer(catalog));
+  return { attributes, filled };
 }
 
 export function amazonTextAttribute(
@@ -635,6 +704,14 @@ export function issueAttributeKeys(issue: {
     );
   }
   if (/part\s*number/i.test(message)) names.add("part_number");
+  if (
+    /5995/.test(message) ||
+    /may not change the brand name/i.test(message) ||
+    /brand name currently shown on the ASIN/i.test(message)
+  ) {
+    names.add("brand");
+    names.add("manufacturer");
+  }
   if (/base\s*material/i.test(message)) {
     names.add("base");
     names.add("base_material");
@@ -743,8 +820,9 @@ export function defaultAmazonAttribute(opts: {
   listing: AmazonListingDraft;
   marketplaceId: string;
   schema?: AmazonProductTypeSchema | null;
+  catalog?: AmazonCatalogSnapshot | null;
 }): unknown | null {
-  const { name, listing, marketplaceId, schema } = opts;
+  const { name, listing, marketplaceId, schema, catalog } = opts;
   const prop = propertyOf(schema, name);
   if (name === "country_of_origin") {
     return [
@@ -771,8 +849,12 @@ export function defaultAmazonAttribute(opts: {
     return amazonTextAttribute(listing.title, marketplaceId, prop);
   }
   if (name === "brand" || name === "manufacturer") {
-    if (!listing.brand) return null;
-    return amazonTextAttribute(listing.brand, marketplaceId, prop);
+    const value =
+      name === "manufacturer"
+        ? amazonCatalogManufacturer(catalog) || listing.brand
+        : amazonCatalogBrand(catalog) || listing.brand;
+    if (!value) return null;
+    return amazonTextAttribute(value, marketplaceId, prop);
   }
   if (name === "model_name" || name === "model_number" || name === "part_number") {
     const model = listingPartNumber(listing);
@@ -858,30 +940,61 @@ export function fillAmazonAttributesFromIssues(opts: {
     for (const name of issueAttributeKeys(issue)) names.add(name);
   }
   for (const name of names) {
-    if (!before[name] && attributes[name]) filled.push(name);
-    if (attributes[name]) continue;
+    const identity = CATALOG_IDENTITY_KEYS.has(name);
+    if (!identity && !before[name] && attributes[name]) filled.push(name);
+    if (!identity && attributes[name]) continue;
     const catalogValue = opts.catalog?.attributes?.[name];
     if (
       catalogValue != null &&
+      amazonAttributeText(catalogValue) &&
       !(SAFETY_OBJECT_KEYS.has(name) && amazonSafetyObjectIncomplete(catalogValue))
     ) {
       attributes[name] = catalogValue;
       filled.push(name);
       continue;
     }
+    if (name === "brand" && amazonCatalogBrand(opts.catalog)) {
+      attributes.brand = amazonTextAttribute(
+        amazonCatalogBrand(opts.catalog),
+        opts.marketplaceId,
+        propertyOf(opts.schema, "brand"),
+      );
+      filled.push(name);
+      continue;
+    }
+    if (name === "manufacturer" && amazonCatalogManufacturer(opts.catalog)) {
+      attributes.manufacturer = amazonTextAttribute(
+        amazonCatalogManufacturer(opts.catalog),
+        opts.marketplaceId,
+        propertyOf(opts.schema, "manufacturer"),
+      );
+      filled.push(name);
+      continue;
+    }
+    if (identity && attributes[name]) continue;
     const fallback = defaultAmazonAttribute({
       name,
       listing: opts.listing,
       marketplaceId: opts.marketplaceId,
       schema: opts.schema,
+      catalog: opts.catalog,
     });
     if (fallback) {
       attributes[name] = fallback;
       filled.push(name);
     }
   }
-  const finalized = finalizeAmazonListingAttributes({
+  const withIdentity = applyAmazonCatalogIdentity({
     attributes,
+    catalog: opts.catalog,
+    marketplaceId: opts.marketplaceId,
+    schema: opts.schema,
+  });
+  filled.push(
+    ...withIdentity.filled.filter((name) => !filled.includes(name)),
+  );
+  const finalized = finalizeAmazonListingAttributes({
+    attributes: withIdentity.attributes,
     listing: opts.listing,
     marketplaceId: opts.marketplaceId,
     schema: opts.schema,
@@ -925,8 +1038,17 @@ export function fillAmazonRequiredAttributes(opts: {
   };
 
   setText("item_name", listing.title || opts.catalog?.title || "");
-  setText("brand", listing.brand || "");
-  setText("manufacturer", listing.brand || "");
+  setText(
+    "brand",
+    amazonCatalogBrand(opts.catalog) || listing.brand || "",
+  );
+  setText(
+    "manufacturer",
+    amazonCatalogManufacturer(opts.catalog) ||
+      amazonCatalogBrand(opts.catalog) ||
+      listing.brand ||
+      "",
+  );
   setText("model_name", listing.model || listing.mpn || "");
   setText("model_number", listing.model || listing.mpn || "");
   setText("part_number", listingPartNumber(listing));
@@ -1093,8 +1215,15 @@ export function buildAmazonListingAttributes(opts: {
     catalog: opts.catalog,
   });
 
-  const finalized = finalizeAmazonListingAttributes({
+  const withIdentity = applyAmazonCatalogIdentity({
     attributes: filled,
+    catalog: opts.catalog,
+    marketplaceId: opts.marketplaceId,
+    schema: opts.schema,
+  });
+
+  const finalized = finalizeAmazonListingAttributes({
+    attributes: withIdentity.attributes,
     listing: opts.listing,
     marketplaceId: opts.marketplaceId,
     schema: opts.schema,

@@ -156,6 +156,74 @@ describe("Amazon complete listing attributes", () => {
     expect(attributes.generic_keyword).toBeTruthy();
   });
 
+  it("uses the Amazon catalog brand on an existing ASIN instead of Google Nest", () => {
+    const attributes = buildAmazonListingAttributes({
+      marketplaceId: AMAZON_US_MARKETPLACE_ID,
+      asin: "B08NESTSTAT",
+      schema: thermostatSchema,
+      catalog: {
+        asin: "B08NESTSTAT",
+        title: "Google Nest Thermostat - Smart Wi-Fi Thermostat",
+        productType: "HVAC_CONTROL_THERMOSTAT",
+        images: [],
+        brand: "Google",
+        attributes: {},
+      },
+      listing: {
+        title: "Google Nest Thermostat - Smart Wi-Fi Thermostat",
+        brand: "Google Nest",
+        model: "GA02081-US",
+        price: 80,
+        quantity: 1,
+        description: "Smart Wi-Fi thermostat imported from Amazon with app control.",
+        features: ["Wi-Fi app control", "Energy saving schedule"],
+        images: ["https://images.example.com/nest.jpg"],
+        countryOfManufacture: "United States",
+        categoryName: "Programmable Thermostats - Google",
+      },
+    });
+    expect((attributes.brand as Array<{ value: string }>)[0].value).toBe("Google");
+    expect((attributes.manufacturer as Array<{ value: string }>)[0].value).toBe(
+      "Google",
+    );
+  });
+
+  it("replaces Amazon 5995 brand mismatch with the catalog brand", () => {
+    const { attributes, filled } = fillAmazonAttributesFromIssues({
+      marketplaceId: AMAZON_US_MARKETPLACE_ID,
+      schema: thermostatSchema,
+      catalog: {
+        asin: "B08NESTSTAT",
+        title: "Google Nest Thermostat",
+        productType: "HVAC_CONTROL_THERMOSTAT",
+        images: [],
+        attributes: {
+          brand: [{ value: "Google", language_tag: "en_US" }],
+          manufacturer: [{ value: "Google", language_tag: "en_US" }],
+        },
+      },
+      listing: {
+        title: "Google Nest Thermostat - Smart Wi-Fi Thermostat",
+        brand: "Google Nest",
+        price: 80,
+        quantity: 1,
+        countryOfManufacture: "United States",
+      },
+      attributes: { brand: [{ value: "Google Nest" }] },
+      issues: [
+        {
+          message:
+            "You may not change the brand name on this ASIN. Please use the brand name currently shown on the ASIN detail page. If you believe you are using the correct brand name, contact Seller support and mention the error code 5995",
+        },
+      ],
+    });
+    expect(filled).toEqual(expect.arrayContaining(["brand"]));
+    expect((attributes.brand as Array<{ value: string }>)[0].value).toBe("Google");
+    expect((attributes.manufacturer as Array<{ value: string }>)[0].value).toBe(
+      "Google",
+    );
+  });
+
   it("fills Amazon missing-attribute issues so the listing can go up complete", () => {
     const { attributes, filled } = fillAmazonAttributesFromIssues({
       marketplaceId: AMAZON_US_MARKETPLACE_ID,

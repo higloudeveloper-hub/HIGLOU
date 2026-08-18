@@ -1,6 +1,7 @@
-import type {
-  AmazonCatalogSnapshot,
-  AmazonProductTypeSchema,
+import {
+  amazonAttributeText,
+  type AmazonCatalogSnapshot,
+  type AmazonProductTypeSchema,
 } from "@/lib/amazon/listing-attributes";
 import {
   sellingPartnerIdFromAccessToken,
@@ -322,18 +323,44 @@ export async function getAmazonCatalogItem(opts: {
   if (!ok) return null;
   const summaries = (json.summaries as Array<Record<string, unknown>>) || [];
   const types = (json.productTypes as Array<Record<string, unknown>>) || [];
-  const browse = summaries[0]?.browseClassification as
+  const summary = summaries[0] || {};
+  const browse = summary.browseClassification as
     | { classificationId?: string }
     | undefined;
+  const brand = String(summary.brand || summary.brandName || "").trim();
+  const manufacturer = String(summary.manufacturer || "").trim();
+  const attributes = {
+    ...((json.attributes as Record<string, unknown>) || {}),
+  };
+  if (brand && !amazonAttributeText(attributes.brand)) {
+    attributes.brand = [
+      {
+        value: brand,
+        language_tag: "en_US",
+        marketplace_id: opts.marketplaceId,
+      },
+    ];
+  }
+  if (manufacturer && !amazonAttributeText(attributes.manufacturer)) {
+    attributes.manufacturer = [
+      {
+        value: manufacturer,
+        language_tag: "en_US",
+        marketplace_id: opts.marketplaceId,
+      },
+    ];
+  }
   return {
     asin,
-    title: String(summaries[0]?.itemName || ""),
+    title: String(summary.itemName || ""),
     productType: String(types[0]?.productType || "PRODUCT"),
-    attributes: (json.attributes as Record<string, unknown>) || {},
+    attributes,
     images: catalogImagesFromPayload(json),
     browseNodeId: browse?.classificationId
       ? String(browse.classificationId)
       : undefined,
+    brand,
+    manufacturer,
   };
 }
 

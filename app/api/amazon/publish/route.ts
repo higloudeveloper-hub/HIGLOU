@@ -22,6 +22,9 @@ const bodySchema = z.object({
     title: z.string().min(1),
     upc: z.string().optional().default(""),
     asin: z.string().optional().default(""),
+    brand: z.string().optional().default(""),
+    model: z.string().optional().default(""),
+    mpn: z.string().optional().default(""),
     price: z.number().positive(),
     quantity: z.number().int().min(1).default(1),
     condition: z.string().optional().default("New"),
@@ -60,7 +63,7 @@ export async function POST(request: Request) {
     parsed = bodySchema.parse(await request.json());
   } catch {
     return NextResponse.json(
-      { error: "Send the listing SKU, title, price, and UPC or ASIN." },
+      { error: "Send the listing SKU, title, and price." },
       { status: 400 },
     );
   }

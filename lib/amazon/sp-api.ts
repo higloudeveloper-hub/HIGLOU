@@ -116,6 +116,10 @@ export async function searchAmazonCatalogByIdentifier(opts: {
     const detail = amazonIssuesText(json) || "Amazon catalog lookup failed";
     throw new Error(detail);
   }
+  return catalogHitsFromPayload(json);
+}
+
+function catalogHitsFromPayload(json: Record<string, unknown>): AmazonCatalogHit[] {
   const items = (json.items as Array<Record<string, unknown>> | undefined) || [];
   return items
     .map((item) => {
@@ -128,6 +132,41 @@ export async function searchAmazonCatalogByIdentifier(opts: {
       };
     })
     .filter((row) => /^[A-Z0-9]{10}$/.test(row.asin));
+}
+
+export async function searchAmazonCatalogByKeywords(opts: {
+  accessToken: string;
+  marketplaceId: string;
+  keywords: string;
+  brand?: string;
+}): Promise<AmazonCatalogHit[]> {
+  const keywords = String(opts.keywords || "").trim();
+  if (!keywords) return [];
+  const params = new URLSearchParams({
+    marketplaceIds: opts.marketplaceId,
+    keywords,
+    includedData: "summaries,identifiers,productTypes",
+    pageSize: "20",
+  });
+  const brand = String(opts.brand || "").trim();
+  if (brand) params.append("brandNames", brand);
+  const { ok, json } = await amazonFetch(
+    opts.accessToken,
+    `/catalog/2022-04-01/items?${params.toString()}`,
+  );
+  if (!ok) {
+    const detail = amazonIssuesText(json) || "Amazon catalog search failed";
+    throw new Error(detail);
+  }
+  const hits = catalogHitsFromPayload(json);
+  if (hits.length || !brand) return hits;
+  params.delete("brandNames");
+  const retry = await amazonFetch(
+    opts.accessToken,
+    `/catalog/2022-04-01/items?${params.toString()}`,
+  );
+  if (!retry.ok) return hits;
+  return catalogHitsFromPayload(retry.json);
 }
 
 export async function putAmazonListingOffer(opts: {

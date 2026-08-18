@@ -1,5 +1,9 @@
 import { sanitizeEbayUpc } from "@/lib/ebay/inventory-api";
 import {
+  amazonSearchKeywords,
+  pickAmazonCatalogMatch,
+} from "@/lib/amazon/catalog-match";
+import {
   amazonConditionType,
   amazonOfferAttributes,
   amazonSkuFromListing,
@@ -9,6 +13,7 @@ import {
 import {
   putAmazonListingOffer,
   searchAmazonCatalogByIdentifier,
+  searchAmazonCatalogByKeywords,
 } from "@/lib/amazon/sp-api";
 import { getAmazonSpConfig } from "@/lib/amazon/sp-config";
 
@@ -17,6 +22,9 @@ export type AmazonPublishInput = {
   title: string;
   upc?: string;
   asin?: string;
+  brand?: string;
+  model?: string;
+  mpn?: string;
   price: number;
   quantity: number;
   condition?: string;
@@ -72,8 +80,32 @@ export async function publishAmazonOffer(opts: {
   }
 
   if (!asin) {
+    const hints = {
+      title: opts.listing.title,
+      brand: opts.listing.brand,
+      model: opts.listing.model,
+      mpn: opts.listing.mpn,
+    };
+    const keywords = amazonSearchKeywords(hints);
+    if (keywords) {
+      const hits = await searchAmazonCatalogByKeywords({
+        accessToken: opts.accessToken,
+        marketplaceId: cfg.marketplaceId,
+        keywords,
+        brand: opts.listing.brand,
+      });
+      const match = pickAmazonCatalogMatch(hits, hints);
+      if (match) {
+        asin = match.asin;
+        productType = match.productType || "PRODUCT";
+        catalogTitle = match.title || catalogTitle;
+      }
+    }
+  }
+
+  if (!asin) {
     throw new Error(
-      "Amazon needs a UPC or ASIN to match the catalog. Add the barcode, or paste an Amazon product link in Photos first.",
+      "Amazon has no catalog match for this product. Higlou can only offer items Amazon already sells.",
     );
   }
 

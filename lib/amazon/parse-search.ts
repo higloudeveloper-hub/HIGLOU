@@ -19,13 +19,13 @@ function decode(value: string): string {
     .trim();
 }
 
-function emptyHit(asin: string, index: number): AmazonWinnerHit {
+function emptyHit(asin: string): AmazonWinnerHit {
   return {
     asin,
     title: "",
     brand: "",
     imageUrl: "",
-    salesRank: index + 1,
+    salesRank: null,
     salesRankLabel: "Amazon search",
     browseNodeId: "",
     browseNodeName: "",
@@ -38,8 +38,8 @@ function emptyHit(asin: string, index: number): AmazonWinnerHit {
   };
 }
 
-function parseCard(chunk: string, asin: string, index: number): AmazonWinnerHit {
-  const hit = emptyHit(asin, index);
+function parseCard(chunk: string, asin: string): AmazonWinnerHit {
+  const hit = emptyHit(asin);
   const title =
     chunk.match(/<h2[^>]*>[\s\S]*?<span[^>]*>([\s\S]*?)<\/span>/i)?.[1] ||
     chunk.match(/<h2[^>]*>[\s\S]*?<a[^>]*>([\s\S]*?)<\/a>/i)?.[1] ||
@@ -59,10 +59,13 @@ function parseCard(chunk: string, asin: string, index: number): AmazonWinnerHit 
   hit.reviewCount = reviews != null && reviews >= 0 ? reviews : null;
   const dollars = chunk.match(/a-price-whole[^>]*>\s*([0-9,]+)/i)?.[1];
   const cents = chunk.match(/a-price-fraction[^>]*>\s*([0-9]{2})/i)?.[1];
+  const offscreen = chunk.match(/a-offscreen[^>]*>\s*\$([0-9,]+\.\d{2})/i)?.[1];
   const plain = chunk.match(/\$([0-9]+(?:\.[0-9]{2})?)/)?.[1];
   if (dollars) {
     const n = Number(`${dollars.replace(/,/g, "")}.${cents || "00"}`);
     hit.amazonPrice = Number.isFinite(n) && n > 0 ? n : null;
+  } else if (offscreen) {
+    hit.amazonPrice = numberFromUnknown(offscreen);
   } else if (plain) {
     hit.amazonPrice = numberFromUnknown(plain);
   }
@@ -92,7 +95,7 @@ export function parseAmazonSearchHtml(html: string): AmazonWinnerHit[] {
     }
     const chunk = html.slice(match.index, match.index + 5500);
     seen.add(asin);
-    hits.push(parseCard(chunk, asin, hits.length));
+    hits.push(parseCard(chunk, asin));
     if (hits.length >= 16) break;
   }
   return hits;
@@ -112,7 +115,7 @@ export function parseAmazonSearchMarkdown(text: string): AmazonWinnerHit[] {
     seen.add(asin);
     const start = Math.max(0, match.index - 400);
     const chunk = body.slice(start, match.index + 500);
-    const hit = emptyHit(asin, hits.length);
+    const hit = emptyHit(asin);
     const title =
       chunk.match(/\[([^\]]{8,180})\]\(/)?.[1] ||
       chunk.match(/^#{1,3}\s+(.{8,180})$/m)?.[1] ||

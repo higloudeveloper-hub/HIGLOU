@@ -541,7 +541,7 @@ export const EBAY_CATEGORY_OPTIONS: EbayCategoryOption[] = [
   {
     id: "20779",
     name: "Hand Tools",
-    keywords: ["wrench", "screwdriver set", "pliers", "hand tools"],
+    keywords: ["wrench", "screwdriver set", "pliers", "hand tools", "caulk", "caulking", "grout", "sealant"],
   },
 
   // Food & drink + hydration

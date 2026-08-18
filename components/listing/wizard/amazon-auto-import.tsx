@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { AnimatePresence, motion } from "motion/react";
 import { Loader2 } from "lucide-react";
 import { AMAZON_WINNER_CATEGORIES, AMAZON_WINNER_LIMITS } from "@/lib/amazon/winner-categories";
 import {
@@ -52,6 +53,34 @@ function eligibilityCopy(hit: OpportunityProduct, mode: OpportunityMode) {
   return "Connect Amazon to confirm you can sell";
 }
 
+function heroFor(hit: OpportunityProduct, mode: OpportunityMode) {
+  const ebay = hit.ebayActiveMedian ?? hit.ebayPrice;
+  if (hit.netProfit != null) {
+    const sign = hit.netProfit >= 0 ? "+" : "−";
+    return {
+      kicker: mode === "amazon" ? "Est. Amazon profit" : "Est. eBay profit",
+      value: `${sign}$${Math.abs(hit.netProfit).toFixed(2)}`,
+      detail:
+        hit.roi != null
+          ? `${Math.round(hit.roi * 100)}% ROI · Amazon ${money(hit.amazonPrice)} → eBay ${money(ebay)}`
+          : `Amazon ${money(hit.amazonPrice)} → eBay ${money(ebay)}`,
+    };
+  }
+  if (ebay != null) {
+    return {
+      kicker: "eBay asking price",
+      value: money(ebay),
+      detail: hit.amazonPrice
+        ? `Amazon cost ${money(hit.amazonPrice)} · scoring profit`
+        : "Analyzing Amazon cost and eBay fees",
+    };
+  }
+  return {
+    kicker: "Scoring",
+    value: `${hit.score}/100`,
+    detail: "Reading live prices",
+  };
+}
 function Metric({ label, value }: { label: string; value: string }) {
   return (
     <div className="border border-[#eee] bg-[#fafafa] px-2 py-2">
@@ -179,6 +208,7 @@ export function AmazonAutoImportPanel({
   const [picked, setPicked] = useState<string[]>([]);
   const [round, setRound] = useState(0);
   const [queries, setQueries] = useState<string[]>([]);
+  const [freshAsins, setFreshAsins] = useState<string[]>([]);
   const liveHitsRef = useRef<OpportunityProduct[]>([]);
   const liveOnRef = useRef(true);
   const modeRef = useRef(mode);
@@ -247,6 +277,12 @@ export function AmazonAutoImportPanel({
           });
           if (cancelled || !liveOnRef.current) break;
           if (found.ok) {
+            const seen = new Set(liveHitsRef.current.map((hit) => hit.asin));
+            setFreshAsins(
+              found.products
+                .filter((hit) => !seen.has(hit.asin))
+                .map((hit) => hit.asin),
+            );
             setLiveHits((prev) => mergeOpportunityHits(prev, found.products));
             setSources(found.sources);
             setQueries(found.queries);
@@ -447,14 +483,27 @@ export function AmazonAutoImportPanel({
               />
             ) : null}
           </div>
-          <p className="mt-2 flex items-center gap-2 text-[13px] text-[#141414]">
-            {liveOn ? (
-              <Loader2 className="size-3.5 shrink-0 animate-spin" />
-            ) : null}
-            {liveOn
-              ? `Scanning ${scanLabel}${queries.length ? ` · ${queries[0]}` : ""}`
-              : "Live scan is stopped. Start it to keep finding winners."}
-          </p>
+          <div
+            className="mt-3 border border-[#e5e5e5] bg-[#fafafa] px-3 py-3"
+            aria-live="polite"
+          >
+            <p className="flex items-center gap-2 text-[11px] font-medium uppercase tracking-wide text-[#707070]">
+              {liveOn ? (
+                <Loader2 className="size-3.5 animate-spin text-[#141414]" />
+              ) : null}
+              {liveOn ? "Analyzing live" : "Live scan stopped"}
+            </p>
+            <p className="mt-1 text-[16px] font-semibold tracking-tight text-[#141414]">
+              {liveOn ? scanLabel : "Start live scan to keep finding winners"}
+            </p>
+            <p className="mt-0.5 text-[13px] text-[#707070]">
+              {liveOn
+                ? queries.length
+                  ? `Now reading ${queries.join(" · ")}`
+                  : "Opening Amazon and eBay asking prices"
+                : "Products stay in the list until you import them."}
+            </p>
+          </div>
         </div>
       ) : (
         <form
@@ -638,62 +687,88 @@ export function AmazonAutoImportPanel({
               {picked.length === hits.length ? "Clear" : "Select all"}
             </button>
           </div>
-          <ul className="mt-2 grid max-h-[36rem] grid-cols-1 gap-2 overflow-y-auto sm:grid-cols-2">
-            {hits.map((hit) => {
-              const checked = picked.includes(hit.asin);
-              return (
-                <li key={hit.asin}>
-                  <label
-                    className={cn(
-                      "flex h-full cursor-pointer flex-col border bg-white p-2",
-                      checked
-                        ? "border-[#141414]"
-                        : "border-[#e5e5e5] hover:border-[#141414]",
-                    )}
+          <ul className="mt-2 grid max-h-[40rem] grid-cols-1 gap-2 overflow-y-auto sm:grid-cols-2">
+            <AnimatePresence initial={false}>
+              {hits.map((hit) => {
+                const checked = picked.includes(hit.asin);
+                const fresh = freshAsins.includes(hit.asin);
+                const hero = heroFor(hit, mode);
+                return (
+                  <motion.li
+                    key={hit.asin}
+                    layout
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
                   >
-                    <span className="flex items-start gap-2">
-                      <input
-                        type="checkbox"
-                        checked={checked}
-                        disabled={locked}
-                        onChange={() => {
-                          setPicked((prev) =>
-                            prev.includes(hit.asin)
-                              ? prev.filter((id) => id !== hit.asin)
-                              : [...prev, hit.asin],
-                          );
-                        }}
-                        className="mt-1 size-4 accent-[#141414]"
-                      />
-                      {hit.imageUrl ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          src={hit.imageUrl}
-                          alt=""
-                          className="h-20 w-20 shrink-0 object-contain"
-                        />
-                      ) : (
-                        <span className="h-20 w-20 shrink-0 bg-[#f4f4f4]" />
+                    <label
+                      className={cn(
+                        "flex h-full cursor-pointer flex-col border bg-white p-2",
+                        checked
+                          ? "border-[#141414]"
+                          : "border-[#e5e5e5] hover:border-[#141414]",
                       )}
-                      <span className="min-w-0 flex-1">
-                        <span className="line-clamp-2 text-[13px] font-medium leading-snug text-[#141414]">
-                          {hit.title || hit.asin}
+                    >
+                      {fresh ? (
+                        <span className="mb-1 text-[10px] font-semibold tracking-[0.14em] text-[#707070] uppercase">
+                          Just found
                         </span>
-                        <span className="mt-1 block text-[12px] text-[#707070]">
-                          {eligibilityCopy(hit, mode)}
-                          {hit.brand ? ` · ${hit.brand}` : ""}
+                      ) : null}
+                      <span className="flex items-start gap-2">
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          disabled={locked}
+                          onChange={() => {
+                            setPicked((prev) =>
+                              prev.includes(hit.asin)
+                                ? prev.filter((id) => id !== hit.asin)
+                                : [...prev, hit.asin],
+                            );
+                          }}
+                          className="mt-1 size-4 accent-[#141414]"
+                        />
+                        {hit.imageUrl ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={hit.imageUrl}
+                            alt=""
+                            className="h-24 w-24 shrink-0 object-contain"
+                          />
+                        ) : (
+                          <span className="h-24 w-24 shrink-0 bg-[#f4f4f4]" />
+                        )}
+                        <span className="min-w-0 flex-1">
+                          <span className="line-clamp-2 text-[13px] font-medium leading-snug text-[#141414]">
+                            {hit.title || hit.asin}
+                          </span>
+                          <span className="mt-1 block text-[12px] text-[#707070]">
+                            {eligibilityCopy(hit, mode)}
+                            {hit.brand ? ` · ${hit.brand}` : ""}
+                          </span>
+                          <span className="mt-2 block">
+                            <span className="block text-[10px] font-medium uppercase tracking-wide text-[#707070]">
+                              {hero.kicker}
+                            </span>
+                            <span className="block text-[22px] font-semibold tracking-tight tabular-nums text-[#141414]">
+                              {hero.value}
+                            </span>
+                            <span className="block text-[12px] text-[#707070]">
+                              {hero.detail}
+                            </span>
+                          </span>
                         </span>
                       </span>
-                    </span>
-                    <span className="mt-2 grid grid-cols-3 gap-1">
-                      {metricsFor(hit, mode).map(([label, value]) => (
-                        <Metric key={label} label={label} value={value} />
-                      ))}
-                    </span>
-                  </label>
-                </li>
-              );
-            })}
+                      <span className="mt-2 grid grid-cols-3 gap-1">
+                        {metricsFor(hit, mode).map(([label, value]) => (
+                          <Metric key={label} label={label} value={value} />
+                        ))}
+                      </span>
+                    </label>
+                  </motion.li>
+                );
+              })}
+            </AnimatePresence>
           </ul>
           <button
             type="button"

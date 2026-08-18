@@ -17,6 +17,7 @@ import {
   syncRelated,
   toDbColumns,
 } from "@/lib/products/persistence";
+import { ebayReadyImportFields } from "@/lib/opportunity/ebay-ready";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -233,25 +234,50 @@ export async function POST(request: Request) {
     );
   }
 
+  const tokens = await loadWinnerMarketTokens(auth.supabase, auth.user.id);
   const saved: Array<{ id: string; asin: string; title: string }> = [];
 
   for (const item of imported) {
     try {
+      const ready = await ebayReadyImportFields({
+        title: item.title,
+        brand: item.brand,
+        features: item.features,
+        ebayToken: tokens.ebayToken,
+        userId: auth.user.id,
+        supabase: auth.supabase,
+      });
       const data = productBodySchema.parse({
         title: item.title.slice(0, 80),
         brand: item.brand,
         sku: item.sku,
         amazonAsin: item.asin,
         upc: item.upc,
-        categoryName: body.category,
+        categoryId: ready.categoryId,
+        categoryName: ready.categoryName || body.category,
         condition: "New",
         conditionId: "NEW",
         price: item.price,
         quantity: 1,
         features: item.features,
-        status: "Uploaded",
+        status: "Needs Review",
+        descriptionSummary: ready.descriptionSummary,
+        descriptionHtml: ready.descriptionHtml,
+        itemLocation: ready.itemLocation,
+        postalCode: ready.postalCode,
+        country: ready.country,
+        handlingTime: ready.handlingTime,
+        packageWeightLbs: ready.packageWeightLbs,
+        packageWeightOz: ready.packageWeightOz,
+        packageLengthIn: ready.packageLengthIn,
+        packageWidthIn: ready.packageWidthIn,
+        packageDepthIn: ready.packageDepthIn,
+        packageSource: ready.packageSource,
         itemSpecifics: [
           { key: "C:ASIN", label: "ASIN", value: item.asin },
+          ...(item.brand
+            ? [{ key: "C:Brand", label: "Brand", value: item.brand }]
+            : []),
         ],
         images: item.dbImages,
       });

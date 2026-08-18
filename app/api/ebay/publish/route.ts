@@ -54,7 +54,7 @@ const bodySchema = z.object({
       title: z.string().min(1),
       descriptionHtml: z.string().optional().default(""),
       descriptionSummary: z.string().optional().default(""),
-      categoryId: z.string().min(1),
+      categoryId: z.string().optional().default(""),
       categoryName: z.string().optional().default(""),
       brand: z.string().optional().default(""),
       model: z.string().optional().default(""),
@@ -270,10 +270,19 @@ export async function POST(request: Request) {
   try {
     data = bodySchema.parse(await request.json());
   } catch (error) {
+    const issues =
+      error && typeof error === "object" && "issues" in error
+        ? (error as { issues: Array<{ path: (string | number)[]; message: string }> })
+            .issues
+        : [];
+    const categoryIssue = issues.some((issue) =>
+      issue.path.includes("categoryId"),
+    );
     return NextResponse.json(
       {
-        error:
-          error instanceof Error ? error.message : "Invalid publish payload",
+        error: categoryIssue
+          ? "This listing still needs an eBay category. Higlou will pick one from the title on the next try."
+          : "The listing is missing a required field. Open Review and try publish again.",
       },
       { status: 400 },
     );

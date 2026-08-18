@@ -47,6 +47,15 @@ describe("Amazon auto-import ranking", () => {
     });
   });
 
+  it("maps a caulking tool title to an eBay hand-tools leaf", async () => {
+    const { resolveEbayCategory } = await import("@/config/ebay-categories");
+    const hit = resolveEbayCategory({
+      title: "Saker Silicone Caulking Tool 3-in-1 Grout Removal Tool",
+      productType: "caulking tool",
+    });
+    expect(hit.categoryId).toBe("20779");
+  });
+
   it("rotates specific product types instead of the same Amazon bestsellers", () => {
     const first = pickCategoryQueries({ categoryId: "home", seed: 0, count: 3 });
     const next = pickCategoryQueries({ categoryId: "home", seed: 3, count: 3 });
@@ -310,11 +319,14 @@ describe("Amazon auto-import stays an eBay draft flow", () => {
     expect(panel).toMatch(/Manual search/);
     expect(panel).toMatch(/Start live scan/);
     expect(panel).toMatch(/Stop live scan/);
+    expect(panel).toMatch(/Just found/);
+    expect(panel).toMatch(/Est\. eBay profit/);
+    expect(panel).toMatch(/Analyzing live/);
     expect(panel).toMatch(/Product name, ASIN, or Amazon link/);
     expect(panel).toMatch(/Find opportunities/);
     expect(panel).toMatch(/Keepa is not connected/);
     expect(panel).toMatch(/seed: nextRound - 1/);
-    expect(modes).toMatch(/Import \$\{count\} for eBay/);
+    expect(modes).toMatch(/Import \$\{count\} ready for eBay/);
     expect(modes).toMatch(/Import \$\{count\} for Amazon/);
     expect(modes).toMatch(/Import \$\{count\} for Amazon and eBay/);
     expect(panel).toMatch(/Choose a category/);
@@ -340,8 +352,10 @@ describe("Amazon auto-import stays an eBay draft flow", () => {
     expect(search).toMatch(/body\.excludeAsins/);
     expect(search).toMatch(/seed: body\.seed/);
     expect(search).not.toMatch(/status: 409/);
+    expect(importRoute).toMatch(/ebayReadyImportFields/);
+    expect(importRoute).toMatch(/categoryId: ready\.categoryId/);
+    expect(importRoute).toMatch(/status: "Needs Review"/);
     expect(importRoute).toMatch(/ebayProfitPrice/);
-    expect(importRoute).toMatch(/status: "Uploaded"/);
     expect(importRoute).toMatch(/id: primarySaved\.id/);
     expect(importRoute).not.toMatch(/publishAmazonOffer/);
     expect(importRoute).not.toMatch(/AMAZON_NOT_CONNECTED/);
@@ -354,6 +368,8 @@ describe("Amazon auto-import stays an eBay draft flow", () => {
     expect(engine).toMatch(/checkAmazonEligibility/);
     expect(engine).toMatch(/getAmazonFeesEstimate/);
     expect(engine).toMatch(/searchEbayLivePrices/);
+    const publish = readRepo("app/api/ebay/publish/route.ts");
+    expect(publish).toMatch(/categoryId: z\.string\(\)\.optional\(\)\.default\(""\)/);
     const tokens = readRepo("lib/amazon/winner-tokens.ts");
     expect(tokens).toMatch(/getValidAmazonAccessToken/);
     expect(tokens).toMatch(/sellingPartnerId/);

@@ -178,7 +178,7 @@ describe("opportunity channel copy", () => {
   it("never sends Sell on Amazon to an eBay import button", () => {
     expect(importActionLabel("amazon", 2, false)).toBe("Import 2 for Amazon");
     expect(importActionLabel("amazon_to_ebay", 2, false)).toBe(
-      "Import 2 for eBay",
+      "Import 2 ready for eBay",
     );
     expect(importActionLabel("supplier", 2, false)).toBe(
       "Import 2 for Amazon and eBay",

@@ -68,7 +68,7 @@ export function importActionLabel(
   }
   if (mode === "amazon") return `Import ${count} for Amazon`;
   if (mode === "supplier") return `Import ${count} for Amazon and eBay`;
-  return `Import ${count} for eBay`;
+  return `Import ${count} ready for eBay`;
 }
 
 export function onlySellableForMode(

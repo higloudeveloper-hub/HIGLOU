@@ -425,6 +425,7 @@ export async function getAmazonProductTypeSchema(opts: {
       ? schemaJson.required.map(String)
       : [],
     properties: schemaJson.properties || {},
+    raw: schemaJson as Record<string, unknown>,
   };
 }
 

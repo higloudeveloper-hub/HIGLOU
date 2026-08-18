@@ -39,6 +39,7 @@ export type AmazonProductTypeSchema = {
   productType: string;
   required: string[];
   properties: Record<string, Record<string, unknown>>;
+  raw?: Record<string, unknown>;
 };
 
 export type AmazonCatalogSnapshot = {
@@ -108,6 +109,8 @@ const SKIP_CATALOG_KEYS = new Set([
   "condition_type",
   "merchant_suggested_asin",
   "list_price",
+  "unit_count",
+  "unit_count_type",
 ]);
 
 const SAFETY_OBJECT_KEYS = new Set(["battery", "lithium_battery", "hazmat"]);
@@ -163,8 +166,68 @@ export function countryOfOriginCode(value?: string): string {
   return COUNTRY_ISO[raw.toLowerCase()] || "US";
 }
 
+function lookupSchemaPointer(
+  root: Record<string, unknown> | undefined,
+  pointer: string,
+): unknown {
+  if (!root || !pointer.startsWith("#/")) return undefined;
+  let cur: unknown = root;
+  for (const part of pointer.slice(2).split("/")) {
+    if (!cur || typeof cur !== "object") return undefined;
+    cur = (cur as Record<string, unknown>)[decodeURIComponent(part)];
+  }
+  return cur;
+}
+
+function derefSchemaNode(
+  node: unknown,
+  root?: Record<string, unknown>,
+  depth = 0,
+): unknown {
+  if (!node || typeof node !== "object" || depth > 10) return node;
+  if (Array.isArray(node)) {
+    return node.map((item) => derefSchemaNode(item, root, depth + 1));
+  }
+  const obj = { ...(node as Record<string, unknown>) };
+  if (typeof obj.$ref === "string" && root) {
+    const target = lookupSchemaPointer(root, obj.$ref);
+    delete obj.$ref;
+    const merged = {
+      ...(target && typeof target === "object" && !Array.isArray(target)
+        ? (target as Record<string, unknown>)
+        : {}),
+      ...obj,
+    };
+    return derefSchemaNode(merged, root, depth + 1);
+  }
+  if (obj.properties && typeof obj.properties === "object") {
+    const next: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(
+      obj.properties as Record<string, unknown>,
+    )) {
+      next[key] = derefSchemaNode(value, root, depth + 1);
+    }
+    obj.properties = next;
+  }
+  if (obj.items) obj.items = derefSchemaNode(obj.items, root, depth + 1);
+  return obj;
+}
+
+function schemaRoot(
+  schema?: AmazonProductTypeSchema | null,
+): Record<string, unknown> | undefined {
+  if (!schema) return undefined;
+  if (schema.raw) return schema.raw;
+  return {
+    properties: schema.properties,
+    required: schema.required,
+  };
+}
+
 function propertyOf(schema: AmazonProductTypeSchema | null | undefined, name: string) {
-  return schema?.properties?.[name] || null;
+  const raw = schema?.properties?.[name];
+  if (!raw) return null;
+  return derefSchemaNode(raw, schemaRoot(schema)) as Record<string, unknown>;
 }
 
 function itemRequired(prop: Record<string, unknown> | null): string[] {
@@ -360,16 +423,72 @@ function nestedEnum(prop: Record<string, unknown> | null, field: string): string
   return [];
 }
 
+function nestedFieldProp(
+  prop: Record<string, unknown> | null,
+  field: string,
+): Record<string, unknown> | null {
+  const items = (prop?.items || {}) as {
+    properties?: Record<string, Record<string, unknown>>;
+  };
+  return items.properties?.[field] || null;
+}
+
 function fieldTypeIsArray(
   prop: Record<string, unknown> | null,
   field: string,
 ): boolean {
-  const items = (prop?.items || {}) as {
-    properties?: Record<string, Record<string, unknown>>;
-  };
-  const fieldProp = items.properties?.[field];
+  const fieldProp = nestedFieldProp(prop, field);
   if (!fieldProp) return false;
   return Boolean(fieldProp.items) || fieldProp.type === "array";
+}
+
+function fieldWantsLanguageTag(fieldProp: Record<string, unknown> | null): boolean {
+  if (!fieldProp) return true;
+  const direct = fieldProp.properties as Record<string, unknown> | undefined;
+  if (direct && "language_tag" in direct) return true;
+  const items = (fieldProp.items || {}) as {
+    properties?: Record<string, unknown>;
+    required?: string[];
+  };
+  if (items.properties && "language_tag" in items.properties) return true;
+  const required = [
+    ...(Array.isArray(fieldProp.required) ? fieldProp.required.map(String) : []),
+    ...(Array.isArray(items.required) ? items.required.map(String) : []),
+  ];
+  return required.includes("language_tag");
+}
+
+function pickUnitCountType(options: string[]): string {
+  const picked = pickFromEnums(options, [
+    "Count",
+    "count",
+    "each",
+    "item",
+    "piece",
+    "set",
+    "pair",
+  ]);
+  if (!picked || /^kit$/i.test(picked)) {
+    return (
+      options.find((option) => /^(count|each|item|piece|set|pair)$/i.test(option)) ||
+      "Count"
+    );
+  }
+  return picked;
+}
+
+function amazonCountTypePayload(
+  prop: Record<string, unknown> | null,
+  type: string,
+): unknown {
+  const fieldProp = nestedFieldProp(prop, "type");
+  if (fieldProp && (fieldProp.type === "string" || Array.isArray(fieldProp.enum))) {
+    return type;
+  }
+  const cell: Record<string, unknown> = { value: type };
+  if (fieldWantsLanguageTag(fieldProp)) cell.language_tag = "en_US";
+  if (fieldTypeIsArray(prop, "type")) return [cell];
+  return cell;
 }
 
 function amazonUnitCountRows(
@@ -379,23 +498,14 @@ function amazonUnitCountRows(
   const prop = propertyOf(schema, "unit_count");
   const allowed = schemaKeys(schema);
   if (!prop && !keepKey("unit_count", allowed)) return null;
-  const typeOptions = nestedEnum(prop, "type");
-  const type = pickFromEnums(typeOptions, [
-    "count",
-    "Count",
-    "each",
-    "item",
-    "kit",
-    "piece",
-  ]);
-  const row: Record<string, unknown> = {
-    value: 1,
-    marketplace_id: marketplaceId,
-  };
-  if (type) {
-    row.type = fieldTypeIsArray(prop, "type") ? [{ value: type }] : type;
-  }
-  return [row];
+  const type = pickUnitCountType(nestedEnum(prop, "type"));
+  return [
+    {
+      value: 1,
+      marketplace_id: marketplaceId,
+      type: amazonCountTypePayload(prop, type),
+    },
+  ];
 }
 
 function amazonUnitCountTypeRows(
@@ -405,9 +515,10 @@ function amazonUnitCountTypeRows(
   const allowed = schemaKeys(schema);
   if (!keepKey("unit_count_type", allowed)) return null;
   const prop = propertyOf(schema, "unit_count_type");
-  const type =
-    pickEnum(prop, ["count", "Count", "each", "item", "kit"]) ||
-    pickFromEnums(valueEnum(prop), ["count", "Count"]);
+  const type = pickUnitCountType([
+    ...valueEnum(prop),
+    ...nestedEnum(prop, "value"),
+  ]);
   if (!type) return null;
   return [{ value: type, marketplace_id: marketplaceId }];
 }

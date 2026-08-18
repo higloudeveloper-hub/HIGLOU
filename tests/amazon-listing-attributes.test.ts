@@ -783,4 +783,82 @@ describe("Amazon complete listing attributes", () => {
       (fixed.unit_count as Array<{ type: Array<{ value: string }> }>)[0].type,
     ).toEqual([{ value: "Count" }]);
   });
+
+  it("resolves unit_count $ref schemas and never copies catalog type kit", () => {
+    const unitCountDef = {
+      type: "array",
+      items: {
+        required: ["value", "type"],
+        properties: {
+          value: { type: "number" },
+          type: {
+            type: "object",
+            required: ["value", "language_tag"],
+            properties: {
+              value: { enum: ["Count", "Ounce"] },
+              language_tag: { type: "string" },
+            },
+          },
+        },
+      },
+    };
+    const raw = {
+      $defs: { unit_count: unitCountDef },
+      required: ["unit_count"],
+      properties: {
+        unit_count: { $ref: "#/$defs/unit_count" },
+        brand: {},
+        item_name: {},
+        merchant_suggested_asin: {},
+        condition_type: {},
+        fulfillment_availability: {},
+        purchasable_offer: {},
+        list_price: {},
+      },
+    };
+    const attributes = buildAmazonListingAttributes({
+      marketplaceId: AMAZON_US_MARKETPLACE_ID,
+      asin: "B08HRPDBFF",
+      schema: {
+        productType: "TESTER",
+        required: ["unit_count", "item_name"],
+        properties: raw.properties,
+        raw,
+      },
+      catalog: {
+        asin: "B08HRPDBFF",
+        title: "Hi-Spec Network Cable Testing Tool Kit",
+        productType: "TESTER",
+        images: [],
+        attributes: {
+          brand: [{ value: "Hi-Spec" }],
+          unit_count: [{ value: 1, type: "kit" }],
+        },
+      },
+      listing: {
+        title: "Hi-Spec Network Cable Testing & Wiring Tool Kit Set - 9 Piece",
+        brand: "Hi-Spec",
+        price: 66,
+        quantity: 1,
+        description: "Nine-piece network cable tester and wiring tool kit.",
+        images: ["https://images.example.com/kit.jpg"],
+      },
+    });
+    expect(attributes.unit_count).toEqual([
+      expect.objectContaining({
+        value: 1,
+        type: { value: "Count", language_tag: "en_US" },
+      }),
+    ]);
+    expect(
+      copyAmazonCatalogAttributes(
+        { unit_count: [{ value: 1, type: "kit" }], brand: [{ value: "Hi-Spec" }] },
+        {
+          productType: "TESTER",
+          required: [],
+          properties: { brand: {}, unit_count: {} },
+        },
+      ).unit_count,
+    ).toBeUndefined();
+  });
 });

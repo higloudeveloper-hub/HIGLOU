@@ -2,39 +2,35 @@
 
 Higlou lists an **offer** on a product Amazon already sells. It matches by **UPC** or **ASIN**. It does not create a new Amazon catalog product (brand gating / product-type schemas).
 
+Private SP-API apps (Higlou Store) do not expose Login/Redirect URIs. Connect by pasting the self-authorize **refresh token** in Settings.
+
 ## One-time setup (Higlou admin)
 
-1. In [Seller Central](https://sellercentral.amazon.com/) go to **Apps and Services → Develop Apps → Add new app client**.
-2. Roles: **Product Listing**, plus Inventory/Pricing if asked.
-3. Register these URIs (production):
-   - Login URI: `https://higlou.vercel.app/api/amazon/oauth/login`
-   - Redirect URI: `https://higlou.vercel.app/api/amazon/oauth/callback`
-4. Copy LWA client id, client secret, and application id into Vercel:
+1. Create the SP-API app in the Solution Provider Portal (Production, Sellers). The Amazon app name can stay whatever Amazon approved.
+2. Copy LWA client id, client secret, and application id into the **Higlou** Vercel project (`higlou.vercel.app`):
 
 ```
 AMAZON_SP_API_ENV=production
 AMAZON_LWA_CLIENT_ID=...
 AMAZON_LWA_CLIENT_SECRET=...
-AMAZON_APP_ID=amzn1.sellerapps.app....
+AMAZON_APP_ID=amzn1.sp.solution....
 AMAZON_MARKETPLACE_ID=ATVPDKIKX0DER
 AMAZON_APP_DRAFT=1
 ```
 
-Token encryption reuses `EBAY_TOKEN_ENCRYPTION_KEY` unless `AMAZON_TOKEN_ENCRYPTION_KEY` is set.
+Token encryption reuses `EBAY_TOKEN_ENCRYPTION_KEY` unless `AMAZON_TOKEN_ENCRYPTION_KEY` is set. Optional: `AMAZON_SELLING_PARTNER_ID` if Amazon does not return the merchant token.
 
-5. Run the SQL migration [`supabase/migrations/20260818_amazon_connections.sql`](../supabase/migrations/20260818_amazon_connections.sql) on the Higlou Supabase project.
-
-6. While the app is **Draft**, keep `AMAZON_APP_DRAFT=1` so consent uses `version=beta`.
+3. Run the SQL migration [`supabase/migrations/20260818_amazon_connections.sql`](../supabase/migrations/20260818_amazon_connections.sql) on the Higlou Supabase project.
 
 ## Seller flow
 
-1. Settings → Stores → **Connect Amazon seller**
-2. Approve Higlou in Seller Central
+1. Amazon Developer Console → your app → **Ver** authorizations → copy **Ficha de actualización**
+2. Higlou Settings → Stores → paste token → **Save Amazon token**
 3. On Export: **Publish to Amazon**
 4. Higlou looks up the catalog (UPC or `AMZ-` ASIN from an Amazon import) and puts the offer (price, qty, condition)
 
 ## Key files
 
-- OAuth: `lib/amazon/sp-oauth.ts`, `app/api/amazon/oauth/*`
+- Self-authorize: `lib/amazon/sp-oauth.ts`, `app/api/amazon/self-authorize/route.ts`
 - Publish: `lib/amazon/publish-listing.ts`, `app/api/amazon/publish/route.ts`
 - UI: `components/settings/amazon-connect-form.tsx`, Export panel

@@ -1,4 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { resolveAmazonSellingPartnerId } from "@/lib/amazon/sp-api";
+import { isAmazonRefreshToken } from "@/lib/amazon/seller-id";
 import {
   amazonCallbackUrl,
   amazonSpMissingReason,
@@ -106,6 +108,38 @@ export async function refreshAmazonAccessToken(refreshToken: string) {
       client_secret: cfg.clientSecret,
     }),
   );
+}
+
+export async function saveAmazonSelfAuthorizeToken(
+  supabase: SupabaseClient,
+  userId: string,
+  refreshToken: string,
+  sellingPartnerIdHint = "",
+) {
+  if (!isAmazonSpConfigured()) {
+    throw new Error(amazonSpMissingReason());
+  }
+  const token = String(refreshToken || "").trim();
+  if (!isAmazonRefreshToken(token)) {
+    throw new Error(
+      "Paste the Amazon refresh token (it starts with Atzr|). Copy it from Authorize application, not the Client Secret.",
+    );
+  }
+
+  const tokens = await refreshAmazonAccessToken(token);
+  const sellingPartnerId =
+    sellingPartnerIdHint.trim() ||
+    (await resolveAmazonSellingPartnerId(tokens.access_token));
+  if (!sellingPartnerId) {
+    throw new Error(
+      "Amazon connected the token but did not return a seller id. Add AMAZON_SELLING_PARTNER_ID (Merchant token from Seller Central).",
+    );
+  }
+
+  await upsertAmazonConnection(supabase, userId, {
+    ...tokens,
+    refresh_token: tokens.refresh_token || token,
+  }, sellingPartnerId);
 }
 
 export async function upsertAmazonConnection(
@@ -229,30 +263,38 @@ export async function getValidAmazonAccessToken(
   if (!row || row.revoked_at || !row.refresh_token_enc) {
     throw new Error("Connect your Amazon seller account in Settings first.");
   }
-  const sellingPartnerId = String(row.selling_partner_id || "").trim();
-  if (!sellingPartnerId) {
-    throw new Error("Amazon seller id is missing. Disconnect and connect again.");
-  }
+  let sellingPartnerId = String(row.selling_partner_id || "").trim();
 
   const expiresAt = row.access_token_expires_at
     ? new Date(row.access_token_expires_at).getTime()
     : 0;
   if (row.access_token_enc && expiresAt > Date.now() + 60_000) {
-    return {
-      token: decryptSecret(row.access_token_enc, cfg.encryptionKey),
-      sellingPartnerId,
-    };
+    const token = decryptSecret(row.access_token_enc, cfg.encryptionKey);
+    if (!sellingPartnerId) {
+      sellingPartnerId = await resolveAmazonSellingPartnerId(token);
+    }
+    if (!sellingPartnerId) {
+      throw new Error("Amazon seller id is missing. Disconnect and connect again.");
+    }
+    return { token, sellingPartnerId };
   }
 
   const refreshToken = decryptSecret(row.refresh_token_enc, cfg.encryptionKey);
   try {
     const tokens = await refreshAmazonAccessToken(refreshToken);
+    if (!sellingPartnerId) {
+      sellingPartnerId = await resolveAmazonSellingPartnerId(tokens.access_token);
+    }
+    if (!sellingPartnerId) {
+      throw new Error("Amazon seller id is missing. Disconnect and connect again.");
+    }
     const nextExpires = new Date(
       Date.now() + Math.max(60, Number(tokens.expires_in || 3600) - 60) * 1000,
     ).toISOString();
     await supabase
       .from("amazon_connections")
       .update({
+        selling_partner_id: sellingPartnerId,
         access_token_enc: encryptSecret(tokens.access_token, cfg.encryptionKey),
         access_token_expires_at: nextExpires,
         refresh_token_enc: tokens.refresh_token

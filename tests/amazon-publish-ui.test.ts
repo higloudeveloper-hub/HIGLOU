@@ -11,7 +11,8 @@ describe("Amazon seller publish stays on Higlou", () => {
     const settings = readRepo("components/settings/settings-studio.tsx");
     const form = readRepo("components/settings/amazon-connect-form.tsx");
     expect(settings).toMatch(/AmazonConnectForm/);
-    expect(form).toMatch(/\/api\/amazon\/oauth\/start/);
+    expect(form).toMatch(/\/api\/amazon\/self-authorize/);
+    expect(form).toMatch(/Paste the Amazon refresh token/);
     expect(form).not.toMatch(/window\.open/);
   });
 

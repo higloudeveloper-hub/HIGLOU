@@ -1,3 +1,7 @@
+import {
+  sellingPartnerIdFromAccessToken,
+  sellingPartnerIdFromPayload,
+} from "@/lib/amazon/seller-id";
 import { getAmazonSpConfig } from "@/lib/amazon/sp-config";
 
 export type AmazonSpIssue = {
@@ -26,6 +30,27 @@ async function amazonFetch(
   });
   const json = (await res.json().catch(() => ({}))) as Record<string, unknown>;
   return { ok: res.ok, status: res.status, json };
+}
+
+export async function resolveAmazonSellingPartnerId(
+  accessToken: string,
+): Promise<string> {
+  const fromToken = sellingPartnerIdFromAccessToken(accessToken);
+  if (fromToken) return fromToken;
+
+  const fromEnv = (process.env.AMAZON_SELLING_PARTNER_ID || "").trim();
+  const paths = [
+    "/sellers/v1/account",
+    "/sellers/2021-07-01/account",
+    "/sellers/v1/marketplaceParticipations",
+  ];
+  for (const path of paths) {
+    const { ok, json } = await amazonFetch(accessToken, path);
+    if (!ok) continue;
+    const found = sellingPartnerIdFromPayload(json);
+    if (found) return found;
+  }
+  return fromEnv;
 }
 
 export function amazonIssuesText(payload: Record<string, unknown>): string {

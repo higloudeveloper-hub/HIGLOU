@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Link2, Loader2, RefreshCw, Unlink } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
 import { StoreLinkLive } from "@/components/settings/store-link-live";
 import { cn } from "@/lib/utils";
 
@@ -24,6 +25,7 @@ export function AmazonConnectForm() {
   const [busy, setBusy] = useState(false);
   const [pingMs, setPingMs] = useState<number | null>(null);
   const [pinging, setPinging] = useState(false);
+  const [refreshToken, setRefreshToken] = useState("");
 
   const load = async (opts?: { silent?: boolean }) => {
     try {
@@ -70,6 +72,26 @@ export function AmazonConnectForm() {
     return () => window.clearInterval(pulse);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- load on mount + live pulse
   }, []);
+
+  const saveToken = async () => {
+    setBusy(true);
+    try {
+      const res = await fetch("/api/amazon/self-authorize", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ refreshToken }),
+      });
+      const body = (await res.json().catch(() => null)) as { error?: string } | null;
+      if (!res.ok) throw new Error(body?.error || "Could not save Amazon token");
+      setRefreshToken("");
+      toast.success("Amazon seller connected");
+      await load();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not save Amazon token");
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const disconnect = async () => {
     setBusy(true);
@@ -119,8 +141,8 @@ export function AmazonConnectForm() {
         <p className="text-[12px] text-amber-800">{connection.missingReason}</p>
       ) : null}
 
-      <div className="flex flex-wrap gap-2">
-        {connected ? (
+      {connected ? (
+        <div className="flex flex-wrap gap-2">
           <Button
             type="button"
             variant="outline"
@@ -134,28 +156,46 @@ export function AmazonConnectForm() {
             )}
             Disconnect
           </Button>
-        ) : (
-          <Button
-            type="button"
-            disabled={!configured || busy}
-            className="higlou-cta-pulse"
-            onClick={() => {
-              window.location.href = "/api/amazon/oauth/start";
-            }}
-          >
-            <Link2 className="size-4" />
-            Connect Amazon seller
+          <Button type="button" variant="ghost" onClick={() => void load()}>
+            <RefreshCw className={cn("size-4", pinging && "animate-spin")} />
+            Refresh
           </Button>
-        )}
-        <Button type="button" variant="ghost" onClick={() => void load()}>
-          <RefreshCw className={cn("size-4", pinging && "animate-spin")} />
-          Refresh
-        </Button>
-      </div>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          <Textarea
+            value={refreshToken}
+            onChange={(event) => setRefreshToken(event.target.value)}
+            placeholder="Paste the Amazon refresh token (starts with Atzr|)"
+            className="min-h-24 font-mono text-[12px]"
+            disabled={!configured || busy}
+          />
+          <div className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              disabled={!configured || busy || !refreshToken.trim()}
+              className="higlou-cta-pulse"
+              onClick={() => void saveToken()}
+            >
+              {busy ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <Link2 className="size-4" />
+              )}
+              Save Amazon token
+            </Button>
+            <Button type="button" variant="ghost" onClick={() => void load()}>
+              <RefreshCw className={cn("size-4", pinging && "animate-spin")} />
+              Refresh
+            </Button>
+          </div>
+        </div>
+      )}
 
       <p className="text-[12px] text-muted-foreground">
-        Opens Seller Central so Higlou can put an offer on products Amazon
-        already sells. You need a UPC or ASIN on the listing.
+        Private Amazon apps do not use login links. Copy the refresh token from
+        Amazon (Ficha de actualización) and paste it here. Higlou then puts
+        offers on products Amazon already sells.
       </p>
     </div>
   );

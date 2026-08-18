@@ -179,7 +179,7 @@ export async function putAmazonListingOffer(opts: {
 }): Promise<{ sku: string; status: string; issues: AmazonSpIssue[] }> {
   const params = new URLSearchParams({
     marketplaceIds: opts.marketplaceId,
-    includedData: "issues,identifiers",
+    includedData: "issues",
   });
   const { ok, status, json } = await amazonFetch(
     opts.accessToken,

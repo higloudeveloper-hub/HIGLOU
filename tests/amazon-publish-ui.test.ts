@@ -21,4 +21,10 @@ describe("Amazon seller publish stays on Higlou", () => {
     expect(exportScreen).toMatch(/Publish to Amazon/);
     expect(exportScreen).toMatch(/onPublishToAmazon/);
   });
+
+  it("does not ask Amazon for identifiers when submitting a live offer", () => {
+    const api = readRepo("lib/amazon/sp-api.ts");
+    expect(api).toMatch(/includedData: "issues"/);
+    expect(api).not.toMatch(/includedData: "issues,identifiers"/);
+  });
 });

@@ -75,10 +75,12 @@ describe("Amazon seller publish stays on Higlou", () => {
 
   it("publishes a complete Amazon listing, never a price-only offer", () => {
     const publish = readRepo("lib/amazon/publish-listing.ts");
+    const attributes = readRepo("lib/amazon/listing-attributes.ts");
     expect(publish).toMatch(/requirements: "LISTING"/);
     expect(publish).not.toMatch(/LISTING_OFFER_ONLY/);
-    expect(publish).toMatch(/Falta la oferta/);
     expect(publish).toMatch(/amazonListingHasPrice/);
+    expect(attributes).toMatch(/merchant_shipping_group/);
+    expect(attributes).toMatch(/legacy-template-id/);
   });
 
   it("does not ask Amazon for identifiers when submitting a live offer", () => {

@@ -6,6 +6,7 @@ import {
   countryOfOriginCode,
   fillAmazonAttributesFromIssues,
   fillAmazonRequiredAttributes,
+  pickAmazonMerchantShippingGroup,
   stripAmazonHtml,
 } from "@/lib/amazon/listing-attributes";
 import { AMAZON_US_MARKETPLACE_ID } from "@/lib/amazon/sp-config";
@@ -63,6 +64,21 @@ const thermostatSchema = {
       },
     },
     merchant_suggested_asin: {},
+    merchant_shipping_group: {
+      items: {
+        required: ["value", "marketplace_id"],
+        properties: {
+          value: {
+            enum: [
+              "legacy-template-id",
+              "9bc08e3b-0e9f-40c3-96c7-0098525b901b",
+            ],
+            enumNames: ["Migrated Template", "US Template"],
+          },
+          marketplace_id: {},
+        },
+      },
+    },
     condition_type: {},
     fulfillment_availability: {},
     purchasable_offer: {},
@@ -137,6 +153,12 @@ describe("Amazon complete listing attributes", () => {
     expect(attributes.skip_offer).toBeUndefined();
     expect(amazonListingHasPrice(attributes)).toBe(true);
     expect(amazonListingHasPrice({ list_price: [{ value: 79.98 }] })).toBe(false);
+    expect(
+      (attributes.merchant_shipping_group as Array<{ value: string }>)[0].value,
+    ).toBe("legacy-template-id");
+    expect(pickAmazonMerchantShippingGroup(thermostatSchema)).toBe(
+      "legacy-template-id",
+    );
     expect(
       (attributes.purchasable_offer as Array<{ our_price: Array<{ schedule: Array<{ value_with_tax: number }> }> }>)[0]
         .our_price[0].schedule[0].value_with_tax,

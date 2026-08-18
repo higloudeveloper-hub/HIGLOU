@@ -62,6 +62,7 @@ const AMAZON_OFFER_ATTRIBUTE_KEYS = [
   "fulfillment_availability",
   "purchasable_offer",
   "list_price",
+  "merchant_shipping_group",
 ] as const;
 
 export function amazonIsBrandLockIssue(issue: {
@@ -111,6 +112,7 @@ const SKIP_CATALOG_KEYS = new Set([
   "list_price",
   "unit_count",
   "unit_count_type",
+  "merchant_shipping_group",
 ]);
 
 const SAFETY_OBJECT_KEYS = new Set(["battery", "lithium_battery", "hazmat"]);
@@ -242,6 +244,42 @@ function valueEnum(prop: Record<string, unknown> | null): string[] {
   return Array.isArray(items.properties?.value?.enum)
     ? items.properties.value.enum.map(String)
     : [];
+}
+
+function valueEnumNames(prop: Record<string, unknown> | null): string[] {
+  const items = (prop?.items || {}) as {
+    properties?: { value?: { enumNames?: string[] } };
+  };
+  return Array.isArray(items.properties?.value?.enumNames)
+    ? items.properties.value.enumNames.map(String)
+    : [];
+}
+
+/** Seller Central shipping template key from the seller-specific product-type schema. */
+export function pickAmazonMerchantShippingGroup(
+  schema?: AmazonProductTypeSchema | null,
+): string {
+  const prop = propertyOf(schema, "merchant_shipping_group");
+  const enums = valueEnum(prop);
+  if (!enums.length) return "";
+  if (enums.includes("legacy-template-id")) return "legacy-template-id";
+  const names = valueEnumNames(prop);
+  const named = names.findIndex((name) =>
+    /migrated|default|us template/i.test(name),
+  );
+  if (named >= 0 && enums[named]) return enums[named];
+  return enums[0] || "";
+}
+
+function amazonMerchantShippingGroupRows(
+  schema: AmazonProductTypeSchema | null | undefined,
+  marketplaceId: string,
+): Array<Record<string, unknown>> | null {
+  const allowed = schemaKeys(schema);
+  if (!keepKey("merchant_shipping_group", allowed)) return null;
+  const value = pickAmazonMerchantShippingGroup(schema);
+  if (!value) return null;
+  return [{ value, marketplace_id: marketplaceId }];
 }
 
 export function amazonAttributeText(value: unknown): string {
@@ -901,6 +939,8 @@ function fillSchemaDrivenDefaults(
   if (accuracy && !attributes.measurement_accuracy) {
     attributes.measurement_accuracy = accuracy;
   }
+  const shippingGroup = amazonMerchantShippingGroupRows(schema, marketplaceId);
+  if (shippingGroup) attributes.merchant_shipping_group = shippingGroup;
 
   const dims = packageInches(listing);
   if (dims) {
@@ -973,6 +1013,13 @@ export function issueAttributeKeys(issue: {
   if (/unit\s*count\s*type/i.test(message)) {
     names.add("unit_count");
     names.add("unit_count_type");
+  }
+  if (
+    /merchant\s*shipping|shipping\s*template|shipping\s*group|plantilla\s*de\s*env[ií]o/i.test(
+      message,
+    )
+  ) {
+    names.add("merchant_shipping_group");
   }
   return [...names];
 }
@@ -1178,6 +1225,9 @@ export function defaultAmazonAttribute(opts: {
       marketplaceId,
     );
   }
+  if (name === "merchant_shipping_group") {
+    return amazonMerchantShippingGroupRows(schema, marketplaceId);
+  }
   if (valueType(prop) === "boolean") {
     return [{ value: false, marketplace_id: marketplaceId }];
   }
@@ -1219,6 +1269,7 @@ export function fillAmazonAttributesFromIssues(opts: {
     "unit_count",
     "unit_count_type",
     "measurement_accuracy",
+    "merchant_shipping_group",
   ]);
   for (const name of names) {
     const identity = CATALOG_IDENTITY_KEYS.has(name);
@@ -1232,6 +1283,7 @@ export function fillAmazonAttributesFromIssues(opts: {
       catalogValue != null &&
       name !== "unit_count" &&
       name !== "unit_count_type" &&
+      name !== "merchant_shipping_group" &&
       amazonAttributeText(catalogValue) &&
       !(SAFETY_OBJECT_KEYS.has(name) && amazonSafetyObjectIncomplete(catalogValue))
     ) {

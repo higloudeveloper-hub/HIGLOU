@@ -63,11 +63,17 @@ export function CatalogImportDock({
         can sell, with room to profit.
       </p>
 
-      <div className="mt-3 grid grid-cols-3 gap-2 sm:gap-3">
+      <div
+        className={cn(
+          "mt-3 grid grid-cols-3 gap-2 sm:gap-3",
+          mode === "winners" && "sm:gap-2",
+        )}
+      >
         <StoreCard
           active={active === "amazon" || mode === "winners"}
           busy={importing === "amazon" || importing === "amazon-auto"}
           disabled={busy}
+          compact={mode === "winners"}
           onClick={() => choose("amazon")}
           header={
             <div className="flex items-center gap-1.5 bg-[#131921] px-2 py-1.5">
@@ -78,8 +84,8 @@ export function CatalogImportDock({
             </div>
           }
         >
-          <AmazonMark className="h-8 sm:h-11" />
-          <span className="mt-2 text-[11px] font-medium text-[#141414] sm:text-[12px]">
+          <AmazonMark className={mode === "winners" ? "h-5 sm:h-6" : "h-8 sm:h-11"} />
+          <span className="mt-1 text-[11px] font-medium text-[#141414] sm:text-[12px]">
             Amazon
           </span>
         </StoreCard>
@@ -88,6 +94,7 @@ export function CatalogImportDock({
           active={active === "homedepot"}
           busy={importing === "homedepot"}
           disabled={busy}
+          compact={mode === "winners"}
           onClick={() => choose("homedepot")}
           header={
             <div className="flex items-center gap-1.5 bg-[#F96302] px-2 py-1.5">
@@ -100,13 +107,20 @@ export function CatalogImportDock({
             </div>
           }
         >
-          <HomeDepotMark className="h-10 sm:h-12" />
-          <span className="mt-1.5 text-[11px] font-medium text-[#141414] sm:text-[12px]">
+          <HomeDepotMark className={mode === "winners" ? "h-6 sm:h-7" : "h-10 sm:h-12"} />
+          <span className="mt-1 text-[11px] font-medium text-[#141414] sm:text-[12px]">
             Home Depot
           </span>
         </StoreCard>
 
-        <div className="flex min-h-[108px] flex-col overflow-hidden bg-white ring-1 ring-[#e5e5e5] sm:min-h-[124px]">
+        <div
+          className={cn(
+            "flex flex-col overflow-hidden bg-white ring-1 ring-[#e5e5e5]",
+            mode === "winners"
+              ? "min-h-[72px] sm:min-h-[80px]"
+              : "min-h-[108px] sm:min-h-[124px]",
+          )}
+        >
           <div className="flex items-center gap-1.5 border-b border-[#e5e5e5] bg-white px-2 py-1.5">
             <EbayMark className="h-3.5 sm:h-4" />
             <span className="min-w-0 flex-1 truncate rounded-sm border border-[#ccc] bg-white px-2 py-0.5 text-[10px] text-[#707070]">
@@ -116,9 +130,14 @@ export function CatalogImportDock({
               <Search className="size-3" strokeWidth={2.4} />
             </span>
           </div>
-          <div className="flex min-h-0 flex-1 flex-col items-center justify-center px-2 py-3">
-            <EbayMark className="h-7 sm:h-9" />
-            <span className="mt-2 text-center text-[11px] font-medium text-[#141414] sm:text-[12px]">
+          <div
+            className={cn(
+              "flex min-h-0 flex-1 flex-col items-center justify-center px-2",
+              mode === "winners" ? "py-1.5" : "py-3",
+            )}
+          >
+            <EbayMark className={mode === "winners" ? "h-5 sm:h-6" : "h-7 sm:h-9"} />
+            <span className="mt-1 text-center text-[11px] font-medium text-[#141414] sm:text-[12px]">
               Lists on eBay
             </span>
           </div>
@@ -198,6 +217,7 @@ function StoreCard({
   active,
   busy,
   disabled,
+  compact = false,
   onClick,
   header,
   children,
@@ -205,6 +225,7 @@ function StoreCard({
   active: boolean;
   busy: boolean;
   disabled: boolean;
+  compact?: boolean;
   onClick: () => void;
   header: ReactNode;
   children: ReactNode;
@@ -215,14 +236,20 @@ function StoreCard({
       onClick={onClick}
       disabled={disabled}
       className={cn(
-        "flex min-h-[108px] flex-col overflow-hidden bg-white text-left transition sm:min-h-[124px]",
+        "flex flex-col overflow-hidden bg-white text-left transition",
+        compact ? "min-h-[72px] sm:min-h-[80px]" : "min-h-[108px] sm:min-h-[124px]",
         active ? "ring-2 ring-[#141414]" : "ring-1 ring-[#e5e5e5] hover:ring-[#141414]",
         busy && "ring-2 ring-[#141414]",
         disabled && !busy && "opacity-50",
       )}
     >
       {header}
-      <span className="flex min-h-0 flex-1 flex-col items-center justify-center px-2 py-3">
+      <span
+        className={cn(
+          "flex min-h-0 flex-1 flex-col items-center justify-center px-2",
+          compact ? "py-1.5" : "py-3",
+        )}
+      >
         {children}
       </span>
     </button>

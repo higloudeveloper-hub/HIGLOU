@@ -259,6 +259,10 @@ describe("Amazon auto-import stays an eBay draft flow", () => {
     expect(panel).toMatch(/How many/);
     expect(panel).toMatch(/type="checkbox"/);
     expect(panel).toMatch(/Import \$\{selected\.length\} for eBay/);
+    expect(panel).toMatch(/Checking if your Amazon account can sell them/);
+    expect(panel).toMatch(/sm:grid-cols-2/);
+    expect(panel).toMatch(/label="Score"/);
+    expect(panel).toMatch(/label="Profit"/);
     expect(panel).toMatch(/settings#amazon-store/);
     expect(panel).toMatch(/settings#ebay-store/);
     expect(panel).toMatch(/active listings, not sold/);

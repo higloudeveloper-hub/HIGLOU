@@ -1,11 +1,15 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { Check, Loader2 } from "lucide-react";
 import {
   AMAZON_WINNER_CATEGORIES,
   AMAZON_WINNER_LIMITS,
 } from "@/lib/amazon/winner-categories";
-import type { OpportunityMode, OpportunityProduct } from "@/lib/opportunity/types";
+import type {
+  OpportunityMode,
+  OpportunityProduct,
+} from "@/lib/opportunity/types";
 import { cn } from "@/lib/utils";
 
 type WinnerSources = {
@@ -15,44 +19,66 @@ type WinnerSources = {
   ebayLive?: boolean;
 };
 
-const MODES: Array<{ id: OpportunityMode; label: string }> = [
-  { id: "amazon_to_ebay", label: "Amazon → eBay" },
-  { id: "amazon", label: "Sell on Amazon" },
-  { id: "supplier", label: "Supplier → both" },
+const MODES: Array<{ id: OpportunityMode; label: string; hint: string }> = [
+  {
+    id: "amazon_to_ebay",
+    label: "Amazon → eBay",
+    hint: "Buy on Amazon. List on eBay.",
+  },
+  {
+    id: "amazon",
+    label: "Sell on Amazon",
+    hint: "Your cost vs Amazon fees.",
+  },
+  {
+    id: "supplier",
+    label: "Supplier → both",
+    hint: "Home Depot or wholesale cost.",
+  },
+];
+
+const SEARCH_STEPS = [
+  "Finding products in this category",
+  "Checking if your Amazon account can sell them",
+  "Reading live Amazon and eBay asking prices",
+  "Scoring profit, demand, and competition",
 ];
 
 function money(n: number | null | undefined) {
-  if (n == null) return "";
+  if (n == null) return "—";
   return `$${n.toFixed(2)}`;
 }
 
 function pct(n: number | null | undefined) {
-  if (n == null) return "";
+  if (n == null) return "—";
   return `${Math.round(n * 100)}%`;
 }
 
-function hitMeta(hit: OpportunityProduct) {
-  const parts: string[] = [`${hit.score}/100`];
-  if (hit.eligibility === "SELLABLE") parts.push("Can sell");
-  else if (hit.eligibility === "APPROVAL_REQUIRED") parts.push("Needs approval");
-  else if (hit.eligibility === "RESTRICTED") parts.push("Blocked");
-  if (hit.netProfit != null) parts.push(`Profit ${money(hit.netProfit)}`);
-  if (hit.roi != null) parts.push(`ROI ${pct(hit.roi)}`);
-  if (hit.sellerCount != null) parts.push(`${hit.sellerCount} sellers`);
-  if (hit.salesRank && hit.salesRankLabel !== "Amazon search") {
-    parts.push(`BSR ${hit.salesRank.toLocaleString()}`);
-  }
-  const amazon = money(hit.amazonPrice);
-  if (amazon) parts.push(`Amazon ${amazon}`);
-  const ebay = money(hit.ebayActiveMedian ?? hit.ebayPrice);
-  if (ebay) {
-    parts.push(
-      hit.ebayActiveCount
-        ? `eBay ask ${ebay} (${hit.ebayActiveCount} active)`
-        : `eBay ask ${ebay}`,
-    );
-  }
-  return parts.join(" · ");
+function eligibilityCopy(hit: OpportunityProduct) {
+  if (hit.eligibility === "SELLABLE") return "You can sell";
+  if (hit.eligibility === "APPROVAL_REQUIRED") return "Needs Amazon approval";
+  if (hit.eligibility === "RESTRICTED") return "Blocked for your account";
+  if (hit.eligibility === "CONDITION_RESTRICTED") return "Wrong condition";
+  return "Eligibility unknown";
+}
+
+function Metric({
+  label,
+  value,
+}: {
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className="border border-[#eee] bg-[#fafafa] px-2 py-2">
+      <p className="text-[10px] font-medium uppercase tracking-wide text-[#707070]">
+        {label}
+      </p>
+      <p className="mt-0.5 truncate text-[13px] font-medium tabular-nums text-[#141414]">
+        {value}
+      </p>
+    </div>
+  );
 }
 
 export function AmazonAutoImportPanel({
@@ -69,6 +95,7 @@ export function AmazonAutoImportPanel({
   const [onlySellable, setOnlySellable] = useState(true);
   const [cost, setCost] = useState("");
   const [searching, setSearching] = useState(false);
+  const [searchStep, setSearchStep] = useState(0);
   const [importing, setImporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [hits, setHits] = useState<OpportunityProduct[]>([]);
@@ -85,9 +112,24 @@ export function AmazonAutoImportPanel({
   const costValue =
     Number.isFinite(supplierCost) && supplierCost > 0 ? supplierCost : undefined;
 
+  useEffect(() => {
+    if (!searching) {
+      setSearchStep(0);
+      return;
+    }
+    setSearchStep(0);
+    const timer = window.setInterval(() => {
+      setSearchStep((step) => Math.min(step + 1, SEARCH_STEPS.length - 1));
+    }, 2200);
+    return () => window.clearInterval(timer);
+  }, [searching]);
+
   const search = async () => {
     if (disabled || !canSearch) return;
     setSearching(true);
+    setHits([]);
+    setSources(null);
+    setPicked([]);
     setError(null);
     try {
       const response = await fetch("/api/amazon/auto-import/search", {
@@ -111,17 +153,14 @@ export function AmazonAutoImportPanel({
       if (!response.ok || !body?.ok || !body.products?.length) {
         setHits([]);
         setSources(null);
-        setPicked([]);
         setError(body?.error || "Amazon search failed.");
         return;
       }
       setHits(body.products.slice(0, limit));
       setSources(body.sources || null);
-      setPicked([]);
     } catch (err) {
       setHits([]);
       setSources(null);
-      setPicked([]);
       setError(err instanceof Error ? err.message : "Amazon search failed.");
     } finally {
       setSearching(false);
@@ -149,12 +188,14 @@ export function AmazonAutoImportPanel({
   return (
     <div className="mt-3 border-t border-[#e5e5e5] pt-3">
       <p className="text-[13px] text-[#707070]">
-        Keepa finds demand and price history. Amazon checks if you can sell it
-        and the real referral fee. eBay shows active asking prices, not sold
-        comps. Import still creates an eBay draft.
+        Step 1: how you will sell. Step 2: category. Step 3: Higlou scores the
+        products. Pick the ones to import as eBay drafts.
       </p>
 
-      <div className="mt-2 flex flex-wrap gap-1">
+      <p className="mt-3 text-[11px] font-medium uppercase tracking-wide text-[#707070]">
+        1. How you will sell
+      </p>
+      <div className="mt-1.5 grid grid-cols-3 gap-1.5">
         {MODES.map((row) => (
           <button
             key={row.id}
@@ -162,18 +203,29 @@ export function AmazonAutoImportPanel({
             disabled={disabled}
             onClick={() => setMode(row.id)}
             className={cn(
-              "h-9 px-3 text-[12px] font-medium",
+              "h-full px-2 py-2 text-left",
               mode === row.id
                 ? "bg-[#141414] text-white"
                 : "border border-[#ccc] bg-white text-[#141414]",
             )}
           >
-            {row.label}
+            <span className="block text-[12px] font-medium">{row.label}</span>
+            <span
+              className={cn(
+                "mt-0.5 block text-[11px] leading-snug",
+                mode === row.id ? "text-white/70" : "text-[#707070]",
+              )}
+            >
+              {row.hint}
+            </span>
           </button>
         ))}
       </div>
 
-      <div className="mt-2 grid gap-2 sm:grid-cols-[1fr_88px]">
+      <p className="mt-3 text-[11px] font-medium uppercase tracking-wide text-[#707070]">
+        2. Category and count
+      </p>
+      <div className="mt-1.5 grid gap-2 sm:grid-cols-[1fr_88px]">
         <label className="block">
           <span className="mb-1 block text-[11px] font-medium text-[#707070]">
             Category
@@ -235,7 +287,7 @@ export function AmazonAutoImportPanel({
           onClick={() => void search()}
           className="h-11 shrink-0 bg-[#141414] px-5 text-[14px] font-medium text-white disabled:opacity-40"
         >
-          {searching ? "Scoring…" : "Find opportunities"}
+          {searching ? "Searching…" : "Find opportunities"}
         </button>
       </div>
 
@@ -267,14 +319,84 @@ export function AmazonAutoImportPanel({
         <p className="mt-2 text-[13px] text-destructive">{error}</p>
       ) : null}
 
-      {hits.length ? (
+      {searching ? (
+        <div className="mt-3 border border-[#e5e5e5] bg-white p-3" aria-live="polite">
+          <p className="text-[13px] font-medium text-[#141414]">
+            Searching this category
+          </p>
+          <p className="mt-0.5 text-[12px] text-[#707070]">
+            Stay here. Higlou checks sellability before it spends Keepa and fee
+            calls.
+          </p>
+          <div className="mt-3 h-0.5 w-full bg-[#eee]">
+            <div
+              className="h-full bg-[#141414] transition-all duration-700"
+              style={{
+                width: `${((searchStep + 1) / SEARCH_STEPS.length) * 100}%`,
+              }}
+            />
+          </div>
+          <ol className="mt-3 grid gap-1.5">
+            {SEARCH_STEPS.map((label, index) => {
+              const done = index < searchStep;
+              const active = index === searchStep;
+              return (
+                <li
+                  key={label}
+                  className={cn(
+                    "flex items-center gap-2 text-[13px]",
+                    active
+                      ? "font-medium text-[#141414]"
+                      : done
+                        ? "text-[#141414]"
+                        : "text-[#a3a3a3]",
+                  )}
+                >
+                  {active ? (
+                    <Loader2 className="size-3.5 shrink-0 animate-spin" />
+                  ) : done ? (
+                    <Check className="size-3.5 shrink-0" strokeWidth={2.4} />
+                  ) : (
+                    <span className="size-3.5 shrink-0 border border-[#ccc]" />
+                  )}
+                  {label}
+                </li>
+              );
+            })}
+          </ol>
+          <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
+            {Array.from({ length: Math.min(limit, 3) }).map((_, index) => (
+              <div
+                key={index}
+                className="border border-[#eee] bg-[#fafafa] p-2"
+              >
+                <div className="h-24 animate-pulse bg-[#ececec]" />
+                <div className="mt-2 h-3 w-4/5 animate-pulse bg-[#ececec]" />
+                <div className="mt-2 grid grid-cols-2 gap-1">
+                  <div className="h-10 animate-pulse bg-[#ececec]" />
+                  <div className="h-10 animate-pulse bg-[#ececec]" />
+                  <div className="h-10 animate-pulse bg-[#ececec]" />
+                  <div className="h-10 animate-pulse bg-[#ececec]" />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
+      {hits.length && !searching ? (
         <div className="mt-3">
           <div className="flex items-center justify-between gap-2">
-            <p className="text-[12px] text-[#707070]">
-              {hits.length} opportunit{hits.length === 1 ? "y" : "ies"}
-              {sources?.keepa ? " with Keepa history" : ""}
-              {sources?.ebayLive ? ". eBay figures are active listings, not sold." : ""}
-            </p>
+            <div>
+              <p className="text-[11px] font-medium uppercase tracking-wide text-[#707070]">
+                3. Pick what to import
+              </p>
+              <p className="mt-0.5 text-[12px] text-[#707070]">
+                {hits.length} opportunit{hits.length === 1 ? "y" : "ies"}
+                {sources?.keepa ? " with Keepa history" : ""}. eBay figures are
+                active listings, not sold.
+              </p>
+            </div>
             <button
               type="button"
               disabled={disabled}
@@ -290,55 +412,76 @@ export function AmazonAutoImportPanel({
               {picked.length === hits.length ? "Clear" : "Select all"}
             </button>
           </div>
-          <ul className="mt-2 max-h-80 divide-y divide-[#eee] overflow-y-auto border border-[#e5e5e5]">
+          <ul className="mt-2 grid max-h-[36rem] grid-cols-1 gap-2 overflow-y-auto sm:grid-cols-2">
             {hits.map((hit) => {
               const checked = picked.includes(hit.asin);
+              const ebay = hit.ebayActiveMedian ?? hit.ebayPrice;
               return (
                 <li key={hit.asin}>
-                  <label className="flex cursor-pointer gap-3 px-3 py-2.5">
-                    <input
-                      type="checkbox"
-                      checked={checked}
-                      disabled={disabled}
-                      onChange={() => {
-                        setPicked((prev) =>
-                          prev.includes(hit.asin)
-                            ? prev.filter((id) => id !== hit.asin)
-                            : [...prev, hit.asin],
-                        );
-                      }}
-                      className="mt-1 size-4 accent-[#141414]"
-                    />
-                    {hit.imageUrl ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={hit.imageUrl}
-                        alt=""
-                        className="size-12 shrink-0 object-contain"
-                      />
-                    ) : (
-                      <span className="size-12 shrink-0 bg-[#f4f4f4]" />
+                  <label
+                    className={cn(
+                      "flex h-full cursor-pointer flex-col border bg-white p-2",
+                      checked
+                        ? "border-[#141414]"
+                        : "border-[#e5e5e5] hover:border-[#141414]",
                     )}
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-[13px] font-medium text-[#141414]">
-                        {hit.title || hit.asin}
-                      </span>
-                      <span
-                        className={cn(
-                          "mt-0.5 block text-[12px] text-[#707070]",
-                          hit.score >= 85 && "text-[#141414]",
-                        )}
-                      >
-                        {hitMeta(hit)}
-                      </span>
-                      {hit.reasons.length ? (
-                        <span className="mt-1 block text-[11px] text-[#707070]">
-                          {hit.reasons
-                            .slice(0, 4)
-                            .map((row) => (row.ok ? row.text : row.text))
-                            .join(" · ")}
+                  >
+                    <span className="flex items-start gap-2">
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        disabled={disabled}
+                        onChange={() => {
+                          setPicked((prev) =>
+                            prev.includes(hit.asin)
+                              ? prev.filter((id) => id !== hit.asin)
+                              : [...prev, hit.asin],
+                          );
+                        }}
+                        className="mt-1 size-4 accent-[#141414]"
+                      />
+                      {hit.imageUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={hit.imageUrl}
+                          alt=""
+                          className="h-20 w-20 shrink-0 object-contain"
+                        />
+                      ) : (
+                        <span className="h-20 w-20 shrink-0 bg-[#f4f4f4]" />
+                      )}
+                      <span className="min-w-0 flex-1">
+                        <span className="line-clamp-2 text-[13px] font-medium leading-snug text-[#141414]">
+                          {hit.title || hit.asin}
                         </span>
-                      ) : null}
+                        <span className="mt-1 block text-[12px] text-[#707070]">
+                          {eligibilityCopy(hit)}
+                          {hit.brand ? ` · ${hit.brand}` : ""}
+                        </span>
+                      </span>
+                    </span>
+                    <span className="mt-2 grid grid-cols-3 gap-1">
+                      <Metric label="Score" value={`${hit.score}/100`} />
+                      <Metric label="Profit" value={money(hit.netProfit)} />
+                      <Metric label="ROI" value={pct(hit.roi)} />
+                      <Metric label="Amazon" value={money(hit.amazonPrice)} />
+                      <Metric
+                        label="eBay ask"
+                        value={
+                          ebay != null && hit.ebayActiveCount
+                            ? `${money(ebay)} · ${hit.ebayActiveCount}`
+                            : money(ebay)
+                        }
+                      />
+                      <Metric
+                        label="BSR"
+                        value={
+                          hit.salesRank &&
+                          hit.salesRankLabel !== "Amazon search"
+                            ? hit.salesRank.toLocaleString()
+                            : "—"
+                        }
+                      />
                     </span>
                   </label>
                 </li>

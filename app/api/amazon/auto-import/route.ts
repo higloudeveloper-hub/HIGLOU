@@ -12,15 +12,6 @@ import { mirrorAmazonImages } from "@/lib/amazon/mirror-images";
 import { findAmazonWinners } from "@/lib/amazon/find-winners";
 import { ebayProfitPrice } from "@/lib/amazon/winner-rank";
 import {
-  amazonSpMissingReason,
-  getAmazonSpConfig,
-  isAmazonSpConfigured,
-} from "@/lib/amazon/sp-config";
-import {
-  getAmazonConnectionPublic,
-  getValidAmazonAccessToken,
-} from "@/lib/amazon/sp-oauth";
-import {
   productBodySchema,
   syncRelated,
   toDbColumns,
@@ -173,38 +164,12 @@ export async function POST(request: Request) {
         { status: 400 },
       );
     }
-    if (!isAmazonSpConfigured()) {
-      return NextResponse.json(
-        { error: amazonSpMissingReason(), code: "AMAZON_NOT_CONFIGURED" },
-        { status: 503 },
-      );
-    }
-    const connection = await getAmazonConnectionPublic(
-      auth.supabase,
-      auth.user.id,
-    );
-    if (!connection.connected) {
-      return NextResponse.json(
-        {
-          error:
-            "Connect your Amazon seller account in Settings to search the catalog.",
-          code: "AMAZON_NOT_CONNECTED",
-        },
-        { status: 409 },
-      );
-    }
     try {
-      const { token } = await getValidAmazonAccessToken(
-        auth.supabase,
-        auth.user.id,
-      );
-      const cfg = getAmazonSpConfig();
       const winners = await findAmazonWinners({
-        accessToken: token,
-        marketplaceId: cfg.marketplaceId,
         query,
         category,
         limit: 3,
+        pageOrigin: new URL(request.url).origin,
       });
       asins = winners.map((hit) => hit.asin);
     } catch (error) {

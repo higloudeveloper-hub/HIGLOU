@@ -10,6 +10,10 @@ import {
   sortAmazonWinners,
   winnerHitsFromCatalogPayload,
 } from "@/lib/amazon/winner-rank";
+import {
+  parseAmazonSearchHtml,
+  parseAmazonSearchMarkdown,
+} from "@/lib/amazon/parse-search";
 
 function readRepo(relative: string): string {
   return readFileSync(resolve(process.cwd(), relative), "utf8");
@@ -131,6 +135,48 @@ describe("Amazon auto-import ranking", () => {
       imageUrl: "https://m.media-amazon.com/images/I/71main.jpg",
     });
   });
+
+  it("reads winners from a public Amazon search page without seller API", () => {
+    const html = `
+      <div data-component-type="s-search-result" data-asin="B0WINNER01">
+        <h2><a href="/dp/B0WINNER01"><span>Olaplex No. 3 Hair Perfector</span></a></h2>
+        <span class="a-icon-alt">4.6 out of 5 stars</span>
+        <span>32,104 ratings</span>
+        <span class="a-price-whole">28</span><span class="a-price-fraction">00</span>
+        <img src="https://m.media-amazon.com/images/I/71beauty.jpg" />
+      </div>
+      <div class="AdHolder" data-component-type="s-search-result" data-asin="B0SPONSOR1">
+        <h2><span>Sponsored cream</span></h2>
+        <span class="a-icon-alt">3.2 out of 5 stars</span>
+      </div>
+      <div data-component-type="s-search-result" data-asin="B0WINNER02">
+        <h2><span>CeraVe Moisturizing Cream</span></h2>
+        <span class="a-icon-alt">4.8 out of 5 stars</span>
+        <span>90,221 ratings</span>
+        <span>$16.99</span>
+      </div>
+    `;
+    const hits = parseAmazonSearchHtml(html);
+    expect(hits.map((row) => row.asin)).toEqual(["B0WINNER01", "B0WINNER02"]);
+    expect(hits[0].rating).toBe(4.6);
+    expect(hits[0].reviewCount).toBe(32104);
+    expect(hits[0].amazonPrice).toBe(28);
+    expect(hits[1].amazonPrice).toBe(16.99);
+  });
+
+  it("reads ASINs from a Jina Amazon search page", () => {
+    const hits = parseAmazonSearchMarkdown(`
+      [Olaplex No. 3](https://www.amazon.com/dp/B0WINNER01)
+      4.6 out of 5 stars 32,104 ratings
+      $28.00
+    `);
+    expect(hits[0]).toMatchObject({
+      asin: "B0WINNER01",
+      rating: 4.6,
+      reviewCount: 32104,
+      amazonPrice: 28,
+    });
+  });
 });
 
 describe("Amazon auto-import stays an eBay draft flow", () => {
@@ -151,5 +197,12 @@ describe("Amazon auto-import stays an eBay draft flow", () => {
     expect(importRoute).toMatch(/status: "Uploaded"/);
     expect(importRoute).not.toMatch(/publishAmazonOffer/);
     expect(importRoute).not.toMatch(/\/listings\/2021-08-01/);
+    expect(importRoute).not.toMatch(/AMAZON_NOT_CONNECTED/);
+    expect(importRoute).not.toMatch(/getValidAmazonAccessToken/);
+    expect(importRoute).not.toMatch(/Connect your Amazon seller account/);
+    const find = readRepo("lib/amazon/find-winners.ts");
+    expect(find).toMatch(/searchAmazonWinnersPage/);
+    expect(find).not.toMatch(/searchAmazonCatalogWinners/);
+    expect(find).not.toMatch(/accessToken/);
   });
 });

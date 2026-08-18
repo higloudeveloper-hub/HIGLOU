@@ -1144,7 +1144,10 @@ export function NewListingWorkspace({
     }
   };
 
-  const importAmazonWinners = async (asins: string[]): Promise<boolean> => {
+  const importAmazonWinners = async (
+    asins: string[],
+    mode: "amazon" | "amazon_to_ebay" | "supplier" = "amazon_to_ebay",
+  ): Promise<boolean> => {
     if (catalogImporting || analyzing) return false;
     const next = [
       ...new Set(
@@ -1160,7 +1163,7 @@ export function NewListingWorkspace({
       const response = await fetch("/api/amazon/auto-import", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ asins: next }),
+        body: JSON.stringify({ asins: next, mode }),
       });
       const body = (await response.json().catch(() => null)) as {
         ok?: boolean;
@@ -1177,6 +1180,7 @@ export function NewListingWorkspace({
         images?: ProductImage[];
         extras?: Array<{ id: string; asin: string; title: string }>;
         skipped?: Array<{ asin: string; reason: string }>;
+        mode?: "amazon" | "amazon_to_ebay" | "supplier";
       } | null;
       if (!response.ok || !body?.ok || !body.images?.length) {
         const message = body?.error || "Amazon auto-import failed";
@@ -1225,10 +1229,19 @@ export function NewListingWorkspace({
       setStep("photos");
       const extraCount = body.extras?.length || 0;
       const skippedCount = body.skipped?.length || 0;
+      const channel = body.mode || mode;
       toast.success(
         extraCount
-          ? `Imported ${1 + extraCount} best-reviewed Amazon winners for eBay. ${extraCount} more saved in Listings.`
-          : "Best-reviewed Amazon winner loaded for eBay.",
+          ? channel === "amazon"
+            ? `Imported ${1 + extraCount} Amazon drafts. ${extraCount} more saved in Listings. Publish from Export.`
+            : channel === "supplier"
+              ? `Imported ${1 + extraCount} drafts for Amazon and eBay. ${extraCount} more saved in Listings.`
+              : `Imported ${1 + extraCount} Amazon products for eBay. ${extraCount} more saved in Listings.`
+          : channel === "amazon"
+            ? "Amazon draft loaded. Publish to Amazon from Export."
+            : channel === "supplier"
+              ? "Draft loaded for Amazon and eBay."
+              : "Amazon product loaded for eBay.",
       );
       if (skippedCount) {
         toast.message(

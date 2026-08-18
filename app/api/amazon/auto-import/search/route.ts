@@ -9,6 +9,7 @@ import {
 import { findAmazonWinners } from "@/lib/amazon/find-winners";
 import { loadWinnerMarketTokens } from "@/lib/amazon/winner-tokens";
 import { opportunitySearchText } from "@/lib/opportunity/categories";
+import { onlySellableForMode } from "@/lib/opportunity/mode-copy";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -86,7 +87,7 @@ export async function POST(request: Request) {
       sellingPartnerId: tokens.sellingPartnerId,
       ebayToken: tokens.ebayToken,
       mode: body.mode,
-      onlySellable: body.onlySellable,
+      onlySellable: onlySellableForMode(body.mode, body.onlySellable),
       supplierCost: body.cost,
     });
     if (!found.products.length) {

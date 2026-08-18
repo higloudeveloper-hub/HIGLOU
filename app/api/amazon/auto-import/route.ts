@@ -26,6 +26,10 @@ const bodySchema = z.object({
   category: z.string().max(120).optional().default(""),
   asins: z.array(z.string().min(10).max(12)).max(5).optional().default([]),
   ebayPrice: z.number().positive().max(100000).optional(),
+  mode: z
+    .enum(["amazon", "amazon_to_ebay", "supplier"])
+    .optional()
+    .default("amazon_to_ebay"),
 });
 
 type ImportedListing = {
@@ -65,6 +69,7 @@ async function importAsin(
   ebayPrice: number | undefined,
   userId: string,
   pageOrigin: string,
+  mode: "amazon" | "amazon_to_ebay" | "supplier",
 ): Promise<ImportedListing> {
   const product = await fetchAmazonProduct(`https://www.amazon.com/dp/${asin}`, {
     pageOrigin,
@@ -77,7 +82,10 @@ async function importAsin(
   if (!images.length) {
     throw new Error("Amazon photos could not be saved.");
   }
-  const price = ebayProfitPrice(product.price, ebayPrice);
+  const price =
+    mode === "amazon"
+      ? product.price
+      : ebayProfitPrice(product.price, ebayPrice);
   const dbImages = images.map((img, index) => ({
     publicUrl: img.publicUrl,
     storagePath: img.storagePath,
@@ -204,7 +212,7 @@ export async function POST(request: Request) {
   for (const asin of asins) {
     try {
       imported.push(
-        await importAsin(asin, body.ebayPrice, auth.user.id, origin),
+        await importAsin(asin, body.ebayPrice, auth.user.id, origin, body.mode),
       );
     } catch (error) {
       skipped.push({
@@ -293,5 +301,6 @@ export async function POST(request: Request) {
     images: primary.images,
     extras: savedExtras,
     skipped,
+    mode: body.mode,
   });
 }

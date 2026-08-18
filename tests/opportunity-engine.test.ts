@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { classifyAmazonRestrictions } from "@/lib/amazon/eligibility";
 import { parseKeepaProduct } from "@/lib/keepa/parse";
+import {
+  importActionLabel,
+  onlySellableForMode,
+} from "@/lib/opportunity/mode-copy";
 import { estimateNetProfit } from "@/lib/opportunity/profit";
 import {
   opportunityGrade,
@@ -167,5 +171,19 @@ describe("Keepa parse", () => {
     });
     expect(snap?.imageUrl).toMatch(/71main/);
     expect(snap?.priceVariation90).toBeCloseTo((27 - 22) / 24, 1);
+  });
+});
+
+describe("opportunity channel copy", () => {
+  it("never sends Sell on Amazon to an eBay import button", () => {
+    expect(importActionLabel("amazon", 2, false)).toBe("Import 2 for Amazon");
+    expect(importActionLabel("amazon_to_ebay", 2, false)).toBe(
+      "Import 2 for eBay",
+    );
+    expect(importActionLabel("supplier", 2, false)).toBe(
+      "Import 2 for Amazon and eBay",
+    );
+    expect(onlySellableForMode("amazon_to_ebay")).toBe(false);
+    expect(onlySellableForMode("amazon")).toBe(true);
   });
 });

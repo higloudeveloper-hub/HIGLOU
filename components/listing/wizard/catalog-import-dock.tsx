@@ -18,7 +18,10 @@ export function CatalogImportDock({
 }: {
   importing?: false | CatalogStore | "amazon-auto";
   onImport: (url: string) => Promise<boolean | void>;
-  onAutoImport?: (asins: string[]) => Promise<boolean | void>;
+  onAutoImport?: (
+    asins: string[],
+    mode: import("@/lib/opportunity/types").OpportunityMode,
+  ) => Promise<boolean | void>;
 }) {
   const [url, setUrl] = useState("");
   const [picked, setPicked] = useState<CatalogStore | null>(null);
@@ -59,8 +62,7 @@ export function CatalogImportDock({
         Import from Amazon or Home Depot
       </p>
       <p className="mt-0.5 text-[13px] text-[#707070]">
-        Keepa, Amazon authorization, and eBay asking prices. Only products you
-        can sell, with room to profit.
+        Keepa, Amazon, and eBay. Pick a channel first: eBay, Amazon, or both.
       </p>
 
       <div

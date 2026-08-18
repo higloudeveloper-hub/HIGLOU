@@ -2,10 +2,13 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Check, Loader2 } from "lucide-react";
+import { AMAZON_WINNER_CATEGORIES, AMAZON_WINNER_LIMITS } from "@/lib/amazon/winner-categories";
 import {
-  AMAZON_WINNER_CATEGORIES,
-  AMAZON_WINNER_LIMITS,
-} from "@/lib/amazon/winner-categories";
+  importActionLabel,
+  OPPORTUNITY_MODES,
+  searchStepsFor,
+} from "@/lib/opportunity/mode-copy";
+import { estimateNetProfit } from "@/lib/opportunity/profit";
 import type {
   OpportunityMode,
   OpportunityProduct,
@@ -19,31 +22,6 @@ type WinnerSources = {
   ebayLive?: boolean;
 };
 
-const MODES: Array<{ id: OpportunityMode; label: string; hint: string }> = [
-  {
-    id: "amazon_to_ebay",
-    label: "Amazon → eBay",
-    hint: "Buy on Amazon. List on eBay.",
-  },
-  {
-    id: "amazon",
-    label: "Sell on Amazon",
-    hint: "Your cost vs Amazon fees.",
-  },
-  {
-    id: "supplier",
-    label: "Supplier → both",
-    hint: "Home Depot or wholesale cost.",
-  },
-];
-
-const SEARCH_STEPS = [
-  "Finding products in this category",
-  "Checking if your Amazon account can sell them",
-  "Reading live Amazon and eBay asking prices",
-  "Scoring profit, demand, and competition",
-];
-
 function money(n: number | null | undefined) {
   if (n == null) return "—";
   return `$${n.toFixed(2)}`;
@@ -54,21 +32,16 @@ function pct(n: number | null | undefined) {
   return `${Math.round(n * 100)}%`;
 }
 
-function eligibilityCopy(hit: OpportunityProduct) {
-  if (hit.eligibility === "SELLABLE") return "You can sell";
+function eligibilityCopy(hit: OpportunityProduct, mode: OpportunityMode) {
+  if (mode === "amazon_to_ebay") return "Buy on Amazon · list on eBay";
+  if (hit.eligibility === "SELLABLE") return "Your Amazon account can sell this";
   if (hit.eligibility === "APPROVAL_REQUIRED") return "Needs Amazon approval";
-  if (hit.eligibility === "RESTRICTED") return "Blocked for your account";
+  if (hit.eligibility === "RESTRICTED") return "Blocked for your Amazon account";
   if (hit.eligibility === "CONDITION_RESTRICTED") return "Wrong condition";
-  return "Eligibility unknown";
+  return "Connect Amazon to confirm you can sell";
 }
 
-function Metric({
-  label,
-  value,
-}: {
-  label: string;
-  value: string;
-}) {
+function Metric({ label, value }: { label: string; value: string }) {
   return (
     <div className="border border-[#eee] bg-[#fafafa] px-2 py-2">
       <p className="text-[10px] font-medium uppercase tracking-wide text-[#707070]">
@@ -81,12 +54,66 @@ function Metric({
   );
 }
 
+function metricsFor(hit: OpportunityProduct, mode: OpportunityMode) {
+  const bsr =
+    hit.salesRank && hit.salesRankLabel !== "Amazon search"
+      ? hit.salesRank.toLocaleString()
+      : "—";
+  const ebay = hit.ebayActiveMedian ?? hit.ebayPrice;
+  if (mode === "amazon") {
+    return [
+      ["Score", `${hit.score}/100`],
+      ["Amazon profit", money(hit.netProfit)],
+      ["ROI", pct(hit.roi)],
+      ["Your cost", money(hit.cost)],
+      ["Amazon price", money(hit.amazonPrice)],
+      ["BSR", bsr],
+    ] as const;
+  }
+  if (mode === "supplier") {
+    const amazonPl = estimateNetProfit({
+      salePrice: hit.amazonPrice,
+      cost: hit.cost,
+      marketplaceFee: hit.amazonFees,
+    });
+    const ebayPl = estimateNetProfit({
+      salePrice: ebay,
+      cost: hit.cost,
+      marketplaceFee: hit.ebayFees,
+    });
+    return [
+      ["Score", `${hit.score}/100`],
+      ["Amazon P/L", money(amazonPl.netProfit)],
+      ["eBay P/L", money(ebayPl.netProfit)],
+      ["Your cost", money(hit.cost)],
+      ["Amazon", money(hit.amazonPrice)],
+      ["eBay ask", money(ebay)],
+    ] as const;
+  }
+  return [
+    ["Score", `${hit.score}/100`],
+    ["eBay profit", money(hit.netProfit)],
+    ["ROI", pct(hit.roi)],
+    ["Amazon cost", money(hit.amazonPrice)],
+    [
+      "eBay ask",
+      ebay != null && hit.ebayActiveCount
+        ? `${money(ebay)} · ${hit.ebayActiveCount}`
+        : money(ebay),
+    ],
+    ["BSR", bsr],
+  ] as const;
+}
+
 export function AmazonAutoImportPanel({
   busy = false,
   onImport,
 }: {
   busy?: boolean;
-  onImport: (asins: string[]) => Promise<boolean | void>;
+  onImport: (
+    asins: string[],
+    mode: OpportunityMode,
+  ) => Promise<boolean | void>;
 }) {
   const [categoryId, setCategoryId] = useState("");
   const [extra, setExtra] = useState("");
@@ -102,6 +129,8 @@ export function AmazonAutoImportPanel({
   const [sources, setSources] = useState<WinnerSources | null>(null);
   const [picked, setPicked] = useState<string[]>([]);
 
+  const steps = searchStepsFor(mode);
+  const activeMode = OPPORTUNITY_MODES.find((row) => row.id === mode);
   const disabled = busy || searching || importing;
   const canSearch = Boolean(categoryId || extra.trim().length >= 2);
   const selected = useMemo(
@@ -111,6 +140,7 @@ export function AmazonAutoImportPanel({
   const supplierCost = Number(cost);
   const costValue =
     Number.isFinite(supplierCost) && supplierCost > 0 ? supplierCost : undefined;
+  const needsCost = mode === "amazon" || mode === "supplier";
 
   useEffect(() => {
     if (!searching) {
@@ -119,10 +149,19 @@ export function AmazonAutoImportPanel({
     }
     setSearchStep(0);
     const timer = window.setInterval(() => {
-      setSearchStep((step) => Math.min(step + 1, SEARCH_STEPS.length - 1));
+      setSearchStep((step) => Math.min(step + 1, steps.length - 1));
     }, 2200);
     return () => window.clearInterval(timer);
-  }, [searching]);
+  }, [searching, steps.length]);
+
+  const chooseMode = (next: OpportunityMode) => {
+    setMode(next);
+    setHits([]);
+    setPicked([]);
+    setSources(null);
+    setError(null);
+    if (next === "amazon") setOnlySellable(true);
+  };
 
   const search = async () => {
     if (disabled || !canSearch) return;
@@ -140,7 +179,7 @@ export function AmazonAutoImportPanel({
           categoryId,
           limit,
           mode,
-          onlySellable,
+          onlySellable: mode === "amazon_to_ebay" ? false : onlySellable,
           cost: costValue,
         }),
       });
@@ -172,7 +211,10 @@ export function AmazonAutoImportPanel({
     setImporting(true);
     setError(null);
     try {
-      const ok = await onImport(selected.map((hit) => hit.asin));
+      const ok = await onImport(
+        selected.map((hit) => hit.asin),
+        mode,
+      );
       if (ok !== false) {
         setHits([]);
         setSources(null);
@@ -187,40 +229,41 @@ export function AmazonAutoImportPanel({
 
   return (
     <div className="mt-3 border-t border-[#e5e5e5] pt-3">
-      <p className="text-[13px] text-[#707070]">
-        Step 1: how you will sell. Step 2: category. Step 3: Higlou scores the
-        products. Pick the ones to import as eBay drafts.
+      <p className="text-[11px] font-medium uppercase tracking-wide text-[#707070]">
+        1. Choose the channel
       </p>
-
-      <p className="mt-3 text-[11px] font-medium uppercase tracking-wide text-[#707070]">
-        1. How you will sell
-      </p>
-      <div className="mt-1.5 grid grid-cols-3 gap-1.5">
-        {MODES.map((row) => (
-          <button
-            key={row.id}
-            type="button"
-            disabled={disabled}
-            onClick={() => setMode(row.id)}
-            className={cn(
-              "h-full px-2 py-2 text-left",
-              mode === row.id
-                ? "bg-[#141414] text-white"
-                : "border border-[#ccc] bg-white text-[#141414]",
-            )}
-          >
-            <span className="block text-[12px] font-medium">{row.label}</span>
-            <span
+      <div className="mt-1.5 grid grid-cols-1 gap-1.5 sm:grid-cols-3">
+        {OPPORTUNITY_MODES.map((row) => {
+          const on = mode === row.id;
+          return (
+            <button
+              key={row.id}
+              type="button"
+              disabled={disabled}
+              onClick={() => chooseMode(row.id)}
               className={cn(
-                "mt-0.5 block text-[11px] leading-snug",
-                mode === row.id ? "text-white/70" : "text-[#707070]",
+                "px-3 py-2.5 text-left",
+                on
+                  ? "bg-[#141414] text-white"
+                  : "border border-[#ccc] bg-white text-[#141414]",
               )}
             >
-              {row.hint}
-            </span>
-          </button>
-        ))}
+              <span className="block text-[13px] font-medium">{row.label}</span>
+              <span
+                className={cn(
+                  "mt-1 block text-[11px] leading-snug",
+                  on ? "text-white/75" : "text-[#707070]",
+                )}
+              >
+                {row.from} → {row.to}
+              </span>
+            </button>
+          );
+        })}
       </div>
+      {activeMode ? (
+        <p className="mt-2 text-[13px] text-[#707070]">{activeMode.hint}</p>
+      ) : null}
 
       <p className="mt-3 text-[11px] font-medium uppercase tracking-wide text-[#707070]">
         2. Category and count
@@ -271,14 +314,14 @@ export function AmazonAutoImportPanel({
           disabled={disabled}
           className="h-11 min-w-0 flex-1 border border-[#ccc] bg-white px-3 text-[14px] outline-none focus:border-[#141414] disabled:opacity-60"
         />
-        {mode !== "amazon_to_ebay" ? (
+        {needsCost ? (
           <input
             value={cost}
             onChange={(e) => setCost(e.target.value)}
-            placeholder="Cost $"
+            placeholder="Your cost $"
             inputMode="decimal"
             disabled={disabled}
-            className="h-11 w-24 shrink-0 border border-[#ccc] bg-white px-3 text-[14px] outline-none focus:border-[#141414] disabled:opacity-60"
+            className="h-11 w-28 shrink-0 border border-[#ccc] bg-white px-3 text-[14px] outline-none focus:border-[#141414] disabled:opacity-60"
           />
         ) : null}
         <button
@@ -291,28 +334,66 @@ export function AmazonAutoImportPanel({
         </button>
       </div>
 
-      <label className="mt-2 flex items-center gap-2 text-[13px] text-[#141414]">
-        <input
-          type="checkbox"
-          checked={onlySellable}
-          disabled={disabled}
-          onChange={(e) => setOnlySellable(e.target.checked)}
-          className="size-4 accent-[#141414]"
-        />
-        Only show products I can sell
-      </label>
+      {mode === "supplier" ? (
+        <label className="mt-2 flex items-center gap-2 text-[13px] text-[#141414]">
+          <input
+            type="checkbox"
+            checked={onlySellable}
+            disabled={disabled}
+            onChange={(e) => setOnlySellable(e.target.checked)}
+            className="size-4 accent-[#141414]"
+          />
+          Only show products I can sell on Amazon
+        </label>
+      ) : mode === "amazon" ? (
+        <p className="mt-2 text-[12px] text-[#707070]">
+          Restricted brands for your Amazon account are hidden automatically.
+        </p>
+      ) : (
+        <p className="mt-2 text-[12px] text-[#707070]">
+          This path buys on Amazon as a shopper. eBay figures are active
+          listings, not sold.
+        </p>
+      )}
 
       <p className="mt-2 text-[12px] text-[#707070]">
-        Connect{" "}
-        <a href="/settings#amazon-store" className="underline underline-offset-2">
-          Amazon
-        </a>{" "}
-        and{" "}
-        <a href="/settings#ebay-store" className="underline underline-offset-2">
-          eBay
-        </a>
-        . Add <span className="font-medium">KEEPA_API_KEY</span> on the server
-        for history, BSR, and seller count. Search still runs without Keepa.
+        {mode === "amazon_to_ebay" ? (
+          <>
+            Connect{" "}
+            <a href="/settings#ebay-store" className="underline underline-offset-2">
+              eBay
+            </a>{" "}
+            for live asking prices.
+          </>
+        ) : mode === "amazon" ? (
+          <>
+            Connect{" "}
+            <a
+              href="/settings#amazon-store"
+              className="underline underline-offset-2"
+            >
+              Amazon
+            </a>{" "}
+            so Higlou can check authorization and fees.
+          </>
+        ) : (
+          <>
+            Connect{" "}
+            <a
+              href="/settings#amazon-store"
+              className="underline underline-offset-2"
+            >
+              Amazon
+            </a>{" "}
+            and{" "}
+            <a href="/settings#ebay-store" className="underline underline-offset-2">
+              eBay
+            </a>
+            .
+          </>
+        )}{" "}
+        Add <span className="font-medium">KEEPA_API_KEY</span> on the server for
+        history and BSR.
       </p>
 
       {error ? (
@@ -320,24 +401,26 @@ export function AmazonAutoImportPanel({
       ) : null}
 
       {searching ? (
-        <div className="mt-3 border border-[#e5e5e5] bg-white p-3" aria-live="polite">
+        <div
+          className="mt-3 border border-[#e5e5e5] bg-white p-3"
+          aria-live="polite"
+        >
           <p className="text-[13px] font-medium text-[#141414]">
-            Searching this category
+            {activeMode?.label}: searching
           </p>
           <p className="mt-0.5 text-[12px] text-[#707070]">
-            Stay here. Higlou checks sellability before it spends Keepa and fee
-            calls.
+            {activeMode?.hint}
           </p>
           <div className="mt-3 h-0.5 w-full bg-[#eee]">
             <div
               className="h-full bg-[#141414] transition-all duration-700"
               style={{
-                width: `${((searchStep + 1) / SEARCH_STEPS.length) * 100}%`,
+                width: `${((searchStep + 1) / steps.length) * 100}%`,
               }}
             />
           </div>
           <ol className="mt-3 grid gap-1.5">
-            {SEARCH_STEPS.map((label, index) => {
+            {steps.map((label, index) => {
               const done = index < searchStep;
               const active = index === searchStep;
               return (
@@ -366,10 +449,7 @@ export function AmazonAutoImportPanel({
           </ol>
           <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
             {Array.from({ length: Math.min(limit, 3) }).map((_, index) => (
-              <div
-                key={index}
-                className="border border-[#eee] bg-[#fafafa] p-2"
-              >
+              <div key={index} className="border border-[#eee] bg-[#fafafa] p-2">
                 <div className="h-24 animate-pulse bg-[#ececec]" />
                 <div className="mt-2 h-3 w-4/5 animate-pulse bg-[#ececec]" />
                 <div className="mt-2 grid grid-cols-2 gap-1">
@@ -389,12 +469,14 @@ export function AmazonAutoImportPanel({
           <div className="flex items-center justify-between gap-2">
             <div>
               <p className="text-[11px] font-medium uppercase tracking-wide text-[#707070]">
-                3. Pick what to import
+                3. {activeMode?.to}
               </p>
               <p className="mt-0.5 text-[12px] text-[#707070]">
-                {hits.length} opportunit{hits.length === 1 ? "y" : "ies"}
-                {sources?.keepa ? " with Keepa history" : ""}. eBay figures are
-                active listings, not sold.
+                {hits.length} opportunit{hits.length === 1 ? "y" : "ies"} for{" "}
+                {activeMode?.label}
+                {mode !== "amazon" && sources?.ebayLive
+                  ? ". eBay figures are active listings, not sold."
+                  : ""}
               </p>
             </div>
             <button
@@ -415,7 +497,6 @@ export function AmazonAutoImportPanel({
           <ul className="mt-2 grid max-h-[36rem] grid-cols-1 gap-2 overflow-y-auto sm:grid-cols-2">
             {hits.map((hit) => {
               const checked = picked.includes(hit.asin);
-              const ebay = hit.ebayActiveMedian ?? hit.ebayPrice;
               return (
                 <li key={hit.asin}>
                   <label
@@ -455,33 +536,15 @@ export function AmazonAutoImportPanel({
                           {hit.title || hit.asin}
                         </span>
                         <span className="mt-1 block text-[12px] text-[#707070]">
-                          {eligibilityCopy(hit)}
+                          {eligibilityCopy(hit, mode)}
                           {hit.brand ? ` · ${hit.brand}` : ""}
                         </span>
                       </span>
                     </span>
                     <span className="mt-2 grid grid-cols-3 gap-1">
-                      <Metric label="Score" value={`${hit.score}/100`} />
-                      <Metric label="Profit" value={money(hit.netProfit)} />
-                      <Metric label="ROI" value={pct(hit.roi)} />
-                      <Metric label="Amazon" value={money(hit.amazonPrice)} />
-                      <Metric
-                        label="eBay ask"
-                        value={
-                          ebay != null && hit.ebayActiveCount
-                            ? `${money(ebay)} · ${hit.ebayActiveCount}`
-                            : money(ebay)
-                        }
-                      />
-                      <Metric
-                        label="BSR"
-                        value={
-                          hit.salesRank &&
-                          hit.salesRankLabel !== "Amazon search"
-                            ? hit.salesRank.toLocaleString()
-                            : "—"
-                        }
-                      />
+                      {metricsFor(hit, mode).map(([label, value]) => (
+                        <Metric key={label} label={label} value={value} />
+                      ))}
                     </span>
                   </label>
                 </li>
@@ -494,11 +557,7 @@ export function AmazonAutoImportPanel({
             onClick={() => void importSelected()}
             className="mt-2 h-11 w-full bg-[#141414] text-[14px] font-medium text-white disabled:opacity-40"
           >
-            {importing
-              ? "Importing…"
-              : selected.length
-                ? `Import ${selected.length} for eBay`
-                : "Pick products to import"}
+            {importActionLabel(mode, selected.length, importing)}
           </button>
         </div>
       ) : null}

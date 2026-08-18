@@ -343,8 +343,15 @@ export async function findOpportunities(opts: {
   }
 
   const eligibilityPool = asins.slice(0, 16);
+  const skipAmazonGate = mode === "amazon_to_ebay";
   const eligible = await mapLimit(eligibilityPool, 4, async (id) => {
     const hit = seeds.get(id) || emptyProduct(id, mode);
+    if (skipAmazonGate) {
+      hit.eligibility = "UNKNOWN";
+      hit.eligibilityMessage =
+        "Buying on Amazon. Your seller approval is not required to resell on eBay.";
+      return hit;
+    }
     if (opts.amazonToken && opts.sellingPartnerId && opts.marketplaceId) {
       const check = await checkAmazonEligibility({
         accessToken: opts.amazonToken,
@@ -362,13 +369,16 @@ export async function findOpportunities(opts: {
   });
 
   const allowed = eligible.filter((hit) => {
+    if (skipAmazonGate) return true;
     if (!onlySellable) return hit.eligibility !== "RESTRICTED";
     if (!opts.sellingPartnerId) return true;
     return hit.eligibility === "SELLABLE";
   });
   if (!allowed.length) {
     throw new Error(
-      "Nothing in this set is sellable on your Amazon account. Restricted brands were removed.",
+      mode === "amazon" || mode === "supplier"
+        ? "Nothing in this set is sellable on your Amazon account. Restricted brands were removed."
+        : "No products passed the first filters. Try another category.",
     );
   }
 
@@ -410,7 +420,7 @@ export async function findOpportunities(opts: {
       opts.amazonToken &&
       opts.marketplaceId &&
       sellForFees &&
-      mode === "amazon"
+      (mode === "amazon" || mode === "supplier")
     ) {
       const fee = await getAmazonFeesEstimate({
         accessToken: opts.amazonToken,

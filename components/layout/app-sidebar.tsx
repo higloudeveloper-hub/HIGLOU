@@ -8,6 +8,7 @@ import {
   Home,
   Images,
   LogOut,
+  Search,
   Settings,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -22,6 +23,14 @@ export const STUDIO_NAV = [
     hint: "Money machine",
     icon: Home,
     match: (path: string) => path === "/home",
+  },
+  {
+    href: "/winners",
+    label: "Find winners",
+    hint: "Opportunities",
+    icon: Search,
+    match: (path: string) =>
+      path === "/winners" || path.startsWith("/winners/"),
   },
   {
     href: "/stats",

@@ -233,28 +233,27 @@ export async function POST(request: Request) {
     );
   }
 
-  const [primary, ...extras] = imported;
-  const savedExtras: Array<{ id: string; asin: string; title: string }> = [];
+  const saved: Array<{ id: string; asin: string; title: string }> = [];
 
-  for (const extra of extras) {
+  for (const item of imported) {
     try {
       const data = productBodySchema.parse({
-        title: extra.title.slice(0, 80),
-        brand: extra.brand,
-        sku: extra.sku,
-        amazonAsin: extra.asin,
-        upc: extra.upc,
+        title: item.title.slice(0, 80),
+        brand: item.brand,
+        sku: item.sku,
+        amazonAsin: item.asin,
+        upc: item.upc,
         categoryName: body.category,
         condition: "New",
         conditionId: "NEW",
-        price: extra.price,
+        price: item.price,
         quantity: 1,
-        features: extra.features,
+        features: item.features,
         status: "Uploaded",
         itemSpecifics: [
-          { key: "C:ASIN", label: "ASIN", value: extra.asin },
+          { key: "C:ASIN", label: "ASIN", value: item.asin },
         ],
-        images: extra.dbImages,
+        images: item.dbImages,
       });
       const { data: inserted, error } = await auth.supabase
         .from("products")
@@ -266,28 +265,43 @@ export async function POST(request: Request) {
         .single();
       if (error || !inserted) {
         skipped.push({
-          asin: extra.asin,
+          asin: item.asin,
           reason: error?.message || "Could not save listing",
         });
         continue;
       }
       await syncRelated(auth.supabase, auth.user.id, inserted.id, data);
-      savedExtras.push({
+      saved.push({
         id: String(inserted.id),
-        asin: extra.asin,
-        title: extra.title,
+        asin: item.asin,
+        title: item.title,
       });
     } catch (error) {
       skipped.push({
-        asin: extra.asin,
+        asin: item.asin,
         reason:
           error instanceof Error ? error.message : "Could not save listing",
       });
     }
   }
 
+  if (!saved.length) {
+    return NextResponse.json(
+      {
+        error: skipped[0]?.reason || "Could not save listing",
+        skipped,
+      },
+      { status: 422 },
+    );
+  }
+
+  const [primarySaved, ...savedExtras] = saved;
+  const primary =
+    imported.find((row) => row.asin === primarySaved.asin) ?? imported[0];
+
   return NextResponse.json({
     ok: true,
+    id: primarySaved.id,
     asin: primary.asin,
     amazonUrl: primary.amazonUrl,
     title: primary.title,

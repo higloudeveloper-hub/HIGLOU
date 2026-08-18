@@ -228,7 +228,7 @@ export function AmazonAutoImportPanel({
   };
 
   return (
-    <div className="mt-3 border-t border-[#e5e5e5] pt-3">
+    <div>
       <p className="text-[11px] font-medium uppercase tracking-wide text-[#707070]">
         1. Choose the channel
       </p>

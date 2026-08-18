@@ -7,27 +7,18 @@ import {
   EbayMark,
   HomeDepotMark,
 } from "@/components/brand/store-marks";
-import { AmazonAutoImportPanel } from "@/components/listing/wizard/amazon-auto-import";
 import { detectCatalogStore, type CatalogStore } from "@/lib/catalog/detect-store";
 import { cn } from "@/lib/utils";
 
 export function CatalogImportDock({
   importing = false,
   onImport,
-  onAutoImport,
 }: {
-  importing?: false | CatalogStore | "amazon-auto";
+  importing?: false | CatalogStore;
   onImport: (url: string) => Promise<boolean | void>;
-  onAutoImport?: (
-    asins: string[],
-    mode: import("@/lib/opportunity/types").OpportunityMode,
-  ) => Promise<boolean | void>;
 }) {
   const [url, setUrl] = useState("");
   const [picked, setPicked] = useState<CatalogStore | null>(null);
-  const [mode, setMode] = useState<"link" | "winners">(
-    onAutoImport ? "winners" : "link",
-  );
   const inputRef = useRef<HTMLInputElement>(null);
   const detected = detectCatalogStore(url);
   const active = detected || picked;
@@ -42,17 +33,12 @@ export function CatalogImportDock({
   const submitLabel =
     importing === "homedepot"
       ? "Reading Home Depot…"
-      : importing === "amazon" || importing === "amazon-auto"
+      : importing === "amazon"
         ? "Reading Amazon…"
         : "Import";
 
   const choose = (store: CatalogStore) => {
     setPicked(store);
-    if (store === "amazon" && onAutoImport) {
-      setMode("winners");
-      return;
-    }
-    setMode("link");
     inputRef.current?.focus();
   };
 
@@ -62,20 +48,14 @@ export function CatalogImportDock({
         Import from Amazon or Home Depot
       </p>
       <p className="mt-0.5 text-[13px] text-[#707070]">
-        Keepa, Amazon, and eBay. Pick a channel first: eBay, Amazon, or both.
+        Paste a product link. Photos and title come in as a draft.
       </p>
 
-      <div
-        className={cn(
-          "mt-3 grid grid-cols-3 gap-2 sm:gap-3",
-          mode === "winners" && "sm:gap-2",
-        )}
-      >
+      <div className="mt-3 grid grid-cols-3 gap-2 sm:gap-3">
         <StoreCard
-          active={active === "amazon" || mode === "winners"}
-          busy={importing === "amazon" || importing === "amazon-auto"}
+          active={active === "amazon"}
+          busy={importing === "amazon"}
           disabled={busy}
-          compact={mode === "winners"}
           onClick={() => choose("amazon")}
           header={
             <div className="flex items-center gap-1.5 bg-[#131921] px-2 py-1.5">
@@ -86,7 +66,7 @@ export function CatalogImportDock({
             </div>
           }
         >
-          <AmazonMark className={mode === "winners" ? "h-5 sm:h-6" : "h-8 sm:h-11"} />
+          <AmazonMark className="h-8 sm:h-11" />
           <span className="mt-1 text-[11px] font-medium text-[#141414] sm:text-[12px]">
             Amazon
           </span>
@@ -96,7 +76,6 @@ export function CatalogImportDock({
           active={active === "homedepot"}
           busy={importing === "homedepot"}
           disabled={busy}
-          compact={mode === "winners"}
           onClick={() => choose("homedepot")}
           header={
             <div className="flex items-center gap-1.5 bg-[#F96302] px-2 py-1.5">
@@ -109,20 +88,13 @@ export function CatalogImportDock({
             </div>
           }
         >
-          <HomeDepotMark className={mode === "winners" ? "h-6 sm:h-7" : "h-10 sm:h-12"} />
+          <HomeDepotMark className="h-10 sm:h-12" />
           <span className="mt-1 text-[11px] font-medium text-[#141414] sm:text-[12px]">
             Home Depot
           </span>
         </StoreCard>
 
-        <div
-          className={cn(
-            "flex flex-col overflow-hidden bg-white ring-1 ring-[#e5e5e5]",
-            mode === "winners"
-              ? "min-h-[72px] sm:min-h-[80px]"
-              : "min-h-[108px] sm:min-h-[124px]",
-          )}
-        >
+        <div className="flex min-h-[108px] flex-col overflow-hidden bg-white ring-1 ring-[#e5e5e5] sm:min-h-[124px]">
           <div className="flex items-center gap-1.5 border-b border-[#e5e5e5] bg-white px-2 py-1.5">
             <EbayMark className="h-3.5 sm:h-4" />
             <span className="min-w-0 flex-1 truncate rounded-sm border border-[#ccc] bg-white px-2 py-0.5 text-[10px] text-[#707070]">
@@ -132,13 +104,8 @@ export function CatalogImportDock({
               <Search className="size-3" strokeWidth={2.4} />
             </span>
           </div>
-          <div
-            className={cn(
-              "flex min-h-0 flex-1 flex-col items-center justify-center px-2",
-              mode === "winners" ? "py-1.5" : "py-3",
-            )}
-          >
-            <EbayMark className={mode === "winners" ? "h-5 sm:h-6" : "h-7 sm:h-9"} />
+          <div className="flex min-h-0 flex-1 flex-col items-center justify-center px-2 py-3">
+            <EbayMark className="h-7 sm:h-9" />
             <span className="mt-1 text-center text-[11px] font-medium text-[#141414] sm:text-[12px]">
               Lists on eBay
             </span>
@@ -146,71 +113,33 @@ export function CatalogImportDock({
         </div>
       </div>
 
-      <div className="mt-3 flex gap-4 text-[13px]">
-        <button
-          type="button"
+      <form
+        className="mt-3 flex gap-2"
+        onSubmit={(e) => {
+          e.preventDefault();
+          const next = url.trim();
+          if (!next || busy) return;
+          void onImport(next).then((ok) => {
+            if (ok !== false) setUrl("");
+          });
+        }}
+      >
+        <input
+          ref={inputRef}
+          value={url}
+          onChange={(e) => setUrl(e.target.value)}
+          placeholder={placeholder}
           disabled={busy}
-          onClick={() => setMode("link")}
-          className={cn(
-            "border-b pb-1",
-            mode === "link"
-              ? "border-[#141414] font-medium text-[#141414]"
-              : "border-transparent text-[#707070]",
-          )}
+          className="h-12 min-w-0 flex-1 border border-[#ccc] bg-white px-3 text-[14px] outline-none focus:border-[#141414] disabled:opacity-60"
+        />
+        <button
+          type="submit"
+          disabled={busy || url.trim().length < 8}
+          className="h-12 shrink-0 bg-[#141414] px-5 text-[14px] font-medium text-white disabled:opacity-40"
         >
-          Paste a link
+          {submitLabel}
         </button>
-        {onAutoImport ? (
-          <button
-            type="button"
-            disabled={busy}
-            onClick={() => {
-              setPicked("amazon");
-              setMode("winners");
-            }}
-            className={cn(
-              "border-b pb-1",
-              mode === "winners"
-                ? "border-[#141414] font-medium text-[#141414]"
-                : "border-transparent text-[#707070]",
-            )}
-          >
-            Find winners
-          </button>
-        ) : null}
-      </div>
-
-      {mode === "winners" && onAutoImport ? (
-        <AmazonAutoImportPanel busy={busy} onImport={onAutoImport} />
-      ) : (
-        <form
-          className="mt-3 flex gap-2"
-          onSubmit={(e) => {
-            e.preventDefault();
-            const next = url.trim();
-            if (!next || busy) return;
-            void onImport(next).then((ok) => {
-              if (ok !== false) setUrl("");
-            });
-          }}
-        >
-          <input
-            ref={inputRef}
-            value={url}
-            onChange={(e) => setUrl(e.target.value)}
-            placeholder={placeholder}
-            disabled={busy}
-            className="h-12 min-w-0 flex-1 border border-[#ccc] bg-white px-3 text-[14px] outline-none focus:border-[#141414] disabled:opacity-60"
-          />
-          <button
-            type="submit"
-            disabled={busy || url.trim().length < 8}
-            className="h-12 shrink-0 bg-[#141414] px-5 text-[14px] font-medium text-white disabled:opacity-40"
-          >
-            {submitLabel}
-          </button>
-        </form>
-      )}
+      </form>
     </div>
   );
 }
@@ -219,7 +148,6 @@ function StoreCard({
   active,
   busy,
   disabled,
-  compact = false,
   onClick,
   header,
   children,
@@ -227,7 +155,6 @@ function StoreCard({
   active: boolean;
   busy: boolean;
   disabled: boolean;
-  compact?: boolean;
   onClick: () => void;
   header: ReactNode;
   children: ReactNode;
@@ -238,20 +165,14 @@ function StoreCard({
       onClick={onClick}
       disabled={disabled}
       className={cn(
-        "flex flex-col overflow-hidden bg-white text-left transition",
-        compact ? "min-h-[72px] sm:min-h-[80px]" : "min-h-[108px] sm:min-h-[124px]",
+        "flex min-h-[108px] flex-col overflow-hidden bg-white text-left transition sm:min-h-[124px]",
         active ? "ring-2 ring-[#141414]" : "ring-1 ring-[#e5e5e5] hover:ring-[#141414]",
         busy && "ring-2 ring-[#141414]",
         disabled && !busy && "opacity-50",
       )}
     >
       {header}
-      <span
-        className={cn(
-          "flex min-h-0 flex-1 flex-col items-center justify-center px-2",
-          compact ? "py-1.5" : "py-3",
-        )}
-      >
+      <span className="flex min-h-0 flex-1 flex-col items-center justify-center px-2 py-3">
         {children}
       </span>
     </button>

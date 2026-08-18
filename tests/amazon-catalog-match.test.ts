@@ -57,6 +57,22 @@ describe("Amazon catalog auto-match", () => {
     );
   });
 
+  it("still matches DCF630 when Higlou model is a long AI phrase", () => {
+    const match = pickAmazonCatalogMatch(hits, {
+      brand: "DeWalt",
+      model: "20V MAX XR Brushless",
+      title: "DeWalt 20V MAX XR Brushless Drywall Screwgun DCF630",
+    });
+    expect(match?.asin).toBe("B0BPY8L57P");
+    expect(
+      amazonSearchKeywords({
+        brand: "DeWalt",
+        model: "20V MAX XR Brushless",
+        title: "DeWalt 20V MAX XR Brushless Drywall Screwgun DCF630",
+      }),
+    ).toBe("DeWalt DCF630");
+  });
+
   it("picks the kit when the Higlou listing is a kit", () => {
     const match = pickAmazonCatalogMatch(hits, {
       brand: "DeWalt",

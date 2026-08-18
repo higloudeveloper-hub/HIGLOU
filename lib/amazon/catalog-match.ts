@@ -11,8 +11,9 @@ export type AmazonMatchHints = {
   mpn?: string;
 };
 
+const MODEL_CODE_RE = /^[A-Z]{2,6}\d{2,5}[A-Z0-9]{0,6}$/;
 const KIT_RE =
-  /\b(kit|combo|batter(?:y|ies)|charger included|2\s*ah|4\s*ah|5\s*ah)\b/i;
+  /\b(kit|combo|batter(?:y|ies)|charger included|pack of|2\s*ah|4\s*ah|5\s*ah)\b/i;
 const BARE_RE = /\b(tool only|bare tool|herramienta sola)\b/i;
 const RENEWED_RE = /\b(renewed|refurbished|reacondicionado)\b/i;
 const MODEL_RE = /\b([A-Z]{2,6}\d{2,5}[A-Z0-9]{0,6})\b/gi;
@@ -38,15 +39,19 @@ export function extractModelCode(text: string): string {
   const skip = new Set(["MAX", "XR", "LED", "USB", "AH", "VMAX"]);
   const codes = matches
     .map((code) => code.replace(/[^A-Z0-9]/g, ""))
-    .filter((code) => code.length >= 5 && !skip.has(code));
+    .filter((code) => MODEL_CODE_RE.test(code) && !skip.has(code));
   return codes.sort((a, b) => b.length - a.length)[0] || "";
+}
+
+export function resolveAmazonModelCode(hints: AmazonMatchHints): string {
+  const fromFields = compact(hints.model || hints.mpn || "");
+  if (MODEL_CODE_RE.test(fromFields)) return fromFields;
+  return extractModelCode(haystack(hints));
 }
 
 export function amazonSearchKeywords(hints: AmazonMatchHints): string {
   const brand = String(hints.brand || "").trim();
-  const model =
-    String(hints.model || hints.mpn || "").trim() ||
-    extractModelCode(hints.title || "");
+  const model = resolveAmazonModelCode(hints);
   const parts = [brand, model].filter(Boolean);
   if (parts.length) return parts.join(" ");
   return String(hints.title || "")
@@ -73,8 +78,7 @@ export function scoreAmazonCatalogHit(
   const title = String(hit.title || "");
   const titleCompact = compact(title);
   const brand = compact(hints.brand || "");
-  const model =
-    compact(hints.model || hints.mpn || "") || extractModelCode(listingText);
+  const model = resolveAmazonModelCode(hints);
   if (!model) return 0;
   const { family, pack } = modelParts(model);
   if (!family || !titleCompact.includes(family)) return 0;

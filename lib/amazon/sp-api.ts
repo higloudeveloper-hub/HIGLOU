@@ -1,5 +1,4 @@
 import {
-  amazonAttributeText,
   type AmazonCatalogSnapshot,
   type AmazonProductTypeSchema,
 } from "@/lib/amazon/listing-attributes";
@@ -332,24 +331,6 @@ export async function getAmazonCatalogItem(opts: {
   const attributes = {
     ...((json.attributes as Record<string, unknown>) || {}),
   };
-  if (brand && !amazonAttributeText(attributes.brand)) {
-    attributes.brand = [
-      {
-        value: brand,
-        language_tag: "en_US",
-        marketplace_id: opts.marketplaceId,
-      },
-    ];
-  }
-  if (manufacturer && !amazonAttributeText(attributes.manufacturer)) {
-    attributes.manufacturer = [
-      {
-        value: manufacturer,
-        language_tag: "en_US",
-        marketplace_id: opts.marketplaceId,
-      },
-    ];
-  }
   return {
     asin,
     title: String(summary.itemName || ""),

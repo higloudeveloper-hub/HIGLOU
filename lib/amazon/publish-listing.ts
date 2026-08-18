@@ -2,8 +2,10 @@ import { sanitizeEbayUpc } from "@/lib/ebay/inventory-api";
 import { resolveAmazonCatalogMatch } from "@/lib/amazon/catalog-resolve";
 import {
   amazonHasBrandLockIssue,
+  amazonIsBrandLockIssue,
   amazonListingHasPrice,
   buildAmazonListingAttributes,
+  stripAmazonSynthesizedIdentity,
   lockAmazonBrandAttributes,
   fillAmazonAttributesFromIssues,
   type AmazonListingDraft,
@@ -121,38 +123,40 @@ export async function publishAmazonOffer(opts: {
     requirements: "LISTING" as const,
   };
 
-  let readyAttributes = attributes;
-  const preview = await putAmazonListingOffer({
-    ...putBase,
-    attributes: readyAttributes,
-    mode: "VALIDATION_PREVIEW",
+  let readyAttributes = stripAmazonSynthesizedIdentity({
+    attributes,
+    asin,
+    catalog,
   });
-  const previewBrand = amazonBrandGatingReason(preview.issues);
-  if (previewBrand) throw new Error(previewBrand);
-  if (amazonHasBrandLockIssue(preview.issues)) {
-    readyAttributes = lockAmazonBrandAttributes({
-      attributes: readyAttributes,
-      listing: opts.listing,
-      catalog,
-      marketplaceId: cfg.marketplaceId,
-      schema,
-    });
-    const unlocked = await putAmazonListingOffer({
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    const preview = await putAmazonListingOffer({
       ...putBase,
       attributes: readyAttributes,
       mode: "VALIDATION_PREVIEW",
     });
-    const unlockedBrand = amazonBrandGatingReason(unlocked.issues);
-    if (unlockedBrand) throw new Error(unlockedBrand);
-    const stillLock = amazonIncompleteListingReason(
-      unlocked.issues,
-      unlocked.status,
-    );
-    if (stillLock) throw new Error(stillLock);
-  } else if (
-    /^INVALID$/i.test(preview.status) ||
-    amazonIncompleteListingReason(preview.issues)
-  ) {
+    const previewBrand = amazonBrandGatingReason(preview.issues);
+    if (previewBrand) throw new Error(previewBrand);
+    if (amazonHasBrandLockIssue(preview.issues)) {
+      const next = lockAmazonBrandAttributes({
+        attributes: readyAttributes,
+        listing: opts.listing,
+        catalog,
+        marketplaceId: cfg.marketplaceId,
+        schema,
+      });
+      const changed =
+        JSON.stringify(next.brand) !== JSON.stringify(readyAttributes.brand) ||
+        JSON.stringify(next.manufacturer) !==
+          JSON.stringify(readyAttributes.manufacturer);
+      readyAttributes = next;
+      if (changed) continue;
+    }
+    if (
+      !/^INVALID$/i.test(preview.status) &&
+      !amazonIncompleteListingReason(preview.issues)
+    ) {
+      break;
+    }
     const fixed = fillAmazonAttributesFromIssues({
       attributes: readyAttributes,
       issues: preview.issues,
@@ -161,18 +165,23 @@ export async function publishAmazonOffer(opts: {
       schema,
       catalog,
     });
-    if (fixed.filled.length) {
-      readyAttributes = fixed.attributes;
-      const again = await putAmazonListingOffer({
-        ...putBase,
-        attributes: readyAttributes,
-        mode: "VALIDATION_PREVIEW",
-      });
-      const againBrand = amazonBrandGatingReason(again.issues);
-      if (againBrand) throw new Error(againBrand);
-      const still = amazonIncompleteListingReason(again.issues, again.status);
+    if (!fixed.filled.length) {
+      const remaining = (preview.issues || []).filter(
+        (issue) => !amazonIsBrandLockIssue(issue),
+      );
+      const still = amazonIncompleteListingReason(
+        remaining,
+        remaining.length ? preview.status : "VALID",
+      );
       if (still) throw new Error(still);
-    } else {
+      break;
+    }
+    readyAttributes = stripAmazonSynthesizedIdentity({
+      attributes: fixed.attributes,
+      asin,
+      catalog,
+    });
+    if (attempt === 3) {
       const still = amazonIncompleteListingReason(preview.issues, preview.status);
       if (still) throw new Error(still);
     }

@@ -81,7 +81,8 @@ describe("Amazon seller publish stays on Higlou", () => {
     expect(publish).toMatch(/amazonListingHasPrice/);
     expect(publish).toMatch(/lockAmazonBrandAttributes/);
     expect(attributes).toMatch(/merchant_shipping_group/);
-    expect(attributes).toMatch(/legacy-template-id/);
+    expect(attributes).toMatch(/stripAmazonSynthesizedIdentity/);
+    expect(publish).toMatch(/attempt < 4/);
   });
 
   it("does not ask Amazon for identifiers when submitting a live offer", () => {

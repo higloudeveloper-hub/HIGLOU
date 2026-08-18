@@ -276,6 +276,72 @@ describe("Amazon complete listing attributes", () => {
     ).toMatch(/nest\.jpg/);
   });
 
+  it("does not rewrite Hi-Spec brand when attaching to an existing Amazon ASIN", () => {
+    const attributes = buildAmazonListingAttributes({
+      marketplaceId: AMAZON_US_MARKETPLACE_ID,
+      asin: "B013QT1SDE",
+      schema: thermostatSchema,
+      catalog: {
+        asin: "B013QT1SDE",
+        title: "Hi-Spec 9pc Network Cable Tester",
+        productType: "TESTER",
+        brand: "Hi-Spec",
+        images: [],
+        attributes: {},
+      },
+      listing: {
+        title: "Hi-Spec Network Cable Testing & Wiring Tool Kit Set - 9 Piece",
+        brand: "Hi-Spec",
+        price: 66,
+        quantity: 1,
+        description: "Nine-piece network cable tester and wiring tool kit.",
+        images: ["https://images.example.com/kit.jpg"],
+      },
+    });
+    expect(attributes.brand).toBeUndefined();
+    expect(attributes.manufacturer).toBeUndefined();
+    expect(
+      (attributes.merchant_suggested_asin as Array<{ value: string }>)[0].value,
+    ).toBe("B013QT1SDE");
+    expect(amazonListingHasPrice(attributes)).toBe(true);
+  });
+
+  it("omits brand after 5995 when the catalog brand was already sent", () => {
+    const { attributes, filled } = fillAmazonAttributesFromIssues({
+      marketplaceId: AMAZON_US_MARKETPLACE_ID,
+      schema: thermostatSchema,
+      catalog: {
+        asin: "B08NESTHAT",
+        title: "Google Nest Thermostat",
+        productType: "HVAC_CONTROL_THERMOSTAT",
+        images: [],
+        attributes: {
+          brand: [{ value: "Google", language_tag: "en_US" }],
+        },
+      },
+      listing: {
+        title: "Google Nest Thermostat",
+        brand: "Google",
+        price: 80,
+        quantity: 1,
+      },
+      attributes: {
+        brand: [{ value: "Google", language_tag: "en_US" }],
+        merchant_suggested_asin: [
+          { value: "B08NESTHAT", marketplace_id: AMAZON_US_MARKETPLACE_ID },
+        ],
+      },
+      issues: [
+        {
+          message:
+            "You may not change the brand name on this ASIN. Please use the brand name currently shown on the ASIN detail page and mention the error code 5995",
+        },
+      ],
+    });
+    expect(filled).toEqual(expect.arrayContaining(["brand"]));
+    expect(attributes.brand).toBeUndefined();
+  });
+
   it("fills missing Brand Name and Manufacturer from the Higlou listing", () => {
     const { attributes, filled } = fillAmazonAttributesFromIssues({
       marketplaceId: AMAZON_US_MARKETPLACE_ID,

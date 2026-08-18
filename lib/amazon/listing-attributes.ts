@@ -326,26 +326,66 @@ export function applyAmazonCatalogIdentity(opts: {
   const catalog = opts.catalog;
   if (!catalog) return { attributes, filled };
 
-  const setIdentity = (name: "brand" | "manufacturer", value: string) => {
-    if (!value) return;
+  const setIdentity = (name: "brand" | "manufacturer") => {
     const catalogValue = catalog.attributes?.[name];
-    attributes[name] =
-      catalogValue != null && amazonAttributeText(catalogValue)
-        ? catalogValue
-        : amazonTextAttribute(
-            value,
-            opts.marketplaceId,
-            propertyOf(opts.schema, name),
-          );
+    if (!(catalogValue != null && amazonAttributeText(catalogValue))) return;
+    attributes[name] = catalogValue;
     filled.push(name);
   };
 
-  setIdentity("brand", amazonCatalogBrand(catalog));
-  setIdentity("manufacturer", amazonCatalogManufacturer(catalog));
+  setIdentity("brand");
+  setIdentity("manufacturer");
   return { attributes, filled };
 }
 
-/** On 5995, copy the catalog brand instead of omitting Brand Name. */
+function catalogRawIdentity(
+  catalog: AmazonCatalogSnapshot | null | undefined,
+  name: "brand" | "manufacturer",
+): unknown | null {
+  const value = catalog?.attributes?.[name];
+  return value != null && amazonAttributeText(value) ? value : null;
+}
+
+/** 5995: use the catalog brand object as-is, or omit it so Amazon keeps the ASIN identity. */
+export function resolveAmazonBrandLock(opts: {
+  attributes: Record<string, unknown>;
+  listing: AmazonListingDraft;
+  catalog?: AmazonCatalogSnapshot | null;
+  marketplaceId: string;
+  schema?: AmazonProductTypeSchema | null;
+}): Record<string, unknown> {
+  const out = { ...opts.attributes };
+  const rawBrand = catalogRawIdentity(opts.catalog, "brand");
+  const sent = amazonAttributeText(out.brand);
+  const catalogText = amazonAttributeText(rawBrand);
+  if (rawBrand && catalogText && sent.toLowerCase() !== catalogText.toLowerCase()) {
+    out.brand = rawBrand;
+    const rawMfr = catalogRawIdentity(opts.catalog, "manufacturer");
+    if (rawMfr) out.manufacturer = rawMfr;
+    return out;
+  }
+  delete out.brand;
+  delete out.manufacturer;
+  return out;
+}
+
+export function stripAmazonSynthesizedIdentity(opts: {
+  attributes: Record<string, unknown>;
+  asin?: string;
+  catalog?: AmazonCatalogSnapshot | null;
+}): Record<string, unknown> {
+  const attaching = /^[A-Z0-9]{10}$/i.test(String(opts.asin || opts.catalog?.asin || ""));
+  if (!attaching) return opts.attributes;
+  const out = { ...opts.attributes };
+  const rawBrand = catalogRawIdentity(opts.catalog, "brand");
+  const rawMfr = catalogRawIdentity(opts.catalog, "manufacturer");
+  if (rawBrand) out.brand = rawBrand;
+  else delete out.brand;
+  if (rawMfr) out.manufacturer = rawMfr;
+  else delete out.manufacturer;
+  return out;
+}
+
 export function lockAmazonBrandAttributes(opts: {
   attributes: Record<string, unknown>;
   listing: AmazonListingDraft;
@@ -353,31 +393,7 @@ export function lockAmazonBrandAttributes(opts: {
   marketplaceId: string;
   schema?: AmazonProductTypeSchema | null;
 }): Record<string, unknown> {
-  const locked = applyAmazonCatalogIdentity({
-    attributes: opts.attributes,
-    catalog: opts.catalog,
-    marketplaceId: opts.marketplaceId,
-    schema: opts.schema,
-  }).attributes;
-  const brand =
-    amazonCatalogBrand(opts.catalog) || String(opts.listing.brand || "").trim();
-  const manufacturer =
-    amazonCatalogManufacturer(opts.catalog) || brand;
-  if (brand && !amazonAttributeText(locked.brand)) {
-    locked.brand = amazonTextAttribute(
-      brand,
-      opts.marketplaceId,
-      propertyOf(opts.schema, "brand"),
-    );
-  }
-  if (manufacturer && !amazonAttributeText(locked.manufacturer)) {
-    locked.manufacturer = amazonTextAttribute(
-      manufacturer,
-      opts.marketplaceId,
-      propertyOf(opts.schema, "manufacturer"),
-    );
-  }
-  return locked;
+  return resolveAmazonBrandLock(opts);
 }
 
 export function amazonTextAttribute(
@@ -1186,10 +1202,10 @@ export function defaultAmazonAttribute(opts: {
     return amazonTextAttribute(listing.title, marketplaceId, prop);
   }
   if (name === "brand" || name === "manufacturer") {
-    const value =
-      name === "manufacturer"
-        ? amazonCatalogManufacturer(catalog) || listing.brand
-        : amazonCatalogBrand(catalog) || listing.brand;
+    const raw = catalogRawIdentity(catalog, name);
+    if (raw) return raw;
+    if (catalog?.asin) return null;
+    const value = listing.brand;
     if (!value) return null;
     return amazonTextAttribute(value, marketplaceId, prop);
   }
@@ -1281,15 +1297,20 @@ export function fillAmazonAttributesFromIssues(opts: {
   catalog?: AmazonCatalogSnapshot | null;
 }): { attributes: Record<string, unknown>; filled: string[] } {
   if (amazonHasBrandLockIssue(opts.issues)) {
+    const next = lockAmazonBrandAttributes({
+      attributes: opts.attributes,
+      listing: opts.listing,
+      catalog: opts.catalog,
+      marketplaceId: opts.marketplaceId,
+      schema: opts.schema,
+    });
+    const changed =
+      JSON.stringify(next.brand) !== JSON.stringify(opts.attributes.brand) ||
+      JSON.stringify(next.manufacturer) !==
+        JSON.stringify(opts.attributes.manufacturer);
     return {
-      attributes: lockAmazonBrandAttributes({
-        attributes: opts.attributes,
-        listing: opts.listing,
-        catalog: opts.catalog,
-        marketplaceId: opts.marketplaceId,
-        schema: opts.schema,
-      }),
-      filled: ["brand", "manufacturer"],
+      attributes: next,
+      filled: changed ? ["brand", "manufacturer"] : [],
     };
   }
   const before = { ...opts.attributes };
@@ -1426,17 +1447,18 @@ export function fillAmazonRequiredAttributes(opts: {
   };
 
   setText("item_name", opts.catalog?.title || listing.title || "");
-  setText(
-    "brand",
-    amazonCatalogBrand(opts.catalog) || listing.brand || "",
-  );
-  setText(
-    "manufacturer",
-    amazonCatalogManufacturer(opts.catalog) ||
-      amazonCatalogBrand(opts.catalog) ||
-      listing.brand ||
-      "",
-  );
+  if (opts.catalog?.asin) {
+    const rawBrand = catalogRawIdentity(opts.catalog, "brand");
+    const rawMfr = catalogRawIdentity(opts.catalog, "manufacturer");
+    if (rawBrand) attributes.brand = rawBrand;
+    if (rawMfr) attributes.manufacturer = rawMfr;
+  } else {
+    setText("brand", listing.brand || "");
+    setText(
+      "manufacturer",
+      listing.brand || "",
+    );
+  }
   setText("model_name", listing.model || listing.mpn || "");
   setText("model_number", listing.model || listing.mpn || "");
   setText("part_number", listingPartNumber(listing));
@@ -1637,5 +1659,9 @@ export function buildAmazonListingAttributes(opts: {
       offer.externally_assigned_product_identifier;
     delete finalized.merchant_suggested_asin;
   }
-  return finalized;
+  return stripAmazonSynthesizedIdentity({
+    attributes: finalized,
+    asin: opts.asin,
+    catalog: opts.catalog,
+  });
 }

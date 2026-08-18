@@ -21,9 +21,12 @@ import {
 import { amazonSearchUrl } from "@/lib/amazon/fetch-search";
 import {
   isCrowdedBestseller,
+  mergeOpportunityHits,
+  nextLiveScanTarget,
   pickCategoryQueries,
   CATEGORY_NICHES,
 } from "@/lib/opportunity/niches";
+import type { OpportunityProduct } from "@/lib/opportunity/types";
 import {
   scoreAmazonOpportunity,
   sortByOpportunity,
@@ -57,6 +60,24 @@ describe("Amazon auto-import ranking", () => {
     expect(amazonSearchUrl("bamboo drawer organizer", "featured")).not.toMatch(
       /review-rank/,
     );
+    expect(nextLiveScanTarget(0)).toMatchObject({
+      categoryId: "home",
+      label: "Home & Kitchen",
+      seed: 0,
+    });
+    expect(nextLiveScanTarget(8)).toMatchObject({
+      categoryId: "home",
+      seed: 1,
+    });
+    const merged = mergeOpportunityHits(
+      [{ asin: "B0OLD00001", score: 40 } as OpportunityProduct],
+      [
+        { asin: "B0NEW00001", score: 80 } as OpportunityProduct,
+        { asin: "B0OLD00001", score: 55 } as OpportunityProduct,
+      ],
+    );
+    expect(merged[0].asin).toBe("B0NEW00001");
+    expect(merged.find((hit) => hit.asin === "B0OLD00001")?.score).toBe(55);
   });
   it("builds keywords from a model and category without the seed ASIN", () => {
     expect(
@@ -285,7 +306,12 @@ describe("Amazon auto-import stays an eBay draft flow", () => {
     expect(winnersStudio).toMatch(/AmazonAutoImportPanel/);
     expect(winnersStudio).toMatch(/JSON\.stringify\(\{ asins: next, mode \}\)/);
     expect(winnersStudio).toMatch(/\/listings\/\$\{body\.id\}/);
-    expect(panel).toMatch(/Find different products/);
+    expect(panel).toMatch(/Live scan/);
+    expect(panel).toMatch(/Manual search/);
+    expect(panel).toMatch(/Start live scan/);
+    expect(panel).toMatch(/Stop live scan/);
+    expect(panel).toMatch(/Product name, ASIN, or Amazon link/);
+    expect(panel).toMatch(/Find opportunities/);
     expect(panel).toMatch(/Keepa is not connected/);
     expect(panel).toMatch(/seed: nextRound - 1/);
     expect(modes).toMatch(/Import \$\{count\} for eBay/);
@@ -311,6 +337,7 @@ describe("Amazon auto-import stays an eBay draft flow", () => {
     expect(search).toMatch(/limit: body\.limit/);
     expect(search).toMatch(/onlySellable/);
     expect(search).toMatch(/excludeAsins/);
+    expect(search).toMatch(/body\.excludeAsins/);
     expect(search).toMatch(/seed: body\.seed/);
     expect(search).not.toMatch(/status: 409/);
     expect(importRoute).toMatch(/ebayProfitPrice/);

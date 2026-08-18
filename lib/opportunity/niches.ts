@@ -1,3 +1,6 @@
+import { OPPORTUNITY_CATEGORIES } from "@/lib/opportunity/categories";
+import type { OpportunityProduct } from "@/lib/opportunity/types";
+
 /** Specific product types per category. Generic Amazon searches always return the same bestsellers. */
 export const CATEGORY_NICHES: Record<string, readonly string[]> = {
   home: [
@@ -130,4 +133,34 @@ export function pickCategoryQueries(opts: {
 /** Household Amazon #1s. Without Keepa these are bestsellers, not opportunities. */
 export function isCrowdedBestseller(reviewCount: number | null | undefined): boolean {
   return (reviewCount || 0) >= 10_000;
+}
+
+export function nextLiveScanTarget(step: number): {
+  categoryId: string;
+  label: string;
+  seed: number;
+} {
+  const cats = OPPORTUNITY_CATEGORIES;
+  const index = Math.max(0, Math.floor(Number(step) || 0));
+  const row = cats[index % cats.length];
+  return {
+    categoryId: row.id,
+    label: row.label,
+    seed: Math.floor(index / cats.length),
+  };
+}
+
+export function mergeOpportunityHits(
+  current: OpportunityProduct[],
+  incoming: OpportunityProduct[],
+  cap = 24,
+): OpportunityProduct[] {
+  const map = new Map(current.map((hit) => [hit.asin, hit]));
+  for (const hit of incoming) {
+    const prev = map.get(hit.asin);
+    if (!prev || hit.score >= prev.score) map.set(hit.asin, hit);
+  }
+  return [...map.values()]
+    .sort((a, b) => b.score - a.score)
+    .slice(0, cap);
 }

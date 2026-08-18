@@ -26,6 +26,7 @@ const bodySchema = z.object({
   onlySellable: z.boolean().optional().default(true),
   cost: z.number().positive().max(100000).optional(),
   seed: z.coerce.number().int().optional().default(0),
+  excludeAsins: z.array(z.string().min(10).max(12)).max(40).optional().default([]),
 });
 
 export async function POST(request: Request) {
@@ -80,9 +81,16 @@ export async function POST(request: Request) {
       .from("products")
       .select("amazon_asin")
       .eq("user_id", auth.user.id);
-    const excludeAsins = (owned.data || [])
-      .map((row) => String(row.amazon_asin || "").trim().toUpperCase())
-      .filter((id) => /^[A-Z0-9]{10}$/.test(id));
+    const excludeAsins = [
+      ...new Set([
+        ...(owned.data || [])
+          .map((row) => String(row.amazon_asin || "").trim().toUpperCase())
+          .filter((id) => /^[A-Z0-9]{10}$/.test(id)),
+        ...body.excludeAsins
+          .map((id) => id.trim().toUpperCase())
+          .filter((id) => /^[A-Z0-9]{10}$/.test(id)),
+      ]),
+    ];
     const found = await findAmazonWinners({
       query,
       category,

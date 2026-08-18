@@ -1,13 +1,16 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { Check, Loader2 } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Loader2 } from "lucide-react";
 import { AMAZON_WINNER_CATEGORIES, AMAZON_WINNER_LIMITS } from "@/lib/amazon/winner-categories";
 import {
   importActionLabel,
   OPPORTUNITY_MODES,
-  searchStepsFor,
 } from "@/lib/opportunity/mode-copy";
+import {
+  mergeOpportunityHits,
+  nextLiveScanTarget,
+} from "@/lib/opportunity/niches";
 import { estimateNetProfit } from "@/lib/opportunity/profit";
 import type {
   OpportunityMode,
@@ -20,6 +23,14 @@ type WinnerSources = {
   amazonCatalog?: boolean;
   amazonFees?: boolean;
   ebayLive?: boolean;
+};
+
+type SearchBody = {
+  ok?: boolean;
+  error?: string;
+  products?: OpportunityProduct[];
+  sources?: WinnerSources;
+  queries?: string[];
 };
 
 function money(n: number | null | undefined) {
@@ -105,6 +116,40 @@ function metricsFor(hit: OpportunityProduct, mode: OpportunityMode) {
   ] as const;
 }
 
+async function requestOpportunities(payload: {
+  query: string;
+  categoryId: string;
+  limit: number;
+  mode: OpportunityMode;
+  onlySellable: boolean;
+  cost?: number;
+  seed: number;
+  excludeAsins: string[];
+}): Promise<{
+  ok: boolean;
+  error: string;
+  products: OpportunityProduct[];
+  sources: WinnerSources | null;
+  queries: string[];
+  retryAfterMs: number;
+}> {
+  const response = await fetch("/api/amazon/auto-import/search", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  const body = (await response.json().catch(() => null)) as SearchBody | null;
+  const retryAfter = Number(response.headers.get("Retry-After") || 0);
+  return {
+    ok: Boolean(response.ok && body?.ok && body.products?.length),
+    error: body?.error || (response.ok ? "" : "Amazon search failed."),
+    products: body?.products || [],
+    sources: body?.sources || null,
+    queries: body?.queries || [],
+    retryAfterMs: Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter * 1000 : 15_000,
+  };
+}
+
 export function AmazonAutoImportPanel({
   busy = false,
   onImport,
@@ -115,6 +160,10 @@ export function AmazonAutoImportPanel({
     mode: OpportunityMode,
   ) => Promise<boolean | void>;
 }) {
+  const [view, setView] = useState<"live" | "manual">("live");
+  const [liveOn, setLiveOn] = useState(true);
+  const [scanStep, setScanStep] = useState(0);
+  const [scanLabel, setScanLabel] = useState("Home & Kitchen");
   const [categoryId, setCategoryId] = useState("");
   const [extra, setExtra] = useState("");
   const [limit, setLimit] = useState(5);
@@ -122,19 +171,23 @@ export function AmazonAutoImportPanel({
   const [onlySellable, setOnlySellable] = useState(true);
   const [cost, setCost] = useState("");
   const [searching, setSearching] = useState(false);
-  const [searchStep, setSearchStep] = useState(0);
   const [importing, setImporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [hits, setHits] = useState<OpportunityProduct[]>([]);
+  const [liveHits, setLiveHits] = useState<OpportunityProduct[]>([]);
+  const [manualHits, setManualHits] = useState<OpportunityProduct[]>([]);
   const [sources, setSources] = useState<WinnerSources | null>(null);
   const [picked, setPicked] = useState<string[]>([]);
   const [round, setRound] = useState(0);
   const [queries, setQueries] = useState<string[]>([]);
+  const liveHitsRef = useRef<OpportunityProduct[]>([]);
+  const liveOnRef = useRef(true);
+  const modeRef = useRef(mode);
+  const costRef = useRef<number | undefined>(undefined);
+  const onlySellableRef = useRef(onlySellable);
 
-  const steps = searchStepsFor(mode);
   const activeMode = OPPORTUNITY_MODES.find((row) => row.id === mode);
-  const disabled = busy || searching || importing;
-  const canSearch = Boolean(categoryId || extra.trim().length >= 2);
+  const locked = busy || importing;
+  const hits = view === "live" ? liveHits : manualHits;
   const selected = useMemo(
     () => hits.filter((hit) => picked.includes(hit.asin)),
     [hits, picked],
@@ -143,74 +196,129 @@ export function AmazonAutoImportPanel({
   const costValue =
     Number.isFinite(supplierCost) && supplierCost > 0 ? supplierCost : undefined;
   const needsCost = mode === "amazon" || mode === "supplier";
+  const canManualSearch = Boolean(categoryId || extra.trim().length >= 2);
 
   useEffect(() => {
-    if (!searching) {
-      setSearchStep(0);
-      return;
-    }
-    setSearchStep(0);
-    const timer = window.setInterval(() => {
-      setSearchStep((step) => Math.min(step + 1, steps.length - 1));
-    }, 2200);
-    return () => window.clearInterval(timer);
-  }, [searching, steps.length]);
+    liveHitsRef.current = liveHits;
+  }, [liveHits]);
+
+  useEffect(() => {
+    liveOnRef.current = liveOn;
+  }, [liveOn]);
+
+  useEffect(() => {
+    modeRef.current = mode;
+  }, [mode]);
+
+  useEffect(() => {
+    costRef.current = costValue;
+  }, [costValue]);
+
+  useEffect(() => {
+    onlySellableRef.current = onlySellable;
+  }, [onlySellable]);
+
+  useEffect(() => {
+    if (view !== "live" || !liveOn) return;
+    let cancelled = false;
+    const wait = (ms: number) =>
+      new Promise((resolve) => window.setTimeout(resolve, ms));
+
+    void (async () => {
+      let step = scanStep;
+      while (!cancelled && liveOnRef.current) {
+        const target = nextLiveScanTarget(step);
+        setScanLabel(target.label);
+        setSearching(true);
+        setError(null);
+        try {
+          const found = await requestOpportunities({
+            query: "",
+            categoryId: target.categoryId,
+            limit: 5,
+            mode: modeRef.current,
+            onlySellable:
+              modeRef.current === "amazon_to_ebay"
+                ? false
+                : onlySellableRef.current,
+            cost: costRef.current,
+            seed: target.seed,
+            excludeAsins: liveHitsRef.current.map((hit) => hit.asin).slice(0, 40),
+          });
+          if (cancelled || !liveOnRef.current) break;
+          if (found.ok) {
+            setLiveHits((prev) => mergeOpportunityHits(prev, found.products));
+            setSources(found.sources);
+            setQueries(found.queries);
+          } else if (/too many/i.test(found.error)) {
+            setError("Live scan paused for a minute, then continues.");
+            setSearching(false);
+            await wait(found.retryAfterMs);
+            continue;
+          } else {
+            setQueries(found.queries);
+          }
+        } catch {
+          if (!cancelled) setError("Live scan lost Amazon for a moment. Retrying…");
+        }
+        if (cancelled || !liveOnRef.current) break;
+        setSearching(false);
+        step += 1;
+        setScanStep(step);
+        await wait(2500);
+      }
+      if (!cancelled) setSearching(false);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+    // Restart when the seller starts/stops live scan or changes channel.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view, liveOn, mode]);
 
   const chooseMode = (next: OpportunityMode) => {
     setMode(next);
-    setHits([]);
+    setLiveHits([]);
+    setManualHits([]);
     setPicked([]);
     setSources(null);
     setQueries([]);
     setError(null);
+    setScanStep(0);
     if (next === "amazon") setOnlySellable(true);
   };
 
-  const search = async () => {
-    if (disabled || !canSearch) return;
+  const searchManual = async () => {
+    if (locked || searching || !canManualSearch) return;
     const nextRound = round + 1;
     setRound(nextRound);
     setSearching(true);
-    setHits([]);
-    setSources(null);
-    setQueries([]);
-    setPicked([]);
     setError(null);
     try {
-      const response = await fetch("/api/amazon/auto-import/search", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          query: extra.trim(),
-          categoryId,
-          limit,
-          mode,
-          onlySellable: mode === "amazon_to_ebay" ? false : onlySellable,
-          cost: costValue,
-          seed: nextRound - 1,
-        }),
+      const found = await requestOpportunities({
+        query: extra.trim(),
+        categoryId,
+        limit,
+        mode,
+        onlySellable: mode === "amazon_to_ebay" ? false : onlySellable,
+        cost: costValue,
+        seed: nextRound - 1,
+        excludeAsins: [],
       });
-      const body = (await response.json().catch(() => null)) as {
-        ok?: boolean;
-        error?: string;
-        products?: OpportunityProduct[];
-        sources?: WinnerSources;
-        queries?: string[];
-      } | null;
-      if (!response.ok || !body?.ok || !body.products?.length) {
-        setHits([]);
+      if (!found.ok) {
+        setManualHits([]);
         setSources(null);
         setQueries([]);
-        setError(body?.error || "Amazon search failed.");
+        setError(found.error || "Amazon search failed.");
         return;
       }
-      setHits(body.products.slice(0, limit));
-      setSources(body.sources || null);
-      setQueries(body.queries || []);
+      setManualHits(found.products.slice(0, limit));
+      setSources(found.sources);
+      setQueries(found.queries);
+      setPicked([]);
     } catch (err) {
-      setHits([]);
-      setSources(null);
-      setQueries([]);
+      setManualHits([]);
       setError(err instanceof Error ? err.message : "Amazon search failed.");
     } finally {
       setSearching(false);
@@ -218,7 +326,7 @@ export function AmazonAutoImportPanel({
   };
 
   const importSelected = async () => {
-    if (disabled || !selected.length) return;
+    if (locked || !selected.length) return;
     setImporting(true);
     setError(null);
     try {
@@ -227,8 +335,9 @@ export function AmazonAutoImportPanel({
         mode,
       );
       if (ok !== false) {
-        setHits([]);
-        setSources(null);
+        const taken = new Set(selected.map((hit) => hit.asin));
+        setLiveHits((prev) => prev.filter((hit) => !taken.has(hit.asin)));
+        setManualHits((prev) => prev.filter((hit) => !taken.has(hit.asin)));
         setPicked([]);
       }
     } catch (err) {
@@ -241,7 +350,7 @@ export function AmazonAutoImportPanel({
   return (
     <div>
       <p className="text-[11px] font-medium uppercase tracking-wide text-[#707070]">
-        1. Choose the channel
+        Channel
       </p>
       <div className="mt-1.5 grid grid-cols-1 gap-1.5 sm:grid-cols-3">
         {OPPORTUNITY_MODES.map((row) => {
@@ -250,7 +359,7 @@ export function AmazonAutoImportPanel({
             <button
               key={row.id}
               type="button"
-              disabled={disabled}
+              disabled={locked}
               onClick={() => chooseMode(row.id)}
               className={cn(
                 "px-3 py-2.5 text-left",
@@ -276,81 +385,162 @@ export function AmazonAutoImportPanel({
         <p className="mt-2 text-[13px] text-[#707070]">{activeMode.hint}</p>
       ) : null}
 
-      <p className="mt-3 text-[11px] font-medium uppercase tracking-wide text-[#707070]">
-        2. Category and count
-      </p>
-      <div className="mt-1.5 grid gap-2 sm:grid-cols-[1fr_88px]">
-        <label className="block">
-          <span className="mb-1 block text-[11px] font-medium text-[#707070]">
-            Category
-          </span>
-          <select
-            value={categoryId}
-            disabled={disabled}
-            onChange={(e) => setCategoryId(e.target.value)}
-            className="h-11 w-full border border-[#ccc] bg-white px-3 text-[14px] outline-none focus:border-[#141414] disabled:opacity-60"
-          >
-            <option value="">Choose a category</option>
-            {AMAZON_WINNER_CATEGORIES.map((row) => (
-              <option key={row.id} value={row.id}>
-                {row.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="block">
-          <span className="mb-1 block text-[11px] font-medium text-[#707070]">
-            How many
-          </span>
-          <select
-            value={limit}
-            disabled={disabled}
-            onChange={(e) => setLimit(Number(e.target.value))}
-            className="h-11 w-full border border-[#ccc] bg-white px-3 text-[14px] outline-none focus:border-[#141414] disabled:opacity-60"
-          >
-            {AMAZON_WINNER_LIMITS.map((n) => (
-              <option key={n} value={n}>
-                {n}
-              </option>
-            ))}
-          </select>
-        </label>
-      </div>
-
-      <div className="mt-2 flex gap-2">
-        <input
-          value={extra}
-          onChange={(e) => setExtra(e.target.value)}
-          placeholder="Optional: organizer, nailer, B0…"
-          disabled={disabled}
-          className="h-11 min-w-0 flex-1 border border-[#ccc] bg-white px-3 text-[14px] outline-none focus:border-[#141414] disabled:opacity-60"
-        />
-        {needsCost ? (
-          <input
-            value={cost}
-            onChange={(e) => setCost(e.target.value)}
-            placeholder="Your cost $"
-            inputMode="decimal"
-            disabled={disabled}
-            className="h-11 w-28 shrink-0 border border-[#ccc] bg-white px-3 text-[14px] outline-none focus:border-[#141414] disabled:opacity-60"
-          />
-        ) : null}
+      <div className="mt-3 flex gap-4 text-[13px]">
         <button
           type="button"
-          disabled={disabled || !canSearch}
-          onClick={() => void search()}
-          className="h-11 shrink-0 bg-[#141414] px-5 text-[14px] font-medium text-white disabled:opacity-40"
+          disabled={locked}
+          onClick={() => {
+            setView("live");
+            setLiveOn(true);
+            setPicked([]);
+            setError(null);
+          }}
+          className={cn(
+            "border-b pb-1",
+            view === "live"
+              ? "border-[#141414] font-medium text-[#141414]"
+              : "border-transparent text-[#707070]",
+          )}
         >
-          {searching ? "Searching…" : "Find opportunities"}
+          Live scan
+        </button>
+        <button
+          type="button"
+          disabled={locked}
+          onClick={() => {
+            setView("manual");
+            setLiveOn(false);
+            setSearching(false);
+            setPicked([]);
+            setError(null);
+          }}
+          className={cn(
+            "border-b pb-1",
+            view === "manual"
+              ? "border-[#141414] font-medium text-[#141414]"
+              : "border-transparent text-[#707070]",
+          )}
+        >
+          Manual search
         </button>
       </div>
+
+      {view === "live" ? (
+        <div className="mt-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              disabled={locked}
+              onClick={() => setLiveOn((on) => !on)}
+              className="h-11 bg-[#141414] px-5 text-[14px] font-medium text-white disabled:opacity-40"
+            >
+              {liveOn ? "Stop live scan" : "Start live scan"}
+            </button>
+            {needsCost ? (
+              <input
+                value={cost}
+                onChange={(e) => setCost(e.target.value)}
+                placeholder="Your cost $"
+                inputMode="decimal"
+                disabled={locked}
+                className="h-11 w-28 border border-[#ccc] bg-white px-3 text-[14px] outline-none focus:border-[#141414] disabled:opacity-60"
+              />
+            ) : null}
+          </div>
+          <p className="mt-2 flex items-center gap-2 text-[13px] text-[#141414]">
+            {liveOn ? (
+              <Loader2 className="size-3.5 shrink-0 animate-spin" />
+            ) : null}
+            {liveOn
+              ? `Scanning ${scanLabel}${queries.length ? ` · ${queries[0]}` : ""}`
+              : "Live scan is stopped. Start it to keep finding winners."}
+          </p>
+        </div>
+      ) : (
+        <form
+          className="mt-3"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void searchManual();
+          }}
+        >
+          <label className="block">
+            <span className="mb-1 block text-[11px] font-medium text-[#707070]">
+              Product name, ASIN, or Amazon link
+            </span>
+            <input
+              value={extra}
+              onChange={(e) => setExtra(e.target.value)}
+              placeholder="cable organizer, B0XXXXXXXXX, or https://www.amazon.com/dp/…"
+              disabled={locked || searching}
+              className="h-12 w-full border border-[#ccc] bg-white px-3 text-[15px] outline-none focus:border-[#141414] disabled:opacity-60"
+            />
+          </label>
+          <div className="mt-2 grid gap-2 sm:grid-cols-[1fr_88px_auto]">
+            <label className="block">
+              <span className="mb-1 block text-[11px] font-medium text-[#707070]">
+                Category
+              </span>
+              <select
+                value={categoryId}
+                disabled={locked || searching}
+                onChange={(e) => setCategoryId(e.target.value)}
+                className="h-11 w-full border border-[#ccc] bg-white px-3 text-[14px] outline-none focus:border-[#141414] disabled:opacity-60"
+              >
+                <option value="">Choose a category</option>
+                {AMAZON_WINNER_CATEGORIES.map((row) => (
+                  <option key={row.id} value={row.id}>
+                    {row.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="block">
+              <span className="mb-1 block text-[11px] font-medium text-[#707070]">
+                How many
+              </span>
+              <select
+                value={limit}
+                disabled={locked || searching}
+                onChange={(e) => setLimit(Number(e.target.value))}
+                className="h-11 w-full border border-[#ccc] bg-white px-3 text-[14px] outline-none focus:border-[#141414] disabled:opacity-60"
+              >
+                {AMAZON_WINNER_LIMITS.map((n) => (
+                  <option key={n} value={n}>
+                    {n}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <div className="flex items-end gap-2">
+              {needsCost ? (
+                <input
+                  value={cost}
+                  onChange={(e) => setCost(e.target.value)}
+                  placeholder="Your cost $"
+                  inputMode="decimal"
+                  disabled={locked || searching}
+                  className="h-11 w-28 border border-[#ccc] bg-white px-3 text-[14px] outline-none focus:border-[#141414] disabled:opacity-60"
+                />
+              ) : null}
+              <button
+                type="submit"
+                disabled={locked || searching || !canManualSearch}
+                className="h-11 shrink-0 bg-[#141414] px-5 text-[14px] font-medium text-white disabled:opacity-40"
+              >
+                {searching ? "Searching…" : "Find opportunities"}
+              </button>
+            </div>
+          </div>
+        </form>
+      )}
 
       {mode === "supplier" ? (
         <label className="mt-2 flex items-center gap-2 text-[13px] text-[#141414]">
           <input
             type="checkbox"
             checked={onlySellable}
-            disabled={disabled}
+            disabled={locked}
             onChange={(e) => setOnlySellable(e.target.checked)}
             className="size-4 accent-[#141414]"
           />
@@ -404,130 +594,49 @@ export function AmazonAutoImportPanel({
           </>
         )}{" "}
         Add <span className="font-medium">KEEPA_API_KEY</span> on the server for
-        live BSR and sales history. Without Keepa, Higlou searches specific
-        product types in the category — not the same Amazon bestsellers every
-        time.
+        live BSR and sales history. Keepa is not connected until that key is set.
       </p>
 
       {error ? (
         <p className="mt-2 text-[13px] text-destructive">{error}</p>
       ) : null}
 
-      {searching ? (
-        <div
-          className="mt-3 border border-[#e5e5e5] bg-white p-3"
-          aria-live="polite"
-        >
-          <p className="text-[13px] font-medium text-[#141414]">
-            {activeMode?.label}: searching
-          </p>
-          <p className="mt-0.5 text-[12px] text-[#707070]">
-            {activeMode?.hint}
-          </p>
-          <div className="mt-3 h-0.5 w-full bg-[#eee]">
-            <div
-              className="h-full bg-[#141414] transition-all duration-700"
-              style={{
-                width: `${((searchStep + 1) / steps.length) * 100}%`,
-              }}
-            />
-          </div>
-          <ol className="mt-3 grid gap-1.5">
-            {steps.map((label, index) => {
-              const done = index < searchStep;
-              const active = index === searchStep;
-              return (
-                <li
-                  key={label}
-                  className={cn(
-                    "flex items-center gap-2 text-[13px]",
-                    active
-                      ? "font-medium text-[#141414]"
-                      : done
-                        ? "text-[#141414]"
-                        : "text-[#a3a3a3]",
-                  )}
-                >
-                  {active ? (
-                    <Loader2 className="size-3.5 shrink-0 animate-spin" />
-                  ) : done ? (
-                    <Check className="size-3.5 shrink-0" strokeWidth={2.4} />
-                  ) : (
-                    <span className="size-3.5 shrink-0 border border-[#ccc]" />
-                  )}
-                  {label}
-                </li>
-              );
-            })}
-          </ol>
-          <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
-            {Array.from({ length: Math.min(limit, 3) }).map((_, index) => (
-              <div key={index} className="border border-[#eee] bg-[#fafafa] p-2">
-                <div className="h-24 animate-pulse bg-[#ececec]" />
-                <div className="mt-2 h-3 w-4/5 animate-pulse bg-[#ececec]" />
-                <div className="mt-2 grid grid-cols-2 gap-1">
-                  <div className="h-10 animate-pulse bg-[#ececec]" />
-                  <div className="h-10 animate-pulse bg-[#ececec]" />
-                  <div className="h-10 animate-pulse bg-[#ececec]" />
-                  <div className="h-10 animate-pulse bg-[#ececec]" />
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      ) : null}
-
-      {hits.length && !searching ? (
+      {hits.length ? (
         <div className="mt-3">
           <div className="flex items-center justify-between gap-2">
             <div>
               <p className="text-[11px] font-medium uppercase tracking-wide text-[#707070]">
-                3. {activeMode?.to}
+                {view === "live" ? "Live opportunities" : activeMode?.to}
               </p>
               <p className="mt-0.5 text-[12px] text-[#707070]">
-                {hits.length} opportunit{hits.length === 1 ? "y" : "ies"} for{" "}
-                {activeMode?.label}
+                {hits.length} opportunit{hits.length === 1 ? "y" : "ies"}
+                {view === "live" ? " found so far" : ` for ${activeMode?.label}`}
                 {mode !== "amazon" && sources?.ebayLive
                   ? ". eBay figures are active listings, not sold."
                   : ""}
               </p>
               {sources && !sources.keepa ? (
                 <p className="mt-1.5 border border-[#e5e5e5] bg-[#fafafa] px-2 py-1.5 text-[12px] text-[#141414]">
-                  Keepa is not connected. This round searched{" "}
-                  {queries.length
-                    ? queries.join(", ")
-                    : "specific product types in this category"}
-                  . Household bestsellers with 10k+ reviews are skipped. Click
-                  Find different products for another slice.
+                  Keepa is not connected. Live scan rotates product types across
+                  categories
+                  {queries.length ? ` · now: ${queries.join(", ")}` : ""}.
                 </p>
               ) : null}
             </div>
-            <div className="flex shrink-0 items-center gap-3">
-              {sources && !sources.keepa ? (
-                <button
-                  type="button"
-                  disabled={disabled}
-                  onClick={() => void search()}
-                  className="text-[12px] font-medium text-[#141414] underline-offset-2 hover:underline"
-                >
-                  Find different products
-                </button>
-              ) : null}
-              <button
-                type="button"
-                disabled={disabled}
-                onClick={() =>
-                  setPicked(
-                    picked.length === hits.length
-                      ? []
-                      : hits.map((hit) => hit.asin),
-                  )
-                }
-                className="text-[12px] font-medium text-[#141414] underline-offset-2 hover:underline"
-              >
-                {picked.length === hits.length ? "Clear" : "Select all"}
-              </button>
-            </div>
+            <button
+              type="button"
+              disabled={locked}
+              onClick={() =>
+                setPicked(
+                  picked.length === hits.length
+                    ? []
+                    : hits.map((hit) => hit.asin),
+                )
+              }
+              className="text-[12px] font-medium text-[#141414] underline-offset-2 hover:underline"
+            >
+              {picked.length === hits.length ? "Clear" : "Select all"}
+            </button>
           </div>
           <ul className="mt-2 grid max-h-[36rem] grid-cols-1 gap-2 overflow-y-auto sm:grid-cols-2">
             {hits.map((hit) => {
@@ -546,7 +655,7 @@ export function AmazonAutoImportPanel({
                       <input
                         type="checkbox"
                         checked={checked}
-                        disabled={disabled}
+                        disabled={locked}
                         onChange={() => {
                           setPicked((prev) =>
                             prev.includes(hit.asin)
@@ -588,7 +697,7 @@ export function AmazonAutoImportPanel({
           </ul>
           <button
             type="button"
-            disabled={disabled || !selected.length}
+            disabled={locked || !selected.length}
             onClick={() => void importSelected()}
             className="mt-2 h-11 w-full bg-[#141414] text-[14px] font-medium text-white disabled:opacity-40"
           >

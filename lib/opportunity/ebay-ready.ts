@@ -5,6 +5,7 @@ import { synthesizeDescriptionSummary, buildListingDescriptionHtml } from "@/lib
 import { STORE_BRANDING_DEFAULTS } from "@/config/store-branding";
 import { ensureListableEbayCategory } from "@/lib/ebay/taxonomy-categories";
 import { seedPackageOnListing } from "@/lib/ebay/package-shipping";
+import { toEbayListingTitle } from "@/lib/ebay/listing-helpers";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 export async function ebayReadyImportFields(opts: {
@@ -30,7 +31,7 @@ export async function ebayReadyImportFields(opts: {
   country: string;
   handlingTime: number;
 }> {
-  const title = String(opts.title || "").trim();
+  const title = toEbayListingTitle(String(opts.title || "").trim());
   const brand = String(opts.brand || "").trim();
   const features = (opts.features || []).map(String).filter(Boolean);
   let categoryId = "";

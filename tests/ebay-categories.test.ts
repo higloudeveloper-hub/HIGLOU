@@ -144,6 +144,15 @@ describe("resolveEbayCategory", () => {
     });
     expect(result.categoryId).toBe("117503");
   });
+
+  it("maps a bamboo silverware drawer organizer to kitchen storage", () => {
+    const result = resolveEbayCategory({
+      title:
+        "Pipishell Bamboo Expandable Silverware Drawer Organizer, Adjustable",
+      productType: "drawer organizer",
+    });
+    expect(result.categoryId).toBe("20601");
+  });
 });
 
 describe("draftDefaultsToPolicyValues", () => {

@@ -42,6 +42,19 @@ describe("parseAmazonProductPage", () => {
     expect(product.imageUrls.every((u) => u.includes("_AC_SL1500_"))).toBe(true);
   });
 
+  it("does not keep Amazon.com page titles as the product title", () => {
+    const product = parseAmazonProductPage(
+      `
+      <title>Amazon.com: Pipishell Bamboo Expandable Silverware Drawer Organizer, Adjustable : Home &amp; Kitchen</title>
+      <meta property="og:title" content="Amazon.com - Pipishell Bamboo Expandable Silverware Drawer Organizer, Adjustable" />
+      `,
+      { asin: "B07SRV3SN8", url: "https://www.amazon.com/dp/B07SRV3SN8" },
+    );
+    expect(product.title).not.toMatch(/amazon\.com/i);
+    expect(product.title).toMatch(/^Pipishell Bamboo Expandable Silverware/i);
+    expect(product.title.length).toBeLessThanOrEqual(80);
+  });
+
   it("keeps later gallery slides when the first photo has nested [width,height]", () => {
     const product = parseAmazonProductPage(
       `

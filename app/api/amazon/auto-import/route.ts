@@ -18,6 +18,7 @@ import {
   toDbColumns,
 } from "@/lib/products/persistence";
 import { ebayReadyImportFields } from "@/lib/opportunity/ebay-ready";
+import { toEbayListingTitle } from "@/lib/ebay/listing-helpers";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -99,7 +100,7 @@ async function importAsin(
   return {
     asin: product.asin,
     amazonUrl: product.url,
-    title: product.title,
+    title: toEbayListingTitle(product.title),
     brand: product.brand,
     price,
     upc: product.upc,
@@ -248,7 +249,7 @@ export async function POST(request: Request) {
         supabase: auth.supabase,
       });
       const data = productBodySchema.parse({
-        title: item.title.slice(0, 80),
+        title: toEbayListingTitle(item.title),
         brand: item.brand,
         sku: item.sku,
         amazonAsin: item.asin,

@@ -341,7 +341,16 @@ export const EBAY_CATEGORY_OPTIONS: EbayCategoryOption[] = [
   {
     id: "20601",
     name: "Kitchen Storage & Organization",
-    keywords: ["kitchen organizer", "food storage", "pantry"],
+    keywords: [
+      "kitchen organizer",
+      "food storage",
+      "pantry",
+      "drawer organizer",
+      "silverware organizer",
+      "silverware",
+      "cutlery organizer",
+      "utensil organizer",
+    ],
   },
   {
     id: "20658",

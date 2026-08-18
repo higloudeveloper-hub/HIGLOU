@@ -25,6 +25,7 @@ import {
 import {
   buildEbayTitle,
   generateSku,
+  toEbayListingTitle,
 } from "@/lib/ebay/listing-helpers";
 import {
   estimatePackageAndShipping,
@@ -132,13 +133,28 @@ function mapApiProductToListing(
       }))
     : base.itemSpecifics;
 
+  const title = toEbayListingTitle(String(product.title ?? ""));
+  const brand = String(product.brand ?? "");
+  const features = Array.isArray(product.features)
+    ? (product.features as string[])
+    : [];
+  const catalog =
+    String(product.categoryId ?? "").trim()
+      ? null
+      : resolveEbayCategory({
+          title,
+          brand,
+          features,
+          productType: String(product.productType ?? ""),
+        });
+
   const mapped: ProductListing = {
     ...base,
     id: String(product.id ?? base.id),
     status: (product.status as ProductListing["status"]) || base.status,
-    title: String(product.title ?? ""),
+    title,
     subtitle: String(product.subtitle ?? ""),
-    brand: String(product.brand ?? ""),
+    brand,
     collection: String(product.collection ?? ""),
     model: String(product.model ?? ""),
     mpn: String(product.mpn ?? ""),
@@ -147,8 +163,9 @@ function mapApiProductToListing(
     amazonAsin: String(product.amazonAsin ?? product.amazon_asin ?? ""),
     amazonUrl: String(product.amazonUrl ?? product.amazon_url ?? ""),
     productType: String(product.productType ?? ""),
-    categoryId: String(product.categoryId ?? ""),
-    categoryName: String(product.categoryName ?? ""),
+    categoryId: String(product.categoryId ?? "") || catalog?.categoryId || "",
+    categoryName:
+      String(product.categoryName ?? "") || catalog?.categoryName || "",
     condition: String(product.condition ?? "New"),
     conditionId: String(product.conditionId ?? "NEW"),
     conditionDescription: String(product.conditionDescription ?? ""),
@@ -606,7 +623,7 @@ export function NewListingWorkspace({
         return;
       }
       if (field === "title" && body.title) {
-        update("title", body.title.slice(0, 80));
+        update("title", toEbayListingTitle(body.title));
         toast.success("Title updated");
       }
       if (field === "description" && body.descriptionSummary) {
@@ -641,16 +658,17 @@ export function NewListingWorkspace({
     const colors = analysis.colors.length ? analysis.colors : prev.colors;
     const numberOfItems = analysis.numberOfItems ?? prev.numberOfItems;
 
-    const title =
+    const title = toEbayListingTitle(
       analysis.title ||
-      buildEbayTitle({
-        brand,
-        model: analysis.collection || model,
-        type: productType,
-        size,
-        pieces: numberOfItems,
-        color: colors[0],
-      });
+        buildEbayTitle({
+          brand,
+          model: analysis.collection || model,
+          type: productType,
+          size,
+          pieces: numberOfItems,
+          color: colors[0],
+        }),
+    );
 
     const sku = /^(AMZ|HD)-/i.test(prev.sku)
       ? prev.sku
@@ -713,7 +731,7 @@ export function NewListingWorkspace({
 
     const nextBase: ProductListing = {
       ...prev,
-      title: title.slice(0, 80),
+      title,
       brand,
       collection: analysis.collection || prev.collection,
       model,
@@ -1094,7 +1112,7 @@ export function NewListingWorkspace({
       );
       const seeded: ProductListing = {
         ...listing,
-        title: (body.title || listing.title).slice(0, 80),
+        title: toEbayListingTitle(body.title || listing.title),
         brand: body.brand || listing.brand,
         model: body.model || listing.model,
         price: body.price ?? listing.price,
@@ -1163,7 +1181,7 @@ export function NewListingWorkspace({
           ? null
           : Number(current.price);
       const payload = {
-        title: String(current.title || ""),
+        title: toEbayListingTitle(String(current.title || "")),
         subtitle: String(current.subtitle || ""),
         brand: String(current.brand || ""),
         collection: String(current.collection || ""),

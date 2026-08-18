@@ -4,6 +4,7 @@ import {
   buildExportFileName,
   toAsciiFileName,
   toAsciiHttpHeaderValue,
+  toEbayListingTitle,
 } from "../lib/ebay/listing-helpers";
 
 describe("HTTP header ASCII safety", () => {
@@ -60,5 +61,26 @@ describe("HTTP header ASCII safety", () => {
     });
     expect(name).toBe("Higlou_Draft_GEProfile_JS760SLSS_30_2026-07-14.csv");
     expect([...name].every((ch) => ch.charCodeAt(0) <= 127)).toBe(true);
+  });
+});
+
+describe("toEbayListingTitle", () => {
+  it("strips Amazon.com page chrome so the listing can use the 80 characters", () => {
+    expect(
+      toEbayListingTitle(
+        "Amazon.com - Pipishell Bamboo Expandable Silverware Drawer Organizer, Adjustable",
+      ),
+    ).toBe(
+      "Pipishell Bamboo Expandable Silverware Drawer Organizer, Adjustable",
+    );
+    expect(
+      toEbayListingTitle(
+        "Amazon.com: RIDGID 18V Nailer : Amazon.com: Tools & Home Improvement",
+      ),
+    ).toBe("RIDGID 18V Nailer");
+    expect(toEbayListingTitle("Amazon Basics 8-Sheet Shredder")).toBe(
+      "Amazon Basics 8-Sheet Shredder",
+    );
+    expect(toEbayListingTitle("Amazon.com")).toBe("");
   });
 });

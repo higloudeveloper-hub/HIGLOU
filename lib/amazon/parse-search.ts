@@ -1,5 +1,6 @@
 import { isCaptchaPage } from "@/lib/amazon/parse-product";
 import type { AmazonWinnerHit } from "@/lib/amazon/winner-rank";
+import { toEbayListingTitle } from "@/lib/ebay/listing-helpers";
 
 function numberFromUnknown(value: unknown): number | null {
   if (value == null || value === "") return null;
@@ -44,7 +45,7 @@ function parseCard(chunk: string, asin: string): AmazonWinnerHit {
     chunk.match(/<h2[^>]*>[\s\S]*?<span[^>]*>([\s\S]*?)<\/span>/i)?.[1] ||
     chunk.match(/<h2[^>]*>[\s\S]*?<a[^>]*>([\s\S]*?)<\/a>/i)?.[1] ||
     "";
-  hit.title = decode(title.replace(/<[^>]+>/g, " "));
+  hit.title = toEbayListingTitle(decode(title.replace(/<[^>]+>/g, " ")));
   const rating =
     numberFromUnknown(chunk.match(/([0-9.]+)\s+out of\s+5/i)?.[1]) ??
     numberFromUnknown(chunk.match(/aria-label="([0-9.]+) out of 5/i)?.[1]);
@@ -120,7 +121,7 @@ export function parseAmazonSearchMarkdown(text: string): AmazonWinnerHit[] {
       chunk.match(/\[([^\]]{8,180})\]\(/)?.[1] ||
       chunk.match(/^#{1,3}\s+(.{8,180})$/m)?.[1] ||
       "";
-    hit.title = decode(title);
+    hit.title = toEbayListingTitle(decode(title));
     hit.rating = numberFromUnknown(
       chunk.match(/([0-9.]+)\s+out of\s+5/i)?.[1],
     );

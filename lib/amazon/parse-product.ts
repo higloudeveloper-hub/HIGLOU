@@ -1,5 +1,6 @@
 import { DEFAULT_VALUES } from "@/config/default-values";
 import { isUsableCatalogBullet } from "@/lib/catalog/bullets";
+import { toEbayListingTitle } from "@/lib/ebay/listing-helpers";
 
 export type AmazonProductDraft = {
   asin: string;
@@ -426,15 +427,15 @@ export function parseAmazonReviews(html: string): {
 }
 
 function titleFromHtml(html: string): string {
-  return stripTags(
-    html.match(/id="productTitle"[^>]*>\s*([\s\S]*?)<\/span>/i)?.[1] ||
-      attr(html, "og:title") ||
-      html.match(/<title>([\s\S]*?)<\/title>/i)?.[1] ||
-      html.match(/^#\s+(.+)$/m)?.[1] ||
-      "",
-  )
-    .replace(/\s*:\s*amazon\.co.*$/i, "")
-    .trim();
+  return toEbayListingTitle(
+    stripTags(
+      html.match(/id="productTitle"[^>]*>\s*([\s\S]*?)<\/span>/i)?.[1] ||
+        attr(html, "og:title") ||
+        html.match(/<title>([\s\S]*?)<\/title>/i)?.[1] ||
+        html.match(/^#\s+(.+)$/m)?.[1] ||
+        "",
+    ),
+  );
 }
 
 export function parseAmazonProductPage(
@@ -457,7 +458,8 @@ export function parseAmazonProductPage(
   const offers = ld.offers as { price?: string | number } | undefined;
   const ldPrice = offers?.price != null ? Number(offers.price) : null;
 
-  const title = titleFromHtml(html) || decodeEntities(ldName);
+  const title =
+    titleFromHtml(html) || toEbayListingTitle(decodeEntities(ldName));
   const brand = brandFromHtml(html) || decodeEntities(ldBrand);
   const price =
     priceFromHtml(html) ??

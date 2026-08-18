@@ -2,6 +2,7 @@ import { getEbayConfig } from "@/lib/ebay/config";
 import { sanitizeEbayAspects } from "@/lib/ebay/sanitize-aspects";
 import { HIGLOU_WAREHOUSE } from "@/config/warehouse";
 import { validateBarcode } from "@/lib/barcode/validators";
+import { toEbayListingTitle } from "@/lib/ebay/listing-helpers";
 
 /**
  * Only send UPC/EAN values eBay will accept (valid GS1 checksum).
@@ -142,7 +143,7 @@ export async function createOrReplaceInventoryItem(
   options?: { aspectCardinality?: Map<string, "SINGLE" | "MULTI"> },
 ) {
   const product: Record<string, unknown> = {
-    title: input.title.slice(0, 80),
+    title: toEbayListingTitle(input.title),
     description: input.description,
     imageUrls: input.imageUrls.slice(0, 24),
   };

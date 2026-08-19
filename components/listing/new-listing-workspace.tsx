@@ -51,6 +51,9 @@ import {
 } from "@/components/listing/review-helpers";
 import { readAiProviderSettings } from "@/components/settings/ai-settings-form";
 import { detectCatalogStore } from "@/lib/catalog/detect-store";
+import { parseBatchCatalogLinks } from "@/lib/catalog/parse-batch-links";
+import { ebayProfitPrice } from "@/lib/amazon/winner-rank";
+import { BatchPricePublish, type BatchPriceItem } from "@/components/listing/wizard/batch-price-publish";
 import { fetchHomeDepotOfficialGalleryInBrowser } from "@/lib/homedepot/browser-gallery";
 import {
   brandingFromEbayStoreName,
@@ -259,8 +262,10 @@ export function NewListingWorkspace({
   const [step, setStep] = useState<WizardStep>("photos");
   const [analyzing, setAnalyzing] = useState(false);
   const [catalogImporting, setCatalogImporting] = useState<
-    false | "amazon" | "homedepot"
+    false | "amazon" | "homedepot" | "batch"
   >(false);
+  const [batchItems, setBatchItems] = useState<BatchPriceItem[] | null>(null);
+  const [batchProgress, setBatchProgress] = useState("");
   const [analysisStep, setAnalysisStep] = useState(0);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
   const [analysisErrorCode, setAnalysisErrorCode] = useState<string | null>(
@@ -1166,6 +1171,289 @@ export function NewListingWorkspace({
     } finally {
       setCatalogImporting(false);
     }
+  };
+
+  const importBatchFromCatalog = async (urls: string[]): Promise<boolean> => {
+    if (catalogImporting || analyzing) return false;
+    const { links, skipped } = parseBatchCatalogLinks(urls.join("\n"));
+    if (!links.length) {
+      const message = skipped.length
+        ? "Paste Amazon or Home Depot product links."
+        : "Paste up to 5 product links.";
+      toast.error(message);
+      return false;
+    }
+
+    setCatalogImporting("batch");
+    setAnalysisError(null);
+    setBatchProgress("Importing…");
+    const items: BatchPriceItem[] = [];
+
+    try {
+      const amazon = links.filter((row) => row.store === "amazon");
+      const homedepot = links.filter((row) => row.store === "homedepot");
+
+      if (amazon.length) {
+        setBatchProgress(
+          `Reading Amazon (${amazon.length} product${amazon.length === 1 ? "" : "s"})…`,
+        );
+        const response = await fetch("/api/amazon/auto-import", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            asins: amazon.map((row) => row.key),
+            urls: amazon.map((row) => row.url),
+            mode: "amazon_to_ebay",
+          }),
+        });
+        const body = (await response.json().catch(() => null)) as {
+          ok?: boolean;
+          error?: string;
+          skipped?: Array<{ asin?: string; reason?: string }>;
+          listings?: Array<{
+            id: string;
+            title: string;
+            imageUrl?: string;
+            price?: number | null;
+          }>;
+          id?: string;
+          title?: string;
+          price?: number | null;
+          images?: Array<{ url?: string }>;
+        } | null;
+        const listings = body?.listings?.length
+          ? body.listings
+          : body?.id
+            ? [
+                {
+                  id: body.id,
+                  title: body.title || "",
+                  imageUrl: body.images?.[0]?.url || "",
+                  price: body.price ?? null,
+                },
+              ]
+            : [];
+        if (!response.ok || !listings.length) {
+          throw new Error(
+            body?.error ||
+              body?.skipped?.[0]?.reason ||
+              "Amazon batch import failed",
+          );
+        }
+        for (const row of listings) {
+          items.push({
+            id: row.id,
+            title: row.title,
+            imageUrl: row.imageUrl || "",
+            store: "amazon",
+            sourcePrice: null,
+            ebayPrice: row.price ?? null,
+            status: "ready",
+          });
+        }
+        if (body?.skipped?.length) {
+          toast.message(
+            `${body.skipped.length} Amazon link${body.skipped.length === 1 ? "" : "s"} could not be imported.`,
+          );
+        }
+      }
+
+      for (let i = 0; i < homedepot.length; i += 1) {
+        const link = homedepot[i]!;
+        setBatchProgress(
+          `Reading Home Depot (${i + 1} of ${homedepot.length})…`,
+        );
+        const html = await fetchHomeDepotOfficialGalleryInBrowser(link.url).catch(
+          () => "",
+        );
+        const response = await fetch("/api/homedepot/import", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ url: link.url, ...(html ? { html } : {}) }),
+        });
+        const body = (await response.json().catch(() => null)) as {
+          ok?: boolean;
+          error?: string;
+          title?: string;
+          brand?: string;
+          model?: string;
+          price?: number | null;
+          upc?: string;
+          features?: string[];
+          sku?: string;
+          images?: Array<{
+            url: string;
+            storagePath?: string;
+            fileName?: string;
+            mimeType?: string;
+            sizeBytes?: number;
+          }>;
+        } | null;
+        if (!response.ok || !body?.ok || !body.images?.length) {
+          items.push({
+            id: `hd-fail-${link.key}`,
+            title: body?.title || link.url,
+            imageUrl: "",
+            store: "homedepot",
+            sourcePrice: body?.price ?? null,
+            ebayPrice: null,
+            status: "error",
+            error: body?.error || "Home Depot import failed",
+          });
+          continue;
+        }
+        const category = resolveEbayCategory({
+          title: body.title,
+          brand: body.brand,
+          productType: body.model,
+        });
+        const ebayPrice = ebayProfitPrice(body.price ?? null);
+        const save = await fetch("/api/products", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            title: toEbayListingTitle(body.title || ""),
+            brand: body.brand || "",
+            model: body.model || "",
+            sku: body.sku || `HD-${link.key}`,
+            upc: body.upc || "",
+            categoryId: category.categoryId,
+            categoryName: category.categoryName,
+            condition: "New",
+            conditionId: "1000",
+            price: ebayPrice,
+            quantity: 1,
+            features: body.features || [],
+            status: "Ready",
+            images: body.images.map((img, index) => ({
+              publicUrl: img.url,
+              storagePath: img.storagePath || "",
+              fileName: img.fileName || `hd-${index + 1}.jpg`,
+              sortOrder: index,
+              isPrimary: index === 0,
+              mimeType: img.mimeType || "image/jpeg",
+              sizeBytes: img.sizeBytes || 0,
+            })),
+          }),
+        });
+        const saved = (await save.json().catch(() => null)) as {
+          product?: { id?: string; title?: string };
+          error?: string;
+        } | null;
+        const id = saved?.product?.id;
+        if (!save.ok || !id) {
+          items.push({
+            id: `hd-fail-${link.key}`,
+            title: body.title || link.url,
+            imageUrl: body.images[0]?.url || "",
+            store: "homedepot",
+            sourcePrice: body.price ?? null,
+            ebayPrice,
+            status: "error",
+            error: saved?.error || "Could not save Home Depot draft",
+          });
+          continue;
+        }
+        items.push({
+          id,
+          title: saved.product?.title || body.title || "",
+          imageUrl: body.images[0]?.url || "",
+          store: "homedepot",
+          sourcePrice: body.price ?? null,
+          ebayPrice,
+          status: "ready",
+        });
+      }
+
+      const okItems = items.filter((row) => row.status !== "error");
+      if (!okItems.length) {
+        throw new Error(items[0]?.error || "None of those links could be imported.");
+      }
+      setBatchItems(items);
+      toast.success(
+        `${okItems.length} listing${okItems.length === 1 ? "" : "s"} ready. Set the eBay prices.`,
+      );
+      return true;
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Batch import failed";
+      setAnalysisError(message);
+      toast.error(message);
+      return false;
+    } finally {
+      setBatchProgress("");
+      setCatalogImporting(false);
+    }
+  };
+
+  const publishBatchListings = async () => {
+    if (!batchItems?.length || catalogImporting) return;
+    const targets = batchItems.filter(
+      (row) => row.status !== "error" && row.status !== "live",
+    );
+    if (targets.some((row) => !row.ebayPrice || row.ebayPrice <= 0)) {
+      toast.error("Set an eBay price on each product.");
+      return;
+    }
+    setCatalogImporting("batch");
+    const next = [...batchItems];
+    for (let i = 0; i < next.length; i += 1) {
+      const row = next[i]!;
+      if (row.status === "error" || row.status === "live") continue;
+      setBatchProgress(`Publishing ${i + 1} of ${targets.length}…`);
+      next[i] = { ...row, status: "publishing" };
+      setBatchItems([...next]);
+      try {
+        const patched = await fetch(`/api/products/${row.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ price: row.ebayPrice }),
+        });
+        if (!patched.ok) {
+          const body = (await patched.json().catch(() => null)) as {
+            error?: string;
+          } | null;
+          throw new Error(body?.error || "Could not save price");
+        }
+        const published = await fetch("/api/ebay/publish", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            productId: row.id,
+            mode: "live",
+          }),
+        });
+        const body = (await published.json().catch(() => null)) as {
+          error?: string;
+          listingId?: string;
+          viewItemUrl?: string;
+          ebayUrl?: string;
+        } | null;
+        if (!published.ok) {
+          throw new Error(body?.error || "eBay publish failed");
+        }
+        next[i] = {
+          ...row,
+          status: "live",
+          listingId: body?.listingId,
+          ebayUrl: body?.viewItemUrl || body?.ebayUrl,
+        };
+      } catch (error) {
+        next[i] = {
+          ...row,
+          status: "error",
+          error:
+            error instanceof Error ? error.message : "eBay publish failed",
+        };
+      }
+      setBatchItems([...next]);
+    }
+    setBatchProgress("");
+    setCatalogImporting(false);
+    const live = next.filter((row) => row.status === "live").length;
+    const failed = next.filter((row) => row.status === "error").length;
+    if (live) toast.success(`${live} listing${live === 1 ? "" : "s"} live on eBay`);
+    if (failed) toast.error(`${failed} could not publish`);
   };
 
   const persistDraft = async (options?: {
@@ -2083,7 +2371,31 @@ export function NewListingWorkspace({
         </div>
       ) : null}
 
-      {!loadingProduct && step === "photos" ? (
+      {!loadingProduct && step === "photos" && batchItems ? (
+        <BatchPricePublish
+          items={batchItems}
+          busy={catalogImporting === "batch"}
+          progress={batchProgress}
+          onPriceChange={(id, price) => {
+            setBatchItems((prev) =>
+              prev
+                ? prev.map((row) =>
+                    row.id === id ? { ...row, ebayPrice: price } : row,
+                  )
+                : prev,
+            );
+          }}
+          onPublish={() => {
+            void publishBatchListings();
+          }}
+          onClose={() => {
+            if (catalogImporting === "batch") return;
+            setBatchItems(null);
+          }}
+        />
+      ) : null}
+
+      {!loadingProduct && step === "photos" && !batchItems ? (
         <PhotosScreen
           images={listing.images}
           productId={listing.id}
@@ -2113,6 +2425,7 @@ export function NewListingWorkspace({
             void analyzeProduct();
           }}
           onCatalogImport={importFromCatalog}
+          onBatchImport={importBatchFromCatalog}
           catalogImporting={catalogImporting}
           sourceListing={listing}
         />

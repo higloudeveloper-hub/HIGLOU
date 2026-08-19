@@ -25,6 +25,7 @@ import {
   synthesizeDescriptionSummary,
 } from "@/lib/ebay/description-html";
 import { STORE_BRANDING_DEFAULTS } from "@/config/store-branding";
+import { parseAmazonLink } from "@/lib/amazon/asin";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -53,6 +54,7 @@ const bodySchema = z.object({
   query: z.string().max(200).optional().default(""),
   category: z.string().max(120).optional().default(""),
   asins: z.array(z.string().min(10).max(12)).max(5).optional().default([]),
+  urls: z.array(z.string().min(8).max(2000)).max(5).optional().default([]),
   cards: z.array(cardSchema).max(5).optional().default([]),
   ebayPrice: z.number().positive().max(100000).optional(),
   mode: z
@@ -337,7 +339,12 @@ async function postWinnerImport(request: Request) {
 
   let asins = [
     ...new Set(
-      (body.asins || [])
+      [
+        ...(body.asins || []),
+        ...(body.urls || []).map(
+          (url) => parseAmazonLink(url)?.asin || "",
+        ),
+      ]
         .map((value) => value.trim().toUpperCase())
         .filter((value) => /^[A-Z0-9]{10}$/.test(value)),
     ),
@@ -550,7 +557,26 @@ async function postWinnerImport(request: Request) {
     rating: primary.rating,
     reviewCount: primary.reviewCount,
     images: primary.images,
-    extras: savedExtras,
+    extras: savedExtras.map((row) => {
+      const item = imported.find((hit) => hit.asin === row.asin);
+      return {
+        id: row.id,
+        asin: row.asin,
+        title: row.title,
+        imageUrl: item?.images[0]?.url || "",
+        price: item?.price ?? null,
+      };
+    }),
+    listings: saved.map((row) => {
+      const item = imported.find((hit) => hit.asin === row.asin);
+      return {
+        id: row.id,
+        asin: row.asin,
+        title: row.title,
+        imageUrl: item?.images[0]?.url || "",
+        price: item?.price ?? null,
+      };
+    }),
     skipped,
     mode: body.mode,
   });

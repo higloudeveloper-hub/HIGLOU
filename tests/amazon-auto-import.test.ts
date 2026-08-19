@@ -383,7 +383,8 @@ describe("Amazon auto-import stays an eBay draft flow", () => {
     const search = readRepo("app/api/amazon/auto-import/search/route.ts");
     const categories = readRepo("lib/opportunity/categories.ts");
     const modes = readRepo("lib/opportunity/mode-copy.ts");
-    expect(dock).not.toMatch(/Find winners/);
+    expect(dock).toMatch(/Up to 5 links/);
+    expect(workspace).toMatch(/importBatchFromCatalog/);
     expect(dock).not.toMatch(/AmazonAutoImportPanel/);
     expect(sidebar).toMatch(/Find winners/);
     expect(sidebar).toMatch(/href: "\/winners"/);
@@ -405,6 +406,8 @@ describe("Amazon auto-import stays an eBay draft flow", () => {
     expect(nextConfig).toMatch(/"sharp"/);
     expect(nextConfig).toMatch(/@img\/sharp-libvips-linux-x64/);
     expect(importRoute).toMatch(/analyzeWinnerListing/);
+    expect(importRoute).toMatch(/listings: saved\.map/);
+    expect(importRoute).toMatch(/urls: z\.array/);
     expect(importRoute).toMatch(/analyzeProductHybrid/);
     expect(importRoute).toMatch(/importAmazonCatalogProduct/);
     expect(importRoute).not.toMatch(/listingFromCard/);

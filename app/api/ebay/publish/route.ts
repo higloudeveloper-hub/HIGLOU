@@ -42,7 +42,7 @@ import { mapProductRow } from "@/lib/products/persistence";
 import type { ProductListing } from "@/types/product";
 import { createEmptyListing } from "@/lib/demo/sample-listing";
 import { DEFAULT_VALUES } from "@/config/default-values";
-import { isListableEbayCategoryId } from "@/config/ebay-categories";
+import { isListableEbayCategoryId, resolveEbayCategory } from "@/config/ebay-categories";
 import { resolveListingPackage } from "@/lib/ebay/package-shipping";
 
 const bodySchema = z.object({
@@ -65,7 +65,11 @@ const bodySchema = z.object({
       type: z.string().optional().default(""),
       condition: z.string().optional().default("New"),
       conditionId: z.string().optional().default("1000"),
-      price: z.number().positive(),
+      price: z.preprocess((value) => {
+        if (value == null || value === "") return undefined;
+        const num = Number(value);
+        return Number.isFinite(num) && num > 0 ? num : undefined;
+      }, z.number().positive().optional()),
       quantity: z.number().int().min(1).default(1),
       colors: z.array(z.string()).optional().default([]),
       materials: z.array(z.string()).optional().default([]),
@@ -118,7 +122,7 @@ function snapshotToListing(
     categoryName: snap.categoryName,
     condition: snap.condition,
     conditionId: snap.conditionId,
-    price: snap.price,
+    price: snap.price ?? null,
     quantity: snap.quantity,
     size: snap.size,
     type: snap.type,
@@ -275,14 +279,21 @@ export async function POST(request: Request) {
         ? (error as { issues: Array<{ path: (string | number)[]; message: string }> })
             .issues
         : [];
+    const first = issues[0];
+    const field = first?.path?.filter(Boolean).join(".") || "";
     const categoryIssue = issues.some((issue) =>
       issue.path.includes("categoryId"),
     );
+    const priceIssue = issues.some((issue) => issue.path.includes("price"));
     return NextResponse.json(
       {
-        error: categoryIssue
-          ? "This listing still needs an eBay category. Higlou will pick one from the title on the next try."
-          : "The listing is missing a required field. Open Review and try publish again.",
+        error: priceIssue
+          ? "Set a selling price before publishing to eBay."
+          : categoryIssue
+            ? "This listing still needs an eBay category. Higlou will pick one from the title on the next try."
+            : field
+              ? `The listing is missing ${field}. Open Review and try publish again.`
+              : "The listing is missing a required field. Open Review and try publish again.",
       },
       { status: 400 },
     );
@@ -320,8 +331,49 @@ export async function POST(request: Request) {
       (images || []) as Array<Record<string, unknown>>,
       (specifics || []) as Array<Record<string, unknown>>,
     );
-  } else if (data.listing) {
-    listing = snapshotToListing(data.listing);
+  }
+
+  if (data.listing) {
+    const snap = snapshotToListing(data.listing);
+    listing = listing
+      ? {
+          ...listing,
+          title: snap.title || listing.title,
+          sku: snap.sku || listing.sku,
+          brand: snap.brand || listing.brand,
+          model: snap.model || listing.model,
+          mpn: snap.mpn || listing.mpn,
+          upc: snap.upc || listing.upc,
+          categoryId: snap.categoryId || listing.categoryId,
+          categoryName: snap.categoryName || listing.categoryName,
+          condition: snap.condition || listing.condition,
+          conditionId: snap.conditionId || listing.conditionId,
+          price: snap.price ?? listing.price,
+          quantity: snap.quantity || listing.quantity,
+          size: snap.size || listing.size,
+          productType: snap.productType || listing.productType,
+          type: snap.type || listing.type,
+          colors: snap.colors.length ? snap.colors : listing.colors,
+          materials: snap.materials.length ? snap.materials : listing.materials,
+          features: snap.features.length ? snap.features : listing.features,
+          descriptionSummary:
+            snap.descriptionSummary || listing.descriptionSummary,
+          descriptionHtml: snap.descriptionHtml || listing.descriptionHtml,
+          itemSpecifics: snap.itemSpecifics.length
+            ? snap.itemSpecifics
+            : listing.itemSpecifics,
+          images: snap.images.length ? snap.images : listing.images,
+          shippingPolicyId: snap.shippingPolicyId || listing.shippingPolicyId,
+          returnPolicyId: snap.returnPolicyId || listing.returnPolicyId,
+          paymentPolicyId: snap.paymentPolicyId || listing.paymentPolicyId,
+          packageWeightLbs: snap.packageWeightLbs ?? listing.packageWeightLbs,
+          packageWeightOz: snap.packageWeightOz ?? listing.packageWeightOz,
+          packageLengthIn: snap.packageLengthIn ?? listing.packageLengthIn,
+          packageWidthIn: snap.packageWidthIn ?? listing.packageWidthIn,
+          packageDepthIn: snap.packageDepthIn ?? listing.packageDepthIn,
+          packageSource: snap.packageSource || listing.packageSource,
+        }
+      : snap;
   }
 
   if (!listing) {
@@ -329,6 +381,26 @@ export async function POST(request: Request) {
       { error: "Provide productId or listing snapshot" },
       { status: 400 },
     );
+  }
+
+  if (!listing.price || listing.price <= 0) {
+    return NextResponse.json(
+      { error: "Set a selling price before publishing to eBay." },
+      { status: 400 },
+    );
+  }
+
+  if (!isListableEbayCategoryId(listing.categoryId)) {
+    const catalog = resolveEbayCategory({
+      title: listing.title,
+      brand: listing.brand,
+      features: listing.features,
+      productType: listing.productType || listing.type,
+    });
+    if (isListableEbayCategoryId(catalog.categoryId)) {
+      listing.categoryId = catalog.categoryId;
+      listing.categoryName = catalog.categoryName;
+    }
   }
 
   try {
@@ -854,9 +926,15 @@ export async function POST(request: Request) {
             : liveHint,
     });
   } catch (error) {
+    const message =
+      error instanceof Error && error.message.trim()
+        ? error.message
+        : typeof error === "string" && error.trim()
+          ? error
+          : "eBay publish failed";
     return NextResponse.json(
       {
-        error: error instanceof Error ? error.message : "eBay publish failed",
+        error: message,
       },
       { status: 502 },
     );

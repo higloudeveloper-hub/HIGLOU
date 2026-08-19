@@ -1723,9 +1723,23 @@ export function NewListingWorkspace({
     setEbayPublishMode(mode);
     setPublishingEbay(true);
     try {
-      await persistDraft({ quiet: true, draft: withPackage });
+      if (
+        withPackage.price == null ||
+        !Number.isFinite(Number(withPackage.price)) ||
+        Number(withPackage.price) <= 0
+      ) {
+        throw new Error("Set a selling price before publishing to eBay.");
+      }
+      const saved = await persistDraft({ quiet: true, draft: withPackage });
+      if (!saved.ok) {
+        throw new Error(saved.message);
+      }
       const productId =
-        /^[0-9a-f-]{36}$/i.test(withPackage.id) ? withPackage.id : undefined;
+        /^[0-9a-f-]{36}$/i.test(saved.productId)
+          ? saved.productId
+          : /^[0-9a-f-]{36}$/i.test(withPackage.id)
+            ? withPackage.id
+            : undefined;
       const response = await fetch("/api/ebay/publish", {
         method: "POST",
         headers: { "Content-Type": "application/json" },

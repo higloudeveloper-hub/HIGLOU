@@ -11,6 +11,7 @@ import type {
   EbayOfferInput,
 } from "@/lib/ebay/inventory-api";
 import { sanitizeEbayAspects } from "@/lib/ebay/sanitize-aspects";
+import { toEbayInventorySku } from "@/lib/ebay/listing-helpers";
 import { ensureInferredElectricalAspects, inferModelAspect, listingHasAspect } from "@/lib/ebay/infer-voltage";
 import { ensureInferredDimensionAspects } from "@/lib/ebay/infer-item-dimensions";
 
@@ -67,6 +68,7 @@ export function listingToEbayAspects(listing: ProductListing): EbayAspects {
     const name = key.replace(/^C:/, "").trim();
     const trimmed = String(value || "").trim();
     if (!name || !trimmed) continue;
+    if (/^(upc|asin|epid)$/i.test(name)) continue;
     // Keep raw string; sanitizeEbayAspects enforces SINGLE/MULTI cardinality.
     aspects[name] = [trimmed];
   }
@@ -124,9 +126,9 @@ export function listingToInventoryItem(
   aspects.Brand = [brand];
   aspects.MPN = [mpnCompact === "DoesNotApply" ? "Does Not Apply" : mpnCompact];
 
-  // Strip invalid UPC from aspects — eBay 25002 rejects bad check digits.
+  // Strip identifiers eBay Inventory does not want as aspects.
   for (const key of Object.keys(aspects)) {
-    if (!/^upc$/i.test(key)) continue;
+    if (!/^(upc|asin|epid)$/i.test(key)) continue;
     delete aspects[key];
   }
 
@@ -165,7 +167,7 @@ export function listingToInventoryItem(
   }
 
   return {
-    sku: listing.sku,
+    sku: toEbayInventorySku(listing.sku),
     title: listing.title,
     description: clampEbayInventoryDescription(listing),
     imageUrls,
@@ -205,7 +207,7 @@ export function listingToOfferInput(
       : pkg.shippingCost;
 
   return {
-    sku: listing.sku,
+    sku: toEbayInventorySku(listing.sku),
     marketplaceId: "EBAY_US",
     categoryId: String(listing.categoryId).trim(),
     price: listing.price,

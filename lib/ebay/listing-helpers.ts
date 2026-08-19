@@ -27,6 +27,18 @@ export function generateSku(parts: {
   return `${brand}${model}${size}${color}`.slice(0, 50);
 }
 
+/**
+ * Inventory SKUs must be alphanumeric (eBay 25707). Keep AMZ-ASINs in Higlou
+ * for Amazon; strip hyphens only when talking to eBay Inventory.
+ */
+export function toEbayInventorySku(raw: string): string {
+  const cleaned = String(raw || "")
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, "")
+    .slice(0, 50);
+  return cleaned || "ITEM";
+}
+
 const AMAZON_HOST =
   "amazon(?:\\.(?:com|ca|co\\.uk|de|fr|es|it|co\\.jp|in|com\\.mx|com\\.au|nl|se|pl|com\\.br|ae|sa|sg|com\\.tr))?";
 

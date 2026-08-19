@@ -4,6 +4,7 @@ import {
   buildExportFileName,
   toAsciiFileName,
   toAsciiHttpHeaderValue,
+  toEbayInventorySku,
   toEbayListingTitle,
 } from "../lib/ebay/listing-helpers";
 
@@ -82,5 +83,12 @@ describe("toEbayListingTitle", () => {
       "Amazon Basics 8-Sheet Shredder",
     );
     expect(toEbayListingTitle("Amazon.com")).toBe("");
+  });
+});
+
+describe("toEbayInventorySku", () => {
+  it("strips hyphens from Amazon import SKUs so eBay Inventory accepts them", () => {
+    expect(toEbayInventorySku("AMZ-B0CHS1BVBC")).toBe("AMZB0CHS1BVBC");
+    expect(toEbayInventorySku("")).toBe("ITEM");
   });
 });

@@ -68,7 +68,24 @@ export function estimateEbayReferralFee(salePrice: number | null): number | null
   return money(salePrice * 0.1365 + 0.3);
 }
 
-/** What the seller keeps after cost, fees, ship, pack, and returns. Never the eBay ask. */
+/** Session cash: verified sold comps only. Active eBay asks never count. */
+export function sessionKeepAmount(opts: {
+  mode: "amazon" | "amazon_to_ebay" | "supplier";
+  soldVerified?: boolean;
+  netProfit?: number | null;
+  cost?: number | null;
+  amazonPrice?: number | null;
+  amazonFees?: number | null;
+  ebayFees?: number | null;
+  ebayActiveMedian?: number | null;
+  ebayPrice?: number | null;
+  salePrice?: number | null;
+}): number | null {
+  if (opts.mode !== "amazon" && !opts.soldVerified) return null;
+  return estimatedKeepAmount(opts);
+}
+
+/** Hypothetical keep if an active ask actually sold. Never session cash. */
 export function estimatedKeepAmount(opts: {
   mode: "amazon" | "amazon_to_ebay" | "supplier";
   netProfit?: number | null;

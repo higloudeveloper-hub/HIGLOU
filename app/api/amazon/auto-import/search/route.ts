@@ -108,21 +108,13 @@ export async function POST(request: Request) {
       seed: body.seed,
       excludeAsins,
     });
-    if (!found.products.length) {
-      return NextResponse.json(
-        {
-          error:
-            "No products passed authorization, margin, and competition filters.",
-        },
-        { status: 404 },
-      );
-    }
     return NextResponse.json({
       ok: true,
       products: found.products,
       sources: found.sources,
       filteredOut: found.filteredOut,
       queries: found.queries,
+      analyzed: found.analyzed,
     });
   } catch (error) {
     const message =

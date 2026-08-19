@@ -7,6 +7,7 @@ import {
 } from "@/lib/opportunity/mode-copy";
 import { estimateNetProfit } from "@/lib/opportunity/profit";
 import {
+  isConfirmedOpportunity,
   opportunityGrade,
   passesMainOpportunityScreen,
   scoreOpportunity,
@@ -127,6 +128,33 @@ describe("opportunity score", () => {
       }, { mode: "amazon" }),
     ).toBe(false);
   });
+
+  it("keeps priced Amazon and eBay candidates even without verified sold profit", () => {
+    expect(
+      isConfirmedOpportunity(
+        {
+          amazonPrice: 18,
+          ebayActiveMedian: 42,
+          netProfit: null,
+          eligibility: "UNKNOWN",
+          title: "Bamboo organizer",
+        },
+        "amazon_to_ebay",
+      ),
+    ).toBe(true);
+    expect(
+      isConfirmedOpportunity(
+        {
+          amazonPrice: 18,
+          ebayActiveMedian: null,
+          netProfit: null,
+          eligibility: "UNKNOWN",
+          title: "Pretty Amazon bestseller",
+        },
+        "amazon_to_ebay",
+      ),
+    ).toBe(false);
+  });
 });
 
 describe("Amazon eligibility", () => {
@@ -201,6 +229,112 @@ describe("Keepa parse", () => {
     });
     expect(snap?.imageUrl).toMatch(/71main/);
     expect(snap?.priceVariation90).toBeCloseTo((27 - 22) / 24, 1);
+  });
+});
+
+describe("verified-sales gates", () => {
+  it("never treats active eBay asks as session cash", async () => {
+    const { sessionKeepAmount } = await import("@/lib/opportunity/profit");
+    expect(
+      sessionKeepAmount({
+        mode: "amazon_to_ebay",
+        amazonPrice: 18.4,
+        ebayPrice: 38.46,
+        soldVerified: false,
+      }),
+    ).toBeNull();
+  });
+
+  it("caps unverified Amazon-to-eBay cards as candidates", async () => {
+    const { judgeOpportunity } = await import("@/lib/opportunity/gates");
+    const judged = judgeOpportunity(
+      {
+        asin: "B0TESTASIN",
+        title: "Bamboo drawer organizer 1 pack",
+        brand: "Acme",
+        imageUrl: "",
+        upc: "012345678905",
+        mpn: "ORG-1",
+        ebayTitle: "Bamboo drawer organizer 1 pack",
+        ebayMatchedByGtin: true,
+        salesRank: 4000,
+        salesRankLabel: "Keepa BSR",
+        browseNodeId: "",
+        browseNodeName: "",
+        rating: 4.6,
+        reviewCount: 80,
+        amazonPrice: 18,
+        ebayPrice: 42,
+        ebayCount: 8,
+        opportunity: "thin",
+        mode: "amazon_to_ebay",
+        eligibility: "UNKNOWN",
+        eligibilityMessage: "",
+        score: 0,
+        grade: "discard",
+        reasons: [],
+        demandScore: 0,
+        sellerCount: 5,
+        amazonRetail: true,
+        buyBoxPrice: 18,
+        avgSalesRank90: 5000,
+        bsrDrops90: 8,
+        priceVariation90: 0.08,
+        cost: 18,
+        salePrice: 42,
+        amazonFees: null,
+        ebayFees: 6,
+        shipping: 7.5,
+        packing: 0.75,
+        returnsReserve: null,
+        netProfit: null,
+        roi: null,
+        margin: null,
+        ebayActiveMedian: 42,
+        ebayActiveLow: 35,
+        ebayActiveCount: 8,
+        ebayListingsAreSold: false,
+        keepa: true,
+        packQty: 1,
+        packageLb: 1.2,
+        avgAmazon90: 28,
+        discount90: 0.35,
+        soldVerified: false,
+        sold30d: null,
+        sold90d: null,
+        medianSoldPrice: null,
+        p25Sold90: null,
+        sellThrough90: null,
+        daysToSell: null,
+        identityConfidence: 0,
+        identityBasis: "",
+        verdict: "candidate",
+        expectedSalePrice: null,
+        hypotheticalKeep: null,
+        landedCost: null,
+        priceDropReserve: null,
+        promotedFee: null,
+        returnRisk: "medium",
+        policyRisk: "low",
+      },
+      "amazon_to_ebay",
+    );
+    expect(judged.soldVerified).toBe(false);
+    expect(judged.netProfit).toBeNull();
+    expect(judged.score).toBeLessThanOrEqual(49);
+    expect(judged.verdict).toBe("candidate");
+  });
+
+  it("rejects a 1-pack vs 2-pack match", async () => {
+    const { scoreProductIdentity } = await import("@/lib/opportunity/identity");
+    const identity = scoreProductIdentity({
+      amazonTitle: "Cable clips 1 pack",
+      ebayTitle: "Cable clips 2 pack",
+      amazonUpc: "012345678905",
+      ebayMatchedByGtin: true,
+    });
+    expect(identity.reject).toBe(true);
+    expect(identity.confidence).toBe(0);
   });
 });
 

@@ -94,11 +94,12 @@ export function FindWinnersStudio() {
 
   return (
     <StudioFrame
-      kicker="Studio"
+      kicker="Business reports"
       title="Find winners"
-      hint="Buy on Amazon, sell on eBay. Real keep after fees — we stop hiding the deals."
+      hint="Amazon inventory dashboard — keep after fees, live BSR and eBay ask."
+      scroll={false}
     >
-      <div className="mx-auto w-full max-w-[1240px] px-5 py-6">
+      <div className="flex min-h-0 flex-1 flex-col">
         <AmazonAutoImportPanel busy={busy} onImport={importWinners} />
       </div>
     </StudioFrame>

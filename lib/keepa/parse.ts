@@ -46,12 +46,16 @@ export type KeepaSnapshot = {
   brand: string;
   imageUrl: string;
   upc: string;
+  mpn: string;
   amazonRetail: boolean;
   buyBoxPrice: number | null;
   newPrice: number | null;
   sellerCount: number | null;
   salesRank: number | null;
   avgSalesRank90: number | null;
+  avgNew90: number | null;
+  discount90: number | null;
+  packageLb: number | null;
   bsrDrops90: number | null;
   priceVariation90: number | null;
   rating: number | null;
@@ -71,6 +75,19 @@ function firstUpc(row: Record<string, unknown>): string {
   const list = row.upcList;
   if (Array.isArray(list) && list[0]) return String(list[0]);
   return String(row.eanList && Array.isArray(row.eanList) ? row.eanList[0] || "" : "");
+}
+
+function firstMpn(row: Record<string, unknown>): string {
+  const part = row.partNumber;
+  if (Array.isArray(part) && part[0]) return String(part[0]).trim();
+  if (typeof part === "string" && part.trim()) return part.trim();
+  return String(row.model || "").trim();
+}
+
+function packageLbFromKeepa(row: Record<string, unknown>): number | null {
+  const grams = Number(row.packageWeight);
+  if (!Number.isFinite(grams) || grams <= 0) return null;
+  return Math.round((grams / 453.592) * 100) / 100;
 }
 
 export function parseKeepaProduct(row: Record<string, unknown>): KeepaSnapshot | null {
@@ -95,6 +112,11 @@ export function parseKeepaProduct(row: Record<string, unknown>): KeepaSnapshot |
     min90 != null && max90 != null && base
       ? Math.round(((max90 - min90) / base) * 1000) / 1000
       : null;
+  const currentNew = buyBox || newPrice;
+  const discount90 =
+    avg90 != null && avg90 > 0 && currentNew != null
+      ? Math.round(((avg90 - currentNew) / avg90) * 1000) / 1000
+      : null;
   const salesRank =
     statsSlot(stats, "current", KEEPA_INDEX.SALES) ??
     keepaLastValue(csv[KEEPA_INDEX.SALES]);
@@ -115,12 +137,16 @@ export function parseKeepaProduct(row: Record<string, unknown>): KeepaSnapshot |
     brand: String(row.brand || "").trim(),
     imageUrl: firstImage(row.imagesCSV),
     upc: firstUpc(row),
+    mpn: firstMpn(row),
     amazonRetail: amazonNow != null,
     buyBoxPrice: buyBox || newPrice,
     newPrice,
     sellerCount,
     salesRank,
     avgSalesRank90,
+    avgNew90: avg90,
+    discount90,
+    packageLb: packageLbFromKeepa(row),
     bsrDrops90: Number.isFinite(drops) && drops > 0 ? drops : null,
     priceVariation90: variation,
     rating,

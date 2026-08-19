@@ -25,6 +25,7 @@ import {
   nextLiveScanTarget,
   opportunityFingerprint,
   pickCategoryQueries,
+  recordNicheLearn,
   CATEGORY_NICHES,
 } from "@/lib/opportunity/niches";
 import type { OpportunityProduct } from "@/lib/opportunity/types";
@@ -85,6 +86,24 @@ describe("Amazon auto-import ranking", () => {
       seed: 1,
       query: CATEGORY_NICHES.home[1],
     });
+    expect(
+      nextLiveScanTarget(2, [
+        {
+          query: "magnetic tool holder bar",
+          categoryId: "tools",
+          confirmed: 4,
+          bestKeep: 16,
+        },
+      ]).query,
+    ).toBe("magnetic tool holder bar");
+    expect(
+      recordNicheLearn([], {
+        query: "bamboo drawer organizer",
+        categoryId: "home",
+        confirmed: 1,
+        bestKeep: 11,
+      })[0],
+    ).toMatchObject({ scans: 1, confirmed: 1, bestKeep: 11 });
     const merged = mergeOpportunityHits(
       [{ asin: "B0OLD00001", score: 40 } as OpportunityProduct],
       [
@@ -448,7 +467,11 @@ describe("Amazon auto-import stays an eBay draft flow", () => {
     expect(engine).toMatch(/skipAmazonGate/);
     expect(engine).toMatch(/keepaFindAsins/);
     expect(engine).toMatch(/diversifyOpportunityHits/);
-    expect(panel).toMatch(/query: target\.query/);
+    expect(panel).toMatch(/isConfirmedOpportunity/);
+    expect(panel).toMatch(/CANDIDATE — SALES NOT VERIFIED/);
+    expect(panel).toMatch(/sessionKeepAmount/);
+    expect(panel).toMatch(/loadLocalLedger/);
+    expect(panel).toMatch(/recordNicheLearn/);
     expect(engine).toMatch(/isCrowdedBestseller/);
     expect(engine).toMatch(/sort: keepaOn \? "review-rank" : "featured"/);
     expect(engine).toMatch(/checkAmazonEligibility/);

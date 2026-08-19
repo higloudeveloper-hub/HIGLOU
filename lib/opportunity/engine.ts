@@ -21,14 +21,23 @@ import {
   isCrowdedBestseller,
   pickCategoryQueries,
 } from "@/lib/opportunity/niches";
+import { judgeOpportunity } from "@/lib/opportunity/gates";
+import { isStarterRestrictedTitle } from "@/lib/opportunity/identity";
 import {
   estimateEbayReferralFee,
   estimateNetProfit,
 } from "@/lib/opportunity/profit";
 import {
   buildOpportunityReasons,
+  isConfirmedOpportunity,
   opportunityLabelFromScore,
-  passesMainOpportunityScreen,
+  scoreOpportunity,
+  sortByRealMoney,
+} from "@/lib/opportunity/score";
+import {
+  buildOpportunityReasons,
+  isConfirmedOpportunity,
+  opportunityLabelFromScore,
   scoreOpportunity,
   sortByRealMoney,
 } from "@/lib/opportunity/score";
@@ -98,6 +107,30 @@ function emptyProduct(asin: string, mode: OpportunityMode): OpportunityProduct {
     ebayActiveCount: null,
     ebayListingsAreSold: false,
     keepa: false,
+    mpn: "",
+    ebayTitle: "",
+    ebayMatchedByGtin: false,
+    packQty: null,
+    packageLb: null,
+    avgAmazon90: null,
+    discount90: null,
+    soldVerified: false,
+    sold30d: null,
+    sold90d: null,
+    medianSoldPrice: null,
+    p25Sold90: null,
+    sellThrough90: null,
+    daysToSell: null,
+    identityConfidence: 0,
+    identityBasis: "",
+    verdict: "candidate",
+    expectedSalePrice: null,
+    hypotheticalKeep: null,
+    landedCost: null,
+    priceDropReserve: null,
+    promotedFee: null,
+    returnRisk: "medium",
+    policyRisk: "low",
   };
 }
 
@@ -119,6 +152,10 @@ function applyKeepa(hit: OpportunityProduct, snap: KeepaSnapshot): OpportunityPr
     avgSalesRank90: snap.avgSalesRank90,
     bsrDrops90: snap.bsrDrops90,
     priceVariation90: snap.priceVariation90,
+    mpn: snap.mpn || hit.mpn,
+    avgAmazon90: snap.avgNew90,
+    discount90: snap.discount90,
+    packageLb: snap.packageLb ?? hit.packageLb,
     keepa: true,
   };
 }
@@ -131,6 +168,13 @@ function cheapKeepaFilter(
   if (price != null && (price < OPPORTUNITY_RULES.minPrice || price > OPPORTUNITY_RULES.maxPrice)) {
     return false;
   }
+  if (snap.discount90 != null && snap.discount90 < OPPORTUNITY_RULES.minDiscount90) {
+    return false;
+  }
+  if (snap.packageLb != null && snap.packageLb > OPPORTUNITY_RULES.maxPackageLb) {
+    return false;
+  }
+  if (isStarterRestrictedTitle(snap.title)) return false;
   const rank = snap.avgSalesRank90 ?? snap.salesRank;
   if (rank != null && (rank < OPPORTUNITY_RULES.minBsr || rank > OPPORTUNITY_RULES.maxBsr)) {
     return false;
@@ -151,6 +195,37 @@ function finishProduct(
 ): OpportunityProduct {
   const amazonPrice = hit.buyBoxPrice ?? hit.amazonPrice;
   const ebayAsk = hit.ebayActiveMedian ?? hit.ebayPrice;
+  if (mode === "amazon_to_ebay") {
+    const judged = judgeOpportunity(
+      {
+        ...hit,
+        amazonPrice,
+        cost: amazonPrice,
+        ebayPrice: ebayAsk,
+        ebayCount: hit.ebayActiveCount,
+        ebayFees: hit.ebayFees ?? estimateEbayReferralFee(ebayAsk),
+        soldVerified: false,
+      },
+      mode,
+    );
+    const next: OpportunityProduct = {
+      ...hit,
+      amazonPrice,
+      ebayPrice: ebayAsk,
+      ebayCount: hit.ebayActiveCount,
+      cost: amazonPrice,
+      ebayFees: hit.ebayFees ?? estimateEbayReferralFee(ebayAsk),
+      ...judged,
+      opportunity:
+        judged.verdict === "winner"
+          ? "now"
+          : judged.verdict === "good"
+            ? "watch"
+            : "thin",
+    };
+    next.reasons = buildOpportunityReasons(next);
+    return next;
+  }
   let cost = supplierCost ?? null;
   let salePrice: number | null = null;
   let marketplaceFee: number | null = null;
@@ -158,10 +233,6 @@ function finishProduct(
     salePrice = amazonPrice;
     cost = supplierCost ?? null;
     marketplaceFee = hit.amazonFees;
-  } else if (mode === "amazon_to_ebay") {
-    salePrice = ebayAsk;
-    cost = amazonPrice;
-    marketplaceFee = hit.ebayFees ?? estimateEbayReferralFee(salePrice);
   } else {
     salePrice = ebayAsk ?? amazonPrice;
     cost = supplierCost ?? amazonPrice;
@@ -236,6 +307,7 @@ export async function findOpportunities(opts: {
   sources: OpportunitySources;
   filteredOut: number;
   queries: string[];
+  analyzed: number;
 }> {
   const mode = opts.mode || "amazon_to_ebay";
   const onlySellable = opts.onlySellable !== false;
@@ -314,6 +386,7 @@ export async function findOpportunities(opts: {
             rootCategory: keepaRoot || undefined,
             title: keywords || undefined,
             perPage: 20,
+            mode,
           })
         : [];
       const searched =
@@ -493,6 +566,8 @@ export async function findOpportunities(opts: {
         count: 0,
         low: null,
         kind: "active_listings" as const,
+        sampleTitle: "",
+        matchedByGtin: false,
       }));
       next = {
         ...next,
@@ -502,6 +577,8 @@ export async function findOpportunities(opts: {
         ebayPrice: live.median,
         ebayCount: live.count,
         ebayFees: estimateEbayReferralFee(live.median),
+        ebayTitle: live.sampleTitle,
+        ebayMatchedByGtin: live.matchedByGtin,
       };
       if (live.count) sources.ebayLive = true;
     }
@@ -509,16 +586,17 @@ export async function findOpportunities(opts: {
   });
 
   const passing = priced.filter((hit) =>
-    passesMainOpportunityScreen(hit, { mode }),
+    isConfirmedOpportunity(hit, mode),
   );
   const ranked = diversifyOpportunityHits(
-    sortByRealMoney(passing.length ? passing : priced),
+    sortByRealMoney(passing),
     Math.max(limit, 8),
   );
   return {
     products: ranked,
     sources,
-    filteredOut: Math.max(0, asins.length - ranked.length),
+    filteredOut: Math.max(0, priced.length - ranked.length),
     queries: searchTerms,
+    analyzed: priced.length,
   };
 }

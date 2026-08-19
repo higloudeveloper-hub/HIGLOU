@@ -12,7 +12,7 @@ export const OPPORTUNITY_MODES: Array<{
     label: "Amazon → eBay",
     from: "Buy on Amazon",
     to: "Publish on eBay",
-    hint: "Import a draft for eBay. Amazon approval is not required.",
+    hint: "Verify sales → Calculate landed cost → Buy inventory → Inspect → Publish",
   },
   {
     id: "amazon",
@@ -48,10 +48,10 @@ export function searchStepsFor(mode: OpportunityMode): string[] {
     ];
   }
   return [
-    "Finding Amazon products to resell",
-    "Reading Amazon buy price",
+    "Finding Amazon products at least 25% below the 90-day average",
+    "Matching UPC, MPN, and pack quantity",
     "Reading eBay asking prices, not sold comps",
-    "Scoring eBay profit after Amazon cost",
+    "Scoring as CANDIDATE until sold comps are verified",
   ];
 }
 

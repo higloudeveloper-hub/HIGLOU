@@ -18,23 +18,29 @@ function asinsFromKeepa(json: Record<string, unknown>): string[] {
   return [];
 }
 
-/** Product Finder: price, BSR, seller count, Amazon not selling. */
+/** Product Finder: price, BSR, 90-day discount, weight. */
 export async function keepaFindAsins(opts: {
   rootCategory?: string;
   title?: string;
   perPage?: number;
+  mode?: "amazon" | "amazon_to_ebay" | "supplier";
 }): Promise<string[]> {
+  const mode = opts.mode || "amazon_to_ebay";
   const selection: Record<string, unknown> = {
     current_NEW_gte: Math.round(OPPORTUNITY_RULES.minPrice * 100),
     current_NEW_lte: Math.round(OPPORTUNITY_RULES.maxPrice * 100),
     current_SALES_gte: OPPORTUNITY_RULES.minBsr,
     current_SALES_lte: OPPORTUNITY_RULES.maxBsr,
-    current_COUNT_NEW_gte: OPPORTUNITY_RULES.minSellers,
-    current_COUNT_NEW_lte: OPPORTUNITY_RULES.maxSellers,
-    availabilityAmazon: [-1],
+    deltaPercent90_NEW_lte: -Math.round(OPPORTUNITY_RULES.minDiscount90 * 100),
+    packageWeight_lte: Math.round(OPPORTUNITY_RULES.maxPackageLb * 453.592),
     perPage: Math.min(opts.perPage ?? 20, 50),
     sort: [["current_SALES", "asc"]],
   };
+  if (mode === "amazon" || mode === "supplier") {
+    selection.current_COUNT_NEW_gte = OPPORTUNITY_RULES.minSellers;
+    selection.current_COUNT_NEW_lte = OPPORTUNITY_RULES.maxSellers;
+    selection.availabilityAmazon = [-1];
+  }
   if (opts.rootCategory) selection.rootCategory = [opts.rootCategory];
   if (opts.title) selection.title = [opts.title];
   const json = await keepaPost(

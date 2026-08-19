@@ -135,6 +135,8 @@ export function buildOpportunityReasons(hit: {
   demandScore: number;
   brand: string;
   title: string;
+  soldVerified?: boolean;
+  mode?: OpportunityMode;
 }): OpportunityReason[] {
   const risk = brandCategoryRisk(hit.brand, hit.title);
   const reasons: OpportunityReason[] = [
@@ -150,11 +152,17 @@ export function buildOpportunityReasons(hit: {
               : "Eligibility not confirmed",
     },
     {
-      ok: (hit.netProfit ?? 0) >= OPPORTUNITY_RULES.minNetProfit,
+      ok:
+        hit.mode === "amazon_to_ebay"
+          ? hit.soldVerified === true &&
+            (hit.netProfit ?? 0) >= OPPORTUNITY_RULES.minNetProfit
+          : (hit.netProfit ?? 0) >= OPPORTUNITY_RULES.minNetProfit,
       text:
-        hit.netProfit == null
-          ? "Need cost and live fees for profit"
-          : `Estimated profit $${hit.netProfit.toFixed(2)}`,
+        hit.mode === "amazon_to_ebay" && hit.soldVerified !== true
+          ? "CANDIDATE — SALES NOT VERIFIED"
+          : hit.netProfit == null
+            ? "Need cost and live fees for profit"
+            : `Estimated profit $${hit.netProfit.toFixed(2)}`,
     },
     {
       ok: (hit.roi ?? 0) >= OPPORTUNITY_RULES.minRoi,
@@ -272,6 +280,38 @@ export function passesMainOpportunityScreen(
   if (opts?.requireProfit) {
     if ((hit.netProfit ?? 0) < OPPORTUNITY_RULES.minNetProfit) return false;
     if ((hit.roi ?? 0) < OPPORTUNITY_RULES.minRoi) return false;
+  }
+  return true;
+}
+
+/** Priced Amazon + eBay candidate. Active asks are not sold comps. */
+export function isConfirmedOpportunity(
+  hit: {
+    amazonPrice?: number | null;
+    ebayPrice?: number | null;
+    ebayActiveMedian?: number | null;
+    netProfit?: number | null;
+    cost?: number | null;
+    eligibility?: EligibilityStatus;
+    amazonRetail?: boolean;
+    sellerCount?: number | null;
+    roi?: number | null;
+    priceVariation90?: number | null;
+    upc?: string;
+    title?: string;
+    verdict?: string;
+    identityConfidence?: number;
+  },
+  mode: OpportunityMode = "amazon_to_ebay",
+): boolean {
+  if (hit.verdict === "reject") return false;
+  if (hit.identityConfidence != null && hit.identityConfidence < 40) return false;
+  if (!passesMainOpportunityScreen(hit, { mode })) return false;
+  const amazon = hit.amazonPrice ?? hit.cost ?? null;
+  if (amazon == null || amazon <= 0) return false;
+  if (mode !== "amazon") {
+    const ebay = hit.ebayActiveMedian ?? hit.ebayPrice ?? null;
+    if (ebay == null || ebay <= 0) return false;
   }
   return true;
 }

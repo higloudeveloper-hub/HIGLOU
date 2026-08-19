@@ -216,7 +216,10 @@ export function isCrowdedBestseller(reviewCount: number | null | undefined): boo
   return (reviewCount || 0) >= 10_000;
 }
 
-export function nextLiveScanTarget(step: number): {
+export function nextLiveScanTarget(
+  step: number,
+  learn?: Array<{ query: string; categoryId: string; confirmed: number; bestKeep: number }>,
+): {
   categoryId: string;
   label: string;
   seed: number;
@@ -229,12 +232,67 @@ export function nextLiveScanTarget(step: number): {
   const nicheIndex = niches.length
     ? Math.floor(index / cats.length) % niches.length
     : 0;
-  return {
+  const explore = {
     categoryId: row.id,
     label: row.label,
     seed: nicheIndex,
     query: niches[nicheIndex] || row.query,
   };
+  const winners = (learn || [])
+    .filter((row) => row.confirmed > 0 && row.query)
+    .sort((a, b) => b.bestKeep - a.bestKeep || b.confirmed - a.confirmed);
+  if (!winners.length || index % 3 !== 2) return explore;
+  const pick = winners[Math.floor(index / 3) % winners.length];
+  return {
+    categoryId: pick.categoryId || explore.categoryId,
+    label: `${explore.label} · learned`,
+    seed: nicheIndex,
+    query: pick.query,
+  };
+}
+
+export function recordNicheLearn(
+  current: Array<{
+    query: string;
+    categoryId: string;
+    scans: number;
+    confirmed: number;
+    bestKeep: number;
+  }>,
+  input: {
+    query: string;
+    categoryId: string;
+    confirmed: number;
+    bestKeep: number;
+  },
+) {
+  const query = String(input.query || "").trim();
+  if (!query) return current;
+  const next = current.map((row) => ({ ...row }));
+  const idx = next.findIndex(
+    (row) => row.query.toLowerCase() === query.toLowerCase(),
+  );
+  if (idx >= 0) {
+    const row = next[idx];
+    next[idx] = {
+      ...row,
+      scans: row.scans + 1,
+      confirmed: row.confirmed + input.confirmed,
+      bestKeep: Math.max(row.bestKeep, input.bestKeep),
+      categoryId: row.categoryId || input.categoryId,
+    };
+  } else {
+    next.push({
+      query,
+      categoryId: input.categoryId,
+      scans: 1,
+      confirmed: input.confirmed,
+      bestKeep: input.bestKeep,
+    });
+  }
+  return next
+    .sort((a, b) => b.confirmed - a.confirmed || b.bestKeep - a.bestKeep)
+    .slice(0, 40);
 }
 
 function pickNum(a: number | null | undefined, b: number | null | undefined) {

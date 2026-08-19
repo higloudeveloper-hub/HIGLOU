@@ -11,6 +11,8 @@ export type EbayActiveListings = {
   count: number;
   low: number | null;
   kind: "active_listings";
+  sampleTitle: string;
+  matchedByGtin: boolean;
 };
 
 async function browseSearch(
@@ -22,6 +24,8 @@ async function browseSearch(
     count: 0,
     low: null,
     kind: "active_listings",
+    sampleTitle: "",
+    matchedByGtin: false,
   };
   const cfg = getEbayConfig();
   const res = await fetch(
@@ -38,16 +42,18 @@ async function browseSearch(
   );
   if (!res.ok) return empty;
   const json = (await res.json()) as {
-    itemSummaries?: Array<{ price?: { value?: string } }>;
+    itemSummaries?: Array<{ title?: string; price?: { value?: string } }>;
   };
   const prices: number[] = [];
+  let sampleTitle = "";
   for (const item of json.itemSummaries ?? []) {
     const n = Number(item.price?.value);
     if (Number.isFinite(n) && n > 1) prices.push(n);
+    if (!sampleTitle && item.title) sampleTitle = String(item.title);
   }
   const median = medianOf(prices);
   const low = prices.length ? Math.min(...prices) : null;
-  return { median, count: prices.length, low, kind: "active_listings" };
+  return { median, count: prices.length, low, kind: "active_listings", sampleTitle, matchedByGtin: false };
 }
 
 /** Live eBay asking prices. These are active listings, not completed sales. */
@@ -62,7 +68,7 @@ export async function searchEbayLivePrices(opts: {
       opts.accessToken,
       `gtin=${encodeURIComponent(gtin)}&limit=20`,
     );
-    if (byGtin.count) return byGtin;
+    if (byGtin.count) return { ...byGtin, matchedByGtin: true };
   }
   const q = String(opts.query || "")
     .split(/[^a-z0-9]+/i)
@@ -70,7 +76,14 @@ export async function searchEbayLivePrices(opts: {
     .slice(0, 8)
     .join(" ");
   if (!q) {
-    return { median: null, count: 0, low: null, kind: "active_listings" };
+    return {
+      median: null,
+      count: 0,
+      low: null,
+      kind: "active_listings",
+      sampleTitle: "",
+      matchedByGtin: false,
+    };
   }
   const filter = encodeURIComponent("buyingOptions:{FIXED_PRICE}");
   return browseSearch(

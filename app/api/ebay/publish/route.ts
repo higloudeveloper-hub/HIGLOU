@@ -37,7 +37,7 @@ import {
   inferVoltageFromText,
   parseMissingAspectFromEbayError,
 } from "@/lib/ebay/infer-voltage";
-import { ensureInferredDimensionAspects } from "@/lib/ebay/infer-item-dimensions";
+import { ensureInferredDimensionAspects, fallbackDimensionAspect } from "@/lib/ebay/infer-item-dimensions";
 import { mapProductRow } from "@/lib/products/persistence";
 import type { ProductListing } from "@/types/product";
 import { createEmptyListing } from "@/lib/demo/sample-listing";
@@ -597,6 +597,10 @@ async function postEbayPublish(request: Request) {
       model: listing.model,
       mpn: listing.mpn,
       productType: listing.productType || listing.type,
+      categoryName: listing.categoryName,
+      packageLengthIn: listing.packageLengthIn,
+      packageWidthIn: listing.packageWidthIn,
+      packageDepthIn: listing.packageDepthIn,
     };
     if (!inventory.aspects) inventory.aspects = {};
     ensureCompatibleAspects(
@@ -658,6 +662,10 @@ async function postEbayPublish(request: Request) {
               model: listing.model,
               mpn: listing.mpn,
               productType: listing.productType || listing.type,
+              categoryName: listing.categoryName,
+              packageLengthIn: listing.packageLengthIn,
+              packageWidthIn: listing.packageWidthIn,
+              packageDepthIn: listing.packageDepthIn,
             }) || "";
         }
 
@@ -666,6 +674,13 @@ async function postEbayPublish(request: Request) {
           /^(model|mpn|compatible\s|fragrance|scent)/i.test(missingAspect)
         ) {
           filled = "Does Not Apply";
+        }
+        if (!filled && /^item\s*(length|width|height)$/i.test(missingAspect)) {
+          filled = fallbackDimensionAspect(missingAspect, hay, {
+            lengthIn: listing.packageLengthIn,
+            widthIn: listing.packageWidthIn,
+            depthIn: listing.packageDepthIn,
+          });
         }
 
         if (filled) {

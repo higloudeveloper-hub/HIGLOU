@@ -64,7 +64,17 @@ export function realisticPackageDims(pkg?: PackageHint | null): ItemDims | null 
   const lengthIn = Number(pkg.lengthIn);
   const widthIn = Number(pkg.widthIn);
   const heightIn = Number(pkg.depthIn);
-  if (![lengthIn, widthIn, heightIn].every(inRange)) return null;
+  if (
+    ![lengthIn, widthIn, heightIn].every(
+      (n) => Number.isFinite(n) && n >= 1 && n <= MAX_REAL_ITEM_INCHES,
+    )
+  ) {
+    return null;
+  }
+  // FORCE_MINI_PACKAGE 1×1×1 is shipping, not product size.
+  if (lengthIn <= 1.5 && widthIn <= 1.5 && heightIn <= 1.5) return null;
+  // Drawer organizers are often ~2" tall; keep them if another axis is product-sized.
+  if (Math.max(lengthIn, widthIn, heightIn) < MIN_REAL_ITEM_INCHES) return null;
   return { lengthIn, widthIn, heightIn };
 }
 
@@ -83,6 +93,13 @@ export function inferFurnitureDefaultDims(text: string): ItemDims | null {
   }
   if (/\b(?:bar\s*)?stool\b|\btaburete\b/.test(hay)) {
     return { lengthIn: 14, widthIn: 14, heightIn: 30 };
+  }
+  if (
+    /drawer\s*organizer|in-?drawer\s*organizer|utensil\s*(tray|holder|organizer)|cutlery\s*(tray|organizer)|silverware\s*organizer|bamboo\s*(drawer|kitchen)?\s*organizer|expandable\s*(drawer\s*)?organizer|adjustable\s*compartments/.test(
+      hay,
+    )
+  ) {
+    return { lengthIn: 18, widthIn: 13, heightIn: 2 };
   }
   if (/\b(?:dining|accent|side|office|desk)?\s*chairs?\b|\bsilla\b/.test(hay)) {
     return { lengthIn: 22, widthIn: 20, heightIn: 32 };
@@ -169,6 +186,43 @@ export function inferItemDimensionAspect(
     return formatEbayInches(dims.heightIn) || null;
   }
   return null;
+}
+
+/** Last-resort size when eBay 25002 demands Item Length/Width/Height. */
+export const STORAGE_FALLBACK_DIMS: ItemDims = {
+  lengthIn: 18,
+  widthIn: 13,
+  heightIn: 2,
+};
+
+export function fallbackDimensionAspect(
+  aspectName: string,
+  text: string,
+  pkg?: PackageHint | null,
+): string {
+  const inferred = inferItemDimensionAspect(aspectName, text, pkg);
+  if (inferred) return inferred;
+  const dims =
+    inferItemDimsFromText(text, pkg) ||
+    inferFurnitureDefaultDims(text) ||
+    STORAGE_FALLBACK_DIMS;
+  const name = String(aspectName || "").trim().toLowerCase();
+  if (/length/.test(name) && !/width|height/.test(name)) {
+    return (
+      formatEbayInches(dims.lengthIn || STORAGE_FALLBACK_DIMS.lengthIn) || "18 in"
+    );
+  }
+  if (/width/.test(name)) {
+    return (
+      formatEbayInches(dims.widthIn || STORAGE_FALLBACK_DIMS.widthIn) || "13 in"
+    );
+  }
+  if (/height/.test(name)) {
+    return (
+      formatEbayInches(dims.heightIn || STORAGE_FALLBACK_DIMS.heightIn) || "2 in"
+    );
+  }
+  return "13 in";
 }
 
 /**

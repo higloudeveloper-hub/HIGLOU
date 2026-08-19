@@ -123,4 +123,41 @@ describe("infer item dimensions (eBay 25002 Item Length)", () => {
       ),
     ).toBeNull();
   });
+
+  it("fills Item Width for bamboo drawer organizers", () => {
+    const hay =
+      "VAIKENE Bamboo Drawer Organizer Set with Adjustable Compartments";
+    expect(inferFurnitureDefaultDims(hay)).toEqual({
+      lengthIn: 18,
+      widthIn: 13,
+      heightIn: 2,
+    });
+    expect(inferItemDimensionAspect("Item Width", hay)).toBe("13 in");
+    expect(inferAspectValueFromText("Item Width", hay)).toBe("13 in");
+    expect(
+      parseMissingAspectFromEbayError(
+        "A user error has occurred. The item specific Item Width is missing. Add Item Width to this listing, enter a valid value, and then try again. [eBay 25002]",
+      ),
+    ).toBe("Item Width");
+
+    const listing = createEmptyListing();
+    listing.title = hay;
+    listing.productType = "Drawer Organizer";
+    listing.categoryName = "Kitchen Storage";
+    listing.price = 19.99;
+    listing.sku = "TESTORG001";
+    listing.packageLengthIn = 1;
+    listing.packageWidthIn = 1;
+    listing.packageDepthIn = 1;
+    const inventory = listingToInventoryItem(listing);
+    expect(inventory.aspects["Item Length"]).toEqual(["18 in"]);
+    expect(inventory.aspects["Item Width"]).toEqual(["13 in"]);
+    expect(inventory.aspects["Item Height"]).toEqual(["2 in"]);
+  });
+
+  it("uses a short package height when length/width are product-sized", () => {
+    expect(
+      realisticPackageDims({ lengthIn: 18, widthIn: 13, depthIn: 2 }),
+    ).toEqual({ lengthIn: 18, widthIn: 13, heightIn: 2 });
+  });
 });

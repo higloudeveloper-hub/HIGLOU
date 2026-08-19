@@ -3,7 +3,7 @@
  * (Voltage, Battery Technology → eBay 25002).
  */
 
-import { inferItemDimensionAspect } from "@/lib/ebay/infer-item-dimensions";
+import { fallbackDimensionAspect, inferItemDimensionAspect } from "@/lib/ebay/infer-item-dimensions";
 
 export function formatEbayVoltage(value: string | number): string {
   const n = Number(String(value).replace(/[^\d.]/g, ""));
@@ -157,6 +157,10 @@ export function inferAspectValueFromText(
     model?: string;
     mpn?: string;
     productType?: string;
+    categoryName?: string;
+    packageLengthIn?: number | null;
+    packageWidthIn?: number | null;
+    packageDepthIn?: number | null;
   },
 ): string | null {
   const name = String(aspectName || "").trim().toLowerCase();
@@ -191,7 +195,12 @@ export function inferAspectValueFromText(
     productType: extras?.productType,
   });
   if (compatible) return compatible;
-  return inferItemDimensionAspect(aspectName, text);
+  const pkg = {
+    lengthIn: extras?.packageLengthIn,
+    widthIn: extras?.packageWidthIn,
+    depthIn: extras?.packageDepthIn,
+  };
+  return inferItemDimensionAspect(aspectName, text, pkg);
 }
 
 const EMPTY_ASPECT = /^(n\/?a|none|null|unknown|-|does\s*not\s*apply)$/i;
@@ -393,6 +402,10 @@ export function ensureRequiredCategoryAspects(
     model?: string;
     mpn?: string;
     productType?: string;
+    categoryName?: string;
+    packageLengthIn?: number | null;
+    packageWidthIn?: number | null;
+    packageDepthIn?: number | null;
   },
 ): string[] {
   const added: string[] = [];
@@ -402,6 +415,7 @@ export function ensureRequiredCategoryAspects(
     extras.model,
     extras.mpn,
     extras.productType,
+    extras.categoryName,
   ]
     .filter(Boolean)
     .join(" ");
@@ -411,7 +425,14 @@ export function ensureRequiredCategoryAspects(
     if (!trimmed || listingHasAspect(aspects, trimmed)) continue;
     const value =
       inferAspectValueFromText(trimmed, hay, extras) ||
-      (DNA_REQUIRED.has(trimmed.toLowerCase()) ? "Does Not Apply" : "");
+      (DNA_REQUIRED.has(trimmed.toLowerCase()) ? "Does Not Apply" : "") ||
+      (/^item\s*(length|width|height)$/i.test(trimmed)
+        ? fallbackDimensionAspect(trimmed, hay, {
+            lengthIn: extras.packageLengthIn,
+            widthIn: extras.packageWidthIn,
+            depthIn: extras.packageDepthIn,
+          })
+        : "");
     if (!value) continue;
     aspects[trimmed] = [value];
     added.push(trimmed);

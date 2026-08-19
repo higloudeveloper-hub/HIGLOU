@@ -3,6 +3,7 @@ import { z } from "zod";
 /** Models often return null for unknown strings — coerce to "". */
 const softString = z
   .union([z.string(), z.number(), z.boolean(), z.null(), z.undefined()])
+  .optional()
   .transform((value) => {
     if (typeof value === "string") return value;
     if (typeof value === "number" && Number.isFinite(value)) return String(value);
@@ -12,6 +13,7 @@ const softString = z
 
 const softNumber = z
   .union([z.number(), z.string(), z.null(), z.undefined()])
+  .optional()
   .transform((value) => {
     if (typeof value === "number" && Number.isFinite(value)) return value;
     if (typeof value === "string" && value.trim() !== "") {
@@ -23,6 +25,7 @@ const softNumber = z
 
 const softConfidence = z
   .union([z.number(), z.string(), z.null(), z.undefined()])
+  .optional()
   .transform((value) => {
     if (typeof value === "number" && Number.isFinite(value)) {
       return Math.min(1, Math.max(0, value));
@@ -42,6 +45,7 @@ const softStringArray = z
     z.null(),
     z.undefined(),
   ])
+  .optional()
   .transform((value) => {
     if (typeof value === "string") {
       return value
@@ -101,6 +105,7 @@ export const analysisResultSchema = z
     price: softNumber,
     quantity: z
       .union([z.number(), z.string(), z.null(), z.undefined()])
+      .optional()
       .transform((value) => {
         const n =
           typeof value === "number"
@@ -131,28 +136,28 @@ export const analysisResultSchema = z
     warnings: softStringArray,
     confidence: z
       .union([
-        z.object({
-          brand: softConfidence,
-          model: softConfidence,
-          upc: softConfidence,
-          category: softConfidence,
-          size: softConfidence,
-          condition: softConfidence,
-        }),
+        z
+          .object({
+            brand: softConfidence,
+            model: softConfidence,
+            upc: softConfidence,
+            category: softConfidence,
+            size: softConfidence,
+            condition: softConfidence,
+          })
+          .passthrough(),
         z.null(),
         z.undefined(),
       ])
-      .transform(
-        (value) =>
-          value ?? {
-            brand: 0,
-            model: 0,
-            upc: 0,
-            category: 0,
-            size: 0,
-            condition: 0,
-          },
-      ),
+      .optional()
+      .transform((value) => ({
+        brand: value?.brand ?? 0,
+        model: value?.model ?? 0,
+        upc: value?.upc ?? 0,
+        category: value?.category ?? 0,
+        size: value?.size ?? 0,
+        condition: value?.condition ?? 0,
+      })),
     fieldMeta: z
       .record(z.string(), fieldMetaSchema.passthrough())
       .optional()
@@ -260,6 +265,24 @@ function coerceAnalysisShape(raw: unknown): unknown {
     if (nested && typeof nested === "object" && !Array.isArray(nested)) {
       Object.assign(obj, nested as object);
     }
+  }
+
+  if (!("packageWeightLbs" in obj)) obj.packageWeightLbs = null;
+  if (!("packageWeightOz" in obj)) obj.packageWeightOz = null;
+  if (!("packageLengthIn" in obj)) obj.packageLengthIn = null;
+  if (!("packageWidthIn" in obj)) obj.packageWidthIn = null;
+  if (!("packageDepthIn" in obj)) obj.packageDepthIn = null;
+
+  if (obj.confidence && typeof obj.confidence === "object" && !Array.isArray(obj.confidence)) {
+    obj.confidence = {
+      brand: 0,
+      model: 0,
+      upc: 0,
+      category: 0,
+      size: 0,
+      condition: 0,
+      ...(obj.confidence as Record<string, unknown>),
+    };
   }
 
   // itemSpecifics sometimes arrives as Record

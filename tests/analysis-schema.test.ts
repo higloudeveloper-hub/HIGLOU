@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { analysisResultSchema } from "@/types/analysis";
+import { analysisResultSchema, parseAnalysisResult } from "@/types/analysis";
 
 describe("analysisResultSchema soft coercion", () => {
   it("accepts null conditionId and fills NEW from condition", () => {
@@ -46,5 +46,25 @@ describe("analysisResultSchema soft coercion", () => {
     expect(parsed.collection).toBe("");
     expect(parsed.colors).toEqual(["Yellow", "Gray"]);
     expect(parsed.confidence.upc).toBe(0);
+    expect(parsed.packageWeightLbs).toBeNull();
+    expect(parsed.packageLengthIn).toBeNull();
+  });
+
+  it("builds a listing when OpenAI omits package and some confidence keys", () => {
+    const result = parseAnalysisResult({
+      title: "Bamboo Kitchen Drawer Organizer",
+      type: "Drawer Organizer",
+      colors: "Bamboo",
+      features: ["Expandable"],
+      descriptionSummary: "Expandable bamboo organizer for kitchen drawers.",
+      confidence: { brand: 0.4, category: 0.7 },
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.data.title).toMatch(/Bamboo/i);
+    expect(result.data.colors).toEqual(["Bamboo"]);
+    expect(result.data.packageWeightLbs).toBeNull();
+    expect(result.data.confidence.upc).toBe(0);
+    expect(result.data.confidence.category).toBe(0.7);
   });
 });

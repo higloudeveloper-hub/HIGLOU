@@ -179,6 +179,22 @@ export interface AnalyzeProductInput {
   supabase?: SupabaseClient | null;
 }
 
+function parseJsonObject(raw: string): unknown {
+  const trimmed = raw.trim();
+  try {
+    return JSON.parse(trimmed) as unknown;
+  } catch {
+    const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i);
+    if (fenced?.[1]) return JSON.parse(fenced[1].trim()) as unknown;
+    const start = trimmed.indexOf("{");
+    const end = trimmed.lastIndexOf("}");
+    if (start >= 0 && end > start) {
+      return JSON.parse(trimmed.slice(start, end + 1)) as unknown;
+    }
+    throw new Error("JSON parse failed");
+  }
+}
+
 export async function analyzeProductHybrid(input: AnalyzeProductInput) {
   const providers = {
     openaiEnabled:
@@ -653,8 +669,7 @@ itemSpecifics:[{key,label,value,confidence?}].`,
   const tryParse = (rawContent: string | null | undefined) => {
     if (!rawContent) return { ok: false as const, error: "empty response" };
     try {
-      const json = JSON.parse(rawContent) as unknown;
-      return parseAnalysisResult(json);
+      return parseAnalysisResult(parseJsonObject(rawContent));
     } catch (error) {
       return {
         ok: false as const,

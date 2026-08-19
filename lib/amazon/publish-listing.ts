@@ -72,6 +72,7 @@ export async function publishAmazonOffer(opts: {
       sku: opts.listing.sku,
       description: opts.listing.description,
       itemSpecifics: opts.listing.itemSpecifics,
+      imageLabels: opts.listing.imageLabels,
     },
   });
 

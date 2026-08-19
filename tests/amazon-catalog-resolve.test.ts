@@ -3,7 +3,9 @@ import { listingModelMatchesHit } from "@/lib/amazon/catalog-match";
 import {
   amazonCatalogFactTexts,
   barcodeSearchKeys,
+  catalogHintsFromListing,
   enrichHitWithCatalog,
+  pickResolvedAmazonCatalog,
 } from "@/lib/amazon/catalog-resolve";
 
 describe("Amazon exact catalog resolve", () => {
@@ -75,5 +77,53 @@ describe("Amazon exact catalog resolve", () => {
         { brand: "Honeywell", model: "RTH2CWF-N", title: "Honeywell Home RTH2CWF-N" },
       ),
     ).toBe(true);
+  });
+
+  it("reads a Milwaukee hyphen SKU from the photo caption when the title has none", () => {
+    const hints = catalogHintsFromListing({
+      title: "Milwaukee Metal Mesh Face Shield with Hard Hat",
+      brand: "Milwaukee",
+      model: "Milwaukee",
+      imageLabels: ["Milwaukee 48-73-1430"],
+    });
+    expect(hints.mpn).toBe("48-73-1430");
+    expect(
+      pickResolvedAmazonCatalog(
+        [
+          {
+            asin: "B00HARDHAT9",
+            title: "Milwaukee Hard Hat with Ratchet Suspension, White",
+          },
+          {
+            asin: "B08MESHSHLD",
+            title: "Milwaukee BOLT Metal Mesh Face Shield with Hard Hat",
+            identifiers: ["48-73-1430"],
+          },
+        ],
+        hints,
+      )?.asin,
+    ).toBe("B08MESHSHLD");
+  });
+
+  it("title-matches the mesh shield when Amazon never stored a model code", () => {
+    expect(
+      pickResolvedAmazonCatalog(
+        [
+          {
+            asin: "B00HARDHAT9",
+            title: "Milwaukee Hard Hat with Ratchet Suspension, White",
+          },
+          {
+            asin: "B08MESHSHLD",
+            title: "Milwaukee BOLT Metal Mesh Face Shield with Hard Hat",
+          },
+        ],
+        {
+          brand: "Milwaukee",
+          model: "Milwaukee",
+          title: "Milwaukee Metal Mesh Face Shield with Hard Hat",
+        },
+      )?.asin,
+    ).toBe("B08MESHSHLD");
   });
 });

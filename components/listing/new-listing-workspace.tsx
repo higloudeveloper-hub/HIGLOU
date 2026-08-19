@@ -1917,7 +1917,7 @@ export function NewListingWorkspace({
                   },
             ),
             brand: fresh.brand,
-            model: fresh.model || fresh.collection,
+            model: fresh.model,
             mpn: fresh.mpn,
             price: fresh.price,
             quantity: fresh.quantity,
@@ -1941,6 +1941,7 @@ export function NewListingWorkspace({
               key: field.key,
               value: field.value,
             })),
+            imageLabels: fresh.images.map((image) => image.fileName || ""),
           },
         }),
       });
@@ -2225,6 +2226,10 @@ export function NewListingWorkspace({
           amazonConnected={amazonConnection.connected}
           amazonConfigured={amazonConnection.configured}
           onPublishToAmazon={() => void publishToAmazon()}
+          onAmazonCatalogMatch={(asin) => {
+            if (listing.amazonAsin?.toUpperCase() === asin) return;
+            update("amazonAsin", asin);
+          }}
           publishingAmazon={publishingAmazon}
           amazonPublishError={amazonPublishError}
           amazonApprovalUrl={amazonApprovalUrl}

@@ -1,16 +1,16 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireUser } from "@/lib/auth/require-user";
+import { resolveAmazonCatalogMatch } from "@/lib/amazon/catalog-resolve";
 import {
   amazonSpMissingReason,
+  getAmazonSpConfig,
   isAmazonSpConfigured,
 } from "@/lib/amazon/sp-config";
 import {
   getAmazonConnectionPublic,
   getValidAmazonAccessToken,
 } from "@/lib/amazon/sp-oauth";
-import { publishAmazonOffer } from "@/lib/amazon/publish-listing";
-import { amazonPublishBlockFromError } from "@/lib/amazon/sp-api";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export const runtime = "nodejs";
@@ -19,29 +19,16 @@ export const maxDuration = 60;
 const bodySchema = z.object({
   productId: z.string().uuid().optional(),
   listing: z.object({
-    sku: z.string().min(1),
     title: z.string().min(1),
+    sku: z.string().optional().default(""),
     upc: z.string().optional().default(""),
     asin: z.string().optional().default(""),
+    amazonAsin: z.string().optional().default(""),
     brand: z.string().optional().default(""),
     model: z.string().optional().default(""),
     mpn: z.string().optional().default(""),
-    price: z.number().positive(),
-    quantity: z.number().int().min(1).default(1),
-    condition: z.string().optional().default("New"),
-    conditionId: z.string().optional().default("1000"),
-    handlingTime: z.number().int().min(1).max(30).optional().default(2),
     description: z.string().optional().default(""),
-    features: z.array(z.string()).optional().default([]),
-    images: z.array(z.string()).optional().default([]),
-    color: z.string().optional().default(""),
-    material: z.string().optional().default(""),
-    countryOfManufacture: z.string().optional().default(""),
-    categoryName: z.string().optional().default(""),
     imageLabels: z.array(z.string()).optional().default([]),
-    packageLengthIn: z.number().positive().nullable().optional(),
-    packageWidthIn: z.number().positive().nullable().optional(),
-    packageDepthIn: z.number().positive().nullable().optional(),
     itemSpecifics: z
       .array(
         z.object({
@@ -85,59 +72,52 @@ export async function POST(request: Request) {
     parsed = bodySchema.parse(await request.json());
   } catch {
     return NextResponse.json(
-      { error: "Send the listing SKU, title, and price." },
+      { error: "Send the listing title to search Amazon." },
       { status: 400 },
     );
   }
 
   try {
     const creds = await getValidAmazonAccessToken(auth.supabase, auth.user.id);
-    const result = await publishAmazonOffer({
+    const cfg = getAmazonSpConfig();
+    const resolved = await resolveAmazonCatalogMatch({
       accessToken: creds.token,
-      sellingPartnerId: creds.sellingPartnerId,
+      marketplaceId: cfg.marketplaceId,
       listing: parsed.listing,
     });
 
-    if (parsed.productId) {
+    if (
+      parsed.productId &&
+      resolved.mode === "existing" &&
+      /^[A-Z0-9]{10}$/i.test(resolved.asin)
+    ) {
       try {
         const admin = createAdminClient();
         await admin
           .from("products")
           .update({
-            amazon_sku: result.sku,
-            amazon_asin: result.asin,
-            amazon_status: result.status,
+            amazon_asin: resolved.asin.toUpperCase(),
             updated_at: new Date().toISOString(),
           })
           .eq("id", parsed.productId)
           .eq("user_id", auth.user.id);
       } catch {
-        /* listing can still succeed if the extra columns are not migrated yet */
+        /* preview still works if the extra column is not migrated */
       }
     }
 
     return NextResponse.json({
       ok: true,
-      ...result,
+      mode: resolved.mode,
+      asin: resolved.asin,
+      title: resolved.title,
+      productType: resolved.productType,
+      imageUrl: resolved.imageUrl || resolved.catalog?.images?.[0] || "",
+      query: resolved.query || "",
     });
   } catch (error) {
-    const blocked = amazonPublishBlockFromError(error);
-    if (blocked) {
-      return NextResponse.json(
-        {
-          error: blocked.message,
-          code: blocked.code,
-          approvalUrl: blocked.approvalUrl,
-          asin: blocked.asin || "",
-          brand: blocked.brand || "",
-          reasonCode: blocked.reasonCode || "",
-          restrictionsDebug: blocked.restrictionsDebug || null,
-        },
-        { status: 422 },
-      );
-    }
     const message =
-      error instanceof Error ? error.message : "Amazon publish failed";
+      error instanceof Error ? error.message : "Amazon catalog search failed";
     return NextResponse.json({ error: message }, { status: 422 });
   }
 }

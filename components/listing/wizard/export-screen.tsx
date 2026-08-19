@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import {
   ArrowLeft,
   Check,
   Download,
+  ExternalLink,
   Loader2,
   Pencil,
   Save,
@@ -39,6 +40,180 @@ const DRAFT_STAGES = [
   "Hosting photos on eBay",
   "Creating unpublished draft",
 ] as const;
+
+type AmazonCatalogPreview = {
+  mode: "existing" | "none";
+  asin: string;
+  title: string;
+  imageUrl: string;
+  query: string;
+};
+
+function listingMatchFingerprint(listing: ProductListing): string {
+  return [
+    listing.title,
+    listing.brand,
+    listing.model,
+    listing.mpn,
+    listing.upc,
+    listing.images.map((image) => image.fileName || "").join(" "),
+  ].join("|");
+}
+
+function AmazonExactMatchPanel({
+  listing,
+  enabled,
+  onMatch,
+}: {
+  listing: ProductListing;
+  enabled: boolean;
+  onMatch?: (asin: string) => void;
+}) {
+  const fingerprint = useMemo(
+    () => listingMatchFingerprint(listing),
+    [
+      listing.title,
+      listing.brand,
+      listing.model,
+      listing.mpn,
+      listing.upc,
+      listing.images,
+    ],
+  );
+  const [status, setStatus] = useState<"searching" | "found" | "none" | "error">(
+    "searching",
+  );
+  const [preview, setPreview] = useState<AmazonCatalogPreview | null>(null);
+
+  useEffect(() => {
+    if (!enabled) return;
+    const controller = new AbortController();
+    setStatus("searching");
+    setPreview(null);
+    const productId = /^[0-9a-f-]{36}$/i.test(listing.id) ? listing.id : undefined;
+    void (async () => {
+      try {
+        const response = await fetch("/api/amazon/catalog-match", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          signal: controller.signal,
+          body: JSON.stringify({
+            productId,
+            listing: {
+              title: listing.title,
+              sku: listing.sku,
+              upc: listing.upc,
+              asin: listing.amazonAsin || "",
+              amazonAsin: listing.amazonAsin || "",
+              brand: listing.brand,
+              model: listing.model,
+              mpn: listing.mpn,
+              description: listing.descriptionSummary || listing.descriptionHtml,
+              imageLabels: listing.images.map((image) => image.fileName || ""),
+              itemSpecifics: listing.itemSpecifics.map((field) => ({
+                label: field.label,
+                key: field.key,
+                value: field.value,
+              })),
+            },
+          }),
+        });
+        const body = (await response.json().catch(() => null)) as
+          | (AmazonCatalogPreview & { error?: string })
+          | null;
+        if (controller.signal.aborted) return;
+        if (!response.ok) {
+          setStatus("error");
+          return;
+        }
+        const next: AmazonCatalogPreview = {
+          mode: body?.mode === "existing" ? "existing" : "none",
+          asin: String(body?.asin || "").toUpperCase(),
+          title: String(body?.title || listing.title),
+          imageUrl: String(body?.imageUrl || ""),
+          query: String(body?.query || ""),
+        };
+        setPreview(next);
+        if (next.mode === "existing" && /^[A-Z0-9]{10}$/.test(next.asin)) {
+          setStatus("found");
+          onMatch?.(next.asin);
+        } else {
+          setStatus("none");
+        }
+      } catch (error) {
+        if (controller.signal.aborted) return;
+        if (error instanceof DOMException && error.name === "AbortError") return;
+        setStatus("error");
+      }
+    })();
+    return () => controller.abort();
+    // listing fields are covered by fingerprint; onMatch is a parent setter.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [enabled, fingerprint]);
+
+  if (!enabled) return null;
+
+  if (status === "searching") {
+    return (
+      <div className="mt-2 rounded-2xl border border-[#f4c928]/40 bg-[#141414] p-3 text-white">
+        <p className="flex items-center gap-2 text-[12px] font-semibold tracking-[0.14em] uppercase text-[#f4c928]">
+          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          Finding the exact Amazon page
+        </p>
+        <p className="mt-1 text-[12px] text-white/70">
+          Searching by SKU, UPC, and title. Higlou will not pick a similar
+          product from photos.
+        </p>
+      </div>
+    );
+  }
+
+  if (status === "found" && preview?.asin) {
+    return (
+      <div className="mt-2 overflow-hidden rounded-2xl border border-[#f4c928] bg-[#141414] text-white">
+        <div className="flex gap-3 p-3">
+          {preview.imageUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={preview.imageUrl}
+              alt=""
+              className="h-16 w-16 shrink-0 rounded-xl object-cover bg-white"
+            />
+          ) : null}
+          <div className="min-w-0">
+            <p className="text-[11px] font-semibold tracking-[0.14em] uppercase text-[#f4c928]">
+              Exact Amazon match
+            </p>
+            <p className="mt-0.5 line-clamp-2 text-[13px] font-semibold leading-5">
+              {preview.title}
+            </p>
+            <p className="mt-1 font-mono text-[11px] text-white/70">
+              {preview.asin}
+              {preview.query ? ` · searched ${preview.query}` : ""}
+            </p>
+          </div>
+        </div>
+        <a
+          href={`https://www.amazon.com/dp/${preview.asin}`}
+          target="_blank"
+          rel="noreferrer"
+          className="flex h-9 items-center justify-center gap-1.5 border-t border-white/10 text-[12px] font-semibold text-[#f4c928] hover:bg-white/5"
+        >
+          Open on Amazon
+          <ExternalLink className="h-3.5 w-3.5" />
+        </a>
+      </div>
+    );
+  }
+
+  return (
+    <p className="mt-2 rounded-2xl border border-amber-300/80 bg-amber-50 px-3 py-2 text-[12px] text-amber-900">
+      No confirmed exact Amazon page yet
+      {preview?.query ? ` for ${preview.query}` : ""}. Higlou will not guess a
+      similar listing from photos or title.
+    </p>
+  );
+}
 
 type EbayPublishResult = {
   mode: "draft" | "live";
@@ -390,6 +565,7 @@ export function ExportScreen({
   amazonConnected = false,
   amazonConfigured = false,
   onPublishToAmazon,
+  onAmazonCatalogMatch,
   publishingAmazon = false,
   amazonPublishError = null,
   amazonApprovalUrl = null,
@@ -427,6 +603,7 @@ export function ExportScreen({
   amazonConnected?: boolean;
   amazonConfigured?: boolean;
   onPublishToAmazon?: () => void;
+  onAmazonCatalogMatch?: (asin: string) => void;
   publishingAmazon?: boolean;
   amazonPublishError?: string | null;
   amazonApprovalUrl?: string | null;
@@ -691,6 +868,13 @@ export function ExportScreen({
                       </span>
                     ) : null}
                   </div>
+                  {amazonConnected && !amazonApprovalUrl && !amazonPublishResult?.asin ? (
+                    <AmazonExactMatchPanel
+                      listing={listing}
+                      enabled
+                      onMatch={onAmazonCatalogMatch}
+                    />
+                  ) : null}
                   {amazonConnected ? (
                     amazonApprovalUrl ? (
                       <>
@@ -769,7 +953,7 @@ export function ExportScreen({
                     <p className="mt-1.5 text-[12px] text-amber-800">
                       {amazonPublishError}
                     </p>
-                  ) : (
+                  ) : amazonConnected ? null : (
                     <p className="mt-1.5 text-[12px] text-muted-foreground">
                       Publishes an offer on a confirmed Amazon ASIN. If there is
                       no exact UPC or brand+model match, Higlou stops instead of

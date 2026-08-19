@@ -247,6 +247,16 @@ describe("Amazon catalog auto-match", () => {
     ).toBe("B08MESHSHLD");
   });
 
+  it("searches the Milwaukee catalog number before brand+model", () => {
+    expect(
+      amazonCatalogQueries({
+        brand: "Milwaukee",
+        model: "48-73-1430",
+        title: "Milwaukee Metal Mesh Face Shield with Hard Hat",
+      })[0],
+    ).toBe("48-73-1430");
+  });
+
   it("matches an Amazon-imported Milwaukee by title when no model or UPC is left", () => {
     const hints = {
       brand: "Milwaukee",

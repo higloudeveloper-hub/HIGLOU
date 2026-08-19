@@ -511,9 +511,8 @@ export async function searchAmazonCatalogForListing(opts: {
       seen.add(hit.asin);
       hits.push(hit);
     }
-    if (hits.length >= 12) break;
   }
-  return hits;
+  return hits.slice(0, 24);
 }
 
 const WINNER_INCLUDED_DATA =

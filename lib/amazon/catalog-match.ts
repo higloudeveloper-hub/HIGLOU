@@ -117,16 +117,19 @@ export function amazonCatalogQueries(hints: AmazonMatchHints): string[] {
   const model = resolveAmazonModelCode(hints);
   const title = String(hints.title || "").replace(/\s+/g, " ").trim().slice(0, 80);
   const brandModel = [brand, model].filter(Boolean).join(" ");
-  // Never search the brand alone — "Milwaukee" fills the result cap with
-  // similar hard hats and Higlou never runs the real product title.
+  // Search the catalog number first. Brand+model ("Milwaukee 48-73-1430")
+  // still returns similar hard hats and used to fill the 12-hit cap before
+  // Higlou ever queried the SKU alone.
   const queries = model
-    ? [brandModel, model, model.replace(/-/g, ""), title]
+    ? [model, brandModel, model.replace(/-/g, ""), title]
     : [title];
   return [...new Set(queries.filter((query) => query.length >= 4))];
 }
 
 export function amazonSearchKeywords(hints: AmazonMatchHints): string {
-  return amazonCatalogQueries(hints)[0] || "";
+  const brand = String(hints.brand || "").trim();
+  const model = resolveAmazonModelCode(hints);
+  return [brand, model].filter(Boolean).join(" ") || amazonCatalogQueries(hints)[0] || "";
 }
 
 function modelsCompatible(listingModel: string, amazonModel: string): boolean {

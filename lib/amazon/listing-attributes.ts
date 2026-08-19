@@ -33,6 +33,7 @@ export type AmazonListingDraft = {
   sku?: string;
   asin?: string;
   amazonAsin?: string;
+  imageLabels?: string[];
 };
 
 export type AmazonProductTypeSchema = {

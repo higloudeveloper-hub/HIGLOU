@@ -19,20 +19,33 @@ import {
 } from "@/lib/products/persistence";
 import { ebayReadyImportFields } from "@/lib/opportunity/ebay-ready";
 import { toEbayListingTitle } from "@/lib/ebay/listing-helpers";
+import { upgradeAmazonImage } from "@/lib/amazon/parse-product";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
+
+const cardSchema = z.object({
+  asin: z.string().min(10).max(12),
+  title: z.string().max(500).optional().default(""),
+  brand: z.string().max(120).optional().default(""),
+  imageUrl: z.string().max(2000).optional().default(""),
+  amazonPrice: z.number().positive().max(100000).nullable().optional(),
+  ebayPrice: z.number().positive().max(100000).nullable().optional(),
+});
 
 const bodySchema = z.object({
   query: z.string().max(200).optional().default(""),
   category: z.string().max(120).optional().default(""),
   asins: z.array(z.string().min(10).max(12)).max(5).optional().default([]),
+  cards: z.array(cardSchema).max(5).optional().default([]),
   ebayPrice: z.number().positive().max(100000).optional(),
   mode: z
     .enum(["amazon", "amazon_to_ebay", "supplier"])
     .optional()
     .default("amazon_to_ebay"),
 });
+
+type WinnerCardHint = z.infer<typeof cardSchema>;
 
 type ImportedListing = {
   asin: string;
@@ -66,42 +79,97 @@ type ImportedListing = {
   }>;
 };
 
+function remoteImage(url: string, asin: string): ImportedListing["dbImages"][number] {
+  return {
+    publicUrl: url,
+    storagePath: "",
+    fileName: `${asin}.jpg`,
+    sortOrder: 0,
+    isPrimary: true,
+    mimeType: "image/jpeg",
+    sizeBytes: 0,
+  };
+}
+
 async function importAsin(
   asin: string,
   ebayPrice: number | undefined,
   userId: string,
   pageOrigin: string,
   mode: "amazon" | "amazon_to_ebay" | "supplier",
+  hint?: WinnerCardHint,
 ): Promise<ImportedListing> {
-  const product = await fetchAmazonProduct(`https://www.amazon.com/dp/${asin}`, {
-    pageOrigin,
-  });
-  const images = await mirrorAmazonImages({
-    imageUrls: product.imageUrls,
-    userId,
-    asin: product.asin,
-  });
-  if (!images.length) {
-    throw new Error("Amazon photos could not be saved.");
+  const hintImage = hint?.imageUrl ? upgradeAmazonImage(hint.imageUrl) : "";
+  let product: Awaited<ReturnType<typeof fetchAmazonProduct>> | null = null;
+  try {
+    product = await fetchAmazonProduct(`https://www.amazon.com/dp/${asin}`, {
+      pageOrigin,
+    });
+  } catch {
+    product = null;
+  }
+  if (!product) {
+    const title = toEbayListingTitle(hint?.title || "") || hint?.brand || asin;
+    product = {
+      asin,
+      url: `https://www.amazon.com/dp/${asin}`,
+      title,
+      brand: hint?.brand || "",
+      price: hint?.amazonPrice ?? null,
+      features: [],
+      imageUrls: hintImage ? [hintImage] : [],
+      upc: "",
+      rating: null,
+      reviewCount: null,
+    };
+  } else if (hintImage && !product.imageUrls.includes(hintImage)) {
+    product = { ...product, imageUrls: [hintImage, ...product.imageUrls] };
+  }
+
+  let images = product.imageUrls.length
+    ? await mirrorAmazonImages({
+        imageUrls: product.imageUrls,
+        userId,
+        asin: product.asin,
+      })
+    : [];
+  if (!images.length && hintImage) {
+    images = await mirrorAmazonImages({
+      imageUrls: [hintImage],
+      userId,
+      asin: product.asin,
+    });
+  }
+  const dbImages = images.length
+    ? images.map((img, index) => ({
+        publicUrl: img.publicUrl,
+        storagePath: img.storagePath,
+        fileName: img.fileName,
+        sortOrder: index,
+        isPrimary: index === 0,
+        mimeType: img.mimeType,
+        sizeBytes: img.sizeBytes,
+      }))
+    : hintImage || product.imageUrls[0]
+      ? [remoteImage(hintImage || product.imageUrls[0], product.asin)].filter(
+          (img) => /^https:\/\//i.test(img.publicUrl),
+        )
+      : [];
+  if (!dbImages.length) {
+    throw new Error("No photo for this product. Try another card.");
   }
   const price =
     mode === "amazon"
-      ? product.price
-      : ebayProfitPrice(product.price, ebayPrice);
-  const dbImages = images.map((img, index) => ({
-    publicUrl: img.publicUrl,
-    storagePath: img.storagePath,
-    fileName: img.fileName,
-    sortOrder: index,
-    isPrimary: index === 0,
-    mimeType: img.mimeType,
-    sizeBytes: img.sizeBytes,
-  }));
+      ? product.price ?? hint?.amazonPrice ?? null
+      : ebayProfitPrice(
+          product.price ?? hint?.amazonPrice ?? null,
+          ebayPrice ?? hint?.ebayPrice ?? undefined,
+        );
   return {
     asin: product.asin,
     amazonUrl: product.url,
     title: toEbayListingTitle(product.title) || product.brand || product.asin,
-    brand: product.brand,
+    brand: product.brand || hint?.brand || "",
     price,
     upc: product.upc,
     features: product.features,
@@ -135,7 +203,7 @@ export async function POST(request: Request) {
 
   const rate = checkRateLimit({
     key: `amazon-auto-import:${clientKeyFromRequest(request, auth.user.id)}`,
-    limit: 4,
+    limit: 10,
     windowMs: 60_000,
   });
   if (!rate.allowed) {
@@ -210,11 +278,21 @@ export async function POST(request: Request) {
   const origin = new URL(request.url).origin;
   const imported: ImportedListing[] = [];
   const skipped: Array<{ asin: string; reason: string }> = [];
+  const hints = new Map(
+    (body.cards || []).map((card) => [card.asin.trim().toUpperCase(), card]),
+  );
 
   for (const asin of asins) {
     try {
       imported.push(
-        await importAsin(asin, body.ebayPrice, auth.user.id, origin, body.mode),
+        await importAsin(
+          asin,
+          body.ebayPrice,
+          auth.user.id,
+          origin,
+          body.mode,
+          hints.get(asin),
+        ),
       );
     } catch (error) {
       skipped.push({
@@ -307,7 +385,9 @@ export async function POST(request: Request) {
       skipped.push({
         asin: item.asin,
         reason:
-          error instanceof Error ? error.message : "Could not save listing",
+          error instanceof Error
+            ? error.message
+            : "Could not save that listing.",
       });
     }
   }

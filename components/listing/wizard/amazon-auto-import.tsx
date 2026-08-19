@@ -364,6 +364,14 @@ export function AmazonAutoImportPanel({
   onImport: (
     asins: string[],
     mode: OpportunityMode,
+    cards?: Array<{
+      asin: string;
+      title: string;
+      brand: string;
+      imageUrl: string;
+      amazonPrice: number | null;
+      ebayPrice: number | null;
+    }>,
   ) => Promise<boolean | void>;
 }) {
   const reduce = usePrefersReducedMotion();
@@ -556,6 +564,14 @@ export function AmazonAutoImportPanel({
       const ok = await onImport(
         selected.map((hit) => hit.asin),
         mode,
+        selected.map((hit) => ({
+          asin: hit.asin,
+          title: hit.title,
+          brand: hit.brand,
+          imageUrl: hit.imageUrl,
+          amazonPrice: hit.amazonPrice,
+          ebayPrice: hit.ebayActiveMedian ?? hit.ebayPrice,
+        })),
       );
       if (ok !== false) {
         const taken = new Set(selected.map((hit) => hit.asin));

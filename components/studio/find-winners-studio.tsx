@@ -14,6 +14,14 @@ export function FindWinnersStudio() {
   const importWinners = async (
     asins: string[],
     mode: OpportunityMode,
+    cards?: Array<{
+      asin: string;
+      title: string;
+      brand: string;
+      imageUrl: string;
+      amazonPrice: number | null;
+      ebayPrice: number | null;
+    }>,
   ): Promise<boolean> => {
     if (busy) return false;
     const next = [
@@ -29,7 +37,7 @@ export function FindWinnersStudio() {
       const response = await fetch("/api/amazon/auto-import", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ asins: next, mode }),
+        body: JSON.stringify({ asins: next, mode, cards: cards || [] }),
       });
       const body = (await response.json().catch(() => null)) as {
         ok?: boolean;
@@ -40,10 +48,13 @@ export function FindWinnersStudio() {
         mode?: OpportunityMode;
       } | null;
       if (!response.ok || !body?.ok || !body.id) {
+        const timedOut = [502, 503, 504].includes(response.status);
         toast.error(
           body?.error ||
             body?.skipped?.[0]?.reason ||
-            "Could not import that product. Try another card.",
+            (timedOut
+              ? "Amazon took too long. Tap Import again."
+              : "Could not import that product. Try another card."),
         );
         return false;
       }

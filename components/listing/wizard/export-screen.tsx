@@ -77,8 +77,15 @@ function PublishProgressOverlay({
   const failed = Boolean(error) && !running;
   const [stage, setStage] = useState(0);
   const [progress, setProgress] = useState(8);
-  const failAt =
-    failed && /item specific|25002/i.test(error || "") ? 0 : stage;
+  const failAt = failed
+    ? /photo|image|EPS|host/i.test(error || "")
+      ? 1
+      : /offer|policy|category|25707|sku|aspect|25002/i.test(error || "")
+        ? 2
+        : /save|sync draft|library|price/i.test(error || "")
+          ? 0
+          : Math.min(stage, 1)
+    : stage;
   const friendly = error ? humanizeEbayPublishError(error) : null;
 
   useEffect(() => {

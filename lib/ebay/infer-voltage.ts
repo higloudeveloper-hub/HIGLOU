@@ -489,6 +489,13 @@ export function humanizeEbayPublishError(raw: string): {
       detail: `This category requires ${aspect} before the listing can go live. Try again — Higlou fills it from the product (or Does Not Apply).`,
     };
   }
+  if (/eBay publish failed/i.test(raw)) {
+    return {
+      headline: "Couldn’t finish publish",
+      detail:
+        "Higlou could not create the eBay listing. Check the selling price and photos, then try again. If this keeps happening, reconnect eBay in Settings.",
+    };
+  }
   return {
     headline: "Couldn’t finish publish",
     detail: String(raw || "eBay rejected the listing.").trim(),

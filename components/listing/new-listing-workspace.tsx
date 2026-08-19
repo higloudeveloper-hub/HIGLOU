@@ -1170,10 +1170,14 @@ export function NewListingWorkspace({
     | { ok: false; message: string }
   > => {
     const current = options?.draft ?? listing;
-    localStorage.setItem(
-      `higlou-listing-${current.id}`,
-      JSON.stringify(current),
-    );
+    try {
+      localStorage.setItem(
+        `higlou-listing-${current.id}`,
+        JSON.stringify(current),
+      );
+    } catch {
+      /* private mode / quota must not block publish */
+    }
 
     try {
       const priceNum =
@@ -1787,20 +1791,27 @@ export function NewListingWorkspace({
           },
         }),
       });
-      const body = (await response.json().catch(() => null)) as {
-        error?: string;
-        code?: string;
-        offerId?: string;
-        listingId?: string | null;
-        sellerHubHint?: string;
-        imageCount?: number;
-        storeOrganize?: {
-          storePath?: string;
-          storePath2?: string | null;
-          createdFolder?: boolean;
-        } | null;
-        storeOrganizeWarning?: string | null;
-      } | null;
+      const raw = await response.text();
+      const body = (() => {
+        try {
+          return raw ? (JSON.parse(raw) as {
+            error?: string;
+            code?: string;
+            offerId?: string;
+            listingId?: string | null;
+            sellerHubHint?: string;
+            imageCount?: number;
+            storeOrganize?: {
+              storePath?: string;
+              storePath2?: string | null;
+              createdFolder?: boolean;
+            } | null;
+            storeOrganizeWarning?: string | null;
+          }) : null;
+        } catch {
+          return null;
+        }
+      })();
       if (!response.ok) {
         if (body?.code === "EBAY_NOT_CONNECTED") {
           setEbayPublishError("Connect your eBay store first");
@@ -1815,7 +1826,12 @@ export function NewListingWorkspace({
           });
           return;
         }
-        throw new Error(body?.error || "eBay publish failed");
+        throw new Error(
+          body?.error ||
+            (raw && !raw.trim().startsWith("{")
+              ? `eBay publish failed (${response.status}). Try again in a few seconds.`
+              : `eBay publish failed (${response.status})`),
+        );
       }
       const photoBit =
         typeof body?.imageCount === "number"

@@ -2,7 +2,7 @@ import { getEbayConfig } from "@/lib/ebay/config";
 import { sanitizeEbayAspects } from "@/lib/ebay/sanitize-aspects";
 import { HIGLOU_WAREHOUSE } from "@/config/warehouse";
 import { validateBarcode } from "@/lib/barcode/validators";
-import { toEbayListingTitle } from "@/lib/ebay/listing-helpers";
+import { toEbayListingTitle, toEbayInventorySku } from "@/lib/ebay/listing-helpers";
 
 /**
  * Only send UPC/EAN values eBay will accept (valid GS1 checksum).
@@ -219,12 +219,12 @@ export async function createOrReplaceInventoryItem(
     };
   }
 
-  const sku = encodeURIComponent(input.sku);
+  const sku = encodeURIComponent(toEbayInventorySku(input.sku));
   await ebayFetch(accessToken, `/sell/inventory/v1/inventory_item/${sku}`, {
     method: "PUT",
     body: JSON.stringify(body),
   });
-  return { sku: input.sku };
+  return { sku: toEbayInventorySku(input.sku) };
 }
 
 /** Display / aspect MPN (keeps readable form when valid). */
@@ -604,10 +604,11 @@ export async function updateOfferStoreCategories(
 }
 
 export async function getOffersForSku(accessToken: string, sku: string) {
+  const safe = toEbayInventorySku(sku);
   try {
     const json = (await ebayFetch(
       accessToken,
-      `/sell/inventory/v1/offer?sku=${encodeURIComponent(sku)}`,
+      `/sell/inventory/v1/offer?sku=${encodeURIComponent(safe)}`,
       { method: "GET" },
     )) as { offers?: Array<{ offerId?: string; status?: string }> };
     return json.offers || [];

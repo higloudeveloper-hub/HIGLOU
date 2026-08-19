@@ -246,6 +246,18 @@ function dbRowToListing(
 }
 
 export async function POST(request: Request) {
+  try {
+    return await postEbayPublish(request);
+  } catch (error) {
+    const message =
+      error instanceof Error && error.message.trim()
+        ? error.message
+        : "eBay publish failed";
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}
+
+async function postEbayPublish(request: Request) {
   const auth = await requireUser();
   if (!auth.ok) return auth.response;
 

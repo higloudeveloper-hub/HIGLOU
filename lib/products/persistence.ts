@@ -135,7 +135,10 @@ export const productBodySchema = z.object({
   images: z
     .array(
       z.object({
-        publicUrl: z.string().url(),
+        publicUrl: z.preprocess(
+          (value) => String(value ?? "").trim(),
+          z.string().min(8),
+        ),
         storagePath: softString,
         fileName: softString,
         sortOrder: z.preprocess((value) => {

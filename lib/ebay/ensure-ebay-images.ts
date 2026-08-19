@@ -19,6 +19,11 @@ export function normalizeEbayImageUrl(raw: string): string | null {
     const u = new URL(trimmed);
     if (u.protocol !== "https:") return null;
     if (/^(localhost|127\.0\.0\.1)$/i.test(u.hostname)) return null;
+    u.hash = "";
+    // Amazon CDN paths break if we re-encode image ids.
+    if (/amazon|media-amazon|ssl-images-amazon/i.test(u.hostname)) {
+      return u.toString();
+    }
     u.pathname = u.pathname
       .split("/")
       .map((seg) => {
@@ -30,11 +35,14 @@ export function normalizeEbayImageUrl(raw: string): string | null {
         }
       })
       .join("/");
-    u.hash = "";
     return u.toString();
   } catch {
     return null;
   }
+}
+
+function isAmazonCdnUrl(url: string): boolean {
+  return /amazon|media-amazon|ssl-images-amazon/i.test(url);
 }
 
 async function fetchImageBuffer(sourceUrl: string): Promise<Buffer> {
@@ -54,7 +62,14 @@ async function fetchImageBuffer(sourceUrl: string): Promise<Buffer> {
     }
   }
 
-  const res = await fetch(sourceUrl, { cache: "no-store" });
+  const res = await fetch(sourceUrl, {
+    cache: "no-store",
+    headers: {
+      Accept: "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
+      "User-Agent":
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+    },
+  });
   if (!res.ok) {
     throw new Error(`Could not fetch image (${res.status})`);
   }
@@ -110,6 +125,19 @@ export async function ensureEbayCompatibleImageUrls(options: {
   for (const raw of options.urls) {
     const normalized = normalizeEbayImageUrl(raw);
     if (!normalized) continue;
+
+    if (isAmazonCdnUrl(normalized) && !isEbayEpsUrl(normalized)) {
+      try {
+        out.push(await createEbayEpsFromUrl(options.accessToken, normalized));
+        continue;
+      } catch (amazonEpsError) {
+        errors.push(
+          amazonEpsError instanceof Error
+            ? amazonEpsError.message
+            : String(amazonEpsError),
+        );
+      }
+    }
 
     try {
       const input = await fetchImageBuffer(normalized);

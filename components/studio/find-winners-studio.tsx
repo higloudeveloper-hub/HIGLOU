@@ -54,7 +54,7 @@ export function FindWinnersStudio() {
             body?.skipped?.[0]?.reason ||
             (timedOut
               ? "Amazon took too long. Tap Import again."
-              : "Could not import that product. Try another card."),
+              : `Could not import (${response.status}). Try again.`),
         );
         return false;
       }

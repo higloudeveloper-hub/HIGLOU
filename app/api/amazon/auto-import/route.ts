@@ -91,6 +91,55 @@ function remoteImage(url: string, asin: string): ImportedListing["dbImages"][num
   };
 }
 
+function photoFromHint(hint?: WinnerCardHint): string {
+  let raw = String(hint?.imageUrl || "").trim().replace(/&amp;/g, "&");
+  if (raw.startsWith("//")) raw = `https:${raw}`;
+  if (!raw) return "";
+  return upgradeAmazonImage(raw) || (/^https:\/\//i.test(raw) ? raw : "");
+}
+
+function listingFromCard(
+  asin: string,
+  mode: "amazon" | "amazon_to_ebay" | "supplier",
+  ebayPrice: number | undefined,
+  hint: WinnerCardHint,
+): ImportedListing {
+  const image = photoFromHint(hint);
+  const dbImages = image ? [remoteImage(image, asin)] : [];
+  const title =
+    toEbayListingTitle(hint.title || "") || hint.brand || asin;
+  const price =
+    mode === "amazon"
+      ? hint.amazonPrice ?? null
+      : ebayProfitPrice(
+          hint.amazonPrice ?? null,
+          ebayPrice ?? hint.ebayPrice ?? undefined,
+        );
+  return {
+    asin,
+    amazonUrl: `https://www.amazon.com/dp/${asin}`,
+    title,
+    brand: hint.brand || "",
+    price,
+    upc: "",
+    features: [],
+    sku: `AMZ-${asin}`,
+    rating: null,
+    reviewCount: null,
+    images: dbImages.map((img) => ({
+      id: nanoid(),
+      url: img.publicUrl,
+      storagePath: img.storagePath,
+      fileName: img.fileName,
+      sortOrder: img.sortOrder,
+      isPrimary: img.isPrimary,
+      mimeType: img.mimeType,
+      sizeBytes: img.sizeBytes,
+    })),
+    dbImages,
+  };
+}
+
 async function importAsin(
   asin: string,
   ebayPrice: number | undefined,
@@ -99,77 +148,38 @@ async function importAsin(
   mode: "amazon" | "amazon_to_ebay" | "supplier",
   hint?: WinnerCardHint,
 ): Promise<ImportedListing> {
-  const hintImage = hint?.imageUrl ? upgradeAmazonImage(hint.imageUrl) : "";
-  let product: Awaited<ReturnType<typeof fetchAmazonProduct>> | null = null;
-  try {
-    product = await fetchAmazonProduct(`https://www.amazon.com/dp/${asin}`, {
-      pageOrigin,
-    });
-  } catch {
-    product = null;
+  if (hint && (hint.imageUrl || hint.title)) {
+    return listingFromCard(asin, mode, ebayPrice, hint);
   }
-  if (!product) {
-    const title = toEbayListingTitle(hint?.title || "") || hint?.brand || asin;
-    product = {
-      asin,
-      url: `https://www.amazon.com/dp/${asin}`,
-      title,
-      brand: hint?.brand || "",
-      price: hint?.amazonPrice ?? null,
-      features: [],
-      imageUrls: hintImage ? [hintImage] : [],
-      upc: "",
-      rating: null,
-      reviewCount: null,
-    };
-  } else if (hintImage && !product.imageUrls.includes(hintImage)) {
-    product = { ...product, imageUrls: [hintImage, ...product.imageUrls] };
-  }
-
-  let images = product.imageUrls.length
-    ? await mirrorAmazonImages({
-        imageUrls: product.imageUrls,
-        userId,
-        asin: product.asin,
-      })
-    : [];
-  if (!images.length && hintImage) {
-    images = await mirrorAmazonImages({
-      imageUrls: [hintImage],
-      userId,
-      asin: product.asin,
-    });
-  }
-  const dbImages = images.length
-    ? images.map((img, index) => ({
-        publicUrl: img.publicUrl,
-        storagePath: img.storagePath,
-        fileName: img.fileName,
-        sortOrder: index,
-        isPrimary: index === 0,
-        mimeType: img.mimeType,
-        sizeBytes: img.sizeBytes,
-      }))
-    : hintImage || product.imageUrls[0]
-      ? [remoteImage(hintImage || product.imageUrls[0], product.asin)].filter(
-          (img) => /^https:\/\//i.test(img.publicUrl),
-        )
-      : [];
-  if (!dbImages.length) {
-    throw new Error("No photo for this product. Try another card.");
+  const product = await fetchAmazonProduct(`https://www.amazon.com/dp/${asin}`, {
+    pageOrigin,
+  });
+  const images = await mirrorAmazonImages({
+    imageUrls: product.imageUrls,
+    userId,
+    asin: product.asin,
+  });
+  if (!images.length) {
+    throw new Error("Amazon photos could not be saved.");
   }
   const price =
     mode === "amazon"
-      ? product.price ?? hint?.amazonPrice ?? null
-      : ebayProfitPrice(
-          product.price ?? hint?.amazonPrice ?? null,
-          ebayPrice ?? hint?.ebayPrice ?? undefined,
-        );
+      ? product.price
+      : ebayProfitPrice(product.price, ebayPrice);
+  const dbImages = images.map((img, index) => ({
+    publicUrl: img.publicUrl,
+    storagePath: img.storagePath,
+    fileName: img.fileName,
+    sortOrder: index,
+    isPrimary: index === 0,
+    mimeType: img.mimeType,
+    sizeBytes: img.sizeBytes,
+  }));
   return {
     asin: product.asin,
     amazonUrl: product.url,
     title: toEbayListingTitle(product.title) || product.brand || product.asin,
-    brand: product.brand || hint?.brand || "",
+    brand: product.brand,
     price,
     upc: product.upc,
     features: product.features,
@@ -325,6 +335,7 @@ export async function POST(request: Request) {
         ebayToken: tokens.ebayToken,
         userId: auth.user.id,
         supabase: auth.supabase,
+        fast: true,
       });
       const data = productBodySchema.parse({
         title: toEbayListingTitle(item.title) || item.brand || item.asin,

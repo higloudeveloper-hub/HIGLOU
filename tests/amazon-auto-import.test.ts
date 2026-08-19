@@ -368,9 +368,8 @@ describe("Amazon auto-import stays an eBay draft flow", () => {
     expect(winnersPage).toMatch(/FindWinnersStudio/);
     expect(winnersStudio).toMatch(/AmazonAutoImportPanel/);
     expect(winnersStudio).toMatch(/JSON\.stringify\(\{ asins: next, mode, cards: cards \|\| \[\] \}\)/);
-    expect(importRoute).toMatch(/upgradeAmazonImage/);
-    expect(importRoute).toMatch(/body\.cards/);
-    expect(importRoute).toMatch(/remoteImage/);
+    expect(importRoute).toMatch(/listingFromCard/);
+    expect(importRoute).toMatch(/fast: true/);
     expect(winnersStudio).toMatch(/\/listings\/\$\{body\.id\}/);
     expect(panel).toMatch(/Live scan/);
     expect(panel).toMatch(/Manual search/);

@@ -15,6 +15,7 @@ export async function ebayReadyImportFields(opts: {
   ebayToken?: string;
   userId: string;
   supabase: SupabaseClient;
+  fast?: boolean;
 }): Promise<{
   categoryId: string;
   categoryName: string;
@@ -37,7 +38,7 @@ export async function ebayReadyImportFields(opts: {
   let categoryId = "";
   let categoryName = "";
 
-  if (opts.ebayToken) {
+  if (opts.ebayToken && !opts.fast) {
     try {
       const ensured = await ensureListableEbayCategory(opts.ebayToken, {
         title,
@@ -62,7 +63,7 @@ export async function ebayReadyImportFields(opts: {
     categoryName = catalog.categoryName;
   }
 
-  if (!categoryId) {
+  if (!categoryId && !opts.fast) {
     const ai = await ensureEbayCategory({
       title,
       brand,

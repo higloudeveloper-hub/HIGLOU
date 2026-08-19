@@ -321,6 +321,8 @@ describe("Amazon auto-import stays an eBay draft flow", () => {
     expect(panel).toMatch(/Stop live scan/);
     expect(panel).toMatch(/Session spread/);
     expect(panel).toMatch(/MoneyTicker/);
+    expect(panel).toMatch(/Just found/);
+    expect(panel).toMatch(/You keep/);
     expect(panel).toMatch(/Est\. eBay profit/);
     expect(panel).toMatch(/Analyzing live/);
     expect(panel).toMatch(/Product name, ASIN, or Amazon link/);

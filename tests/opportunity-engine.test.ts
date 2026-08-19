@@ -26,6 +26,25 @@ describe("opportunity profit", () => {
     expect(profit.roi).toBe(0.636);
     expect(profit.margin).toBe(0.239);
   });
+
+  it("never treats the eBay ask as what you keep", async () => {
+    const { estimatedKeepAmount } = await import("@/lib/opportunity/profit");
+    const keep = estimatedKeepAmount({
+      mode: "amazon_to_ebay",
+      amazonPrice: 18.4,
+      ebayPrice: 38.46,
+    });
+    expect(keep).not.toBe(38.46);
+    expect(keep).toBeGreaterThan(0);
+    expect(keep).toBeLessThan(20);
+    expect(
+      estimatedKeepAmount({
+        mode: "amazon_to_ebay",
+        netProfit: 6.43,
+        ebayPrice: 38.46,
+      }),
+    ).toBe(6.43);
+  });
 });
 
 describe("opportunity score", () => {

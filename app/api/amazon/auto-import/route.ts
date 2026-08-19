@@ -100,7 +100,7 @@ async function importAsin(
   return {
     asin: product.asin,
     amazonUrl: product.url,
-    title: toEbayListingTitle(product.title),
+    title: toEbayListingTitle(product.title) || product.brand || product.asin,
     brand: product.brand,
     price,
     upc: product.upc,
@@ -249,7 +249,7 @@ export async function POST(request: Request) {
         supabase: auth.supabase,
       });
       const data = productBodySchema.parse({
-        title: toEbayListingTitle(item.title),
+        title: toEbayListingTitle(item.title) || item.brand || item.asin,
         brand: item.brand,
         sku: item.sku,
         amazonAsin: item.asin,

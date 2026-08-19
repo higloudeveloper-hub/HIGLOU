@@ -67,3 +67,34 @@ export function estimateEbayReferralFee(salePrice: number | null): number | null
   if (!salePrice || salePrice <= 0) return null;
   return money(salePrice * 0.1365 + 0.3);
 }
+
+/** What the seller keeps after cost, fees, ship, pack, and returns. Never the eBay ask. */
+export function estimatedKeepAmount(opts: {
+  mode: "amazon" | "amazon_to_ebay" | "supplier";
+  netProfit?: number | null;
+  cost?: number | null;
+  amazonPrice?: number | null;
+  amazonFees?: number | null;
+  ebayFees?: number | null;
+  ebayActiveMedian?: number | null;
+  ebayPrice?: number | null;
+  salePrice?: number | null;
+}): number | null {
+  if (opts.netProfit != null && Number.isFinite(opts.netProfit)) {
+    return money(opts.netProfit);
+  }
+  const cost = opts.cost ?? opts.amazonPrice ?? null;
+  const sale =
+    opts.mode === "amazon"
+      ? opts.amazonPrice ?? null
+      : opts.ebayActiveMedian ?? opts.ebayPrice ?? opts.salePrice ?? null;
+  const fee =
+    opts.mode === "amazon"
+      ? opts.amazonFees ?? null
+      : opts.ebayFees ?? estimateEbayReferralFee(sale);
+  return estimateNetProfit({
+    salePrice: sale,
+    cost,
+    marketplaceFee: fee,
+  }).netProfit;
+}

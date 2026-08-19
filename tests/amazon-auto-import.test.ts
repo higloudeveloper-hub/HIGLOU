@@ -87,6 +87,28 @@ describe("Amazon auto-import ranking", () => {
     );
     expect(merged[0].asin).toBe("B0NEW00001");
     expect(merged.find((hit) => hit.asin === "B0OLD00001")?.score).toBe(55);
+    const kept = mergeOpportunityHits(
+      [
+        {
+          asin: "B0KEEP0001",
+          score: 40,
+          netProfit: 38.46,
+          amazonPrice: 12,
+          ebayPrice: 49,
+        } as OpportunityProduct,
+      ],
+      [
+        {
+          asin: "B0KEEP0001",
+          score: 50,
+          netProfit: null,
+          amazonPrice: null,
+          ebayPrice: 49,
+        } as OpportunityProduct,
+      ],
+    );
+    expect(kept[0].netProfit).toBe(38.46);
+    expect(kept[0].amazonPrice).toBe(12);
   });
   it("builds keywords from a model and category without the seed ASIN", () => {
     expect(
@@ -323,6 +345,8 @@ describe("Amazon auto-import stays an eBay draft flow", () => {
     expect(panel).toMatch(/MoneyTicker/);
     expect(panel).toMatch(/Just found/);
     expect(panel).toMatch(/You keep/);
+    expect(panel).toMatch(/estimatedKeepAmount/);
+    expect(panel).toMatch(/Scoring/);
     expect(panel).toMatch(/Est\. eBay profit/);
     expect(panel).toMatch(/Analyzing live/);
     expect(panel).toMatch(/Product name, ASIN, or Amazon link/);

@@ -150,6 +150,36 @@ export function nextLiveScanTarget(step: number): {
   };
 }
 
+function pickNum(a: number | null | undefined, b: number | null | undefined) {
+  return a != null ? a : b ?? null;
+}
+
+function mergeHit(
+  prev: OpportunityProduct,
+  next: OpportunityProduct,
+): OpportunityProduct {
+  const primary = next.score >= prev.score ? next : prev;
+  const fallback = primary === next ? prev : next;
+  return {
+    ...fallback,
+    ...primary,
+    title: primary.title || fallback.title,
+    imageUrl: primary.imageUrl || fallback.imageUrl,
+    brand: primary.brand || fallback.brand,
+    amazonPrice: pickNum(primary.amazonPrice, fallback.amazonPrice),
+    ebayPrice: pickNum(primary.ebayPrice, fallback.ebayPrice),
+    ebayActiveMedian: pickNum(primary.ebayActiveMedian, fallback.ebayActiveMedian),
+    cost: pickNum(primary.cost, fallback.cost),
+    netProfit: pickNum(primary.netProfit, fallback.netProfit),
+    roi: pickNum(primary.roi, fallback.roi),
+    margin: pickNum(primary.margin, fallback.margin),
+    ebayFees: pickNum(primary.ebayFees, fallback.ebayFees),
+    amazonFees: pickNum(primary.amazonFees, fallback.amazonFees),
+    rating: pickNum(primary.rating, fallback.rating),
+    reviewCount: pickNum(primary.reviewCount, fallback.reviewCount),
+  };
+}
+
 export function mergeOpportunityHits(
   current: OpportunityProduct[],
   incoming: OpportunityProduct[],
@@ -158,7 +188,7 @@ export function mergeOpportunityHits(
   const map = new Map(current.map((hit) => [hit.asin, hit]));
   for (const hit of incoming) {
     const prev = map.get(hit.asin);
-    if (!prev || hit.score >= prev.score) map.set(hit.asin, hit);
+    map.set(hit.asin, prev ? mergeHit(prev, hit) : hit);
   }
   return [...map.values()]
     .sort((a, b) => b.score - a.score)

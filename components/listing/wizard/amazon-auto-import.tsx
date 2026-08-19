@@ -12,13 +12,14 @@ import {
   mergeOpportunityHits,
   nextLiveScanTarget,
 } from "@/lib/opportunity/niches";
-import { estimateNetProfit } from "@/lib/opportunity/profit";
+import { estimateNetProfit, estimatedKeepAmount } from "@/lib/opportunity/profit";
 import type {
   OpportunityMode,
   OpportunityProduct,
 } from "@/lib/opportunity/types";
 import { cn } from "@/lib/utils";
 import { usePrefersReducedMotion } from "@/components/listing/wizard/use-prefers-reduced-motion";
+import { toEbayListingTitle } from "@/lib/ebay/listing-helpers";
 
 type WinnerSources = {
   keepa?: boolean;
@@ -60,13 +61,18 @@ function eligibilityCopy(hit: OpportunityProduct, mode: OpportunityMode) {
   return "Connect Amazon to confirm you can sell";
 }
 
+function keepFor(hit: OpportunityProduct, mode: OpportunityMode) {
+  return estimatedKeepAmount({ ...hit, mode });
+}
+
 function heroFor(hit: OpportunityProduct, mode: OpportunityMode) {
   const ebay = hit.ebayActiveMedian ?? hit.ebayPrice;
-  if (hit.netProfit != null) {
+  const keep = keepFor(hit, mode);
+  if (keep != null) {
     return {
       kicker: mode === "amazon" ? "Est. Amazon profit" : "Est. eBay profit",
-      value: signedMoney(hit.netProfit),
-      amount: hit.netProfit,
+      value: signedMoney(keep),
+      amount: keep,
       detail:
         hit.roi != null
           ? `${Math.round(hit.roi * 100)}% ROI · Amazon ${money(hit.amazonPrice)} → eBay ${money(ebay)}`
@@ -129,7 +135,7 @@ function MoneyTicker({
   signed?: boolean;
 }) {
   const reduce = usePrefersReducedMotion();
-  const n = useCountToward(value, reduce);
+  const n = useCountToward(Number(value) || 0, reduce);
   const shown = signed ? signedMoney(n) : money(n);
   return (
     <span className={cn("tabular-nums tracking-tight", className)}>{shown}</span>
@@ -277,11 +283,11 @@ function WinnerCard({
               {hero.amount != null ? (
                 <MoneyTicker
                   value={hero.amount}
-                  className="block text-[20px] font-semibold leading-none text-[#141414]"
+                  className="block text-[22px] font-semibold leading-none text-[#141414]"
                 />
               ) : (
-                <span className="block text-[20px] font-semibold leading-none tabular-nums text-[#141414]">
-                  {hero.value}
+                <span className="block text-[18px] font-semibold leading-none text-[#707070]">
+                  Scoring
                 </span>
               )}
             </span>
@@ -289,7 +295,7 @@ function WinnerCard({
         </span>
         <span className="flex min-w-0 flex-1 flex-col px-3.5 pt-3 pb-3.5">
           <span className="line-clamp-2 min-h-[40px] text-[15px] font-semibold leading-snug text-[#141414]">
-            {hit.title || hit.asin}
+            {toEbayListingTitle(hit.title) || hit.asin}
           </span>
           <span className="mt-1 block truncate text-[12px] text-[#707070]">
             {proofLine(hit)}
@@ -400,12 +406,12 @@ export function AmazonAutoImportPanel({
   const needsCost = mode === "amazon" || mode === "supplier";
   const canManualSearch = Boolean(categoryId || extra.trim().length >= 2);
   const sessionProfit = useMemo(
-    () => hits.reduce((sum, hit) => sum + (hit.netProfit ?? 0), 0),
-    [hits],
+    () => hits.reduce((sum, hit) => sum + (keepFor(hit, mode) ?? 0), 0),
+    [hits, mode],
   );
   const selectedProfit = useMemo(
-    () => selected.reduce((sum, hit) => sum + (hit.netProfit ?? 0), 0),
-    [selected],
+    () => selected.reduce((sum, hit) => sum + (keepFor(hit, mode) ?? 0), 0),
+    [selected, mode],
   );
 
   useEffect(() => {

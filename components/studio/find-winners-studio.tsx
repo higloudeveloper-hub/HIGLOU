@@ -40,7 +40,11 @@ export function FindWinnersStudio() {
         mode?: OpportunityMode;
       } | null;
       if (!response.ok || !body?.ok || !body.id) {
-        toast.error(body?.error || "Amazon auto-import failed");
+        toast.error(
+          body?.error ||
+            body?.skipped?.[0]?.reason ||
+            "Could not import that product. Try another card.",
+        );
         return false;
       }
 
@@ -69,7 +73,7 @@ export function FindWinnersStudio() {
       return true;
     } catch (error) {
       toast.error(
-        error instanceof Error ? error.message : "Amazon auto-import failed",
+        error instanceof Error ? error.message : "Could not import that product. Try another card.",
       );
       return false;
     } finally {

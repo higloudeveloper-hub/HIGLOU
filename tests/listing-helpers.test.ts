@@ -66,6 +66,16 @@ describe("HTTP header ASCII safety", () => {
 });
 
 describe("toEbayListingTitle", () => {
+  it("cleans adult slang so eBay 25019 does not fire on the title", () => {
+    expect(
+      toEbayListingTitle(
+        "7LB Sex Doll Torso Pocket Pussy, Big Butt Male Sex Toy Masturbator",
+      ),
+    ).toBe(
+      "7LB Sex Doll Torso male masturbator, Big Butt Male Sex Toy Masturbator",
+    );
+  });
+
   it("strips Amazon.com page chrome so the listing can use the 80 characters", () => {
     expect(
       toEbayListingTitle(

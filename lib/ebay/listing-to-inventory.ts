@@ -11,7 +11,7 @@ import type {
   EbayOfferInput,
 } from "@/lib/ebay/inventory-api";
 import { sanitizeEbayAspects } from "@/lib/ebay/sanitize-aspects";
-import { toEbayInventorySku } from "@/lib/ebay/listing-helpers";
+import { sanitizeEbayPolicyCopy, toEbayInventorySku } from "@/lib/ebay/listing-helpers";
 import { ensureInferredElectricalAspects, inferModelAspect, listingHasAspect } from "@/lib/ebay/infer-voltage";
 import { ensureInferredDimensionAspects } from "@/lib/ebay/infer-item-dimensions";
 
@@ -29,6 +29,7 @@ function clampEbayInventoryDescription(listing: ProductListing): string {
       .replace(/\s+/g, " ")
       .trim();
   if (!text) text = String(listing.title || "Product").trim() || "Product";
+  text = sanitizeEbayPolicyCopy(text);
   if (text.length > EBAY_INVENTORY_DESCRIPTION_MAX) {
     text = `${text.slice(0, EBAY_INVENTORY_DESCRIPTION_MAX - 1).trimEnd()}…`;
   }
@@ -39,11 +40,11 @@ function clampEbayListingDescription(listing: ProductListing): string {
   const html = String(listing.descriptionHtml || "").trim();
   const summary = synthesizeDescriptionSummary(listing).trim();
   // Offer listingDescription allows long HTML; inventory product.description is capped separately.
-  return (
+  return sanitizeEbayPolicyCopy(
     html ||
-    summary ||
-    String(listing.title || "Product").trim() ||
-    "Product"
+      summary ||
+      String(listing.title || "Product").trim() ||
+      "Product",
   );
 }
 

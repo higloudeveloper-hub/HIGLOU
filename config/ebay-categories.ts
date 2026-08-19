@@ -1,4 +1,5 @@
 import { isCategoryProductMismatch } from "@/lib/ebay/category-guard";
+import { isAdultSexualWellnessText } from "@/lib/ebay/listing-helpers";
 
 export type EbayCategoryOption = {
   id: string;
@@ -488,6 +489,20 @@ export const EBAY_CATEGORY_OPTIONS: EbayCategoryOption[] = [
     name: "Hair Care & Styling",
     keywords: ["shampoo", "conditioner", "hair dryer", "hair oil"],
   },
+  {
+    id: "176988",
+    name: "Sex Dolls & Masturbators",
+    keywords: [
+      "sex doll",
+      "masturbator",
+      "pocket pussy",
+      "male sex toy",
+      "adult sex toy",
+      "fleshlight",
+      "onahole",
+      "sex torso",
+    ],
+  },
 
   // Toys / baby / sports
   {
@@ -773,6 +788,13 @@ export function scoreEbayCategories(input: {
       else if (option.id === "79684" && /\b(camastro|lounger|chaise)\b/i.test(haystack)) {
         score += 24;
       } else if (INDOOR_FURNITURE_SCORE_IDS.has(option.id)) {
+        score = Math.max(0, score - 50);
+      }
+    }
+
+    if (isAdultSexualWellnessText(haystack)) {
+      if (option.id === "176988") score += 60;
+      else if (option.id === "220" || /toy|doll/i.test(option.name)) {
         score = Math.max(0, score - 50);
       }
     }

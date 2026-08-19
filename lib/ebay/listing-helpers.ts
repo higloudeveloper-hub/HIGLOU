@@ -42,12 +42,44 @@ export function toEbayInventorySku(raw: string): string {
 const AMAZON_HOST =
   "amazon(?:\\.(?:com|ca|co\\.uk|de|fr|es|it|co\\.jp|in|com\\.mx|com\\.au|nl|se|pl|com\\.br|ae|sa|sg|com\\.tr))?";
 
+/** Adult sexual wellness — must not land in Toys / Dolls. */
+export const ADULT_SEXUAL_WELLNESS_RE =
+  /\b(sex\s*doll|masturbat(?:or|ion)?|fleshlight|onahole|pocket\s*pussy|male\s*sex\s*toy|adult\s*sex\s*toy|realistic\s*(?:vagina|penis)|stroker)\b/i;
+
+export function isAdultSexualWellnessText(text: string): boolean {
+  return ADULT_SEXUAL_WELLNESS_RE.test(String(text || ""));
+}
+
+/**
+ * eBay 25019: vulgar slang in title/description is blocked even when the
+ * product is a legal adult item. Keep clinical category language.
+ */
+export function sanitizeEbayPolicyCopy(raw: string): string {
+  let text = String(raw || "");
+  const swaps: Array<[RegExp, string]> = [
+    [/\bpocket\s*puss(?:y|ies)\b/gi, "male masturbator"],
+    [/\bpuss(?:y|ies)\b/gi, "masturbator"],
+    [/\bcunts?\b/gi, ""],
+    [/\bfucks?\b/gi, ""],
+    [/\bsluts?\b/gi, ""],
+    [/\bwhores?\b/gi, ""],
+    [/\bdicks?\b/gi, ""],
+    [/\bcocks?\b/gi, ""],
+  ];
+  for (const [pattern, next] of swaps) {
+    text = text.replace(pattern, next);
+  }
+  return text.replace(/\s{2,}/g, " ").replace(/\s+,/g, ",").trim();
+}
+
 /** eBay titles cannot carry Amazon page chrome like "Amazon.com -". */
 export function toEbayListingTitle(raw: string): string {
-  let title = String(raw || "")
-    .replace(/<[^>]+>/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
+  let title = sanitizeEbayPolicyCopy(
+    String(raw || "")
+      .replace(/<[^>]+>/g, " ")
+      .replace(/\s+/g, " ")
+      .trim(),
+  );
 
   for (let i = 0; i < 5 && title; i++) {
     const next = title

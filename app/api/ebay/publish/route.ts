@@ -20,6 +20,7 @@ import {
   listingToInventoryItem,
   listingToOfferInput,
 } from "@/lib/ebay/listing-to-inventory";
+import { toEbayListingTitle } from "@/lib/ebay/listing-helpers";
 import { ensureEbayCompatibleImageUrls } from "@/lib/ebay/ensure-ebay-images";
 import {
   ensureHiglouBusinessPolicies,
@@ -858,6 +859,60 @@ async function postEbayPublish(request: Request) {
           paymentPolicyId: listing.paymentPolicyId,
           returnPolicyId: listing.returnPolicyId,
         }));
+      } else if (
+        /25019|improper words|looks like a sex doll|sexual wellness/i.test(
+          message,
+        )
+      ) {
+        listing.title = toEbayListingTitle(listing.title);
+        const forced = await ensureListableEbayCategory(accessToken, {
+          categoryId: "",
+          categoryName: "Sex Dolls & Masturbators",
+          title: `${listing.title} sex doll masturbator`,
+          productType: "Sex Doll Masturbator",
+          brand: listing.brand,
+        });
+        listing.categoryId = forced.categoryId;
+        if (forced.categoryName) listing.categoryName = forced.categoryName;
+        inventory.title = listing.title;
+        try {
+          const adultMeta = await fetchCategoryAspectMeta(
+            accessToken,
+            listing.categoryId,
+          );
+          await createOrReplaceInventoryItem(accessToken, inventory, {
+            aspectCardinality: adultMeta.cardinality,
+          });
+          ({ offerId } = await upsertOfferForSku(accessToken, {
+            ...offerInput,
+            categoryId: forced.categoryId,
+            listingDescription: listingToOfferInput(listing, {
+              fulfillmentPolicyId: listing.shippingPolicyId,
+              paymentPolicyId: listing.paymentPolicyId,
+              returnPolicyId: listing.returnPolicyId,
+            }).listingDescription,
+          }));
+        } catch (adultError) {
+          const adultMsg =
+            adultError instanceof Error
+              ? adultError.message
+              : String(adultError);
+          throw new Error(
+            `eBay blocked this adult item (25019). Higlou moved it to ${forced.categoryName || "Sex Dolls & Masturbators"} [${forced.categoryId}] and removed slang from the title. If it still fails, the photos may show nudity (eBay forbids that even in adult categories), or your seller account needs Sexual Wellness approval in Seller Hub. ${adultMsg}`,
+          );
+        }
+        if (productId) {
+          await auth.supabase
+            .from("products")
+            .update({
+              title: listing.title,
+              category_id: forced.categoryId,
+              category_name: forced.categoryName || listing.categoryName,
+              updated_at: new Date().toISOString(),
+            })
+            .eq("id", productId)
+            .eq("user_id", auth.user.id);
+        }
       } else {
         throw offerError;
       }

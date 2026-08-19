@@ -1,3 +1,5 @@
+import { isAdultSexualWellnessText } from "@/lib/ebay/listing-helpers";
+
 /**
  * Detect when a model-supplied eBay category clearly disagrees with the product.
  * Used to stop trusting numeric IDs like Fishing (179985) for bottled water.
@@ -124,6 +126,17 @@ export function isCategoryProductMismatch(input: {
     (INDOOR_FURNITURE_CATEGORY_IDS.has(id) ||
       (INDOOR_FURNITURE_NAME.test(name) &&
         !/\b(patio|outdoor|exterior|jard[ií]n)\b/i.test(name)))
+  ) {
+    return true;
+  }
+
+  if (
+    isAdultSexualWellnessText(product) &&
+    (id === "220" ||
+      (/\b(toys?|hobbies|dolls?|stuffed|action\s*figure|novelt(?:y|ies))\b/i.test(
+        name,
+      ) &&
+        !/\b(sexual|adult|masturbat|sex\s*doll)\b/i.test(name)))
   ) {
     return true;
   }

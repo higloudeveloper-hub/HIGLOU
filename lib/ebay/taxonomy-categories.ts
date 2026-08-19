@@ -3,6 +3,7 @@ import {
   isListableEbayCategoryId,
   resolveEbayCategory,
 } from "@/config/ebay-categories";
+import { isAdultSexualWellnessText } from "@/lib/ebay/listing-helpers";
 
 const US_CATEGORY_TREE_ID = "0";
 
@@ -112,8 +113,34 @@ export async function ensureListableEbayCategory(
     .filter(Boolean)
     .join(" ")
     .trim();
+  const adult = isAdultSexualWellnessText(query);
+  const adultLeafName = /sex dolls|masturbat|sexual wellness|adult toys/i.test(
+    String(input.categoryName || ""),
+  );
 
-  if (isListableEbayCategoryId(currentId)) {
+  if (adult && !adultLeafName) {
+    try {
+      const suggestions = await suggestEbayLeafCategories(
+        accessToken,
+        "Sex Dolls Masturbators Adult Toys Sexual Wellness",
+      );
+      const hit =
+        suggestions.find((row) =>
+          /sex doll|masturbat|adult toy|sexual wellness/i.test(row.categoryName),
+        ) || suggestions[0];
+      if (hit) {
+        return {
+          categoryId: hit.categoryId,
+          categoryName: hit.categoryName,
+          source: "taxonomy-adult",
+        };
+      }
+    } catch {
+      // Fall through to the current ID / catalog resolver.
+    }
+  }
+
+  if (isListableEbayCategoryId(currentId) && (!adult || adultLeafName)) {
     const leaf = await isEbayLeafCategory(accessToken, currentId);
     if (leaf) {
       return {

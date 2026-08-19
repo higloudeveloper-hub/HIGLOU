@@ -12,6 +12,15 @@ describe("resolveEbayCategory", () => {
     expect(new Set(ids).size).toBe(ids.length);
   });
 
+  it("maps a sex doll torso to Sex Dolls & Masturbators, not Toys", () => {
+    const result = resolveEbayCategory({
+      title: "7LB Sex Doll Torso Pocket Pussy, Big Butt Male Sex Toy Masturbator",
+      productType: "Sex Doll",
+    });
+    expect(result.categoryId).toBe("176988");
+    expect(result.categoryName).toMatch(/Sex Dolls/i);
+  });
+
   it("maps sneakers to men's athletic shoes", () => {
     const result = resolveEbayCategory({
       productType: "Sneakers",

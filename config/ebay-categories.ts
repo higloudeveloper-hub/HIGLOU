@@ -141,6 +141,23 @@ export const EBAY_CATEGORY_OPTIONS: EbayCategoryOption[] = [
     keywords: ["necklace", "bracelet", "earrings", "jewelry"],
   },
   {
+    id: "2996",
+    name: "Wallets",
+    keywords: [
+      "wallet",
+      "rfid wallet",
+      "bifold wallet",
+      "card holder wallet",
+      "money clip",
+      "rfid blocking wallet",
+    ],
+  },
+  {
+    id: "45258",
+    name: "Wallets",
+    keywords: ["women wallet", "womens wallet", "ladies wallet", "coin purse"],
+  },
+  {
     id: "2993",
     name: "Men's Sunglasses",
     keywords: ["sunglasses", "shades", "eyewear"],
@@ -472,7 +489,15 @@ export const EBAY_CATEGORY_OPTIONS: EbayCategoryOption[] = [
   {
     id: "11874",
     name: "Makeup",
-    keywords: ["makeup", "lipstick", "foundation", "mascara"],
+    keywords: [
+      "makeup",
+      "lipstick",
+      "foundation",
+      "mascara",
+      "makeup brush",
+      "makeup brush set",
+      "cosmetic brush",
+    ],
   },
   {
     id: "11863",

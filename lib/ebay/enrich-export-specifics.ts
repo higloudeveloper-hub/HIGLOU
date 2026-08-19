@@ -1,5 +1,5 @@
 import { resolveCategorySpecifics } from "@/config/category-specifics";
-import { inferVoltageFromText, inferBatteryTechnologyFromText, inferModelAspect } from "@/lib/ebay/infer-voltage";
+import { inferVoltageFromText, inferBatteryTechnologyFromText, inferModelAspect, inferDepartmentAspect } from "@/lib/ebay/infer-voltage";
 import {
   formatEbayInches,
   inferItemDimsFromText,
@@ -173,6 +173,7 @@ export function enrichItemSpecificsForExport(input: {
   colors?: string[];
   materials?: string[];
   features?: string[];
+  department?: string;
 }): EnrichedExportSpecifics {
   const columns: Record<string, string> = {};
 
@@ -218,6 +219,12 @@ export function enrichItemSpecificsForExport(input: {
       joinAspect(input.features),
     ),
     finish,
+    department: inferDepartmentAspect({
+      title: input.title,
+      categoryName: input.categoryName,
+      productType: input.productType,
+      department: firstNonEmpty(columns["C:Department"], input.department),
+    }),
   };
 
   // eBay BrandMPN (25002): Brand without a valid MPN is rejected.
@@ -275,6 +282,15 @@ export function enrichItemSpecificsForExport(input: {
   // Force MPN whenever Brand is present (overwrite empty / whitespace).
   if (columns["C:Brand"]?.trim() && !columns["C:MPN"]?.trim()) {
     columns["C:MPN"] = derived.mpn;
+  }
+
+  const wantsDepartment =
+    family.fields.some((field) => field.key === "department") ||
+    /\b(wallet|rfid|shirt|shoe|dress|jean|hoodie|jacket|belt|hat|watch|handbag|purse|backpack)\b/i.test(
+      [input.title, input.productType, input.categoryName].join(" "),
+    );
+  if (wantsDepartment && !columns["C:Department"]?.trim() && derived.department) {
+    columns["C:Department"] = derived.department;
   }
 
   // Voltage required in many electrical / EV categories (eBay 25002).

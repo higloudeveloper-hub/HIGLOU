@@ -62,6 +62,7 @@ export function listingToEbayAspects(listing: ProductListing): EbayAspects {
     colors: listing.colors,
     materials: listing.materials,
     features: listing.features,
+    department: listing.department,
   });
 
   const aspects: EbayAspects = {};

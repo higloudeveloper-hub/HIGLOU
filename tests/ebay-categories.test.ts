@@ -162,6 +162,15 @@ describe("resolveEbayCategory", () => {
     });
     expect(result.categoryId).toBe("20601");
   });
+
+  it("maps an RFID wallet to Wallets, not belts", () => {
+    const result = resolveEbayCategory({
+      title: "Green RFID Blocking Wallet with Keychain",
+      productType: "Wallet",
+    });
+    expect(result.categoryId).toBe("2996");
+    expect(result.categoryName).toMatch(/Wallet/i);
+  });
 });
 
 describe("draftDefaultsToPolicyValues", () => {

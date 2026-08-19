@@ -309,3 +309,49 @@ describe("Fragrance Name aspect (eBay 25002 Fragrance Name)", () => {
     expect(inferFragranceName({ title: "", brand: "" })).toBe("Does Not Apply");
   });
 });
+
+describe("Department aspect (eBay 25002 Department)", () => {
+  it("parses Department from eBay 25002 text", () => {
+    expect(
+      parseMissingAspectFromEbayError(
+        "A user error has occurred. The item specific Department is missing. Add Department to this listing, enter a valid value, and then try again. [eBay 25002]",
+      ),
+    ).toBe("Department");
+  });
+
+  it("uses Unisex Adults for an RFID wallet", () => {
+    expect(
+      inferAspectValueFromText(
+        "Department",
+        "Green RFID Blocking Wallet with Keychain",
+        { title: "Green RFID Blocking Wallet with Keychain" },
+      ),
+    ).toBe("Unisex Adults");
+  });
+
+  it("uses Women when the title says ladies", () => {
+    expect(
+      inferAspectValueFromText("Department", "Ladies Leather Wallet", {
+        title: "Ladies Leather Wallet",
+      }),
+    ).toBe("Women");
+  });
+
+  it("ignores Higlou store departments like Beauty", () => {
+    expect(
+      inferAspectValueFromText("Department", "Green RFID Blocking Wallet", {
+        title: "Green RFID Blocking Wallet",
+        department: "Health & Beauty",
+      }),
+    ).toBe("Unisex Adults");
+  });
+
+  it("fills required Department before Inventory PUT", () => {
+    const aspects: Record<string, string[]> = { Brand: ["Unbranded"] };
+    ensureRequiredCategoryAspects(aspects, ["Department", "Color"], {
+      title: "Green RFID Blocking Wallet with Keychain",
+      productType: "Wallet",
+    });
+    expect(aspects.Department).toEqual(["Unisex Adults"]);
+  });
+});

@@ -158,6 +158,7 @@ export function inferAspectValueFromText(
     mpn?: string;
     productType?: string;
     categoryName?: string;
+    department?: string;
     packageLengthIn?: number | null;
     packageWidthIn?: number | null;
     packageDepthIn?: number | null;
@@ -187,6 +188,22 @@ export function inferAspectValueFromText(
       brand: extras?.brand,
       title: extras?.title || text,
     });
+  }
+  if (name === "department") {
+    return inferDepartmentAspect({
+      title: extras?.title || text,
+      categoryName: extras?.categoryName,
+      productType: extras?.productType,
+      department: extras?.department,
+    });
+  }
+  if (
+    (name === "size" || name === "size type") &&
+    /\b(wallet|rfid|keychain|key\s*chain)\b/i.test(
+      [extras?.title || text, extras?.productType, extras?.categoryName].join(" "),
+    )
+  ) {
+    return name === "size type" ? "Regular" : "One Size";
   }
   const compatible = inferCompatibleAspect(aspectName, {
     title: extras?.title || text,
@@ -301,6 +318,54 @@ export function inferModelAspect(opts: {
   return "Does Not Apply";
 }
 
+const STORE_DEPARTMENT_NAMES =
+  /^(kitchen|lighting|beauty|electronics|home|more|tools|bedding|health|sports|toys|outdoor|automotive|food|climate|decor|improvement)$/i;
+
+/**
+ * eBay clothing/accessories Department (Men, Women, Unisex Adults).
+ * Not the Higlou Store department (Kitchen, Beauty, …).
+ */
+export function inferDepartmentAspect(opts: {
+  title?: string;
+  categoryName?: string;
+  productType?: string;
+  department?: string;
+}): string {
+  const fromField = normalizeEbayDepartment(opts.department);
+  if (fromField) return fromField;
+
+  const hay = [opts.title, opts.categoryName, opts.productType]
+    .filter(Boolean)
+    .join(" ");
+  const women = /\b(women'?s|womens|ladies|for women|female)\b/i.test(hay);
+  const men = /\b(men'?s|mens|gentlemen|for men|\bmale\b)\b/i.test(hay);
+  if (women && men) return "Unisex Adults";
+  if (women) return "Women";
+  if (men) return "Men";
+  if (/\b(girls?)\b/i.test(hay)) return "Girls";
+  if (/\b(boys?)\b/i.test(hay)) return "Boys";
+  if (/\b(baby|infant|newborn|toddler)\b/i.test(hay)) return "Baby";
+  if (/\bunisex\s*kids?\b/i.test(hay)) return "Unisex Kids";
+  if (/\bunisex\b/i.test(hay)) return "Unisex Adults";
+  return "Unisex Adults";
+}
+
+function normalizeEbayDepartment(value?: string | null): string | null {
+  const raw = String(value || "").trim();
+  if (!raw || EMPTY_ASPECT.test(raw)) return null;
+  const key = raw.toLowerCase().replace(/[_-]+/g, " ");
+  if (STORE_DEPARTMENT_NAMES.test(key.split(/\s+/)[0] || "")) return null;
+  if (/health\s*&\s*beauty|home\s*d[eé]cor|patio/i.test(key)) return null;
+  if (/^(unisex adults|unisex adult)$/i.test(key)) return "Unisex Adults";
+  if (/^(unisex kids|unisex kid|kids)$/i.test(key)) return "Unisex Kids";
+  if (/^(women|womens|women's)$/i.test(key)) return "Women";
+  if (/^(men|mens|men's)$/i.test(key)) return "Men";
+  if (/^(girls|girl)$/i.test(key)) return "Girls";
+  if (/^(boys|boy)$/i.test(key)) return "Boys";
+  if (/^(baby|infant|infants & toddlers)$/i.test(key)) return "Baby";
+  return null;
+}
+
 /**
  * Compatibility aspects (Compatible Model / Brand / Product) are required in
  * some kitchen/parts categories. A finished product uses "Does Not Apply".
@@ -403,6 +468,7 @@ export function ensureRequiredCategoryAspects(
     mpn?: string;
     productType?: string;
     categoryName?: string;
+    department?: string;
     packageLengthIn?: number | null;
     packageWidthIn?: number | null;
     packageDepthIn?: number | null;
@@ -416,6 +482,7 @@ export function ensureRequiredCategoryAspects(
     extras.mpn,
     extras.productType,
     extras.categoryName,
+    extras.department,
   ]
     .filter(Boolean)
     .join(" ");

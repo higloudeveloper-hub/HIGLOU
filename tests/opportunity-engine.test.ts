@@ -10,6 +10,7 @@ import {
   opportunityGrade,
   passesMainOpportunityScreen,
   scoreOpportunity,
+  sortByRealMoney,
 } from "@/lib/opportunity/score";
 
 describe("opportunity profit", () => {
@@ -90,30 +91,40 @@ describe("opportunity score", () => {
     expect(opportunityGrade(scored.score)).toBe("excellent");
   });
 
-  it("drops Amazon-dominated or crowded listings from the main screen", () => {
+  it("ranks a bigger payday ahead of a higher vanity score", () => {
+    const ranked = sortByRealMoney([
+      { asin: "B0LOWPAY01", score: 90, netProfit: 4 },
+      { asin: "B0CASH0001", score: 61, netProfit: 18.4 },
+      { asin: "B0UNKNOWN1", score: 80, netProfit: null },
+    ]);
+    expect(ranked.map((row) => row.asin)).toEqual([
+      "B0CASH0001",
+      "B0LOWPAY01",
+      "B0UNKNOWN1",
+    ]);
+  });
+
+  it("drops Amazon-dominated listings only when selling on Amazon", () => {
+    const crowded = {
+      eligibility: "SELLABLE" as const,
+      netProfit: 14,
+      roi: 0.4,
+      priceVariation90: 0.1,
+      sellerCount: 5,
+      amazonRetail: true,
+      upc: "123",
+      title: "Bin",
+    };
+    expect(passesMainOpportunityScreen(crowded, { mode: "amazon" })).toBe(false);
+    expect(
+      passesMainOpportunityScreen(crowded, { mode: "amazon_to_ebay" }),
+    ).toBe(true);
     expect(
       passesMainOpportunityScreen({
-        eligibility: "SELLABLE",
-        netProfit: 14,
-        roi: 0.4,
-        priceVariation90: 0.1,
-        sellerCount: 5,
-        amazonRetail: true,
-        upc: "123",
-        title: "Bin",
-      }),
-    ).toBe(false);
-    expect(
-      passesMainOpportunityScreen({
-        eligibility: "SELLABLE",
-        netProfit: 14,
-        roi: 0.4,
-        priceVariation90: 0.1,
-        sellerCount: 18,
+        ...crowded,
         amazonRetail: false,
-        upc: "123",
-        title: "Bin",
-      }),
+        sellerCount: 18,
+      }, { mode: "amazon" }),
     ).toBe(false);
   });
 });

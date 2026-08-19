@@ -50,7 +50,7 @@ export const OPPORTUNITY_CATEGORIES = [
   },
 ] as const;
 
-export const OPPORTUNITY_LIMITS = [1, 2, 3, 4, 5] as const;
+export const OPPORTUNITY_LIMITS = [3, 5, 8] as const;
 
 export function opportunitySearchText(
   categoryId: string,

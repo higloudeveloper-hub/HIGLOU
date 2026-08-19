@@ -3,6 +3,7 @@ import { OPPORTUNITY_RULES } from "@/lib/opportunity/types";
 import type {
   EligibilityStatus,
   OpportunityGrade,
+  OpportunityMode,
   OpportunityProduct,
   OpportunityReason,
 } from "@/lib/opportunity/types";
@@ -86,6 +87,18 @@ function riskPoints(brand: string, title: string): number {
 function trendPoints(bsrDrops90: number | null): number {
   if ((bsrDrops90 ?? 0) >= 12) return 5;
   if ((bsrDrops90 ?? 0) >= 4) return 3;
+  return 1;
+}
+
+function ebayLanePoints(
+  ebayActiveCount: number | null | undefined,
+  netProfit: number | null,
+): number {
+  const n = ebayActiveCount;
+  if (n == null) return 4;
+  if (n <= 6 && (netProfit == null || netProfit > 0)) return 12;
+  if (n <= 15) return 7;
+  if (n <= 40) return 3;
   return 1;
 }
 
@@ -174,7 +187,7 @@ export function buildOpportunityReasons(hit: {
     {
       ok: !hit.amazonRetail,
       text: hit.amazonRetail
-        ? "Amazon retail is on this listing"
+        ? "Amazon is selling it — you can still buy and list on eBay"
         : "Amazon is not selling it",
     },
     {
@@ -201,6 +214,7 @@ export function scoreOpportunity(hit: {
   priceVariation90: number | null;
   brand: string;
   title: string;
+  ebayActiveCount?: number | null;
 }): { score: number; demandScore: number; grade: OpportunityGrade } {
   if (
     hit.eligibility === "RESTRICTED" ||
@@ -216,7 +230,8 @@ export function scoreOpportunity(hit: {
       competitionPoints(hit) +
       stabilityPoints(hit.priceVariation90) +
       riskPoints(hit.brand, hit.title) +
-      trendPoints(hit.bsrDrops90),
+      trendPoints(hit.bsrDrops90) +
+      ebayLanePoints(hit.ebayActiveCount, hit.netProfit),
   );
   return { score, demandScore, grade: opportunityGrade(score) };
 }
@@ -233,23 +248,26 @@ export function passesMainOpportunityScreen(
     | "upc"
     | "title"
   >,
-  opts?: { requireProfit?: boolean },
+  opts?: { requireProfit?: boolean; mode?: OpportunityMode },
 ): boolean {
-  if (hit.eligibility !== "SELLABLE" && hit.eligibility !== "UNKNOWN") {
-    return false;
-  }
-  if (hit.amazonRetail) return false;
+  const mode = opts?.mode || "amazon_to_ebay";
   if (
-    hit.sellerCount != null &&
-    hit.sellerCount > OPPORTUNITY_RULES.maxSellers
+    hit.eligibility === "RESTRICTED" ||
+    hit.eligibility === "CONDITION_RESTRICTED"
   ) {
     return false;
   }
-  if (
-    hit.priceVariation90 != null &&
-    hit.priceVariation90 > OPPORTUNITY_RULES.maxPriceVariation
-  ) {
-    return false;
+  if (mode === "amazon" || mode === "supplier") {
+    if (hit.eligibility !== "SELLABLE" && hit.eligibility !== "UNKNOWN") {
+      return false;
+    }
+    if (hit.amazonRetail) return false;
+    if (
+      hit.sellerCount != null &&
+      hit.sellerCount > OPPORTUNITY_RULES.maxSellers
+    ) {
+      return false;
+    }
   }
   if (opts?.requireProfit) {
     if ((hit.netProfit ?? 0) < OPPORTUNITY_RULES.minNetProfit) return false;
@@ -262,6 +280,22 @@ export function sortByOpportunityScore<T extends { score: number; asin: string }
   hits: T[],
 ): T[] {
   return [...hits].sort((a, b) => {
+    if (b.score !== a.score) return b.score - a.score;
+    return a.asin.localeCompare(b.asin);
+  });
+}
+
+/** Rank by cash you keep, then score. Never bury a real payday. */
+export function sortByRealMoney<
+  T extends { score: number; asin: string; netProfit?: number | null },
+>(hits: T[]): T[] {
+  return [...hits].sort((a, b) => {
+    const pa = a.netProfit;
+    const pb = b.netProfit;
+    const aKnown = pa != null && Number.isFinite(pa);
+    const bKnown = pb != null && Number.isFinite(pb);
+    if (aKnown && bKnown && pb !== pa) return (pb as number) - (pa as number);
+    if (bKnown !== aKnown) return bKnown ? 1 : -1;
     if (b.score !== a.score) return b.score - a.score;
     return a.asin.localeCompare(b.asin);
   });

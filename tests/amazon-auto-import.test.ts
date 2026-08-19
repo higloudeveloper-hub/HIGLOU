@@ -139,8 +139,11 @@ describe("Amazon auto-import ranking", () => {
         } as OpportunityProduct,
       ],
     );
-    expect(sameKind).toHaveLength(1);
-    expect(sameKind[0].asin).toBe("B0BAMBOO01");
+    expect(sameKind).toHaveLength(2);
+    expect(sameKind.map((hit) => hit.asin).sort()).toEqual([
+      "B0BAMBOO01",
+      "B0BAMBOO02",
+    ]);
   });
   it("builds keywords from a model and category without the seed ASIN", () => {
     expect(

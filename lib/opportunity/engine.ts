@@ -30,7 +30,7 @@ import {
   opportunityLabelFromScore,
   passesMainOpportunityScreen,
   scoreOpportunity,
-  sortByOpportunityScore,
+  sortByRealMoney,
 } from "@/lib/opportunity/score";
 import type {
   EligibilityStatus,
@@ -123,7 +123,10 @@ function applyKeepa(hit: OpportunityProduct, snap: KeepaSnapshot): OpportunityPr
   };
 }
 
-function cheapKeepaFilter(snap: KeepaSnapshot): boolean {
+function cheapKeepaFilter(
+  snap: KeepaSnapshot,
+  mode: OpportunityMode,
+): boolean {
   const price = snap.buyBoxPrice ?? snap.newPrice;
   if (price != null && (price < OPPORTUNITY_RULES.minPrice || price > OPPORTUNITY_RULES.maxPrice)) {
     return false;
@@ -132,16 +135,12 @@ function cheapKeepaFilter(snap: KeepaSnapshot): boolean {
   if (rank != null && (rank < OPPORTUNITY_RULES.minBsr || rank > OPPORTUNITY_RULES.maxBsr)) {
     return false;
   }
-  if (snap.sellerCount != null && snap.sellerCount > OPPORTUNITY_RULES.maxSellers) {
-    return false;
+  if (mode === "amazon" || mode === "supplier") {
+    if (snap.sellerCount != null && snap.sellerCount > OPPORTUNITY_RULES.maxSellers) {
+      return false;
+    }
+    if (snap.amazonRetail) return false;
   }
-  if (
-    snap.priceVariation90 != null &&
-    snap.priceVariation90 > OPPORTUNITY_RULES.maxPriceVariation
-  ) {
-    return false;
-  }
-  if (snap.amazonRetail) return false;
   return true;
 }
 
@@ -191,6 +190,7 @@ function finishProduct(
     priceVariation90: hit.priceVariation90,
     brand: hit.brand,
     title: hit.title,
+    ebayActiveCount: hit.ebayActiveCount,
   });
   const next: OpportunityProduct = {
     ...hit,
@@ -239,7 +239,7 @@ export async function findOpportunities(opts: {
 }> {
   const mode = opts.mode || "amazon_to_ebay";
   const onlySellable = opts.onlySellable !== false;
-  const limit = Math.min(Math.max(opts.limit ?? 5, 1), 5);
+  const limit = Math.min(Math.max(opts.limit ?? 8, 1), 8);
   const query = String(opts.query || "").trim();
   const category = String(opts.category || "").trim();
   const fromId = opts.categoryId
@@ -378,7 +378,10 @@ export async function findOpportunities(opts: {
       if (!hit || hit.reviewCount == null) return true;
       return !isCrowdedBestseller(hit.reviewCount);
     });
-    if (lean.length >= Math.max(limit, 3)) asins = lean;
+    if (lean.length >= Math.max(limit, 6) && lean.length < asins.length) {
+      const crowded = asins.filter((id) => !lean.includes(id));
+      asins = [...lean, ...crowded].slice(0, 20);
+    }
   }
   if (!asins.length) {
     throw new Error(
@@ -442,7 +445,7 @@ export async function findOpportunities(opts: {
     })
     .filter((hit) => {
       const snap = keepaMap.get(hit.asin);
-      return snap ? cheapKeepaFilter(snap) : true;
+      return snap ? cheapKeepaFilter(snap, mode) : true;
     });
 
   const pool = afterKeepa.length ? afterKeepa : allowed;
@@ -505,13 +508,12 @@ export async function findOpportunities(opts: {
     return finishProduct(next, mode, opts.supplierCost);
   });
 
-  const requireProfit = priced.some((hit) => hit.netProfit != null);
   const passing = priced.filter((hit) =>
-    passesMainOpportunityScreen(hit, { requireProfit }),
+    passesMainOpportunityScreen(hit, { mode }),
   );
   const ranked = diversifyOpportunityHits(
-    sortByOpportunityScore(passing.length ? passing : priced),
-    limit,
+    sortByRealMoney(passing.length ? passing : priced),
+    Math.max(limit, 8),
   );
   return {
     products: ranked,

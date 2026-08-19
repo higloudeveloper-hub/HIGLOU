@@ -18,7 +18,7 @@ const bodySchema = z.object({
   query: z.string().max(200).optional().default(""),
   category: z.string().max(120).optional().default(""),
   categoryId: z.string().max(40).optional().default(""),
-  limit: z.coerce.number().int().min(1).max(5).optional().default(5),
+  limit: z.coerce.number().int().min(1).max(8).optional().default(8),
   mode: z
     .enum(["amazon", "amazon_to_ebay", "supplier"])
     .optional()

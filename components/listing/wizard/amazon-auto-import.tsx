@@ -142,6 +142,24 @@ function MoneyTicker({
   );
 }
 
+function dealChips(hit: OpportunityProduct, mode: OpportunityMode) {
+  const chips: string[] = [];
+  const keep = keepFor(hit, mode);
+  if (keep != null && keep >= 10) chips.push("Real payday");
+  else if (keep != null && keep > 0) chips.push("Positive keep");
+  const ebayN = hit.ebayActiveCount;
+  if (ebayN != null && ebayN <= 6) chips.push("Thin eBay");
+  else if (ebayN != null && ebayN <= 15) chips.push(`${ebayN} on eBay`);
+  if (hit.amazonRetail && mode === "amazon_to_ebay") chips.push("Buy from Amazon");
+  if (hit.grade === "excellent") chips.push("Strong score");
+  return chips.slice(0, 3);
+}
+
+function spreadPct(amazon: number | null, ebay: number | null) {
+  if (amazon == null || ebay == null || amazon <= 0 || ebay <= amazon) return 0;
+  return Math.min(100, Math.round(((ebay - amazon) / ebay) * 100));
+}
+
 function reviewsLabel(n: number | null) {
   if (n == null) return "";
   if (n >= 1000) return `${(n / 1000).toFixed(n >= 10_000 ? 0 : 1).replace(/\.0$/, "")}k`;
@@ -234,38 +252,49 @@ function WinnerCard({
   onToggle: () => void;
 }) {
   const hero = heroFor(hit, mode);
+  const ebay = hit.ebayActiveMedian ?? hit.ebayPrice;
+  const hot = hero.amount != null && hero.amount >= 10;
+  const chips = dealChips(hit, mode);
+  const fill = spreadPct(hit.amazonPrice, ebay);
 
   return (
     <motion.li
       layout
-      initial={{ opacity: 0, y: 16 }}
-      animate={{ opacity: 1, y: 0 }}
+      initial={{ opacity: 0, y: 18, scale: 0.98 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
       exit={{ opacity: 0, y: 8 }}
-      whileHover={locked ? undefined : { y: -4 }}
-      transition={{ duration: 0.32, ease: EASE }}
+      whileHover={locked ? undefined : { y: -6 }}
+      transition={{ duration: 0.34, ease: EASE }}
     >
       <label
         className={cn(
-          "group flex h-full cursor-pointer flex-col overflow-hidden rounded-2xl border bg-white transition-shadow",
+          "group flex h-full cursor-pointer flex-col overflow-hidden rounded-[22px] border bg-white transition-[box-shadow,border-color,transform]",
           checked
-            ? "border-[#141414] shadow-[0_10px_28px_rgba(20,20,20,0.1)]"
-            : "border-[#ececec] hover:border-[#cfcfcf] hover:shadow-[0_8px_24px_rgba(20,20,20,0.07)]",
+            ? "border-[#141414] shadow-[0_16px_40px_rgba(20,20,20,0.16)]"
+            : hot
+              ? "border-[#f4c928]/80 shadow-[0_12px_32px_rgba(244,201,40,0.18)] hover:border-[#f4c928]"
+              : "border-[#ececec] hover:border-[#cfcfcf] hover:shadow-[0_8px_24px_rgba(20,20,20,0.07)]",
         )}
       >
-        <span className="relative block h-[168px] shrink-0 bg-[#f3f3f3]">
+        <span className="relative block h-[176px] shrink-0 bg-[#111]">
           {hit.imageUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
               src={hit.imageUrl}
               alt=""
-              className="h-full w-full object-contain p-5 transition duration-500 group-hover:scale-[1.04]"
+              className="h-full w-full object-contain p-5 transition duration-500 group-hover:scale-[1.05]"
             />
           ) : (
-            <span className="block h-full w-full bg-[#f4f4f4]" />
+            <span className="block h-full w-full bg-[#1a1a1a]" />
           )}
+          <span className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-black/20" />
           {fresh ? (
-            <span className="absolute top-2.5 left-2.5 bg-white px-2 py-0.5 text-[10px] font-semibold tracking-[0.12em] text-[#141414] uppercase">
+            <span className="absolute top-2.5 left-2.5 bg-[#f4c928] px-2 py-0.5 text-[10px] font-semibold tracking-[0.14em] text-[#141414] uppercase">
               Just found
+            </span>
+          ) : hit.opportunity === "now" ? (
+            <span className="absolute top-2.5 left-2.5 bg-[#f4c928] px-2 py-0.5 text-[10px] font-semibold tracking-[0.14em] text-[#141414] uppercase">
+              Now
             </span>
           ) : null}
           <input
@@ -273,23 +302,26 @@ function WinnerCard({
             checked={checked}
             disabled={locked}
             onChange={onToggle}
-            className="absolute top-2.5 right-2.5 size-5 accent-[#141414]"
+            className="absolute top-2.5 right-2.5 size-5 accent-[#f4c928]"
           />
           <span className="absolute right-2.5 bottom-2.5 left-2.5 flex items-end justify-between gap-2">
-            <span className="max-w-[78%] bg-white px-2.5 py-1.5 shadow-[0_1px_4px_rgba(20,20,20,0.08)]">
-              <span className="block text-[10px] font-medium text-[#707070]">
+            <span className="min-w-0 bg-black/80 px-2.5 py-1.5 text-white backdrop-blur-sm">
+              <span className="block text-[10px] font-medium tracking-[0.12em] text-[#f4c928] uppercase">
                 You keep
               </span>
               {hero.amount != null ? (
                 <MoneyTicker
                   value={hero.amount}
-                  className="block text-[22px] font-semibold leading-none text-[#141414]"
+                  className="block text-[26px] font-semibold leading-none text-white"
                 />
               ) : (
-                <span className="block text-[18px] font-semibold leading-none text-[#707070]">
+                <span className="block text-[18px] font-semibold leading-none text-white/55">
                   Scoring
                 </span>
               )}
+            </span>
+            <span className="shrink-0 bg-white/10 px-2 py-1 text-[10px] font-semibold tracking-wide text-white uppercase backdrop-blur-sm">
+              {hit.score}/100
             </span>
           </span>
         </span>
@@ -301,6 +333,18 @@ function WinnerCard({
             {proofLine(hit)}
             {hit.brand ? ` · ${hit.brand}` : ""}
           </span>
+          <span className="mt-3">
+            <span className="flex items-center justify-between text-[11px] font-medium tabular-nums text-[#707070]">
+              <span>Amazon {money(hit.amazonPrice)}</span>
+              <span>eBay {money(ebay)}</span>
+            </span>
+            <span className="mt-1 block h-1.5 overflow-hidden rounded-full bg-[#ececec]">
+              <span
+                className="block h-full rounded-full bg-[#f4c928]"
+                style={{ width: `${Math.max(8, fill)}%` }}
+              />
+            </span>
+          </span>
           <span className="mt-2 block text-[13px] font-medium tabular-nums text-[#141414]">
             {dealLine(hit, mode)}
           </span>
@@ -308,6 +352,18 @@ function WinnerCard({
             {hero.kicker}
             {hit.roi != null ? ` · ${Math.round(hit.roi * 100)}% back` : ""}
           </span>
+          {chips.length ? (
+            <span className="mt-2 flex flex-wrap gap-1">
+              {chips.map((chip) => (
+                <span
+                  key={chip}
+                  className="bg-[#141414] px-1.5 py-0.5 text-[10px] font-medium tracking-wide text-[#f4c928] uppercase"
+                >
+                  {chip}
+                </span>
+              ))}
+            </span>
+          ) : null}
           <span className="sr-only">
             {metricsFor(hit, mode)
               .map(([label, value]) => `${label} ${value}`)
@@ -381,7 +437,7 @@ export function AmazonAutoImportPanel({
   const [scanLabel, setScanLabel] = useState("Home & Kitchen");
   const [categoryId, setCategoryId] = useState("");
   const [extra, setExtra] = useState("");
-  const [limit, setLimit] = useState(5);
+  const [limit, setLimit] = useState(8);
   const [mode, setMode] = useState<OpportunityMode>("amazon_to_ebay");
   const [onlySellable, setOnlySellable] = useState(true);
   const [cost, setCost] = useState("");
@@ -460,7 +516,7 @@ export function AmazonAutoImportPanel({
           const found = await requestOpportunities({
             query: target.query,
             categoryId: target.categoryId,
-            limit: 3,
+            limit: 5,
             mode: modeRef.current,
             onlySellable:
               modeRef.current === "amazon_to_ebay"
@@ -693,36 +749,36 @@ export function AmazonAutoImportPanel({
             ) : null}
           </div>
           <div
-            className="relative mt-3 overflow-hidden border border-[#e5e5e5] bg-white"
+            className="relative mt-3 overflow-hidden border border-[#141414] bg-[#111] text-white"
             aria-live="polite"
           >
             {liveOn && !reduce ? (
               <motion.span
-                className="pointer-events-none absolute inset-y-0 w-1/3 bg-[#141414]/[0.04]"
+                className="pointer-events-none absolute inset-y-0 w-1/3 bg-[#f4c928]/10"
                 animate={{ left: ["-33%", "100%"] }}
                 transition={{ duration: 2.2, repeat: Infinity, ease: "linear" }}
               />
             ) : null}
-            <div className="relative grid gap-4 px-4 py-4 sm:grid-cols-[1fr_auto] sm:items-end">
+            <div className="relative grid gap-4 px-4 py-5 sm:grid-cols-[1fr_auto] sm:items-end">
               <div>
-                <p className="flex items-center gap-2 text-[11px] font-medium uppercase tracking-wide text-[#707070]">
+                <p className="flex items-center gap-2 text-[11px] font-medium uppercase tracking-[0.16em] text-[#f4c928]">
                   {liveOn ? (
                     <>
                       <span className="relative flex size-2">
-                        <span className="absolute inset-0 animate-ping bg-[#141414]/35" />
-                        <span className="relative size-2 bg-[#141414]" />
+                        <span className="absolute inset-0 animate-ping bg-[#f4c928]/50" />
+                        <span className="relative size-2 bg-[#f4c928]" />
                       </span>
-                      <Loader2 className="size-3.5 animate-spin text-[#141414]" />
+                      <Loader2 className="size-3.5 animate-spin text-[#f4c928]" />
                       Analyzing live
                     </>
                   ) : (
                     "Live scan stopped"
                   )}
                 </p>
-                <p className="mt-1 text-[22px] font-semibold tracking-tight text-[#141414]">
+                <p className="mt-1 text-[26px] font-semibold tracking-tight text-white">
                   {liveOn ? scanLabel : "Start live scan to keep finding winners"}
                 </p>
-                <p className="mt-0.5 text-[13px] text-[#707070]">
+                <p className="mt-0.5 text-[13px] text-white/60">
                   {liveOn
                     ? queries.length
                       ? `Now reading ${queries.join(" · ")}`
@@ -731,14 +787,14 @@ export function AmazonAutoImportPanel({
                 </p>
               </div>
               <div className="text-left sm:text-right">
-                <p className="text-[10px] font-medium uppercase tracking-wide text-[#707070]">
+                <p className="text-[10px] font-medium uppercase tracking-[0.16em] text-[#f4c928]">
                   Session spread
                 </p>
                 <MoneyTicker
                   value={sessionProfit}
-                  className="mt-0.5 block text-[34px] font-semibold leading-none text-[#141414]"
+                  className="mt-0.5 block text-[40px] font-semibold leading-none text-[#f4c928]"
                 />
-                <p className="mt-1 text-[12px] text-[#707070]">
+                <p className="mt-1 text-[12px] text-white/55">
                   {hits.length} opportunit{hits.length === 1 ? "y" : "ies"} on the board
                 </p>
               </div>
@@ -842,7 +898,7 @@ export function AmazonAutoImportPanel({
       ) : (
         <p className="mt-2 text-[12px] text-[#707070]">
           This path buys on Amazon as a shopper. eBay figures are active
-          listings, not sold.
+          listings, not sold. We keep every real spread on the board.
         </p>
       )}
 
@@ -962,9 +1018,9 @@ export function AmazonAutoImportPanel({
               ))}
             </AnimatePresence>
           </ul>
-          <div className="sticky bottom-0 z-10 mt-3 border border-[#e5e5e5] bg-white/95 p-3 backdrop-blur-sm">
+          <div className="sticky bottom-0 z-10 mt-3 border border-[#141414] bg-[#111] p-3 text-white">
             <div className="mb-2 flex items-baseline justify-between gap-3">
-              <p className="text-[12px] text-[#707070]">
+              <p className="text-[12px] text-white/60">
                 {selected.length
                   ? `${selected.length} selected`
                   : "Tap a card to add it. Import when you are ready."}
@@ -972,7 +1028,7 @@ export function AmazonAutoImportPanel({
               {selected.length ? (
                 <MoneyTicker
                   value={selectedProfit}
-                  className="text-[20px] font-semibold text-[#141414]"
+                  className="text-[22px] font-semibold text-[#f4c928]"
                 />
               ) : null}
             </div>
@@ -980,7 +1036,7 @@ export function AmazonAutoImportPanel({
               type="button"
               disabled={locked || !selected.length}
               onClick={() => void importSelected()}
-              className="h-12 w-full bg-[#141414] text-[15px] font-medium text-white disabled:opacity-40"
+              className="h-12 w-full bg-[#f4c928] text-[15px] font-semibold text-[#141414] disabled:opacity-40"
             >
               {importActionLabel(mode, selected.length, importing)}
             </button>

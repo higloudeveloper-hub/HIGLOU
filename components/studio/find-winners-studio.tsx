@@ -96,9 +96,9 @@ export function FindWinnersStudio() {
     <StudioFrame
       kicker="Studio"
       title="Find winners"
-      hint="Tap a card like a catalog. You keep is the opportunity."
+      hint="Buy on Amazon, sell on eBay. Real keep after fees — we stop hiding the deals."
     >
-      <div className="mx-auto w-full max-w-[1120px] px-5 py-6">
+      <div className="mx-auto w-full max-w-[1240px] px-5 py-6">
         <AmazonAutoImportPanel busy={busy} onImport={importWinners} />
       </div>
     </StudioFrame>

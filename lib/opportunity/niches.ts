@@ -1,4 +1,5 @@
 import { OPPORTUNITY_CATEGORIES } from "@/lib/opportunity/categories";
+import { sortByRealMoney } from "@/lib/opportunity/score";
 import type { OpportunityProduct } from "@/lib/opportunity/types";
 
 /** Specific product types per category. Generic Amazon searches always return the same bestsellers. */
@@ -268,16 +269,17 @@ function mergeHit(
 
 export function diversifyOpportunityHits(
   hits: OpportunityProduct[],
-  cap = 24,
+  cap = 36,
 ): OpportunityProduct[] {
-  const ranked = [...hits].sort((a, b) => (b.score || 0) - (a.score || 0));
+  const ranked = sortByRealMoney(hits);
   const out: OpportunityProduct[] = [];
-  const fingerprints = new Set<string>();
+  const seen = new Map<string, number>();
   for (const hit of ranked) {
     const fingerprint =
       opportunityFingerprint(hit.title) || String(hit.asin || "").toUpperCase();
-    if (fingerprint && fingerprints.has(fingerprint)) continue;
-    if (fingerprint) fingerprints.add(fingerprint);
+    const count = seen.get(fingerprint) || 0;
+    if (count >= 2) continue;
+    seen.set(fingerprint, count + 1);
     out.push(hit);
     if (out.length >= cap) break;
   }
@@ -287,7 +289,7 @@ export function diversifyOpportunityHits(
 export function mergeOpportunityHits(
   current: OpportunityProduct[],
   incoming: OpportunityProduct[],
-  cap = 24,
+  cap = 36,
 ): OpportunityProduct[] {
   const map = new Map(current.map((hit) => [hit.asin, hit]));
   for (const hit of incoming) {

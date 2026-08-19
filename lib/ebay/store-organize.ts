@@ -63,6 +63,10 @@ export const HIGLOU_DEFAULT_STORE_PATHS: string[] = [
   "/Home/Vacuum & Cleaning",
   "/Home/Cleaning Accessories",
   "/Home/Storage",
+  "/Beauty",
+  "/Beauty/Makeup",
+  "/Beauty/Hair Care",
+  "/Beauty/Skin Care",
   "/Automotive",
   "/Automotive/Parts",
   "/Electronics",
@@ -1169,6 +1173,47 @@ const CLASSIFY_RULES: Rule[] = [
     weight: 5,
   },
   {
+    path: "/Beauty/Makeup",
+    patterns: [
+      /\bmakeup\b/i,
+      /\blipstick\b/i,
+      /\bmascara\b/i,
+      /\bfoundation\b/i,
+      /\bconcealer\b/i,
+      /\beyeshadow\b/i,
+      /\beyeliner\b/i,
+      /\bcosmetic\b/i,
+      /makeup\s*brush/i,
+      /beauty\s*blender/i,
+      /\bblush\b/i,
+      /\bhighlighter\b/i,
+      /\bprimer\b/i,
+    ],
+    weight: 12,
+  },
+  {
+    path: "/Beauty/Hair Care",
+    patterns: [
+      /\bshampoo\b/i,
+      /\bconditioner\b/i,
+      /hair\s*dryer/i,
+      /hair\s*oil/i,
+      /hair\s*care/i,
+    ],
+    weight: 11,
+  },
+  {
+    path: "/Beauty/Skin Care",
+    patterns: [
+      /\bskincare\b/i,
+      /\bmoisturizer\b/i,
+      /\bserum\b/i,
+      /face\s*cream/i,
+      /skin\s*care/i,
+    ],
+    weight: 11,
+  },
+  {
     path: "/Home/Vacuum & Cleaning",
     patterns: [/\bvacuum\b/i, /roomba/i, /dyson/i, /\bcleaner\b/i, /steam\s*mop/i],
     weight: 9,
@@ -1179,7 +1224,9 @@ const CLASSIFY_RULES: Rule[] = [
       /scrubber/i,
       /mop\s*pad/i,
       /cleaning\s*kit/i,
-      /brush\s*kit/i,
+      /cleaning\s*brush/i,
+      /toilet\s*brush/i,
+      /dish\s*brush/i,
       /accessory\s*kit/i,
     ],
     weight: 9,
@@ -1355,6 +1402,32 @@ export function inferDynamicStorePath(haystack: string): {
       path: "/Lighting/Smart Lighting",
       confidence: 0.7,
       reason: "Lighting brand → /Lighting/Smart Lighting",
+    };
+  }
+
+  if (
+    /\b(makeup|lipstick|mascara|cosmetic|skincare|shampoo|perfume|concealer|eyeshadow|eyeliner)\b/i.test(
+      text,
+    )
+  ) {
+    if (/\b(shampoo|conditioner|hair\s*dryer|hair\s*oil|hair\s*care)\b/i.test(text)) {
+      return {
+        path: "/Beauty/Hair Care",
+        confidence: 0.72,
+        reason: "Hair care → /Beauty/Hair Care",
+      };
+    }
+    if (/\b(skincare|moisturizer|serum|face\s*cream|skin\s*care)\b/i.test(text)) {
+      return {
+        path: "/Beauty/Skin Care",
+        confidence: 0.72,
+        reason: "Skin care → /Beauty/Skin Care",
+      };
+    }
+    return {
+      path: "/Beauty/Makeup",
+      confidence: 0.72,
+      reason: "Beauty product → /Beauty/Makeup",
     };
   }
 
@@ -1658,9 +1731,20 @@ const STORE_THEME_HINTS: Array<{
     boost: 8,
   },
   {
-    folder: /clean|vacuum|home/,
-    product: /\b(vacuum|cleaner|scrubber|mop|kitchen|home)\b/i,
-    boost: 7,
+    folder: /beauty|makeup|cosmetic|fragrance|skin\s*care|hair\s*care/,
+    product:
+      /\b(makeup|lipstick|mascara|foundation|cosmetic|beauty|skincare|shampoo|perfume|blush|concealer|eyeshadow|eyeliner|makeup\s*brush)\b/i,
+    boost: 12,
+  },
+  {
+    folder: /vacuum|cleaning/,
+    product: /\b(vacuum|roomba|dyson|cleaner|scrubber|steam\s*mop|mop\s*pad)\b/i,
+    boost: 9,
+  },
+  {
+    folder: /kitchen/,
+    product: /\b(kitchen|cookware|skillet|blender|toaster|air\s*fryer)\b/i,
+    boost: 8,
   },
   {
     folder: /auto|car|vehicle/,
@@ -1743,6 +1827,15 @@ const PLUMBING_EBAY_CATEGORY_IDS = new Set([
   "63898",
 ]);
 
+/** Known eBay leaf Category IDs for beauty. */
+const BEAUTY_EBAY_CATEGORY_IDS = new Set([
+  "11874",
+  "11863",
+  "11838",
+  "11854",
+  "26395",
+]);
+
 /** Known eBay leaf Category IDs for tools. */
 const TOOLS_EBAY_CATEGORY_IDS = new Set([
   "20779",
@@ -1769,6 +1862,9 @@ function offerClassifyHaystack(offer: EbayStoreOfferRow): string {
   const toolsCatHint = TOOLS_EBAY_CATEGORY_IDS.has(catId)
     ? " tools power tool drill saw"
     : "";
+  const beautyCatHint = BEAUTY_EBAY_CATEGORY_IDS.has(catId)
+    ? " makeup beauty cosmetic"
+    : "";
   return [
     offer.title,
     offer.brand,
@@ -1778,6 +1874,7 @@ function offerClassifyHaystack(offer: EbayStoreOfferRow): string {
     catId,
     plumbingCatHint,
     toolsCatHint,
+    beautyCatHint,
   ]
     .filter(Boolean)
     .join(" ");
@@ -2314,17 +2411,21 @@ export function mapTaxonomyPathToExistingStore(
           ? /batter|power/
           : /tool|drill|measur|hand tool|power tool/i.test(needle)
             ? /tool|drill|power|measur|batter/
-            : /vacuum|clean|kitchen|home/i.test(needle)
-              ? /home|clean|vacuum|kitchen/
-              : /electr|cable|charg/i.test(needle)
-                ? /electr|cable|charg/
-                : /auto/i.test(needle)
-                  ? /auto|car|vehicle/
-                  : /outdoor|garden/i.test(needle)
-                    ? /outdoor|garden|lawn/
-                    : /hardware|fastener/i.test(needle)
-                      ? /hardware|fastener/
-                      : null;
+            : /beauty|makeup|cosmetic|fragrance|skin\s*care|hair\s*care/i.test(needle)
+              ? /beauty|makeup|cosmetic|fragrance|skin|hair|health/
+              : /vacuum|cleaning/i.test(needle)
+                ? /vacuum|cleaning/
+                : /kitchen/i.test(needle)
+                  ? /kitchen/
+                  : /electr|cable|charg/i.test(needle)
+                    ? /electr|cable|charg/
+                    : /auto/i.test(needle)
+                      ? /auto|car|vehicle/
+                      : /outdoor|garden/i.test(needle)
+                        ? /outdoor|garden|lawn/
+                        : /hardware|fastener/i.test(needle)
+                          ? /hardware|fastener/
+                          : null;
 
   if (!theme) return null;
 

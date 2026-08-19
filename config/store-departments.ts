@@ -157,7 +157,15 @@ export const STORE_DEPARTMENTS: StoreDepartment[] = [
     slug: "health-beauty",
     name: "Health & Beauty",
     leafIds: ["11874", "11863", "11838", "11854", "26395"],
-    keywords: ["makeup", "skin", "perfume", "shampoo", "beauty"],
+    keywords: [
+      "makeup",
+      "makeup brush",
+      "cosmetic",
+      "skin",
+      "perfume",
+      "shampoo",
+      "beauty",
+    ],
   },
   {
     slug: "toys-baby",

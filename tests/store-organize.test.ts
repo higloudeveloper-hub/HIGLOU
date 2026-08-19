@@ -546,4 +546,55 @@ describe("classifyOffersForStore", () => {
     expect(row.suggestedPath.startsWith("/Bath and Plumbing")).toBe(true);
     expect(row.suggestedPath.toLowerCase()).not.toContain("/plumbing/pumps");
   });
+
+  it("files makeup brushes in Beauty/Makeup, not Vacuum & Cleaning", () => {
+    const [row] = classifyOffersForStore(
+      [
+        {
+          offerId: "m1",
+          sku: "MAKEUP1",
+          status: "PUBLISHED",
+          title: "Real Perfection Pink Makeup Brush Set - 16 Pieces",
+          categoryId: "11874",
+          categoryName: "Makeup",
+          listingId: "820024046317",
+          price: 19,
+          currentStorePaths: [],
+        },
+      ],
+      categories,
+    );
+    expect(row.suggestedPath).toBe("/Beauty/Makeup");
+    expect(row.suggestedPath.toLowerCase()).not.toContain("vacuum");
+  });
+
+  it("does not steal makeup into an existing Vacuum & Cleaning folder", () => {
+    const live = [
+      { path: "/Home", name: "Home", categoryId: "10" },
+      {
+        path: "/Home/Vacuum & Cleaning",
+        name: "Vacuum & Cleaning",
+        categoryId: "11",
+      },
+      { path: "/Home/Kitchen", name: "Kitchen", categoryId: "12" },
+    ];
+    const [row] = classifyOffersForStore(
+      [
+        {
+          offerId: "m2",
+          sku: "MAKEUP2",
+          status: "PUBLISHED",
+          title: "Real Perfection Pink Makeup Brush Set - 16 Pieces",
+          categoryId: "11874",
+          categoryName: "Makeup",
+          listingId: "820024046317",
+          price: 19,
+          currentStorePaths: [],
+        },
+      ],
+      live,
+    );
+    expect(row.suggestedPath).toBe("/Beauty/Makeup");
+    expect(row.suggestedPath.toLowerCase()).not.toMatch(/vacuum|cleaning|kitchen/);
+  });
 });

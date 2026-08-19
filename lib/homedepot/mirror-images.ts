@@ -1,6 +1,6 @@
 import { DEFAULT_VALUES } from "@/config/default-values";
 import { randomUUID } from "crypto";
-import sharp from "sharp";
+import { tryLoadSharp } from "@/lib/images/load-sharp";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { compressImageBuffer } from "@/lib/images/compress-server";
 import {
@@ -48,12 +48,21 @@ async function fetchBuffer(url: string): Promise<Buffer | null> {
 }
 
 async function downloadLargestHomeDepotImage(url: string): Promise<Buffer | null> {
+  const sharp = await tryLoadSharp();
   let best: Buffer | null = null;
   let bestLong = 0;
 
   for (const candidate of homeDepotImageCandidates(url)) {
     const raw = await fetchBuffer(candidate);
     if (!raw) continue;
+    if (!sharp) {
+      if (isLikelyHomeDepotPlaceholder(raw.byteLength, 0)) continue;
+      if (!best || raw.byteLength > best.byteLength) {
+        best = raw;
+        bestLong = raw.byteLength;
+      }
+      continue;
+    }
     try {
       const meta = await sharp(raw, { failOn: "none" }).metadata();
       const longest = Math.max(meta.width ?? 0, meta.height ?? 0);
@@ -75,7 +84,9 @@ async function downloadLargestHomeDepotImage(url: string): Promise<Buffer | null
     }
   }
 
-  if (!best || bestLong < 80) return null;
+  if (!best) return null;
+  if (!sharp) return best;
+  if (bestLong < 80) return null;
   if (bestLong < EBAY_MIN_LONG_SIDE) {
     const meta = await sharp(best, { failOn: "none" }).metadata();
     const width = meta.width ?? bestLong;

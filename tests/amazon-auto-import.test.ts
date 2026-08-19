@@ -370,6 +370,18 @@ describe("Amazon auto-import stays an eBay draft flow", () => {
     expect(winnersStudio).toMatch(/JSON\.stringify\(\{ asins: next, mode, cards: cards \|\| \[\] \}\)/);
     expect(importRoute).toMatch(/listingFromDraft/);
     expect(importRoute).toMatch(/fast: false/);
+    const completeImport = readRepo("lib/amazon/complete-import.ts");
+    const nextConfig = readRepo("next.config.ts");
+    expect(completeImport).toMatch(/mirrorAmazonImages = null/);
+    expect(completeImport).toMatch(
+      /await import\("@\/lib\/amazon\/mirror-images"\)/,
+    );
+    expect(readRepo("lib/amazon/mirror-images.ts")).not.toMatch(/from "sharp"/);
+    expect(readRepo("lib/images/normalize-image.ts")).not.toMatch(
+      /from "sharp"/,
+    );
+    expect(nextConfig).toMatch(/"sharp"/);
+    expect(nextConfig).toMatch(/@img\/sharp-libvips-linux-x64/);
     expect(importRoute).toMatch(/analyzeWinnerListing/);
     expect(importRoute).toMatch(/analyzeProductHybrid/);
     expect(importRoute).toMatch(/importAmazonCatalogProduct/);

@@ -58,7 +58,13 @@ export async function importAmazonCatalogProduct(opts: {
   fallbackPrice?: number | null;
 }): Promise<AmazonImportDraft> {
   const { fetchAmazonProduct } = await import("@/lib/amazon/fetch-product");
-  const { mirrorAmazonImages } = await import("@/lib/amazon/mirror-images");
+  let mirrorAmazonImages: typeof import("@/lib/amazon/mirror-images").mirrorAmazonImages | null =
+    null;
+  try {
+    ({ mirrorAmazonImages } = await import("@/lib/amazon/mirror-images"));
+  } catch {
+    mirrorAmazonImages = null;
+  }
 
   let product: Awaited<ReturnType<typeof fetchAmazonProduct>> | null = null;
   try {
@@ -94,14 +100,16 @@ export async function importAmazonCatalogProduct(opts: {
     mimeType: string;
     sizeBytes: number;
   }> = [];
-  try {
-    mirrored = await mirrorAmazonImages({
-      imageUrls: product.imageUrls,
-      userId: opts.userId,
-      asin: product.asin,
-    });
-  } catch {
-    mirrored = [];
+  if (mirrorAmazonImages) {
+    try {
+      mirrored = await mirrorAmazonImages({
+        imageUrls: product.imageUrls,
+        userId: opts.userId,
+        asin: product.asin,
+      });
+    } catch {
+      mirrored = [];
+    }
   }
 
   const images = mirrored.length

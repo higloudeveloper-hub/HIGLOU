@@ -1,4 +1,4 @@
-import sharp from "sharp";
+import { loadSharp } from "@/lib/images/load-sharp";
 import { PRODUCT_IMAGES_BUCKET } from "@/lib/images/storage";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { cleanHttpsUrl } from "@/lib/images/url-sanitize";
@@ -89,6 +89,7 @@ const EBAY_SKIP_BELOW = 80;
 export async function prepareEbayListingJpeg(
   input: Buffer,
 ): Promise<Buffer | null> {
+  const sharp = await loadSharp();
   const meta = await sharp(input, { failOn: "none" }).rotate().metadata();
   const width = meta.width ?? 0;
   const height = meta.height ?? 0;
@@ -140,6 +141,7 @@ export async function ensureEbayCompatibleImageUrls(options: {
     }
 
     try {
+      const sharp = await loadSharp();
       const input = await fetchImageBuffer(normalized);
       const sourceMeta = await sharp(input, { failOn: "none" }).rotate().metadata();
       const sourceLong = Math.max(sourceMeta.width ?? 0, sourceMeta.height ?? 0);

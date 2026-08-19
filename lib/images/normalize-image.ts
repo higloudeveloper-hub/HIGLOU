@@ -1,5 +1,5 @@
 import { createHash } from "crypto";
-import sharp from "sharp";
+import { loadSharp } from "@/lib/images/load-sharp";
 import {
   resolveImageMime,
   type NormalizedImageMimeType,
@@ -64,6 +64,7 @@ export async function normalizeImageForAnalysis(
   const maxEdge = options?.maxEdge ?? 4096;
 
   try {
+    const sharp = await loadSharp();
     const pipeline = sharp(inputBuffer, {
       failOn: "none",
       animated: false,

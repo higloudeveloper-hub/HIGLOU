@@ -43,8 +43,19 @@ async function fetchBuffer(url: string): Promise<Buffer | null> {
       cache: "no-store",
       signal: AbortSignal.timeout(20_000),
     });
-    if (!res.ok) return null;
-    return Buffer.from(await res.arrayBuffer());
+    if (res.ok) return Buffer.from(await res.arrayBuffer());
+    const desktop = await fetch(url, {
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",
+        Accept: "image/jpeg,image/png,image/webp;q=0.8,*/*;q=0.5",
+        Referer: "https://www.amazon.com/",
+      },
+      cache: "no-store",
+      signal: AbortSignal.timeout(20_000),
+    });
+    if (!desktop.ok) return null;
+    return Buffer.from(await desktop.arrayBuffer());
   } catch {
     return null;
   }

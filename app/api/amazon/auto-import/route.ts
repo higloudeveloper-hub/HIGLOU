@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { nanoid } from "nanoid";
 import { requireUser } from "@/lib/auth/require-user";
 import { isSupabaseConfigured } from "@/lib/supabase/admin";
 import {
@@ -16,10 +15,19 @@ import {
 } from "@/lib/products/persistence";
 import { ebayReadyImportFields } from "@/lib/opportunity/ebay-ready";
 import { toEbayListingTitle } from "@/lib/ebay/listing-helpers";
-import { upgradeAmazonImage } from "@/lib/amazon/parse-product";
+import {
+  importAmazonCatalogProduct,
+  toWizardImages,
+} from "@/lib/amazon/complete-import";
+import { resolveEbayCategory } from "@/config/ebay-categories";
+import {
+  buildListingDescriptionHtml,
+  synthesizeDescriptionSummary,
+} from "@/lib/ebay/description-html";
+import { STORE_BRANDING_DEFAULTS } from "@/config/store-branding";
 
 export const runtime = "nodejs";
-export const maxDuration = 60;
+export const maxDuration = 120;
 
 const cardSchema = z.object({
   asin: z.string().min(10).max(12),
@@ -87,64 +95,33 @@ type ImportedListing = {
   }>;
 };
 
-function remoteImage(url: string, asin: string): ImportedListing["dbImages"][number] {
-  return {
-    publicUrl: url,
-    storagePath: "",
-    fileName: `${asin}.jpg`,
-    sortOrder: 0,
-    isPrimary: true,
-    mimeType: "image/jpeg",
-    sizeBytes: 0,
-  };
-}
-
-function photoFromHint(hint?: WinnerCardHint): string {
-  let raw = String(hint?.imageUrl || "").trim().replace(/&amp;/g, "&");
-  if (raw.startsWith("//")) raw = `https:${raw}`;
-  if (!raw) return "";
-  return upgradeAmazonImage(raw) || (/^https:\/\//i.test(raw) ? raw : "");
-}
-
-function listingFromCard(
-  asin: string,
+function listingFromDraft(
+  draft: Awaited<ReturnType<typeof importAmazonCatalogProduct>>,
   mode: "amazon" | "amazon_to_ebay" | "supplier",
   ebayPrice: number | undefined,
-  hint: WinnerCardHint,
+  hint?: WinnerCardHint,
 ): ImportedListing {
-  const image = photoFromHint(hint);
-  const dbImages = image ? [remoteImage(image, asin)] : [];
-  const title =
-    toEbayListingTitle(hint.title || "") || hint.brand || asin;
   const price =
     mode === "amazon"
-      ? hint.amazonPrice ?? null
+      ? draft.price ?? hint?.amazonPrice ?? null
       : ebayProfitPrice(
-          hint.amazonPrice ?? null,
-          ebayPrice ?? hint.ebayPrice ?? undefined,
+          draft.price ?? hint?.amazonPrice ?? null,
+          ebayPrice ?? hint?.ebayPrice ?? undefined,
         );
+  const wizardImages = toWizardImages(draft.images);
   return {
-    asin,
-    amazonUrl: `https://www.amazon.com/dp/${asin}`,
-    title,
-    brand: hint.brand || "",
+    asin: draft.asin,
+    amazonUrl: draft.amazonUrl,
+    title: toEbayListingTitle(draft.title) || hint?.title || draft.brand || draft.asin,
+    brand: draft.brand || hint?.brand || "",
     price,
-    upc: "",
-    features: [],
-    sku: `AMZ-${asin}`,
+    upc: draft.upc,
+    features: draft.features,
+    sku: draft.sku,
     rating: null,
     reviewCount: null,
-    images: dbImages.map((img) => ({
-      id: nanoid(),
-      url: img.publicUrl,
-      storagePath: img.storagePath,
-      fileName: img.fileName,
-      sortOrder: img.sortOrder,
-      isPrimary: img.isPrimary,
-      mimeType: img.mimeType,
-      sizeBytes: img.sizeBytes,
-    })),
-    dbImages,
+    images: wizardImages,
+    dbImages: draft.images,
   };
 }
 
@@ -156,58 +133,160 @@ async function importAsin(
   mode: "amazon" | "amazon_to_ebay" | "supplier",
   hint?: WinnerCardHint,
 ): Promise<ImportedListing> {
-  if (hint && (hint.imageUrl || hint.title)) {
-    return listingFromCard(asin, mode, ebayPrice, hint);
-  }
-  const { fetchAmazonProduct } = await import("@/lib/amazon/fetch-product");
-  const { mirrorAmazonImages } = await import("@/lib/amazon/mirror-images");
-  const product = await fetchAmazonProduct(`https://www.amazon.com/dp/${asin}`, {
-    pageOrigin,
-  });
-  const images = await mirrorAmazonImages({
-    imageUrls: product.imageUrls,
+  const draft = await importAmazonCatalogProduct({
+    url: `https://www.amazon.com/dp/${asin}`,
     userId,
-    asin: product.asin,
+    pageOrigin,
+    fallbackTitle: hint?.title,
+    fallbackBrand: hint?.brand,
+    fallbackImageUrl: hint?.imageUrl,
+    fallbackPrice: hint?.amazonPrice ?? null,
   });
-  if (!images.length) {
-    throw new Error("Amazon photos could not be saved.");
-  }
-  const price =
-    mode === "amazon"
-      ? product.price
-      : ebayProfitPrice(product.price, ebayPrice);
-  const dbImages = images.map((img, index) => ({
-    publicUrl: img.publicUrl,
-    storagePath: img.storagePath,
-    fileName: img.fileName,
-    sortOrder: index,
-    isPrimary: index === 0,
-    mimeType: img.mimeType,
-    sizeBytes: img.sizeBytes,
-  }));
-  return {
-    asin: product.asin,
-    amazonUrl: product.url,
-    title: toEbayListingTitle(product.title) || product.brand || product.asin,
-    brand: product.brand,
-    price,
-    upc: product.upc,
-    features: product.features,
-    sku: `AMZ-${product.asin}`,
-    rating: product.rating,
-    reviewCount: product.reviewCount,
-    images: dbImages.map((img) => ({
-      id: nanoid(),
-      url: img.publicUrl,
-      storagePath: img.storagePath,
-      fileName: img.fileName,
-      sortOrder: img.sortOrder,
-      isPrimary: img.isPrimary,
-      mimeType: img.mimeType,
-      sizeBytes: img.sizeBytes,
-    })),
-    dbImages,
+  return listingFromDraft(draft, mode, ebayPrice, hint);
+}
+
+async function analyzeWinnerListing(
+  item: ImportedListing,
+  ctx: { userId: string; supabase: import("@supabase/supabase-js").SupabaseClient },
+) {
+  const catalog = resolveEbayCategory({
+    title: item.title,
+    brand: item.brand,
+    features: item.features,
+    productType: item.title,
+  });
+  const base = {
+    title: item.title,
+    brand: item.brand,
+    model: "",
+    mpn: "",
+    upc: item.upc,
+    categoryId: catalog.categoryId,
+    categoryName: catalog.categoryName,
+    condition: "New",
+    conditionId: "1000",
+    price: item.price,
+    size: "",
+    productType: "",
+    colors: [] as string[],
+    materials: [] as string[],
+    features: item.features,
+    descriptionSummary: synthesizeDescriptionSummary({
+      title: item.title,
+      brand: item.brand,
+      features: item.features,
+      condition: "New",
+    }),
+    descriptionHtml: "",
+    itemSpecifics: [
+      { key: "C:ASIN", label: "ASIN", value: item.asin },
+      ...(item.brand
+        ? [{ key: "C:Brand", label: "Brand", value: item.brand }]
+        : []),
+    ],
   };
+  base.descriptionHtml = buildListingDescriptionHtml(
+    {
+      title: base.title,
+      brand: base.brand,
+      features: base.features,
+      descriptionSummary: base.descriptionSummary,
+      condition: "New",
+    },
+    STORE_BRANDING_DEFAULTS,
+  );
+
+  const imageUrls = item.dbImages
+    .map((img) => img.publicUrl)
+    .filter((url) => /^https:\/\//i.test(url))
+    .slice(0, 4);
+  if (!imageUrls.length || !process.env.OPENAI_API_KEY) return base;
+
+  try {
+    const { analyzeProductHybrid } = await import("@/lib/ai/analyze-product");
+    const result = await analyzeProductHybrid({
+      imageUrls,
+      productHints: {
+        brand: item.brand,
+        upc: item.upc,
+        categoryId: catalog.categoryId,
+        categoryName: catalog.categoryName,
+        condition: "New",
+        notes: item.features.slice(0, 8).join(" · "),
+      },
+      analysisTier: "economy",
+      userId: ctx.userId,
+      supabase: ctx.supabase,
+    });
+    const analysis = result.analysis;
+    const title =
+      toEbayListingTitle(analysis.title || "") || item.title;
+    const features = analysis.features.length
+      ? analysis.features
+      : item.features;
+    const category = resolveEbayCategory({
+      categoryId: analysis.categoryId || catalog.categoryId,
+      categoryName: analysis.categoryName || catalog.categoryName,
+      productType: analysis.type || title,
+      title,
+      brand: analysis.brand || item.brand,
+      materials: analysis.materials,
+      features,
+    });
+    const summary =
+      analysis.descriptionSummary ||
+      synthesizeDescriptionSummary({
+        title,
+        brand: analysis.brand || item.brand,
+        features,
+        condition: analysis.condition || "New",
+      });
+    const specifics = analysis.itemSpecifics.length
+      ? analysis.itemSpecifics.map((field) => ({
+          key: field.key.startsWith("C:") ? field.key : `C:${field.key}`,
+          label: field.label || field.key.replace(/^C:/, ""),
+          value: field.value,
+        }))
+      : base.itemSpecifics;
+    if (
+      !specifics.some((field) =>
+        /^(asin|amazon\s*asin)$/i.test(String(field.label || "").replace(/^C:/, "")),
+      )
+    ) {
+      specifics.unshift({ key: "C:ASIN", label: "ASIN", value: item.asin });
+    }
+    return {
+      title,
+      brand: analysis.brand || item.brand,
+      model: analysis.model || "",
+      mpn: analysis.mpn || "",
+      upc: analysis.upc || item.upc,
+      categoryId: category.categoryId,
+      categoryName: category.categoryName,
+      condition: analysis.condition || "New",
+      conditionId: analysis.conditionId || "1000",
+      price: item.price ?? analysis.price,
+      size: analysis.size || "",
+      productType: analysis.type || "",
+      colors: analysis.colors,
+      materials: analysis.materials,
+      features,
+      descriptionSummary: summary,
+      descriptionHtml: buildListingDescriptionHtml(
+        {
+          title,
+          brand: analysis.brand || item.brand,
+          features,
+          descriptionSummary: summary,
+          condition: analysis.condition || "New",
+        },
+        STORE_BRANDING_DEFAULTS,
+      ),
+      itemSpecifics: specifics,
+    };
+  } catch {
+    return base;
+  }
 }
 
 export async function POST(request: Request) {
@@ -349,31 +428,48 @@ async function postWinnerImport(request: Request) {
 
   for (const item of imported) {
     try {
+      const analyzed = await analyzeWinnerListing(item, {
+        userId: auth.user.id,
+        supabase: auth.supabase,
+      });
       const ready = await ebayReadyImportFields({
-        title: item.title,
-        brand: item.brand,
-        features: item.features,
+        title: analyzed.title,
+        brand: analyzed.brand,
+        features: analyzed.features,
         ebayToken: tokens.ebayToken,
         userId: auth.user.id,
         supabase: auth.supabase,
-        fast: true,
+        fast: false,
       });
+      const categoryId = analyzed.categoryId || ready.categoryId;
+      const categoryName =
+        analyzed.categoryName || ready.categoryName || body.category;
       const data = productBodySchema.parse({
-        title: toEbayListingTitle(item.title) || item.brand || item.asin,
-        brand: item.brand,
+        title: toEbayListingTitle(analyzed.title) || item.brand || item.asin,
+        brand: analyzed.brand,
+        model: analyzed.model,
         sku: item.sku,
         amazonAsin: item.asin,
-        upc: item.upc,
-        categoryId: ready.categoryId,
-        categoryName: ready.categoryName || body.category,
-        condition: "New",
-        conditionId: "NEW",
-        price: item.price,
+        upc: analyzed.upc || item.upc,
+        mpn: analyzed.mpn,
+        categoryId,
+        categoryName,
+        condition: analyzed.condition || "New",
+        conditionId:
+          analyzed.conditionId && /^\d+$/.test(analyzed.conditionId)
+            ? analyzed.conditionId
+            : "1000",
+        price: item.price ?? analyzed.price,
         quantity: 1,
-        features: item.features,
-        status: "Needs Review",
-        descriptionSummary: ready.descriptionSummary,
-        descriptionHtml: ready.descriptionHtml,
+        size: analyzed.size,
+        productType: analyzed.productType,
+        colors: analyzed.colors,
+        materials: analyzed.materials,
+        features: analyzed.features,
+        status: categoryId && item.dbImages.length ? "Ready" : "Needs Review",
+        descriptionSummary:
+          analyzed.descriptionSummary || ready.descriptionSummary,
+        descriptionHtml: analyzed.descriptionHtml || ready.descriptionHtml,
         itemLocation: ready.itemLocation,
         postalCode: ready.postalCode,
         country: ready.country,
@@ -384,12 +480,7 @@ async function postWinnerImport(request: Request) {
         packageWidthIn: ready.packageWidthIn,
         packageDepthIn: ready.packageDepthIn,
         packageSource: ready.packageSource,
-        itemSpecifics: [
-          { key: "C:ASIN", label: "ASIN", value: item.asin },
-          ...(item.brand
-            ? [{ key: "C:Brand", label: "Brand", value: item.brand }]
-            : []),
-        ],
+        itemSpecifics: analyzed.itemSpecifics,
         images: item.dbImages.filter((img) => {
           try {
             const parsed = new URL(img.publicUrl);

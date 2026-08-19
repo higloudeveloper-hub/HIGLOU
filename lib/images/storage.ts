@@ -59,7 +59,18 @@ export async function fetchProductImageBuffer(options: {
   url: string;
   storagePath?: string;
 }): Promise<Buffer> {
-  const response = await fetch(options.url, { cache: "no-store" });
+  const amazonHost = /amazon|media-amazon|ssl-images-amazon/i.test(options.url);
+  const response = await fetch(options.url, {
+    cache: "no-store",
+    headers: amazonHost
+      ? {
+          Accept: "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
+          Referer: "https://www.amazon.com/",
+          "User-Agent":
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",
+        }
+      : undefined,
+  });
   if (response.ok) {
     return Buffer.from(await response.arrayBuffer());
   }

@@ -74,7 +74,9 @@ function isOwnedSupabaseImageUrl(url: string, userId?: string): boolean {
   if (!base || !userId) return true;
   const prefix = `${base}/storage/v1/object/public/`;
   if (!clean.startsWith(prefix)) {
-    return /^https:\/\/(ir\.ebaystatic\.com|i\.ebayimg\.com)/i.test(clean);
+    return /amazon|media-amazon|ssl-images-amazon|ebayimg\.com|ebaystatic\.com/i.test(
+      clean,
+    );
   }
   return clean.includes(`/${userId}/`);
 }

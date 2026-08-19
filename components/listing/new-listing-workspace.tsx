@@ -1146,10 +1146,16 @@ export function NewListingWorkspace({
         updatedAt: new Date().toISOString(),
       };
       setListing(seeded);
-      setStep("photos");
-      toast.success(
-        `${storeLabel} photos loaded — delete, add, or drag to reorder, then Continue.`,
-      );
+      toast.success(`${storeLabel} photos loaded — analyzing for eBay.`);
+      await analyzeProduct({
+        baseListing: seeded,
+        images: body.images,
+        hints: {
+          brand: seeded.brand,
+          upc: seeded.upc,
+          notes: (body.features || []).slice(0, 8).join(" · "),
+        },
+      });
       return true;
     } catch (error) {
       const message =

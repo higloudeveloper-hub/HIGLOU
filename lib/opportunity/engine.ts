@@ -34,13 +34,6 @@ import {
   scoreOpportunity,
   sortByRealMoney,
 } from "@/lib/opportunity/score";
-import {
-  buildOpportunityReasons,
-  isConfirmedOpportunity,
-  opportunityLabelFromScore,
-  scoreOpportunity,
-  sortByRealMoney,
-} from "@/lib/opportunity/score";
 import type {
   EligibilityStatus,
   OpportunityMode,

@@ -245,17 +245,16 @@ export function scoreOpportunity(hit: {
 }
 
 export function passesMainOpportunityScreen(
-  hit: Pick<
-    OpportunityProduct,
-    | "eligibility"
-    | "netProfit"
-    | "roi"
-    | "priceVariation90"
-    | "sellerCount"
-    | "amazonRetail"
-    | "upc"
-    | "title"
-  >,
+  hit: {
+    eligibility?: EligibilityStatus;
+    netProfit?: number | null;
+    roi?: number | null;
+    priceVariation90?: number | null;
+    sellerCount?: number | null;
+    amazonRetail?: boolean;
+    upc?: string;
+    title?: string;
+  },
   opts?: { requireProfit?: boolean; mode?: OpportunityMode },
 ): boolean {
   const mode = opts?.mode || "amazon_to_ebay";

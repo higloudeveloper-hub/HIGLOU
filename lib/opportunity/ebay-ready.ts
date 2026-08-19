@@ -1,9 +1,7 @@
 import { resolveEbayCategory } from "@/config/ebay-categories";
 import { DEFAULT_VALUES } from "@/config/default-values";
-import { ensureEbayCategory } from "@/lib/ebay/ensure-category";
 import { synthesizeDescriptionSummary, buildListingDescriptionHtml } from "@/lib/ebay/description-html";
 import { STORE_BRANDING_DEFAULTS } from "@/config/store-branding";
-import { ensureListableEbayCategory } from "@/lib/ebay/taxonomy-categories";
 import { seedPackageOnListing } from "@/lib/ebay/package-shipping";
 import { toEbayListingTitle } from "@/lib/ebay/listing-helpers";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -40,6 +38,9 @@ export async function ebayReadyImportFields(opts: {
 
   if (opts.ebayToken && !opts.fast) {
     try {
+      const { ensureListableEbayCategory } = await import(
+        "@/lib/ebay/taxonomy-categories"
+      );
       const ensured = await ensureListableEbayCategory(opts.ebayToken, {
         title,
         brand,
@@ -64,6 +65,7 @@ export async function ebayReadyImportFields(opts: {
   }
 
   if (!categoryId && !opts.fast) {
+    const { ensureEbayCategory } = await import("@/lib/ebay/ensure-category");
     const ai = await ensureEbayCategory({
       title,
       brand,

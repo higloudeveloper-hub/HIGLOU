@@ -7,9 +7,6 @@ import {
   checkRateLimit,
   clientKeyFromRequest,
 } from "@/lib/api/rate-limit";
-import { fetchAmazonProduct } from "@/lib/amazon/fetch-product";
-import { mirrorAmazonImages } from "@/lib/amazon/mirror-images";
-import { findAmazonWinners } from "@/lib/amazon/find-winners";
 import { loadWinnerMarketTokens } from "@/lib/amazon/winner-tokens";
 import { ebayProfitPrice } from "@/lib/amazon/winner-rank";
 import {
@@ -28,9 +25,20 @@ const cardSchema = z.object({
   asin: z.string().min(10).max(12),
   title: z.string().max(500).optional().default(""),
   brand: z.string().max(120).optional().default(""),
-  imageUrl: z.string().max(2000).optional().default(""),
-  amazonPrice: z.number().positive().max(100000).nullable().optional(),
-  ebayPrice: z.number().positive().max(100000).nullable().optional(),
+  imageUrl: z.preprocess(
+    (value) => String(value ?? ""),
+    z.string().max(4000).optional().default(""),
+  ),
+  amazonPrice: z.preprocess((value) => {
+    if (value == null || value === "") return null;
+    const num = Number(value);
+    return Number.isFinite(num) && num > 0 ? num : null;
+  }, z.number().nullable().optional()),
+  ebayPrice: z.preprocess((value) => {
+    if (value == null || value === "") return null;
+    const num = Number(value);
+    return Number.isFinite(num) && num > 0 ? num : null;
+  }, z.number().nullable().optional()),
 });
 
 const bodySchema = z.object({
@@ -151,6 +159,8 @@ async function importAsin(
   if (hint && (hint.imageUrl || hint.title)) {
     return listingFromCard(asin, mode, ebayPrice, hint);
   }
+  const { fetchAmazonProduct } = await import("@/lib/amazon/fetch-product");
+  const { mirrorAmazonImages } = await import("@/lib/amazon/mirror-images");
   const product = await fetchAmazonProduct(`https://www.amazon.com/dp/${asin}`, {
     pageOrigin,
   });
@@ -201,6 +211,16 @@ async function importAsin(
 }
 
 export async function POST(request: Request) {
+  try {
+    return await postWinnerImport(request);
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Import failed.";
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}
+
+async function postWinnerImport(request: Request) {
   if (!isSupabaseConfigured()) {
     return NextResponse.json(
       { error: "Sign in to import from Amazon." },
@@ -254,6 +274,7 @@ export async function POST(request: Request) {
       );
     }
     try {
+      const { findAmazonWinners } = await import("@/lib/amazon/find-winners");
       const tokens = await loadWinnerMarketTokens(auth.supabase, auth.user.id);
       const found = await findAmazonWinners({
         query,
@@ -369,7 +390,14 @@ export async function POST(request: Request) {
             ? [{ key: "C:Brand", label: "Brand", value: item.brand }]
             : []),
         ],
-        images: item.dbImages,
+        images: item.dbImages.filter((img) => {
+          try {
+            const parsed = new URL(img.publicUrl);
+            return parsed.protocol === "http:" || parsed.protocol === "https:";
+          } catch {
+            return false;
+          }
+        }),
       });
       const { data: inserted, error } = await auth.supabase
         .from("products")

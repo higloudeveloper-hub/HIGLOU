@@ -306,7 +306,7 @@ function KeepSpark({
         {Array.from({ length: 18 }, (_, i) => (
           <span
             key={i}
-            className="flex-1 bg-[#3d4c5f]"
+            className="flex-1 bg-[#d5d9d9]"
             style={{ height: `${10 + ((i * 17) % 55)}%` }}
           />
         ))}
@@ -380,7 +380,7 @@ function WinnerRow({
         )}
       </td>
       <td className="max-w-[320px] py-2 pr-3">
-        <p className="line-clamp-2 font-medium leading-snug">
+        <p className="line-clamp-2 font-medium leading-snug text-[#007185]">
           {toEbayListingTitle(hit.title) || hit.asin}
         </p>
         <p className="mt-0.5 truncate font-mono text-[11px] text-[#565959]">
@@ -817,9 +817,15 @@ export function AmazonAutoImportPanel({
   const stats = sessionStats(hits, mode);
 
   return (
-    <div className="flex h-full min-h-0 flex-1 flex-col bg-[#eaeded]">
+    <div className="flex h-full min-h-0 flex-1 flex-col bg-[#eaeded] font-sans text-[#0f1111]">
       <div className="shrink-0 bg-[#232f3e] text-white">
-        <div className="flex flex-wrap items-center gap-2 border-b border-white/10 px-3 py-2">
+        <div className="flex flex-wrap items-center gap-3 px-4 py-2.5">
+          <div className="min-w-[140px]">
+            <p className="text-[11px] font-semibold tracking-[0.18em] text-[#f4c928] uppercase">
+              Inventory
+            </p>
+            <h1 className="text-[18px] font-semibold leading-none">Find winners</h1>
+          </div>
           {OPPORTUNITY_MODES.map((row) => {
             const on = mode === row.id;
             return (
@@ -829,8 +835,8 @@ export function AmazonAutoImportPanel({
                 disabled={locked}
                 onClick={() => chooseMode(row.id)}
                 className={cn(
-                  "h-8 px-3 text-[12px] font-medium",
-                  on ? "bg-[#f4c928] text-[#141414]" : "bg-white/10 text-white hover:bg-white/15",
+                  "h-8 px-3 text-[13px] font-medium",
+                  on ? "bg-[#f4c928] text-[#141414]" : "text-white/80 hover:bg-white/10",
                 )}
               >
                 {row.label}
@@ -851,7 +857,7 @@ export function AmazonAutoImportPanel({
                 setError(null);
               }}
               className={cn(
-                "h-8 px-3 text-[12px] font-medium",
+                "h-8 px-3 text-[13px] font-medium",
                 view === "live" ? "bg-white text-[#232f3e]" : "text-white/70 hover:text-white",
               )}
             >
@@ -868,7 +874,7 @@ export function AmazonAutoImportPanel({
                 setError(null);
               }}
               className={cn(
-                "h-8 px-3 text-[12px] font-medium",
+                "h-8 px-3 text-[13px] font-medium",
                 view === "manual" ? "bg-white text-[#232f3e]" : "text-white/70 hover:text-white",
               )}
             >
@@ -876,79 +882,16 @@ export function AmazonAutoImportPanel({
             </button>
           </span>
         </div>
-        <div className="grid grid-cols-2 gap-px bg-white/10 sm:grid-cols-2 lg:grid-cols-7">
-          <div className="bg-[#232f3e] px-3 py-2.5">
-            <p className="text-[10px] font-semibold tracking-[0.14em] text-[#f4c928] uppercase">
-              Session spread
-            </p>
-            <MoneyTicker
-              value={sessionProfit}
-              className="mt-0.5 block text-[22px] font-semibold leading-none"
-            />
-          </div>
-          <div className="bg-[#232f3e] px-3 py-2.5">
-            <p className="text-[10px] font-semibold tracking-[0.14em] text-[#f4c928] uppercase">
-              Analyzed
-            </p>
-            <p className="mt-0.5 text-[22px] font-semibold leading-none tabular-nums">
-              {analyzedTotal}
-            </p>
-          </div>
-          <div className="bg-[#232f3e] px-3 py-2.5">
-            <p className="text-[10px] font-semibold tracking-[0.14em] text-[#f4c928] uppercase">
-              On the board
-            </p>
-            <p className="mt-0.5 text-[22px] font-semibold leading-none tabular-nums">
-              {hits.length}
-            </p>
-          </div>
-          <div className="bg-[#232f3e] px-3 py-2.5">
-            <p className="text-[10px] font-semibold tracking-[0.14em] text-[#f4c928] uppercase">
-              Avg keep
-            </p>
-            <p className="mt-0.5 text-[22px] font-semibold leading-none tabular-nums">
-              {signedMoney(stats.avgKeep)}
-            </p>
-          </div>
-          <div className="bg-[#232f3e] px-3 py-2.5">
-            <p className="text-[10px] font-semibold tracking-[0.14em] text-[#f4c928] uppercase">
-              Paydays
-            </p>
-            <p className="mt-0.5 text-[22px] font-semibold leading-none tabular-nums">
-              {stats.payday}
-            </p>
-          </div>
-          <div className="bg-[#232f3e] px-3 py-2.5">
-            <p className="text-[10px] font-semibold tracking-[0.14em] text-[#f4c928] uppercase">
-              Thin eBay
-            </p>
-            <p className="mt-0.5 text-[22px] font-semibold leading-none tabular-nums">
-              {stats.thin}
-            </p>
-          </div>
-          <div className="bg-[#232f3e] px-3 py-2.5">
-            <p className="text-[10px] font-semibold tracking-[0.14em] text-[#f4c928] uppercase">
-              Avg score
-            </p>
-            <p className="mt-0.5 text-[22px] font-semibold leading-none tabular-nums">
-              {stats.avgScore || "—"}
-            </p>
-          </div>
-        </div>
-        <div className="flex items-end gap-4 px-3 py-2">
-          <div className="min-w-0 flex-1">
-            <p className="text-[10px] font-semibold tracking-[0.14em] text-white/45 uppercase">
-              Keep by ASIN
-            </p>
-            <KeepSpark hits={hits} mode={mode} />
-          </div>
+        <div className="flex flex-wrap items-center gap-2 bg-[#37475a] px-4 py-2">
+          <p className="text-[12px] text-white/70">Manage Inventory</p>
+          <span className="text-white/30">|</span>
           {view === "live" ? (
-            <div className="flex items-center gap-2 pb-0.5">
+            <>
               <button
                 type="button"
                 disabled={locked}
                 onClick={() => setLiveOn((on) => !on)}
-                className="h-9 bg-[#f4c928] px-4 text-[13px] font-semibold text-[#141414] disabled:opacity-40"
+                className="h-8 bg-[#f4c928] px-4 text-[13px] font-semibold text-[#141414] disabled:opacity-40"
               >
                 {liveOn ? "Stop live scan" : "Start live scan"}
               </button>
@@ -959,11 +902,45 @@ export function AmazonAutoImportPanel({
                   placeholder="Your cost $"
                   inputMode="decimal"
                   disabled={locked}
-                  className="h-9 w-28 border border-white/20 bg-[#1b2430] px-3 text-[13px] text-white outline-none placeholder:text-white/40"
+                  className="h-8 w-28 border border-white/20 bg-[#232f3e] px-3 text-[13px] text-white outline-none placeholder:text-white/40"
                 />
               ) : null}
+            </>
+          ) : (
+            <p className="text-[12px] text-white/70">Search by product, ASIN, or Amazon link</p>
+          )}
+        </div>
+      </div>
+
+      <div className="shrink-0 border-b border-[#d5d9d9] bg-[#eaeded] px-3 py-3">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-2 lg:grid-cols-7">
+          {[
+            ["Session spread", <MoneyTicker key="spread" value={sessionProfit} className="block text-[22px] font-semibold leading-none" />],
+            ["Analyzed", analyzedTotal],
+            ["On the board", hits.length],
+            ["Avg keep", signedMoney(stats.avgKeep)],
+            ["Paydays", stats.payday],
+            ["Thin eBay", stats.thin],
+            ["Avg score", stats.avgScore || "—"],
+          ].map(([label, value]) => (
+            <div
+              key={String(label)}
+              className="border border-[#d5d9d9] bg-white px-3 py-2.5 shadow-[0_1px_0_rgba(15,17,17,0.04)]"
+            >
+              <p className="text-[11px] font-semibold tracking-[0.04em] text-[#565959]">
+                {label}
+              </p>
+              <div className="mt-0.5 text-[22px] font-semibold leading-none tabular-nums text-[#0f1111]">
+                {value}
+              </div>
             </div>
-          ) : null}
+          ))}
+        </div>
+        <div className="mt-3 border border-[#d5d9d9] bg-white px-3 py-2">
+          <p className="text-[11px] font-semibold tracking-[0.04em] text-[#565959]">
+            Keep by ASIN
+          </p>
+          <KeepSpark hits={hits} mode={mode} />
         </div>
       </div>
       <p className="sr-only">Channel</p>
@@ -1112,7 +1089,7 @@ export function AmazonAutoImportPanel({
         <p className="mt-2 text-[13px] text-destructive">{error}</p>
       ) : null}
 
-      <div className="mt-3 flex min-h-0 flex-1 overflow-hidden border border-[#d5d9d9] bg-white">
+      <div className="mx-3 mb-0 mt-0 flex min-h-0 flex-1 overflow-hidden border border-[#d5d9d9] bg-white">
         <div className="min-w-0 flex-1 overflow-auto">
           <table className="w-full min-w-[980px] border-collapse text-left">
             <thead className="sticky top-0 z-[1] bg-[#f3f3f3] text-[11px] font-semibold tracking-wide text-[#565959] uppercase">
@@ -1241,9 +1218,9 @@ export function AmazonAutoImportPanel({
         </aside>
       </div>
 
-      <div className="sticky bottom-0 z-10 mt-0 border-t border-[#141414] bg-[#111] p-3 text-white">
+      <div className="sticky bottom-0 z-10 border-t border-[#d5d9d9] bg-white p-3">
         <div className="mb-2 flex items-baseline justify-between gap-3">
-          <p className="text-[12px] text-white/60">
+          <p className="text-[12px] text-[#565959]">
             {selected.length
               ? `${selected.length} selected · Live opportunities`
               : hits.length
@@ -1253,7 +1230,7 @@ export function AmazonAutoImportPanel({
           {selected.length ? (
             <MoneyTicker
               value={selectedProfit}
-              className="text-[22px] font-semibold text-[#f4c928]"
+              className="text-[22px] font-semibold text-[#0f1111]"
             />
           ) : null}
         </div>
@@ -1261,7 +1238,7 @@ export function AmazonAutoImportPanel({
           type="button"
           disabled={locked || !selected.length}
           onClick={() => void importSelected()}
-          className="h-12 w-full bg-[#f4c928] text-[15px] font-semibold text-[#141414] disabled:opacity-40"
+          className="h-10 w-full bg-[#f4c928] text-[13px] font-semibold text-[#141414] disabled:opacity-40"
         >
           {importActionLabel(mode, selected.length, importing)}
         </button>

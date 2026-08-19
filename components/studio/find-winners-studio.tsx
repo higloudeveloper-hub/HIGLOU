@@ -3,7 +3,6 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { StudioFrame } from "@/components/layout/studio-frame";
 import { AmazonAutoImportPanel } from "@/components/listing/wizard/amazon-auto-import";
 import type { OpportunityMode } from "@/lib/opportunity/types";
 
@@ -92,16 +91,5 @@ export function FindWinnersStudio() {
     }
   };
 
-  return (
-    <StudioFrame
-      kicker="Business reports"
-      title="Find winners"
-      hint="Amazon inventory dashboard — keep after fees, live BSR and eBay ask."
-      scroll={false}
-    >
-      <div className="flex min-h-0 flex-1 flex-col">
-        <AmazonAutoImportPanel busy={busy} onImport={importWinners} />
-      </div>
-    </StudioFrame>
-  );
+  return <AmazonAutoImportPanel busy={busy} onImport={importWinners} />;
 }

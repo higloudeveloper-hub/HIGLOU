@@ -445,13 +445,14 @@ export function AmazonAutoImportPanel({
       while (!cancelled && liveOnRef.current) {
         const target = nextLiveScanTarget(step);
         setScanLabel(target.label);
+        setQueries([target.query]);
         setSearching(true);
         setError(null);
         try {
           const found = await requestOpportunities({
-            query: "",
+            query: target.query,
             categoryId: target.categoryId,
-            limit: 5,
+            limit: 3,
             mode: modeRef.current,
             onlySellable:
               modeRef.current === "amazon_to_ebay"
@@ -459,7 +460,7 @@ export function AmazonAutoImportPanel({
                 : onlySellableRef.current,
             cost: costRef.current,
             seed: target.seed,
-            excludeAsins: liveHitsRef.current.map((hit) => hit.asin).slice(0, 40),
+            excludeAsins: liveHitsRef.current.map((hit) => hit.asin).slice(0, 80),
           });
           if (cancelled || !liveOnRef.current) break;
           if (found.ok) {

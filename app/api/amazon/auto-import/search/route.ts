@@ -26,7 +26,7 @@ const bodySchema = z.object({
   onlySellable: z.boolean().optional().default(true),
   cost: z.number().positive().max(100000).optional(),
   seed: z.coerce.number().int().optional().default(0),
-  excludeAsins: z.array(z.string().min(10).max(12)).max(40).optional().default([]),
+  excludeAsins: z.array(z.string().min(10).max(12)).max(80).optional().default([]),
 });
 
 export async function POST(request: Request) {

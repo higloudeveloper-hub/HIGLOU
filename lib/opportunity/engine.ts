@@ -17,6 +17,7 @@ import type { KeepaSnapshot } from "@/lib/keepa/parse";
 import { searchEbayLivePrices } from "@/lib/ebay/live-prices";
 import { opportunitySearchText } from "@/lib/opportunity/categories";
 import {
+  diversifyOpportunityHits,
   isCrowdedBestseller,
   pickCategoryQueries,
 } from "@/lib/opportunity/niches";
@@ -263,7 +264,7 @@ export async function findOpportunities(opts: {
         extra: query,
         generic: keywords,
         seed: opts.seed,
-        count: 3,
+        count: query ? 1 : 3,
       });
   const asin = parseAmazonLink(query)?.asin || "";
   if (!query && !category && !fromId.category && !asin && !keepaRoot && !queries.length) {
@@ -508,8 +509,8 @@ export async function findOpportunities(opts: {
   const passing = priced.filter((hit) =>
     passesMainOpportunityScreen(hit, { requireProfit }),
   );
-  const ranked = sortByOpportunityScore(passing.length ? passing : priced).slice(
-    0,
+  const ranked = diversifyOpportunityHits(
+    sortByOpportunityScore(passing.length ? passing : priced),
     limit,
   );
   return {

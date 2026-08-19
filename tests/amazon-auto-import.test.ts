@@ -23,6 +23,7 @@ import {
   isCrowdedBestseller,
   mergeOpportunityHits,
   nextLiveScanTarget,
+  opportunityFingerprint,
   pickCategoryQueries,
   CATEGORY_NICHES,
 } from "@/lib/opportunity/niches";
@@ -59,7 +60,9 @@ describe("Amazon auto-import ranking", () => {
   it("rotates specific product types instead of the same Amazon bestsellers", () => {
     const first = pickCategoryQueries({ categoryId: "home", seed: 0, count: 3 });
     const next = pickCategoryQueries({ categoryId: "home", seed: 3, count: 3 });
-    expect(first).toEqual([...CATEGORY_NICHES.home.slice(0, 3)]);
+    expect(first[0]).toBe(CATEGORY_NICHES.home[0]);
+    expect(first[1]).not.toBe(CATEGORY_NICHES.home[1]);
+    expect(new Set(first).size).toBe(3);
     expect(next[0]).not.toBe(first[0]);
     expect(
       pickCategoryQueries({ categoryId: "home", extra: "nailer", seed: 0 }),
@@ -73,10 +76,14 @@ describe("Amazon auto-import ranking", () => {
       categoryId: "home",
       label: "Home & Kitchen",
       seed: 0,
+      query: CATEGORY_NICHES.home[0],
     });
+    expect(nextLiveScanTarget(1).categoryId).toBe("office");
+    expect(nextLiveScanTarget(1).query).toBe(CATEGORY_NICHES.office[0]);
     expect(nextLiveScanTarget(8)).toMatchObject({
       categoryId: "home",
       seed: 1,
+      query: CATEGORY_NICHES.home[1],
     });
     const merged = mergeOpportunityHits(
       [{ asin: "B0OLD00001", score: 40 } as OpportunityProduct],
@@ -109,6 +116,31 @@ describe("Amazon auto-import ranking", () => {
     );
     expect(kept[0].netProfit).toBe(38.46);
     expect(kept[0].amazonPrice).toBe(12);
+    expect(
+      opportunityFingerprint(
+        "ROYAL CRAFT WOOD Luxury Bamboo Kitchen Drawer Organizer Extra Wide",
+      ),
+    ).toBe(
+      opportunityFingerprint("SpaceAid Bamboo Expandable Drawer Organizer"),
+    );
+    const sameKind = mergeOpportunityHits(
+      [
+        {
+          asin: "B0BAMBOO01",
+          score: 40,
+          title: "ROYAL CRAFT WOOD Luxury Bamboo Kitchen Drawer Organizer",
+        } as OpportunityProduct,
+      ],
+      [
+        {
+          asin: "B0BAMBOO02",
+          score: 39,
+          title: "SpaceAid Bamboo Expandable Drawer Organizer",
+        } as OpportunityProduct,
+      ],
+    );
+    expect(sameKind).toHaveLength(1);
+    expect(sameKind[0].asin).toBe("B0BAMBOO01");
   });
   it("builds keywords from a model and category without the seed ASIN", () => {
     expect(
@@ -390,7 +422,8 @@ describe("Amazon auto-import stays an eBay draft flow", () => {
     const engine = readRepo("lib/opportunity/engine.ts");
     expect(engine).toMatch(/skipAmazonGate/);
     expect(engine).toMatch(/keepaFindAsins/);
-    expect(engine).toMatch(/pickCategoryQueries/);
+    expect(engine).toMatch(/diversifyOpportunityHits/);
+    expect(panel).toMatch(/query: target\.query/);
     expect(engine).toMatch(/isCrowdedBestseller/);
     expect(engine).toMatch(/sort: keepaOn \? "review-rank" : "featured"/);
     expect(engine).toMatch(/checkAmazonEligibility/);

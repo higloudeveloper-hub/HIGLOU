@@ -105,6 +105,81 @@ export const CATEGORY_NICHES: Record<string, readonly string[]> = {
   ],
 };
 
+export function opportunityFingerprint(title: string): string {
+  const stemmed = String(title || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(
+      /\b(the|and|for|with|set|pack|inch|inches|cm|mm|pcs|pc|piece|pieces|luxury|premium|adjustable|expandable|large|small|mini|new|best|home|kitchen|wood|wooden|bamboo|silicone|plastic|black|white|gray|grey|royal|craft)\b/g,
+      " ",
+    )
+    .replace(/\b\d+[a-z]?\b/g, " ")
+    .replace(/\b(\w{4,})s\b/g, "$1")
+    .replace(/\s+/g, " ")
+    .trim();
+  const words = [...new Set(stemmed.split(" ").filter((word) => word.length > 3))];
+  const type = [
+    "organizer",
+    "divider",
+    "caddy",
+    "holder",
+    "rack",
+    "tray",
+    "bin",
+    "mat",
+    "pad",
+    "glove",
+    "knife",
+    "level",
+    "clamp",
+    "hose",
+    "saucer",
+    "scoop",
+    "stand",
+    "liner",
+    "shear",
+    "gland",
+    "grommet",
+    "cutter",
+    "hoop",
+    "stapler",
+    "whiteboard",
+  ].find((word) => words.includes(word));
+  const object = [
+    "drawer",
+    "spice",
+    "cable",
+    "desk",
+    "door",
+    "sink",
+    "tool",
+    "shoe",
+    "closet",
+    "plant",
+    "pet",
+    "hose",
+    "file",
+    "monitor",
+    "laptop",
+    "paper",
+    "utensil",
+    "lid",
+    "egg",
+    "board",
+    "dish",
+    "fridge",
+    "pantry",
+    "jewelry",
+    "hat",
+    "vacuum",
+    "cube",
+  ].find((word) => words.includes(word) && word !== type);
+  const other = words.find((word) => word !== type && word !== object) || "";
+  if (type && object) return `${object} ${type}`;
+  if (type && other) return `${other} ${type}`;
+  return words.slice(0, 3).sort().join(" ");
+}
+
 export function pickCategoryQueries(opts: {
   categoryId?: string;
   extra?: string;
@@ -123,9 +198,14 @@ export function pickCategoryQueries(opts: {
   }
   const count = Math.min(Math.max(opts.count ?? 3, 1), 4);
   const start = Math.abs(Math.floor(Number(opts.seed) || 0)) % niches.length;
+  const stride = Math.max(1, Math.floor(niches.length / count));
   const picked: string[] = [];
-  for (let i = 0; i < Math.min(count, niches.length); i += 1) {
-    picked.push(niches[(start + i) % niches.length]);
+  const seen = new Set<string>();
+  for (let i = 0; i < niches.length && picked.length < count; i += 1) {
+    const term = niches[(start + i * stride) % niches.length];
+    if (seen.has(term)) continue;
+    seen.add(term);
+    picked.push(term);
   }
   return picked;
 }
@@ -139,14 +219,20 @@ export function nextLiveScanTarget(step: number): {
   categoryId: string;
   label: string;
   seed: number;
+  query: string;
 } {
   const cats = OPPORTUNITY_CATEGORIES;
   const index = Math.max(0, Math.floor(Number(step) || 0));
   const row = cats[index % cats.length];
+  const niches = CATEGORY_NICHES[row.id] || [];
+  const nicheIndex = niches.length
+    ? Math.floor(index / cats.length) % niches.length
+    : 0;
   return {
     categoryId: row.id,
     label: row.label,
-    seed: Math.floor(index / cats.length),
+    seed: nicheIndex,
+    query: niches[nicheIndex] || row.query,
   };
 }
 
@@ -180,6 +266,24 @@ function mergeHit(
   };
 }
 
+export function diversifyOpportunityHits(
+  hits: OpportunityProduct[],
+  cap = 24,
+): OpportunityProduct[] {
+  const ranked = [...hits].sort((a, b) => (b.score || 0) - (a.score || 0));
+  const out: OpportunityProduct[] = [];
+  const fingerprints = new Set<string>();
+  for (const hit of ranked) {
+    const fingerprint =
+      opportunityFingerprint(hit.title) || String(hit.asin || "").toUpperCase();
+    if (fingerprint && fingerprints.has(fingerprint)) continue;
+    if (fingerprint) fingerprints.add(fingerprint);
+    out.push(hit);
+    if (out.length >= cap) break;
+  }
+  return out;
+}
+
 export function mergeOpportunityHits(
   current: OpportunityProduct[],
   incoming: OpportunityProduct[],
@@ -190,7 +294,5 @@ export function mergeOpportunityHits(
     const prev = map.get(hit.asin);
     map.set(hit.asin, prev ? mergeHit(prev, hit) : hit);
   }
-  return [...map.values()]
-    .sort((a, b) => b.score - a.score)
-    .slice(0, cap);
+  return diversifyOpportunityHits([...map.values()], cap);
 }

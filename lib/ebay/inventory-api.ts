@@ -409,6 +409,23 @@ export async function clearOffersForSku(accessToken: string, sku: string) {
   }
 }
 
+export async function deleteInventoryItemGroup(
+  accessToken: string,
+  inventoryItemGroupKey: string,
+) {
+  const key = toEbayInventorySku(inventoryItemGroupKey);
+  if (!key) return;
+  try {
+    await ebayFetch(
+      accessToken,
+      `/sell/inventory/v1/inventory_item_group/${encodeURIComponent(key)}`,
+      { method: "DELETE" },
+    );
+  } catch {
+    // No leftover group — single-item publish can continue.
+  }
+}
+
 /**
  * Ensure Higlou ship-from location exists (2525 Market St, Logansport, IN).
  * Required before offers and helps avoid LOGISTICS_INFO_IS_MISSING on policies.

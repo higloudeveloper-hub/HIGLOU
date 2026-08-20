@@ -10,7 +10,9 @@ import {
   getValidAccessToken,
 } from "@/lib/ebay/oauth";
 import {
+  clearOffersForSku,
   createOrReplaceInventoryItem,
+  deleteInventoryItemGroup,
   publishOffer,
   sanitizeEbayUpc,
   upsertOfferForSku,
@@ -20,9 +22,9 @@ import {
   listingToInventoryItem,
   listingToOfferInput,
 } from "@/lib/ebay/listing-to-inventory";
-import { publishEbayVariationGroup, planVariationGroup } from "@/lib/ebay/publish-variation-group";
+import { planVariationGroup } from "@/lib/ebay/publish-variation-group";
 import { variationsFromListing } from "@/lib/listing/variations";
-import { toEbayListingTitle } from "@/lib/ebay/listing-helpers";
+import { toEbayListingTitle, toEbayInventorySku } from "@/lib/ebay/listing-helpers";
 import { ensureEbayCompatibleImageUrls } from "@/lib/ebay/ensure-ebay-images";
 import {
   ensureHiglouBusinessPolicies,
@@ -636,76 +638,26 @@ async function postEbayPublish(request: Request) {
     else listing.upc = "";
 
     const variationSet = variationsFromListing(listing);
-    let variationPublished: { offerId: string; listingId: string } | null =
-      null;
+    let variationPublished = null as {
+      offerId: string;
+      listingId: string;
+    } | null;
     let preparedStore: Awaited<
       ReturnType<typeof prepareStoreCategoriesForPublish>
     > | null = null;
 
-    if (variationSet && planVariationGroup(variationSet, listing.sku)) {
-      const variationOffer = listingToOfferInput(listing, {
-        fulfillmentPolicyId: listing.shippingPolicyId,
-        paymentPolicyId: listing.paymentPolicyId,
-        returnPolicyId: listing.returnPolicyId,
-      });
-      try {
-        preparedStore = await prepareStoreCategoriesForPublish(accessToken, {
-          title: listing.title,
-          sku: listing.sku,
-          categoryId: listing.categoryId,
-          categoryName: listing.categoryName,
-          brand: listing.brand,
-          productType: listing.productType || listing.type,
-        });
-        if (preparedStore.storeCategoryNames.length) {
-          variationOffer.storeCategoryNames = preparedStore.storeCategoryNames;
-        }
-      } catch (prepareError) {
-        console.warn(
-          "[ebay/publish] prepare store folders",
-          prepareError instanceof Error ? prepareError.message : prepareError,
-        );
-      }
-      variationPublished = await publishEbayVariationGroup({
-        accessToken,
-        listing,
-        set: variationSet,
-        inventory,
-        offer: variationOffer,
-        aspectCardinality,
-        allowedAspectValues: aspectMeta.allowedValues,
-        live: data.mode === "live",
-        hostImages: (urls) =>
-          ensureEbayCompatibleImageUrls({
-            urls,
-            userId: auth.user.id,
-            accessToken,
-          }),
-      }).catch(async (error) => {
-        const message = error instanceof Error ? error.message : String(error);
-        if (/VARIATIONS_TOO_COMPLEX|25013|too many trait values/i.test(message)) {
-          console.warn("[ebay/publish] variation group 25013, listing as one item");
-          return null;
-        }
-        if (!/25001|core inventory service internal/i.test(message)) throw error;
-        await new Promise((resolve) => setTimeout(resolve, 1500));
-        return publishEbayVariationGroup({
-          accessToken,
-          listing,
-          set: variationSet,
-          inventory,
-          offer: variationOffer,
-          aspectCardinality,
-          allowedAspectValues: aspectMeta.allowedValues,
-          live: data.mode === "live",
-          hostImages: (urls) =>
-            ensureEbayCompatibleImageUrls({
-              urls,
-              userId: auth.user.id,
-              accessToken,
-            }),
-        });
-      });
+    // Publish as one eBay item (no Color/Size dropdown). Variation groups were
+    // blocking every listing with 25002; leftover groups from those attempts
+    // are deleted so the parent SKU can go live alone.
+    const leftoverGroup = variationSet
+      ? planVariationGroup(variationSet, listing.sku)
+      : null;
+    const leftoverGroupKey =
+      leftoverGroup?.groupKey ||
+      `${toEbayInventorySku(listing.sku)}G`.slice(0, 50);
+    await deleteInventoryItemGroup(accessToken, leftoverGroupKey);
+    for (const sku of leftoverGroup?.variantSkus || []) {
+      await clearOffersForSku(accessToken, sku);
     }
     if (!variationPublished) {
     try {

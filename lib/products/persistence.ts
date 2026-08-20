@@ -157,6 +157,74 @@ export const productBodySchema = z.object({
     .default([]),
 });
 
+const PRODUCT_JSON_TO_COLUMN: Record<string, string> = {
+  title: "title",
+  subtitle: "subtitle",
+  brand: "brand",
+  collection: "collection",
+  model: "model",
+  sku: "sku",
+  amazonAsin: "amazon_asin",
+  upc: "upc",
+  mpn: "mpn",
+  categoryId: "category_id",
+  categoryName: "category_name",
+  condition: "condition",
+  conditionId: "condition_id",
+  conditionDescription: "condition_description",
+  price: "price",
+  quantity: "quantity",
+  listingFormat: "listing_format",
+  descriptionHtml: "description_html",
+  descriptionSummary: "description_summary",
+  features: "features",
+  setIncludes: "set_includes",
+  colors: "colors",
+  materials: "materials",
+  size: "size",
+  productType: "product_type",
+  shippingPolicyId: "shipping_policy_id",
+  returnPolicyId: "return_policy_id",
+  paymentPolicyId: "payment_policy_id",
+  handlingTime: "handling_time",
+  itemLocation: "item_location",
+  postalCode: "postal_code",
+  country: "country",
+  status: "status",
+  packageWeightLbs: "package_weight_lbs",
+  packageWeightOz: "package_weight_oz",
+  packageLengthIn: "package_length_in",
+  packageWidthIn: "package_width_in",
+  packageDepthIn: "package_depth_in",
+  packageSource: "package_source",
+};
+
+/**
+ * Partial product PATCH. Zod defaults must not fill omitted keys — a price-only
+ * save was wiping category_id/title and eBay publish then failed with "(empty)".
+ */
+export function parseProductPatch(json: unknown): {
+  data: Partial<z.infer<typeof productBodySchema>>;
+  columns: Record<string, unknown>;
+  requested: Set<string>;
+} {
+  if (!json || typeof json !== "object" || Array.isArray(json)) {
+    throw new Error("Send a JSON object");
+  }
+  const requested = new Set(Object.keys(json));
+  const data = productBodySchema.partial().parse(json);
+  const columns: Record<string, unknown> = {};
+  for (const key of requested) {
+    if (key === "images" || key === "itemSpecifics") continue;
+    if (!Object.prototype.hasOwnProperty.call(data, key)) continue;
+    const value = data[key as keyof typeof data];
+    if (value === undefined) continue;
+    const column = PRODUCT_JSON_TO_COLUMN[key];
+    if (column) columns[column] = value;
+  }
+  return { data, columns, requested };
+}
+
 export function mapProductRow(
   row: Record<string, unknown>,
   images: Array<Record<string, unknown>> = [],

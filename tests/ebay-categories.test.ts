@@ -171,6 +171,16 @@ describe("resolveEbayCategory", () => {
     expect(result.categoryId).toBe("2996");
     expect(result.categoryName).toMatch(/Wallet/i);
   });
+
+  it("maps a women's RFID card-holder wallet to the women's wallet leaf", () => {
+    const result = resolveEbayCategory({
+      title:
+        "Airkit Small Wallet Women RFID, PU Leather Card Holder with Keychain | Slim",
+      productType: "Wallet",
+    });
+    expect(["2996", "45258"]).toContain(result.categoryId);
+    expect(result.categoryName).toMatch(/Wallet/i);
+  });
 });
 
 describe("draftDefaultsToPolicyValues", () => {

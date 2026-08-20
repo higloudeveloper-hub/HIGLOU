@@ -448,9 +448,20 @@ async function postWinnerImport(request: Request) {
         supabase: auth.supabase,
         fast: false,
       });
-      const categoryId = analyzed.categoryId || ready.categoryId;
+      const catalog = resolveEbayCategory({
+        categoryId: analyzed.categoryId || ready.categoryId,
+        categoryName: analyzed.categoryName || ready.categoryName,
+        title: analyzed.title || item.title,
+        brand: analyzed.brand || item.brand,
+        features: analyzed.features.length ? analyzed.features : item.features,
+        productType: analyzed.productType || analyzed.title || item.title,
+      });
+      const categoryId = catalog.categoryId || analyzed.categoryId || ready.categoryId;
       const categoryName =
-        analyzed.categoryName || ready.categoryName || body.category;
+        catalog.categoryName ||
+        analyzed.categoryName ||
+        ready.categoryName ||
+        body.category;
       const data = productBodySchema.parse({
         title: toEbayListingTitle(analyzed.title) || item.brand || item.asin,
         brand: analyzed.brand,

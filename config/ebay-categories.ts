@@ -147,6 +147,8 @@ export const EBAY_CATEGORY_OPTIONS: EbayCategoryOption[] = [
       "wallet",
       "rfid wallet",
       "bifold wallet",
+      "card holder",
+      "cardholder",
       "card holder wallet",
       "money clip",
       "rfid blocking wallet",
@@ -155,7 +157,14 @@ export const EBAY_CATEGORY_OPTIONS: EbayCategoryOption[] = [
   {
     id: "45258",
     name: "Wallets",
-    keywords: ["women wallet", "womens wallet", "ladies wallet", "coin purse"],
+    keywords: [
+      "women wallet",
+      "womens wallet",
+      "wallet women",
+      "ladies wallet",
+      "coin purse",
+      "women card holder",
+    ],
   },
   {
     id: "2993",
@@ -821,6 +830,14 @@ export function scoreEbayCategories(input: {
       if (option.id === "176988") score += 60;
       else if (option.id === "220" || /toy|doll/i.test(option.name)) {
         score = Math.max(0, score - 50);
+      }
+    }
+
+    if (/\bwallet|card\s*holder|cardholder|rfid\s*blocking\b/i.test(haystack)) {
+      if (option.id === "45258" && /\b(women|woman|ladies|lady|womens)\b/i.test(haystack)) {
+        score += 24;
+      } else if (option.id === "2996") {
+        score += 18;
       }
     }
 

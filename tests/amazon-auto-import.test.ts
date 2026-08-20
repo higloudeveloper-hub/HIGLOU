@@ -464,7 +464,9 @@ describe("Amazon auto-import stays an eBay draft flow", () => {
     expect(search).not.toMatch(/status: 409/);
     expect(importRoute).toMatch(/toEbayListingTitle/);
     expect(importRoute).toMatch(/ebayReadyImportFields/);
-    expect(importRoute).toMatch(/analyzed\.categoryId \|\| ready\.categoryId/);
+    expect(importRoute).toMatch(
+      /catalog\.categoryId \|\| analyzed\.categoryId \|\| ready\.categoryId/,
+    );
     expect(importRoute).toMatch(/\? "Ready" : "Needs Review"/);
     expect(importRoute).toMatch(/ebayProfitPrice/);
     expect(importRoute).toMatch(/id: primarySaved\.id/);

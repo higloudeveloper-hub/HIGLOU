@@ -151,6 +151,27 @@ export async function ensureListableEbayCategory(
     }
   }
 
+  const resolved = resolveEbayCategory({
+    categoryId: isListableEbayCategoryId(currentId) ? currentId : "",
+    categoryName: input.categoryName,
+    productType: input.productType,
+    title: input.title,
+    brand: input.brand,
+  });
+
+  // Empty category (batch Amazon import / price PATCH): use the catalog leaf
+  // before Taxonomy. Taxonomy often returns nothing for long Amazon titles.
+  if (
+    !isListableEbayCategoryId(currentId) &&
+    isListableEbayCategoryId(resolved.categoryId)
+  ) {
+    return {
+      categoryId: resolved.categoryId,
+      categoryName: resolved.categoryName,
+      source: "catalog",
+    };
+  }
+
   if (query) {
     try {
       const suggestions = await suggestEbayLeafCategories(accessToken, query);
@@ -165,14 +186,6 @@ export async function ensureListableEbayCategory(
       // Fall through to curated resolver.
     }
   }
-
-  const resolved = resolveEbayCategory({
-    categoryId: isListableEbayCategoryId(currentId) ? currentId : "",
-    categoryName: input.categoryName,
-    productType: input.productType,
-    title: input.title,
-    brand: input.brand,
-  });
 
   if (isListableEbayCategoryId(resolved.categoryId)) {
     return {

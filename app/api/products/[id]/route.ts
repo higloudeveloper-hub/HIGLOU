@@ -3,6 +3,7 @@ import { requireUser } from "@/lib/auth/require-user";
 import { createClient } from "@/lib/supabase/server";
 import {
   mapProductRow,
+  parseProductPatch,
   productBodySchema,
   syncRelated,
 } from "@/lib/products/persistence";
@@ -42,49 +43,6 @@ async function loadProductBundle(
   );
 }
 
-const fieldMap: Record<string, string> = {
-  title: "title",
-  subtitle: "subtitle",
-  brand: "brand",
-  collection: "collection",
-  model: "model",
-  sku: "sku",
-  amazonAsin: "amazon_asin",
-  upc: "upc",
-  mpn: "mpn",
-  categoryId: "category_id",
-  categoryName: "category_name",
-  condition: "condition",
-  conditionId: "condition_id",
-  conditionDescription: "condition_description",
-  price: "price",
-  quantity: "quantity",
-  listingFormat: "listing_format",
-  descriptionHtml: "description_html",
-  descriptionSummary: "description_summary",
-  itemSpecifics: "item_specifics",
-  features: "features",
-  setIncludes: "set_includes",
-  colors: "colors",
-  materials: "materials",
-  size: "size",
-  productType: "product_type",
-  shippingPolicyId: "shipping_policy_id",
-  returnPolicyId: "return_policy_id",
-  paymentPolicyId: "payment_policy_id",
-  handlingTime: "handling_time",
-  itemLocation: "item_location",
-  postalCode: "postal_code",
-  country: "country",
-  status: "status",
-  packageWeightLbs: "package_weight_lbs",
-  packageWeightOz: "package_weight_oz",
-  packageLengthIn: "package_length_in",
-  packageWidthIn: "package_width_in",
-  packageDepthIn: "package_depth_in",
-  packageSource: "package_source",
-};
-
 export async function GET(_request: Request, context: RouteContext) {
   const auth = await requireUser();
   if (!auth.ok) return auth.response;
@@ -111,17 +69,11 @@ export async function PATCH(request: Request, context: RouteContext) {
 
   try {
     const json = await request.json();
-    const data = productBodySchema.partial().parse(json);
+    const { data, columns: patchColumns, requested } = parseProductPatch(json);
     const columns: Record<string, unknown> = {
+      ...patchColumns,
       updated_at: new Date().toISOString(),
     };
-
-    for (const [key, value] of Object.entries(data)) {
-      if (value === undefined) continue;
-      if (key === "images") continue;
-      const column = fieldMap[key];
-      if (column) columns[column] = value;
-    }
 
     const { data: updated, error } = await auth.supabase
       .from("products")
@@ -138,12 +90,14 @@ export async function PATCH(request: Request, context: RouteContext) {
       return NextResponse.json({ error: "Product not found" }, { status: 404 });
     }
 
-    if (data.images || data.itemSpecifics) {
+    if (requested.has("images") || requested.has("itemSpecifics")) {
       await syncRelated(auth.supabase, auth.user.id, id, {
         ...productBodySchema.parse({}),
         ...data,
-        images: data.images ?? [],
-        itemSpecifics: data.itemSpecifics ?? [],
+        images: requested.has("images") ? (data.images ?? []) : [],
+        itemSpecifics: requested.has("itemSpecifics")
+          ? (data.itemSpecifics ?? [])
+          : [],
       });
     }
 

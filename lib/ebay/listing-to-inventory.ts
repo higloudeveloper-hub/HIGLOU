@@ -70,7 +70,7 @@ export function listingToEbayAspects(listing: ProductListing): EbayAspects {
     const name = key.replace(/^C:/, "").trim();
     const trimmed = String(value || "").trim();
     if (!name || !trimmed) continue;
-    if (/^(upc|asin|amazon\s*asin|epid)$/i.test(name)) continue;
+    if (/^(upc|asin|amazon\s*asin|epid|__higlou_variations__|higlou\s*variations)$/i.test(name)) continue;
     // Keep raw string; sanitizeEbayAspects enforces SINGLE/MULTI cardinality.
     aspects[name] = [trimmed];
   }
@@ -130,7 +130,7 @@ export function listingToInventoryItem(
 
   // Strip identifiers eBay Inventory does not want as aspects.
   for (const key of Object.keys(aspects)) {
-    if (!/^(upc|asin|amazon\s*asin|epid)$/i.test(key)) continue;
+    if (!/^(upc|asin|amazon\s*asin|epid|__higlou_variations__|higlou\s*variations)$/i.test(key)) continue;
     delete aspects[key];
   }
 

@@ -14,6 +14,7 @@ export type BatchPriceItem = {
   error?: string;
   listingId?: string;
   ebayUrl?: string;
+  variationCount?: number;
 };
 
 export function BatchPricePublish({
@@ -44,8 +45,8 @@ export function BatchPricePublish({
           Set eBay prices, then they go live
         </p>
         <p className="mt-0.5 text-[13px] text-[#707070]">
-          Higlou already filled photos, title, and category. You only edit the
-          selling price.
+          Higlou already filled photos, title, category, and variations.
+          You only edit the selling price.
         </p>
         {progress ? (
           <p className="mt-2 inline-flex items-center gap-2 text-[13px] text-[#141414]">
@@ -77,6 +78,9 @@ export function BatchPricePublish({
               </p>
               <p className="mt-0.5 text-[12px] text-[#707070]">
                 {row.store === "amazon" ? "Amazon" : "Home Depot"}
+                {row.variationCount && row.variationCount >= 2
+                  ? ` · ${row.variationCount} variations`
+                  : ""}
                 {row.sourcePrice ? ` · cost ${money(row.sourcePrice)}` : ""}
                 {row.status === "live" ? " · Live on eBay" : ""}
                 {row.status === "error" && row.error ? ` · ${row.error}` : ""}

@@ -26,6 +26,8 @@ import {
 } from "@/lib/ebay/description-html";
 import { STORE_BRANDING_DEFAULTS } from "@/config/store-branding";
 import { parseAmazonLink } from "@/lib/amazon/asin";
+import { withEncodedVariations } from "@/lib/listing/variations";
+import type { ListingVariationSet } from "@/lib/listing/variations";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -95,6 +97,7 @@ type ImportedListing = {
     mimeType: string;
     sizeBytes: number;
   }>;
+  variations: ListingVariationSet | null;
 };
 
 function listingFromDraft(
@@ -124,6 +127,7 @@ function listingFromDraft(
     reviewCount: null,
     images: wizardImages,
     dbImages: draft.images,
+    variations: draft.variations || null,
   };
 }
 
@@ -180,12 +184,15 @@ async function analyzeWinnerListing(
       condition: "New",
     }),
     descriptionHtml: "",
-    itemSpecifics: [
-      { key: "C:ASIN", label: "ASIN", value: item.asin },
-      ...(item.brand
-        ? [{ key: "C:Brand", label: "Brand", value: item.brand }]
-        : []),
-    ],
+    itemSpecifics: withEncodedVariations(
+      [
+        { key: "C:ASIN", label: "ASIN", value: item.asin },
+        ...(item.brand
+          ? [{ key: "C:Brand", label: "Brand", value: item.brand }]
+          : []),
+      ],
+      item.variations,
+    ),
   };
   base.descriptionHtml = buildListingDescriptionHtml(
     {
@@ -270,7 +277,15 @@ async function analyzeWinnerListing(
       price: item.price ?? analysis.price,
       size: analysis.size || "",
       productType: analysis.type || "",
-      colors: analysis.colors,
+      colors: analysis.colors.length
+        ? analysis.colors
+        : [
+            ...new Set(
+              (item.variations?.variants || [])
+                .map((row) => row.aspects.Color)
+                .filter(Boolean),
+            ),
+          ],
       materials: analysis.materials,
       features,
       descriptionSummary: summary,
@@ -284,7 +299,7 @@ async function analyzeWinnerListing(
         },
         STORE_BRANDING_DEFAULTS,
       ),
-      itemSpecifics: specifics,
+      itemSpecifics: withEncodedVariations(specifics, item.variations),
     };
   } catch {
     return base;
@@ -576,6 +591,7 @@ async function postWinnerImport(request: Request) {
         title: row.title,
         imageUrl: item?.images[0]?.url || "",
         price: item?.price ?? null,
+        variationCount: item?.variations?.variants.length || 0,
       };
     }),
     listings: saved.map((row) => {
@@ -586,6 +602,7 @@ async function postWinnerImport(request: Request) {
         title: row.title,
         imageUrl: item?.images[0]?.url || "",
         price: item?.price ?? null,
+        variationCount: item?.variations?.variants.length || 0,
       };
     }),
     skipped,

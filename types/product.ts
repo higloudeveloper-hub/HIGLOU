@@ -30,6 +30,13 @@ export interface ItemSpecificField {
   isCustom?: boolean;
 }
 
+export interface ListingVariation {
+  asin: string;
+  sku: string;
+  aspects: Record<string, string>;
+  imageUrls: string[];
+}
+
 export interface ProductListing {
   id: string;
   status: ProductStatus;
@@ -72,6 +79,9 @@ export interface ProductListing {
   descriptionSummary: string;
   descriptionHtml: string;
   itemSpecifics: ItemSpecificField[];
+  /** Child ASINs when Amazon has Color/Size (or similar) twister options. */
+  variations?: ListingVariation[];
+  variationAxes?: string[];
   images: ProductImage[];
   shippingPolicyId: string;
   returnPolicyId: string;

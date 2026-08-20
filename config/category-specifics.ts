@@ -51,6 +51,8 @@ export const CATEGORY_SPECIFICS: CategorySpecificConfig[] = [
       "57990",
       "2996",
       "45258",
+      "11507",
+      "45238",
     ],
     fields: [
       { key: "brand", label: "Brand", csvColumn: "C:Brand", required: true },

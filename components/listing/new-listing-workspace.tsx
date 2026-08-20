@@ -28,6 +28,11 @@ import {
   toEbayListingTitle,
 } from "@/lib/ebay/listing-helpers";
 import {
+  variationSummary,
+  variationsFromListing,
+  withEncodedVariations,
+} from "@/lib/listing/variations";
+import {
   estimatePackageAndShipping,
   listingHasMeasuredPackage,
   seedPackageOnListing,
@@ -698,16 +703,18 @@ export function NewListingWorkspace({
           ? String(prev.amazonAsin).trim().toUpperCase()
           : "")
       : amazonAsinFromListing(prev);
-    const itemSpecifics =
+    const itemSpecifics = withEncodedVariations(
       importedAsin &&
-      !mappedSpecifics.some((field) =>
-        /^(asin|amazon\s*asin)$/i.test(String(field.label || "").replace(/^C:/, "")),
-      )
+        !mappedSpecifics.some((field) =>
+          /^(asin|amazon\s*asin)$/i.test(String(field.label || "").replace(/^C:/, "")),
+        )
         ? [
             { key: "C:ASIN", label: "ASIN", value: importedAsin },
             ...mappedSpecifics,
           ]
-        : mappedSpecifics;
+        : mappedSpecifics,
+      variationsFromListing(prev),
+    );
 
     const category = resolveEbayCategory({
       categoryId: analysis.categoryId || prev.categoryId,
@@ -1098,6 +1105,7 @@ export function NewListingWorkspace({
         asin?: string;
         amazonUrl?: string;
         images?: ProductImage[];
+        variations?: import("@/lib/listing/variations").ListingVariationSet | null;
       } | null;
       if (!response.ok || !body?.ok || !body.images?.length) {
         const message = body?.error || `${storeLabel} import failed`;
@@ -1133,25 +1141,33 @@ export function NewListingWorkspace({
         images: body.images,
         descriptionHtml: fromHomeDepot ? "" : listing.descriptionHtml,
         descriptionSummary: fromHomeDepot ? "" : listing.descriptionSummary,
-        itemSpecifics: importedAsin
-          ? [
-              {
-                key: "C:ASIN",
-                label: "ASIN",
-                value: importedAsin,
-              },
-              ...withoutAsin,
-            ]
-          : fromHomeDepot
-            ? withoutAsin
-            : listing.itemSpecifics,
+        itemSpecifics: withEncodedVariations(
+          importedAsin
+            ? [
+                {
+                  key: "C:ASIN",
+                  label: "ASIN",
+                  value: importedAsin,
+                },
+                ...withoutAsin,
+              ]
+            : fromHomeDepot
+              ? withoutAsin
+              : listing.itemSpecifics,
+          fromHomeDepot ? null : body.variations,
+        ),
         condition: newCondition,
         conditionId: match?.conditionId ?? listing.conditionId,
         status: "Uploaded",
         updatedAt: new Date().toISOString(),
       };
       setListing(seeded);
-      toast.success(`${storeLabel} photos loaded — analyzing for eBay.`);
+      const variationNote = variationSummary(body.variations || null);
+      toast.success(
+        variationNote
+          ? `${storeLabel} photos loaded — ${variationNote}.`
+          : `${storeLabel} photos loaded — analyzing for eBay.`,
+      );
       await analyzeProduct({
         baseListing: seeded,
         images: body.images,
@@ -1215,6 +1231,7 @@ export function NewListingWorkspace({
             title: string;
             imageUrl?: string;
             price?: number | null;
+            variationCount?: number;
           }>;
           id?: string;
           title?: string;
@@ -1249,6 +1266,7 @@ export function NewListingWorkspace({
             sourcePrice: null,
             ebayPrice: row.price ?? null,
             status: "ready",
+            variationCount: row.variationCount || 0,
           });
         }
         if (body?.skipped?.length) {

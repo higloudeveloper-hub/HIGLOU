@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { createClient } from "@/lib/supabase/server";
+import { variationsFromListing } from "@/lib/listing/variations";
 
 const softString = z.preprocess(
   (value) => (value == null ? "" : String(value)),
@@ -230,6 +231,29 @@ export function mapProductRow(
   images: Array<Record<string, unknown>> = [],
   specifics: Array<Record<string, unknown>> = [],
 ) {
+  const itemSpecifics = specifics.length
+    ? specifics.map((s) => ({
+        key: String(s.csv_column || ""),
+        label: String(s.label || ""),
+        value: String(s.value || ""),
+        required: Boolean(s.required),
+        confidence:
+          s.confidence === null || s.confidence === undefined
+            ? undefined
+            : Number(s.confidence),
+        isCustom: Boolean(s.is_custom),
+      }))
+    : Array.isArray(row.item_specifics)
+      ? (row.item_specifics as Array<{
+          key: string;
+          label: string;
+          value: string;
+          required?: boolean;
+          confidence?: number;
+          isCustom?: boolean;
+        }>)
+      : [];
+  const variationSet = variationsFromListing({ itemSpecifics });
   return {
     id: row.id,
     userId: row.user_id,
@@ -253,21 +277,7 @@ export function mapProductRow(
     listingFormat: row.listing_format,
     descriptionHtml: row.description_html,
     descriptionSummary: row.description_summary,
-    itemSpecifics: specifics.length
-      ? specifics.map((s) => ({
-          key: s.csv_column,
-          label: s.label,
-          value: s.value,
-          required: s.required,
-          confidence:
-            s.confidence === null || s.confidence === undefined
-              ? undefined
-              : Number(s.confidence),
-          isCustom: s.is_custom,
-        }))
-      : Array.isArray(row.item_specifics)
-        ? row.item_specifics
-        : [],
+    itemSpecifics,
     features: row.features,
     setIncludes: row.set_includes,
     colors: row.colors,
@@ -316,6 +326,8 @@ export function mapProductRow(
       mimeType: img.mime_type,
       sizeBytes: img.size_bytes,
     })),
+    variations: variationSet?.variants,
+    variationAxes: variationSet?.axisNames,
   };
 }
 

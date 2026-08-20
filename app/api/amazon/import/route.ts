@@ -74,6 +74,7 @@ export async function POST(request: Request) {
       features: product.features,
       sku: product.sku,
       images: toWizardImages(product.images),
+      variations: product.variations,
     });
   } catch (error) {
     const message =

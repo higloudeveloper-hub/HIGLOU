@@ -114,6 +114,20 @@ export const EBAY_CATEGORY_OPTIONS: EbayCategoryOption[] = [
     keywords: ["boxer", "briefs", "underwear"],
   },
   {
+    id: "11507",
+    name: "Panties",
+    keywords: [
+      "panties",
+      "panty",
+      "thong",
+      "g-string",
+      "g string",
+      "women underwear",
+      "womens underwear",
+      "lingerie panty",
+    ],
+  },
+  {
     id: "155183",
     name: "Men's Hats",
     keywords: ["cap", "hat", "beanie", "fitted hat"],
@@ -713,6 +727,7 @@ const APPAREL_CATEGORY_IDS = new Set([
   "63863",
   "1059",
   "45238",
+  "11507",
   "155183",
   "95672",
 ]);
@@ -831,6 +846,11 @@ export function scoreEbayCategories(input: {
       else if (option.id === "220" || /toy|doll/i.test(option.name)) {
         score = Math.max(0, score - 50);
       }
+    }
+
+    if (/\b(thong|g-string|panties|panty)\b/i.test(haystack)) {
+      if (option.id === "11507") score += 36;
+      if (option.id === "45238") score = 0;
     }
 
     if (/\bwallet|card\s*holder|cardholder|rfid\s*blocking\b/i.test(haystack)) {

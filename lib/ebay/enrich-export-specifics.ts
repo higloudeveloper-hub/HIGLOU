@@ -375,7 +375,7 @@ export function enrichItemSpecificsForExport(input: {
   }
 
   for (const key of Object.keys(columns)) {
-    if (/^C:(asin|amazon\s*asin|epid)$/i.test(key)) {
+    if (/^C:(asin|amazon\s*asin|epid|__higlou_variations__|higlou\s*variations)$/i.test(key)) {
       delete columns[key];
     }
   }

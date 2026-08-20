@@ -20,6 +20,8 @@ import {
   listingToInventoryItem,
   listingToOfferInput,
 } from "@/lib/ebay/listing-to-inventory";
+import { publishEbayVariationGroup } from "@/lib/ebay/publish-variation-group";
+import { variationsFromListing } from "@/lib/listing/variations";
 import { toEbayListingTitle } from "@/lib/ebay/listing-helpers";
 import { ensureEbayCompatibleImageUrls } from "@/lib/ebay/ensure-ebay-images";
 import {
@@ -622,6 +624,47 @@ async function postEbayPublish(request: Request) {
     if (safeUpc) inventory.upc = safeUpc;
     else listing.upc = "";
 
+    const variationSet = variationsFromListing(listing);
+    let variationPublished: { offerId: string; listingId: string } | null =
+      null;
+    let preparedStore: Awaited<
+      ReturnType<typeof prepareStoreCategoriesForPublish>
+    > | null = null;
+
+    if (variationSet && variationSet.variants.length >= 2) {
+      const variationOffer = listingToOfferInput(listing, {
+        fulfillmentPolicyId: listing.shippingPolicyId,
+        paymentPolicyId: listing.paymentPolicyId,
+        returnPolicyId: listing.returnPolicyId,
+      });
+      try {
+        preparedStore = await prepareStoreCategoriesForPublish(accessToken, {
+          title: listing.title,
+          sku: listing.sku,
+          categoryId: listing.categoryId,
+          categoryName: listing.categoryName,
+          brand: listing.brand,
+          productType: listing.productType || listing.type,
+        });
+        if (preparedStore.storeCategoryNames.length) {
+          variationOffer.storeCategoryNames = preparedStore.storeCategoryNames;
+        }
+      } catch (prepareError) {
+        console.warn(
+          "[ebay/publish] prepare store folders",
+          prepareError instanceof Error ? prepareError.message : prepareError,
+        );
+      }
+      variationPublished = await publishEbayVariationGroup({
+        accessToken,
+        listing,
+        set: variationSet,
+        inventory,
+        offer: variationOffer,
+        aspectCardinality,
+        live: data.mode === "live",
+      });
+    } else {
     try {
       await createOrReplaceInventoryItem(accessToken, inventory, {
         aspectCardinality,
@@ -743,6 +786,7 @@ async function postEbayPublish(request: Request) {
         throw inventoryError;
       }
     }
+    }
 
     const offerInput = listingToOfferInput(listing, {
       fulfillmentPolicyId: listing.shippingPolicyId,
@@ -752,9 +796,7 @@ async function postEbayPublish(request: Request) {
 
     // Inventory listings cannot get Store folders via Trading revise — set
     // storeCategoryNames on the offer before publishOffer.
-    let preparedStore: Awaited<
-      ReturnType<typeof prepareStoreCategoriesForPublish>
-    > | null = null;
+    if (!variationPublished) {
     try {
       preparedStore = await prepareStoreCategoriesForPublish(accessToken, {
         title: listing.title,
@@ -773,8 +815,10 @@ async function postEbayPublish(request: Request) {
         prepareError instanceof Error ? prepareError.message : prepareError,
       );
     }
+    }
 
-    let offerId = "";
+    let offerId = variationPublished?.offerId || "";
+    if (!variationPublished) {
     try {
       ({ offerId } = await upsertOfferForSku(accessToken, offerInput));
     } catch (offerError) {
@@ -919,9 +963,11 @@ async function postEbayPublish(request: Request) {
         throw offerError;
       }
     }
+    }
 
-    let listingId = "";
-    let status = "UNPUBLISHED";
+    let listingId = variationPublished?.listingId || "";
+    let status =
+      data.mode === "live" && listingId ? "PUBLISHED" : "UNPUBLISHED";
     let storeOrganize: {
       storePath: string;
       storePath2: string | null;
@@ -932,9 +978,11 @@ async function postEbayPublish(request: Request) {
     let storeOrganizeWarning: string | null = null;
 
     if (data.mode === "live") {
-      const published = await publishOffer(accessToken, offerId);
-      listingId = published.listingId;
-      status = "PUBLISHED";
+      if (!variationPublished) {
+        const published = await publishOffer(accessToken, offerId);
+        listingId = published.listingId;
+        status = "PUBLISHED";
+      }
 
       // Same pattern as Settings → Organize Store: classify → create folder → assign.
       // Inventory listings fall back to updateOffer storeCategoryNames.

@@ -616,3 +616,53 @@ export async function getOffersForSku(accessToken: string, sku: string) {
     return [];
   }
 }
+
+export async function createOrReplaceInventoryItemGroup(
+  accessToken: string,
+  input: {
+    inventoryItemGroupKey: string;
+    variantSKUs: string[];
+    title: string;
+    description: string;
+    imageUrls: string[];
+    variesBy: {
+      specifications: Array<{ name: string; values: string[] }>;
+      aspectsImageVariesBy?: string[];
+    };
+  },
+) {
+  const key = toEbayInventorySku(input.inventoryItemGroupKey);
+  const body = {
+    inventoryItemGroupKey: key,
+    variantSKUs: input.variantSKUs.map((sku) => toEbayInventorySku(sku)),
+    title: toEbayListingTitle(input.title),
+    description: input.description,
+    imageUrls: input.imageUrls.slice(0, 24),
+    variesBy: input.variesBy,
+  };
+  await ebayFetch(
+    accessToken,
+    `/sell/inventory/v1/inventory_item_group/${encodeURIComponent(key)}`,
+    { method: "PUT", body: JSON.stringify(body) },
+  );
+  return { inventoryItemGroupKey: key };
+}
+
+export async function publishOfferByInventoryItemGroup(
+  accessToken: string,
+  inventoryItemGroupKey: string,
+  marketplaceId = "EBAY_US",
+) {
+  const json = (await ebayFetch(
+    accessToken,
+    `/sell/inventory/v1/offer/publish_by_inventory_item_group`,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        inventoryItemGroupKey: toEbayInventorySku(inventoryItemGroupKey),
+        marketplaceId,
+      }),
+    },
+  )) as { listingId?: string };
+  return { listingId: String(json.listingId || "") };
+}

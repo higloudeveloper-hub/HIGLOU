@@ -2,6 +2,7 @@ import { parseAmazonLink } from "@/lib/amazon/asin";
 import { nanoid } from "nanoid";
 import { toEbayListingTitle } from "@/lib/ebay/listing-helpers";
 import { upgradeAmazonImage } from "@/lib/amazon/parse-product";
+import type { ListingVariationSet } from "@/lib/listing/variations";
 
 export type AmazonImportImage = {
   publicUrl: string;
@@ -23,6 +24,7 @@ export type AmazonImportDraft = {
   features: string[];
   sku: string;
   images: AmazonImportImage[];
+  variations: ListingVariationSet | null;
 };
 
 function remotePhoto(url: string, asin: string, index: number): AmazonImportImage {
@@ -90,6 +92,7 @@ export async function importAmazonCatalogProduct(opts: {
       features: [],
       sku: `AMZ-${asin}`,
       images: fallbackImage ? [remotePhoto(fallbackImage, asin, 0)] : [],
+      variations: null,
     };
   }
 
@@ -150,6 +153,7 @@ export async function importAmazonCatalogProduct(opts: {
     features: product.features,
     sku: `AMZ-${product.asin}`,
     images,
+    variations: product.variations || null,
   };
 }
 

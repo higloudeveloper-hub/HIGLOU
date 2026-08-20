@@ -1,4 +1,5 @@
 import { parseAmazonLink } from "@/lib/amazon/asin";
+import { amazonVariationHintCount } from "@/lib/amazon/parse-variations";
 import {
   collectAmazonImageUrlsFromHtml,
   isCaptchaPage,
@@ -26,10 +27,7 @@ function galleryCount(html: string, asin?: string): number {
 }
 
 function variationHintCount(html: string): number {
-  if (!html) return 0;
-  return (html.match(
-    /dimensionToAsinMap|dimensionValuesDisplayData|colorToAsin|inline-twister|twister-plus/gi,
-  ) || []).length;
+  return amazonVariationHintCount(html);
 }
 
 function scoreHtml(html: string, asin?: string): number {

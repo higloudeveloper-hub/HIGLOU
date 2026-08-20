@@ -72,6 +72,71 @@ describe("parseAmazonVariations", () => {
     expect(set?.variants[0]?.aspects.Color).toBe("Multicolor 8 Pack");
   });
 
+  it("reads unquoted dataToReturn twister JSON", () => {
+    const set = parseAmazonVariations(`
+      P.register("twister-js-init-dpx-data", function() {
+        var dataToReturn = {
+          dimensions : ["color_name"],
+          variationDisplayLabels : ["Color"],
+          variationValues : { color_name : ["Bamboo 11 Pack", "Rose Gold 8 Pack"] },
+          dimensionToAsinMap : { "0" : "B0173HB5K0", "1" : "B0ROSE8PK0" }
+        };
+        return dataToReturn;
+      });
+    `);
+    expect(set?.variants).toHaveLength(2);
+    expect(
+      set?.variants.find((row) => row.asin === "B0173HB5K0")?.aspects.Color,
+    ).toBe("Bamboo 11 Pack");
+  });
+
+  it("skips an empty dimensionToAsinMap before the real one", () => {
+    const set = parseAmazonVariations(`
+      "dimensionToAsinMap": {}
+      "variationValues": {"foo":["x"]}
+      "dimensions":["color_name"]
+      "variationDisplayLabels":["Color"]
+      "variationValues":{"color_name":["Bamboo 11 Pack","Pink 8 Pack"]}
+      "dimensionToAsinMap":{"0":"B0173HB5K0","1":"B0PINK08PK"}
+    `);
+    expect(set?.variants.map((row) => row.asin).sort()).toEqual([
+      "B0173HB5K0",
+      "B0PINK08PK",
+    ]);
+  });
+
+  it("reads image swatches whose label is on a nested img alt", () => {
+    const set = parseAmazonVariations(`
+      <li id="color_name_0" class="swatchSelect" data-defaultasin="B0173HB5K0"><img alt="Bamboo 11 Pack" /></li>
+      <li id="color_name_1" class="swatchAvailable" data-defaultasin="B0ROSE8PK0"><img alt="Rose Gold 8 Pack" /></li>
+    `);
+    expect(set?.variants).toHaveLength(2);
+    expect(set?.variants[0]?.aspects.Color).toBe("Bamboo 11 Pack");
+  });
+
+  it("reads data-dp-url child ASINs in a twister row", () => {
+    const set = parseAmazonVariations(`
+      <li class="swatchAvailable" data-dp-url="/foo/dp/B0173HB5K0/ref=twister_swatch" title="Bamboo 11 Pack"></li>
+      <li class="swatchAvailable" data-dp-url="/foo/dp/B0ROSE8PK0/ref=twister_swatch" title="Rose Gold 8 Pack"></li>
+    `);
+    expect(set?.variants).toHaveLength(2);
+  });
+
+  it("reads twister-plus dimensionList valueToAsinList", () => {
+    const set = parseAmazonVariations(`
+      "dimensionList":[{
+        "dimensionName":"color_name",
+        "displayName":"Color",
+        "valueToAsinList":[
+          {"asin":"B0173HB5K0","value":"Bamboo 11 Pack"},
+          {"asin":"B0ROSE8PK0","value":"Rose Gold 8 Pack"}
+        ]
+      }]
+    `);
+    expect(set?.axisNames).toEqual(["Color"]);
+    expect(set?.variants).toHaveLength(2);
+  });
+
   it("falls back to colorToAsin when size is not in the page", () => {
     const set = parseAmazonVariations(`
       'colorToAsin': { 'initial': { 'Black': 'B0BLACK001', 'Red': 'B0RED00001' } }

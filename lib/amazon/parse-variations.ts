@@ -56,11 +56,7 @@ function blockAfterKey(
   key: string,
   openCh: "{" | "[",
 ): string {
-  const re = new RegExp(
-    `['"]${key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}['"]\\s*:`,
-    "i",
-  );
-  const match = re.exec(html);
+  const match = keyColonRe(key, "i").exec(html);
   if (!match || match.index == null) return "";
   let i = match.index + match[0].length;
   while (i < html.length && /\s/.test(html[i])) i += 1;
@@ -84,11 +80,39 @@ function parseJs(raw: string): unknown {
     return JSON.parse(
       text
         .replace(/'/g, '"')
-        .replace(/([{,]\s*)([A-Za-z0-9_]+)\s*:/g, '$1"$2":'),
+        .replace(/([{,]\s*)([A-Za-z0-9_]+)\s*:/g, '$1"$2":')
+        .replace(/,(\s*[}\]])/g, "$1"),
     );
   } catch {
     return null;
   }
+}
+
+function keyColonRe(key: string, flags: string): RegExp {
+  const escaped = key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`(?:['"]${escaped}['"]|\\b${escaped}\\b)\\s*:`, flags);
+}
+
+function isNonEmptyRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(
+    value &&
+      typeof value === "object" &&
+      !Array.isArray(value) &&
+      Object.keys(value as object).length,
+  );
+}
+
+function asinFromUnknown(value: unknown): string {
+  if (typeof value === "string" && isAsin(value.trim())) {
+    return value.trim().toUpperCase();
+  }
+  if (!value || typeof value !== "object") return "";
+  const rec = value as Record<string, unknown>;
+  for (const key of ["asin", "ASIN", "asinVariation", "value"]) {
+    const found = String(rec[key] || "").trim().toUpperCase();
+    if (isAsin(found)) return found;
+  }
+  return "";
 }
 
 function axisName(raw: string): string {
@@ -154,10 +178,7 @@ function allBlocksAfterKey(
   key: string,
   openCh: "{" | "[",
 ): string[] {
-  const re = new RegExp(
-    `['"]${key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}['"]\\s*:`,
-    "gi",
-  );
+  const re = keyColonRe(key, "gi");
   const blocks: string[] = [];
   let match: RegExpExecArray | null = re.exec(html);
   while (match) {
@@ -179,14 +200,17 @@ function allBlocksAfterKey(
   return blocks;
 }
 
-function firstParsedObject(html: string, key: string): Record<string, unknown> | null {
+function allParsedObjects(html: string, key: string): Record<string, unknown>[] {
+  const out: Record<string, unknown>[] = [];
   for (const block of allBlocksAfterKey(html, key, "{")) {
     const parsed = parseJs(block);
-    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-      return parsed as Record<string, unknown>;
-    }
+    if (isNonEmptyRecord(parsed)) out.push(parsed);
   }
-  return null;
+  return out;
+}
+
+function firstParsedObject(html: string, key: string): Record<string, unknown> | null {
+  return allParsedObjects(html, key)[0] || null;
 }
 
 function firstParsedArray(html: string, key: string): unknown[] | null {
@@ -309,16 +333,19 @@ function fromColorToAsin(html: string): ListingVariationSet | null {
   return { axisNames: ["Color"], variants: variants.slice(0, MAX_VARIANTS) };
 }
 
-function fromDimensionToAsinMap(html: string): ListingVariationSet | null {
-  const map = firstParsedObject(html, "dimensionToAsinMap");
-  const valuesObj = firstParsedObject(html, "variationValues");
-  if (!map || !valuesObj) return null;
-  const dimKeysRaw = firstParsedArray(html, "dimensions");
-  const labelsRaw = firstParsedArray(html, "variationDisplayLabels");
+function setFromDimensionMap(
+  map: Record<string, unknown>,
+  valuesObj: Record<string, unknown> | null,
+  dimKeysRaw: unknown[] | null,
+  labelsRaw: unknown[] | null,
+  colorNames: string[],
+): ListingVariationSet | null {
   const dimKeys = (
     Array.isArray(dimKeysRaw) && dimKeysRaw.length
       ? dimKeysRaw.map((row) => String(row || ""))
-      : Object.keys(valuesObj)
+      : valuesObj
+        ? Object.keys(valuesObj)
+        : ["color_name"]
   ).filter(Boolean);
   if (!dimKeys.length) return null;
   const labels = (
@@ -328,9 +355,10 @@ function fromDimensionToAsinMap(html: string): ListingVariationSet | null {
   ).filter(Boolean);
   const variants: ListingVariation[] = [];
   const seen = new Set<string>();
-  for (const [combo, asinRaw] of Object.entries(map)) {
-    const asin = String(asinRaw || "").trim().toUpperCase();
-    if (!isAsin(asin) || seen.has(asin)) continue;
+  const entries = Object.entries(map);
+  entries.forEach(([combo, asinRaw], entryIndex) => {
+    const asin = asinFromUnknown(asinRaw);
+    if (!asin || seen.has(asin)) return;
     const indexes = String(combo)
       .split(/[_-]/)
       .map((part) => Number(part))
@@ -338,15 +366,22 @@ function fromDimensionToAsinMap(html: string): ListingVariationSet | null {
     const aspects: Record<string, string> = {};
     indexes.forEach((index, axisIndex) => {
       const dim = dimKeys[axisIndex];
-      const label = labels[axisIndex] || axisName(dim);
-      if (!dim || !label) return;
-      const list = valuesObj[dim];
-      const text = Array.isArray(list)
+      const label = labels[axisIndex] || axisName(dim) || "Color";
+      const list = valuesObj?.[dim];
+      const fromValues = Array.isArray(list)
         ? cleanValue(String(list[index] || ""))
         : "";
-      if (text) aspects[label] = text;
+      const fromColors =
+        !fromValues && axisIndex === 0
+          ? cleanValue(colorNames[index] || colorNames[entryIndex] || "")
+          : "";
+      const text = fromValues || fromColors;
+      if (label && text) aspects[label] = text;
     });
-    if (!Object.keys(aspects).length) continue;
+    if (!Object.keys(aspects).length && colorNames[entryIndex]) {
+      aspects.Color = colorNames[entryIndex];
+    }
+    if (!Object.keys(aspects).length) return;
     seen.add(asin);
     variants.push({
       asin,
@@ -354,23 +389,109 @@ function fromDimensionToAsinMap(html: string): ListingVariationSet | null {
       aspects,
       imageUrls: [],
     });
+  });
+  if (variants.length < 2) return null;
+  return {
+    axisNames: labels.length
+      ? labels
+      : [...new Set(variants.flatMap((row) => Object.keys(row.aspects)))],
+    variants: variants.slice(0, MAX_VARIANTS),
+  };
+}
+
+function fromDimensionToAsinMap(html: string): ListingVariationSet | null {
+  const maps = allParsedObjects(html, "dimensionToAsinMap");
+  if (!maps.length) return null;
+  const valueBags = allParsedObjects(html, "variationValues");
+  const dimKeysRaw = firstParsedArray(html, "dimensions");
+  const labelsRaw = firstParsedArray(html, "variationDisplayLabels");
+  const colorNames = Object.keys(colorImageMap(html));
+  let best: ListingVariationSet | null = null;
+  for (const map of maps) {
+    const bags = valueBags.length ? valueBags : [null];
+    for (const valuesObj of bags) {
+      const set = setFromDimensionMap(
+        map,
+        valuesObj,
+        dimKeysRaw,
+        labelsRaw,
+        colorNames,
+      );
+      if (set && (!best || set.variants.length > best.variants.length)) {
+        best = set;
+      }
+    }
+  }
+  return best;
+}
+
+function fromDimensionList(html: string): ListingVariationSet | null {
+  const variants: ListingVariation[] = [];
+  const seen = new Set<string>();
+  const axisNames: string[] = [];
+  const lists: unknown[] = [];
+  for (const block of allBlocksAfterKey(html, "dimensionList", "[")) {
+    const parsed = parseJs(block);
+    if (Array.isArray(parsed) && parsed.length) lists.push(...parsed);
+  }
+  for (const dim of lists) {
+    if (!dim || typeof dim !== "object") continue;
+    const rec = dim as Record<string, unknown>;
+    const name = axisName(
+      String(rec.displayName || rec.dimensionName || rec.name || "Color"),
+    );
+    if (name && !axisNames.includes(name)) axisNames.push(name);
+    const rows = rec.valueToAsinList || rec.values || rec.asinList;
+    if (!Array.isArray(rows)) continue;
+    for (const row of rows) {
+      if (!row || typeof row !== "object") continue;
+      const item = row as Record<string, unknown>;
+      const asin = asinFromUnknown(item);
+      const value = cleanValue(
+        String(item.value || item.displayValue || item.name || ""),
+      );
+      if (!asin || !value || seen.has(asin)) continue;
+      seen.add(asin);
+      variants.push({
+        asin,
+        sku: `AMZ-${asin}`,
+        aspects: { [name || "Color"]: value },
+        imageUrls: [],
+      });
+    }
   }
   if (variants.length < 2) return null;
   return {
-    axisNames: labels.length ? labels : [...new Set(variants.flatMap((row) => Object.keys(row.aspects)))],
+    axisNames: axisNames.length ? axisNames : ["Color"],
     variants: variants.slice(0, MAX_VARIANTS),
   };
 }
 
 function aStatePayloads(html: string): unknown[] {
   const out: unknown[] = [];
-  const re = /<script[^>]*type=["']a-state["'][^>]*>([\s\S]*?)<\/script>/gi;
-  let match: RegExpExecArray | null = re.exec(html);
+  const scriptRe = /<script[^>]*type=["']a-state["'][^>]*>([\s\S]*?)<\/script>/gi;
+  let match: RegExpExecArray | null = scriptRe.exec(html);
   while (match) {
     const parsed = parseJs(String(match[1] || "").trim());
     if (parsed) out.push(parsed);
     if (out.length >= 24) break;
-    match = re.exec(html);
+    match = scriptRe.exec(html);
+  }
+  const attrRe = /data-a-state=(["'])([\s\S]*?)\1/gi;
+  let attr = attrRe.exec(html);
+  while (attr) {
+    const parsed = parseJs(String(attr[2] || "").replace(/&quot;/g, '"').trim());
+    if (parsed) out.push(parsed);
+    if (out.length >= 32) break;
+    attr = attrRe.exec(html);
+  }
+  const dataMarker = html.search(/dataToReturn\s*=/);
+  if (dataMarker >= 0) {
+    const brace = html.indexOf("{", dataMarker);
+    if (brace >= 0 && brace - dataMarker < 80) {
+      const parsed = parseJs(extractBalanced(html, brace, "{"));
+      if (parsed) out.push(parsed);
+    }
   }
   return out;
 }
@@ -383,7 +504,9 @@ function bagsFromUnknown(root: unknown, depth = 0): Record<string, unknown>[] {
     rec.dimensionToAsinMap ||
     rec.dimensionValuesDisplayData ||
     rec.colorToAsin ||
-    rec.asinVariationValues
+    rec.asinVariationValues ||
+    rec.dimensionList ||
+    rec.valueToAsinList
   ) {
     bags.push(rec);
   }
@@ -400,6 +523,7 @@ function setFromBag(rec: Record<string, unknown>): ListingVariationSet | null {
   const htmlish = JSON.stringify(rec);
   return (
     fromDimensionToAsinMap(htmlish) ||
+    fromDimensionList(htmlish) ||
     fromDimensionDisplay(htmlish) ||
     fromAsinVariationValues(htmlish) ||
     fromColorToAsin(htmlish)
@@ -408,56 +532,76 @@ function setFromBag(rec: Record<string, unknown>): ListingVariationSet | null {
 
 function fromAStateAndNested(html: string): ListingVariationSet | null {
   let best: ListingVariationSet | null = null;
+  const consider = (set: ListingVariationSet | null) => {
+    if (set && (!best || set.variants.length > best.variants.length)) {
+      best = set;
+    }
+  };
   for (const payload of aStatePayloads(html)) {
     for (const bag of bagsFromUnknown(payload)) {
-      const set = setFromBag(bag);
-      if (set && (!best || set.variants.length > best.variants.length)) {
-        best = set;
-      }
+      consider(setFromBag(bag));
     }
   }
+  consider(fromDimensionList(html));
   const dpx = html.search(/twister-js-init-dpx-data|immutableTwisterData|twister-plus-inline-twister/i);
   if (dpx >= 0) {
-    const brace = html.indexOf("{", dpx);
-    if (brace >= 0 && brace - dpx < 500) {
+    const slice = html.slice(dpx, dpx + 8000);
+    const dataRel = slice.search(/dataToReturn\s*=/);
+    const from = dataRel >= 0 ? dpx + dataRel : dpx;
+    const brace = html.indexOf("{", from);
+    if (brace >= 0 && brace - from < 500) {
       const block = extractBalanced(html, brace, "{");
       const parsed = parseJs(block);
       for (const bag of bagsFromUnknown(parsed)) {
-        const set = setFromBag(bag);
-        if (set && (!best || set.variants.length > best.variants.length)) {
-          best = set;
-        }
+        consider(setFromBag(bag));
       }
     }
   }
   return best;
 }
 
+function swatchLabel(chunk: string): string {
+  for (const attr of ["data-value", "title", "aria-label", "alt"]) {
+    const found = chunk.match(
+      new RegExp(`${attr}=["']([^"']{1,80})["']`, "i"),
+    )?.[1];
+    const text = cleanValue(
+      String(found || "").replace(/^(click to select|select)\s+/i, ""),
+    );
+    if (text && !/^(image|photo|swatch)$/i.test(text)) return text;
+  }
+  return "";
+}
+
 function fromHtmlSwatches(html: string): ListingVariationSet | null {
   const variants: ListingVariation[] = [];
   const seen = new Set<string>();
   const tagRe =
-    /<(?:li|span|button|div)[^>]{0,900}(?:data-defaultasin|data-asin)=["']([A-Z0-9]{10})["'][^>]{0,900}>/gi;
+    /(?:data-defaultasin|data-asin|data-csa-c-item-id)=["'](?:amzn1\.asin\.)?([A-Z0-9]{10})["']|data-dp-url=["'][^"']*\/dp\/([A-Z0-9]{10})/gi;
   let match: RegExpExecArray | null = tagRe.exec(html);
   while (match) {
-    const tag = match[0];
-    const asin = String(match[1] || "").toUpperCase();
+    const asin = String(match[1] || match[2] || "").toUpperCase();
     if (!isAsin(asin) || seen.has(asin)) {
       match = tagRe.exec(html);
       continue;
     }
+    const tagStart = html.lastIndexOf("<", match.index);
+    const tagEnd = html.indexOf(">", match.index);
+    const tag = tagEnd > tagStart ? html.slice(tagStart, tagEnd + 1) : match[0];
+    const inner = tagEnd >= 0 ? html.slice(tagEnd + 1, tagEnd + 420) : "";
+    const nearby = html.slice(
+      Math.max(0, match.index - 240),
+      match.index + 240,
+    );
     if (
-      !/(color_name|size_name|style_name|inline-twister|twister|swatch)/i.test(tag)
+      !/(color_name|size_name|style_name|inline-twister|twister|swatch)/i.test(
+        `${tag}${nearby}`,
+      )
     ) {
       match = tagRe.exec(html);
       continue;
     }
-    const title =
-      tag.match(/(?:title|aria-label|data-value)=["']([^"']{1,80})["']/i)?.[1] ||
-      "";
-    const color = cleanValue(
-      title.replace(/^(click to select|select)\s+/i, ""),
-    );
+    const color = swatchLabel(tag) || swatchLabel(inner);
     if (!color) {
       match = tagRe.exec(html);
       continue;
@@ -490,6 +634,16 @@ function attachColorImages(
   };
 }
 
+/** Real variation JSON / swatch ASINs — not the empty twister-plus widget shell. */
+export function amazonVariationHintCount(html: string): number {
+  if (!html) return 0;
+  return (
+    html.match(
+      /dimensionToAsinMap|dimensionValuesDisplayData|colorToAsin|asinVariationValues|data-defaultasin|data-dp-url/gi,
+    ) || []
+  ).length;
+}
+
 /** Color / size (and similar) child ASINs from an Amazon twister page. */
 export function parseAmazonVariations(html: string): ListingVariationSet | null {
   const decoded = String(html || "")
@@ -504,6 +658,7 @@ export function parseAmazonVariations(html: string): ListingVariationSet | null 
     fromDimensionDisplay(decoded) ||
     fromAsinVariationValues(decoded) ||
     fromColorToAsin(decoded) ||
+    fromDimensionList(decoded) ||
     fromHtmlSwatches(decoded);
   if (!set) return null;
   const axes = set.axisNames.filter((name) => {

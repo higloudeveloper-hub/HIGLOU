@@ -39,6 +39,7 @@ import {
   inferAspectValueFromText,
   inferVoltageFromText,
   inferSizeTypeFromText,
+  nextEbayVolumeValue,
   parseMissingAspectFromEbayError,
 } from "@/lib/ebay/infer-voltage";
 import { ensureInferredDimensionAspects, fallbackDimensionAspect } from "@/lib/ebay/infer-item-dimensions";
@@ -665,6 +666,7 @@ async function postEbayPublish(request: Request) {
         inventory,
         offer: variationOffer,
         aspectCardinality,
+        allowedAspectValues: aspectMeta.allowedValues,
         live: data.mode === "live",
         hostImages: (urls) =>
           ensureEbayCompatibleImageUrls({
@@ -687,6 +689,7 @@ async function postEbayPublish(request: Request) {
           inventory,
           offer: variationOffer,
           aspectCardinality,
+          allowedAspectValues: aspectMeta.allowedValues,
           live: data.mode === "live",
           hostImages: (urls) =>
             ensureEbayCompatibleImageUrls({
@@ -701,6 +704,7 @@ async function postEbayPublish(request: Request) {
     try {
       await createOrReplaceInventoryItem(accessToken, inventory, {
         aspectCardinality,
+        allowedAspectValues: aspectMeta.allowedValues,
       });
     } catch (inventoryError) {
       const invMsg =
@@ -751,6 +755,12 @@ async function postEbayPublish(request: Request) {
         if (/^brand$/i.test(missingAspect)) {
           filled = "Unbranded";
         }
+        if (/^volume$/i.test(missingAspect)) {
+          filled = nextEbayVolumeValue(
+            inventory.aspects?.Volume?.[0] || filled || "3.4 oz",
+            aspectMeta.allowedValues.get("volume"),
+          );
+        }
 
         if (
           !filled &&
@@ -799,6 +809,7 @@ async function postEbayPublish(request: Request) {
           }
           await createOrReplaceInventoryItem(accessToken, inventory, {
             aspectCardinality,
+            allowedAspectValues: aspectMeta.allowedValues,
           });
         } else if (/25002|invalid value.*upc|upc has an invalid/i.test(invMsg)) {
           inventory.upc = undefined;
@@ -808,6 +819,7 @@ async function postEbayPublish(request: Request) {
           }
           await createOrReplaceInventoryItem(accessToken, inventory, {
             aspectCardinality,
+            allowedAspectValues: aspectMeta.allowedValues,
           });
         } else {
           throw inventoryError;
@@ -821,6 +833,7 @@ async function postEbayPublish(request: Request) {
         }
         await createOrReplaceInventoryItem(accessToken, inventory, {
           aspectCardinality,
+          allowedAspectValues: aspectMeta.allowedValues,
         });
       } else {
         throw inventoryError;
@@ -901,6 +914,7 @@ async function postEbayPublish(request: Request) {
         inventory.sku = retrySku;
         await createOrReplaceInventoryItem(accessToken, inventory, {
           aspectCardinality,
+          allowedAspectValues: aspectMeta.allowedValues,
         });
         ({ offerId } = await upsertOfferForSku(accessToken, {
           ...offerInput,
@@ -968,6 +982,7 @@ async function postEbayPublish(request: Request) {
           );
           await createOrReplaceInventoryItem(accessToken, inventory, {
             aspectCardinality: adultMeta.cardinality,
+            allowedAspectValues: adultMeta.allowedValues,
           });
           ({ offerId } = await upsertOfferForSku(accessToken, {
             ...offerInput,

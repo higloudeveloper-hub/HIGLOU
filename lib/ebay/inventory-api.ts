@@ -3,7 +3,7 @@ import { sanitizeEbayAspects } from "@/lib/ebay/sanitize-aspects";
 import { HIGLOU_WAREHOUSE } from "@/config/warehouse";
 import { validateBarcode } from "@/lib/barcode/validators";
 import { toEbayListingTitle, toEbayInventorySku } from "@/lib/ebay/listing-helpers";
-import { resolveEbayBrand } from "@/lib/ebay/infer-voltage";
+import { resolveEbayBrand, applyEbayVolumeAspect } from "@/lib/ebay/infer-voltage";
 
 /**
  * Only send UPC/EAN values eBay will accept (valid GS1 checksum).
@@ -145,6 +145,8 @@ export async function createOrReplaceInventoryItem(
     aspectCardinality?: Map<string, "SINGLE" | "MULTI">;
     /** Variation axes must stay one value — commas in scent names must not split. */
     lockAspects?: Record<string, string>;
+    /** Taxonomy recommended values; Volume is selection-only on fragrance. */
+    allowedAspectValues?: Map<string, string[]>;
   },
 ) {
   const product: Record<string, unknown> = {
@@ -188,6 +190,17 @@ export async function createOrReplaceInventoryItem(
     aspects[name] = [value];
   }
   aspects.Brand = [brand];
+  const existingVolume =
+    options?.lockAspects?.Volume ||
+    Object.entries(aspects).find(([key]) => key.toLowerCase() === "volume")?.[1]?.[0] ||
+    "";
+  if (existingVolume) {
+    applyEbayVolumeAspect(
+      aspects,
+      existingVolume,
+      options?.allowedAspectValues?.get("volume"),
+    );
+  }
   // Never send invalid UPC in aspects either (same 25002 failure mode).
   for (const key of Object.keys(aspects)) {
     if (!/^upc$/i.test(key)) continue;

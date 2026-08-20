@@ -46,6 +46,7 @@ const FORCE_SINGLE_ASPECTS = new Set(
     "Lighting Technology",
     "Shade Shape",
     "Shade Material",
+    "Volume",
   ].map((n) => n.toLowerCase()),
 );
 
@@ -129,12 +130,15 @@ type TaxonomyAspect = {
     aspectRequired?: boolean;
     aspectUsage?: string;
   };
+  aspectValues?: Array<{ localizedValue?: string }>;
 };
 
 export type CategoryAspectMeta = {
   cardinality: Map<string, AspectCardinality>;
   /** Original-cased names eBay marked required for this category. */
   required: string[];
+  /** Recommended/allowed values from Taxonomy, keyed by lowercase aspect name. */
+  allowedValues: Map<string, string[]>;
 };
 
 /**
@@ -146,8 +150,9 @@ export async function fetchCategoryAspectMeta(
 ): Promise<CategoryAspectMeta> {
   const cardinality = new Map<string, AspectCardinality>();
   const required: string[] = [];
+  const allowedValues = new Map<string, string[]>();
   const id = String(categoryId || "").trim();
-  if (!id) return { cardinality, required };
+  if (!id) return { cardinality, required, allowedValues };
 
   const cfg = getEbayConfig();
   try {
@@ -162,7 +167,7 @@ export async function fetchCategoryAspectMeta(
         },
       },
     );
-    if (!res.ok) return { cardinality, required };
+    if (!res.ok) return { cardinality, required, allowedValues };
     const json = (await res.json()) as {
       aspects?: TaxonomyAspect[];
     };
@@ -180,11 +185,16 @@ export async function fetchCategoryAspectMeta(
       if (aspect.aspectConstraint?.aspectRequired || usage === "REQUIRED") {
         required.push(name);
       }
+      const allowed = (aspect.aspectValues || [])
+        .map((row) => String(row.localizedValue || "").trim())
+        .filter(Boolean)
+        .slice(0, 400);
+      if (allowed.length) allowedValues.set(name.toLowerCase(), allowed);
     }
   } catch {
     // Non-fatal — sanitize with defaults.
   }
-  return { cardinality, required };
+  return { cardinality, required, allowedValues };
 }
 
 /**

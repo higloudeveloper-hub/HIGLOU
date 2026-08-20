@@ -19,8 +19,10 @@ import {
   ensureInferredFragranceAspects,
   inferFilledAspectForEbayError,
   inferVolumeFromText,
+  nextEbayVolumeValue,
   parseMissingAspectFromEbayError,
   resolveEbayBrand,
+  resolveEbayVolume,
 } from "@/lib/ebay/infer-voltage";
 
 export type VariationGroupPlan = {
@@ -249,6 +251,7 @@ async function putVariantInventory(opts: {
   lockAspects: Record<string, string>;
   imageUrls: string[];
   aspectCardinality?: Map<string, "SINGLE" | "MULTI">;
+  allowedAspectValues?: Map<string, string[]>;
 }): Promise<void> {
   const payload = {
     ...opts.inventory,
@@ -262,11 +265,13 @@ async function putVariantInventory(opts: {
     opts.listing.title,
   );
   payload.brand = payload.aspects.Brand?.[0] || "Unbranded";
+  const itemOpts = {
+    aspectCardinality: opts.aspectCardinality,
+    lockAspects: opts.lockAspects,
+    allowedAspectValues: opts.allowedAspectValues,
+  };
   try {
-    await createOrReplaceInventoryItem(opts.accessToken, payload, {
-      aspectCardinality: opts.aspectCardinality,
-      lockAspects: opts.lockAspects,
-    });
+    await createOrReplaceInventoryItem(opts.accessToken, payload, itemOpts);
     return;
   } catch (error) {
     const message = errorText(error);
@@ -283,7 +288,7 @@ async function putVariantInventory(opts: {
     ]
       .filter(Boolean)
       .join(" ");
-    const filled = inferFilledAspectForEbayError(missingAspect, hay, {
+    let filled = inferFilledAspectForEbayError(missingAspect, hay, {
       title: opts.listing.title,
       brand: opts.listing.brand,
       model: opts.listing.model,
@@ -296,6 +301,12 @@ async function putVariantInventory(opts: {
       packageWidthIn: opts.listing.packageWidthIn,
       packageDepthIn: opts.listing.packageDepthIn,
     });
+    if (/^volume$/i.test(missingAspect)) {
+      filled = nextEbayVolumeValue(
+        opts.lockAspects.Volume || opts.aspects.Volume?.[0] || filled,
+        opts.allowedAspectValues?.get("volume"),
+      );
+    }
     if (!filled) throw error;
     const brand =
       /^brand$/i.test(missingAspect)
@@ -316,10 +327,11 @@ async function putVariantInventory(opts: {
       payload.brand = brand;
       ensureEbayBrandAspect(payload.aspects, brand, opts.listing.title);
     }
-    await createOrReplaceInventoryItem(opts.accessToken, payload, {
-      aspectCardinality: opts.aspectCardinality,
-      lockAspects: opts.lockAspects,
-    });
+    if (/^volume$/i.test(missingAspect)) {
+      opts.lockAspects.Volume = filled;
+      itemOpts.lockAspects = opts.lockAspects;
+    }
+    await createOrReplaceInventoryItem(opts.accessToken, payload, itemOpts);
   }
 }
 
@@ -330,6 +342,7 @@ export async function publishEbayVariationGroup(opts: {
   inventory: EbayInventoryItemInput;
   offer: EbayOfferInput;
   aspectCardinality?: Map<string, "SINGLE" | "MULTI">;
+  allowedAspectValues?: Map<string, string[]>;
   live: boolean;
   hostImages?: (urls: string[]) => Promise<string[]>;
 }): Promise<{ offerId: string; listingId: string; skipped?: number }> {
@@ -435,13 +448,15 @@ export async function publishEbayVariationGroup(opts: {
       aspects.Volume?.[0] ||
       /\b(fragrance|perfume|parfum|cologne|eau de)\b/i.test(perfumeHay)
     ) {
-      const volume =
+      const volume = resolveEbayVolume(
         inferVolumeFromText(
           [variant?.aspects.Size, opts.listing.size, perfumeHay].join(" "),
           true,
         ) ||
-        aspects.Volume?.[0] ||
-        "3.4 fl oz";
+          aspects.Volume?.[0] ||
+          "3.4 oz",
+        opts.allowedAspectValues?.get("volume"),
+      );
       aspects.Volume = [volume];
       lockAspects.Volume = volume;
     }
@@ -459,6 +474,7 @@ export async function publishEbayVariationGroup(opts: {
         lockAspects,
         imageUrls: variantPhotos,
         aspectCardinality: opts.aspectCardinality,
+        allowedAspectValues: opts.allowedAspectValues,
       });
       await clearOffersForSku(opts.accessToken, sku);
       acceptedSkus.push(sku);
@@ -585,7 +601,7 @@ export async function publishEbayVariationGroup(opts: {
     const message = errorText(error);
     const missing = parseMissingAspectFromEbayError(message);
     if (!/25002/i.test(message) || !missing) return false;
-    const filled = inferFilledAspectForEbayError(missing, fillHay, {
+    let filled = inferFilledAspectForEbayError(missing, fillHay, {
       title: opts.listing.title,
       brand: opts.listing.brand,
       productType: opts.listing.productType || opts.listing.type,
@@ -594,6 +610,16 @@ export async function publishEbayVariationGroup(opts: {
       department: opts.listing.department,
       size: opts.listing.size,
     });
+    if (/^volume$/i.test(missing)) {
+      const current =
+        aspectsBySku.get(groupPlan.variantSkus[0] || "")?.Volume?.[0] ||
+        opts.inventory.aspects?.Volume?.[0] ||
+        filled;
+      filled = nextEbayVolumeValue(
+        current,
+        opts.allowedAspectValues?.get("volume"),
+      );
+    }
     if (!filled) return false;
     if (/^brand$/i.test(missing)) {
       opts.inventory.brand = filled;
@@ -620,31 +646,41 @@ export async function publishEbayVariationGroup(opts: {
         lockAspects,
         imageUrls: photosBySku.get(sku) || opts.inventory.imageUrls,
         aspectCardinality: opts.aspectCardinality,
+        allowedAspectValues: opts.allowedAspectValues,
       });
       await sleep(200);
     }
     return true;
   };
 
+  const putOffers = async (): Promise<string> => {
+    let id = "";
+    for (const sku of groupPlan.variantSkus) {
+      const created = await upsertOfferForSku(opts.accessToken, {
+        ...opts.offer,
+        sku,
+      });
+      if (!id) id = created.offerId;
+    }
+    return id;
+  };
+
   let offerId = "";
   try {
-    for (const sku of groupPlan.variantSkus) {
-      const created = await upsertOfferForSku(opts.accessToken, {
-        ...opts.offer,
-        sku,
-      });
-      if (!offerId) offerId = created.offerId;
-    }
+    offerId = await putOffers();
   } catch (error) {
-    if (!(await restampMissingAspect(error))) throw error;
-    offerId = "";
-    for (const sku of groupPlan.variantSkus) {
-      const created = await upsertOfferForSku(opts.accessToken, {
-        ...opts.offer,
-        sku,
-      });
-      if (!offerId) offerId = created.offerId;
+    let last: unknown = error;
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      if (!(await restampMissingAspect(last))) throw last;
+      try {
+        offerId = await putOffers();
+        last = null;
+        break;
+      } catch (retryError) {
+        last = retryError;
+      }
     }
+    if (last) throw last;
   }
 
   const skipped = planned.variantSkus.length - groupPlan.variantSkus.length;

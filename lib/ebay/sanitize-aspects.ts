@@ -185,10 +185,11 @@ export async function fetchCategoryAspectMeta(
       if (aspect.aspectConstraint?.aspectRequired || usage === "REQUIRED") {
         required.push(name);
       }
+      const cap = name.toLowerCase() === "brand" ? 3000 : 400;
       const allowed = (aspect.aspectValues || [])
         .map((row) => String(row.localizedValue || "").trim())
         .filter(Boolean)
-        .slice(0, 400);
+        .slice(0, cap);
       if (allowed.length) allowedValues.set(name.toLowerCase(), allowed);
     }
   } catch {

@@ -17,7 +17,9 @@ import {
   inferVolumeFromText,
   normalizeEbayBrand,
   nextEbayVolumeValue,
+  resolveEbayBrandForCategory,
   resolveEbayVolume,
+  coerceSelectionAspects,
   ensureInferredFragranceAspects,
   resolveEbayBrand,
 } from "@/lib/ebay/infer-voltage";
@@ -593,6 +595,42 @@ describe("Brand aspect (eBay 25002 Brand)", () => {
         brand: "ASTRID",
       }),
     ).toBe("ASTRID");
+  });
+
+  it("maps boutique shaver brands onto Unbranded when eBay has no Wuudl", () => {
+    expect(
+      resolveEbayBrandForCategory({
+        brand: "Wuudl",
+        title: "Wuudl Double Head Electric Shaver for Women - Pink",
+        allowed: ["Braun", "Philips", "Remington", "Unbranded"],
+      }),
+    ).toBe("Unbranded");
+    expect(
+      resolveEbayBrandForCategory({
+        brand: "Unbranded",
+        title: "Wuudl Double Head Electric Shaver for Women - Pink",
+      }),
+    ).toBe("Unbranded");
+    const aspects: Record<string, string[]> = { Brand: ["Wuudl"] };
+    coerceSelectionAspects(
+      aspects,
+      new Map([["brand", ["Braun", "Philips", "Unbranded"]]]),
+      {
+        title: "Wuudl Double Head Electric Shaver for Women - Pink",
+        brand: "Wuudl",
+      },
+    );
+    expect(aspects.Brand).toEqual(["Unbranded"]);
+    expect(
+      inferFilledAspectForEbayError(
+        "Brand",
+        "Wuudl Double Head Electric Shaver for Women - Pink",
+        {
+          brand: "Wuudl",
+          title: "Wuudl Double Head Electric Shaver for Women - Pink",
+        },
+      ),
+    ).toBe("Unbranded");
   });
 
   it("replaces Does Not Apply Brand before Inventory PUT", () => {

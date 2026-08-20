@@ -318,6 +318,18 @@ export function inferAspectValueFromText(
       title: extras?.title || text,
     });
   }
+  if (name === "type") {
+    const fromType = String(extras?.productType || "").replace(/\s+/g, " ").trim();
+    if (fromType.length >= 2) return fromType.slice(0, 65);
+    return null;
+  }
+  if (name === "power source") {
+    const hay = [extras?.title || text, extras?.productType].join(" ");
+    if (/\b(recharge|cordless|battery)\b/i.test(hay)) return "Battery";
+    if (/\b(corded|plug-?in)\b/i.test(hay)) return "Corded Electric";
+    if (/\belectric\b/i.test(hay)) return "Battery";
+    return null;
+  }
   if (
     name === "size" &&
     /\b(wallet|rfid|keychain|key\s*chain)\b/i.test(
@@ -406,23 +418,93 @@ export function resolveEbayBrand(opts: {
 }
 
 /** Put a valid Brand on Inventory aspects (mutates). */
-export function ensureEbayBrandAspect(
+export function resolveEbayBrandForCategory(opts: {
+  brand?: string;
+  title?: string;
+  allowed?: string[];
+}): string {
+  const resolved = resolveEbayBrand({ brand: opts.brand, title: opts.title });
+  if (!opts.allowed?.length) return resolved;
+  const hit = pickAllowedAspectValue(resolved, opts.allowed);
+  if (opts.allowed.some((row) => row.toLowerCase() === hit.toLowerCase())) {
+    return hit;
+  }
+  return (
+    opts.allowed.find((row) => /^unbranded$/i.test(row)) || "Unbranded"
+  );
+}
+
+export function applyEbayBrandAspect(
   aspects: Record<string, string[]>,
-  brand?: string,
+  raw: string,
   title?: string,
-): string[] {
-  const current = Object.entries(aspects || {}).find(
-    ([key]) => key.trim().toLowerCase() === "brand",
-  )?.[1]?.[0];
-  const next = resolveEbayBrand({ brand: brand || current || "", title });
+  allowed?: string[],
+): string {
   for (const key of Object.keys(aspects || {})) {
     if (key.trim().toLowerCase() === "brand" && key !== "Brand") {
       delete aspects[key];
     }
   }
-  const same = aspects.Brand?.[0] === next;
-  aspects.Brand = [next];
-  return same ? [] : ["Brand"];
+  const value = resolveEbayBrandForCategory({ brand: raw, title, allowed });
+  aspects.Brand = [value];
+  return value;
+}
+
+export function ensureEbayBrandAspect(
+  aspects: Record<string, string[]>,
+  brand?: string,
+  title?: string,
+  allowed?: string[],
+): string[] {
+  const current = Object.entries(aspects || {}).find(
+    ([key]) => key.trim().toLowerCase() === "brand",
+  )?.[1]?.[0];
+  const next = applyEbayBrandAspect(
+    aspects,
+    brand || current || "",
+    title,
+    allowed,
+  );
+  return aspects.Brand?.[0] === current && current === next ? [] : ["Brand"];
+}
+
+const SKIP_SELECTION_COERCE =
+  /^(colou?r|size|style|pattern|scent|fragrance|flavou?r|notes)$/i;
+
+/** Map Brand/Volume/Type onto Taxonomy allowed values so eBay does not drop them. */
+export function coerceSelectionAspects(
+  aspects: Record<string, string[]>,
+  allowed: Map<string, string[]> | undefined,
+  extras?: { title?: string; brand?: string },
+): void {
+  applyEbayBrandAspect(
+    aspects,
+    aspects.Brand?.[0] || extras?.brand || "",
+    extras?.title,
+    allowed?.get("brand"),
+  );
+  if (aspects.Volume?.[0]) {
+    applyEbayVolumeAspect(aspects, aspects.Volume[0], allowed?.get("volume"));
+  }
+  if (!allowed?.size) return;
+  for (const [name, values] of Object.entries(aspects)) {
+    if (SKIP_SELECTION_COERCE.test(name)) continue;
+    if (/^brand$/i.test(name) || /^volume$/i.test(name)) continue;
+    const list = allowed.get(name.toLowerCase());
+    const current = String(values?.[0] || "").trim();
+    if (!list?.length || !current) continue;
+    const hit = pickAllowedAspectValue(current, list);
+    if (list.some((row) => row.toLowerCase() === hit.toLowerCase())) {
+      aspects[name] = [hit];
+      continue;
+    }
+    const fuzzy = list.find((row) => {
+      const a = row.toLowerCase();
+      const b = current.toLowerCase();
+      return a.includes(b) || b.includes(a);
+    });
+    if (fuzzy) aspects[name] = [fuzzy];
+  }
 }
 
 /**
@@ -984,7 +1066,7 @@ export function inferFilledAspectForEbayError(
   }
   const inferred = inferAspectValueFromText(name, hay, extras) || "";
   if (/^brand$/i.test(name)) {
-    // 25002 Brand missing means eBay dropped the value we already sent.
+    // 25002 Brand missing means eBay dropped the Amazon maker. Unbranded is valid.
     return "Unbranded";
   }
   if (/^department$/i.test(name)) {

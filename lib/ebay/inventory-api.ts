@@ -3,7 +3,7 @@ import { sanitizeEbayAspects } from "@/lib/ebay/sanitize-aspects";
 import { HIGLOU_WAREHOUSE } from "@/config/warehouse";
 import { validateBarcode } from "@/lib/barcode/validators";
 import { toEbayListingTitle, toEbayInventorySku } from "@/lib/ebay/listing-helpers";
-import { resolveEbayBrand, applyEbayVolumeAspect } from "@/lib/ebay/infer-voltage";
+import { resolveEbayBrandForCategory, applyEbayVolumeAspect } from "@/lib/ebay/infer-voltage";
 
 /**
  * Only send UPC/EAN values eBay will accept (valid GS1 checksum).
@@ -157,9 +157,14 @@ export async function createOrReplaceInventoryItem(
 
   // BrandMPN (25002): product.brand + product.mpn must both be present for branded items.
   // Production rejects product.mpn as string[] (2004 serialize) — send a plain string.
-  const brand = resolveEbayBrand({
-    brand: String(input.brand || "") || String(input.aspects?.Brand?.[0] || ""),
+  // Boutique Amazon makers (Wuudl) are dropped by eBay's Brand list — Unbranded if not allowed.
+  const brand = resolveEbayBrandForCategory({
+    brand:
+      options?.lockAspects?.Brand ||
+      String(input.brand || "") ||
+      String(input.aspects?.Brand?.[0] || ""),
     title: input.title,
+    allowed: options?.allowedAspectValues?.get("brand"),
   });
   const mpnRaw =
     String(input.mpn || "").trim() ||
@@ -182,6 +187,7 @@ export async function createOrReplaceInventoryItem(
   aspects.Brand = [brand];
   aspects.MPN = [mpnProduct];
   for (const [name, raw] of Object.entries(options?.lockAspects || {})) {
+    if (/^brand$/i.test(name)) continue;
     const value = String(raw || "")
       .replace(/\s+/g, " ")
       .trim()

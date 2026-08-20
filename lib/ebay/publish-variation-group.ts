@@ -14,6 +14,8 @@ import {
 } from "@/lib/ebay/inventory-api";
 import { toEbayInventorySku, sanitizeEbayPolicyCopy } from "@/lib/ebay/listing-helpers";
 import {
+  applyEbayBrandAspect,
+  coerceSelectionAspects,
   ensureEbayBrandAspect,
   ensureInferredApparelAspects,
   ensureInferredFragranceAspects,
@@ -22,6 +24,7 @@ import {
   nextEbayVolumeValue,
   parseMissingAspectFromEbayError,
   resolveEbayBrand,
+  resolveEbayBrandForCategory,
   resolveEbayVolume,
 } from "@/lib/ebay/infer-voltage";
 
@@ -261,8 +264,12 @@ async function putVariantInventory(opts: {
   };
   ensureEbayBrandAspect(
     payload.aspects,
-    opts.listing.brand || opts.inventory.brand,
+    opts.lockAspects.Brand ||
+      opts.aspects.Brand?.[0] ||
+      opts.inventory.brand ||
+      "Unbranded",
     opts.listing.title,
+    opts.allowedAspectValues?.get("brand"),
   );
   payload.brand = payload.aspects.Brand?.[0] || "Unbranded";
   const itemOpts = {
@@ -325,7 +332,15 @@ async function putVariantInventory(opts: {
     };
     if (brand) {
       payload.brand = brand;
-      ensureEbayBrandAspect(payload.aspects, brand, opts.listing.title);
+      opts.inventory.brand = brand;
+      opts.lockAspects.Brand = brand;
+      itemOpts.lockAspects = opts.lockAspects;
+      ensureEbayBrandAspect(
+        payload.aspects,
+        brand,
+        opts.listing.title,
+        opts.allowedAspectValues?.get("brand"),
+      );
     }
     if (/^volume$/i.test(missingAspect)) {
       opts.lockAspects.Volume = filled;
@@ -354,17 +369,13 @@ export async function publishEbayVariationGroup(opts: {
   }
 
   if (!opts.inventory.aspects) opts.inventory.aspects = {};
-  ensureEbayBrandAspect(
+  applyEbayBrandAspect(
     opts.inventory.aspects,
-    opts.listing.brand || opts.inventory.brand,
+    opts.inventory.brand || opts.listing.brand || "",
     opts.listing.title,
+    opts.allowedAspectValues?.get("brand"),
   );
-  opts.inventory.brand =
-    opts.inventory.aspects.Brand?.[0] ||
-    resolveEbayBrand({
-      brand: opts.listing.brand || opts.inventory.brand,
-      title: opts.listing.title,
-    });
+  opts.inventory.brand = opts.inventory.aspects.Brand?.[0] || "Unbranded";
   ensureInferredApparelAspects(opts.inventory.aspects, {
     title: opts.listing.title,
     productType: opts.listing.productType || opts.listing.type,
@@ -378,6 +389,12 @@ export async function publishEbayVariationGroup(opts: {
     categoryName: opts.listing.categoryName,
     size: opts.listing.size,
   });
+  coerceSelectionAspects(
+    opts.inventory.aspects,
+    opts.allowedAspectValues,
+    { title: opts.listing.title, brand: opts.inventory.brand },
+  );
+  opts.inventory.brand = opts.inventory.aspects.Brand?.[0] || "Unbranded";
 
   const skuToVariant = new Map(
     opts.set.variants.map((row) => [
@@ -459,6 +476,20 @@ export async function publishEbayVariationGroup(opts: {
       );
       aspects.Volume = [volume];
       lockAspects.Volume = volume;
+    }
+    const brandValue = resolveEbayBrandForCategory({
+      brand: aspects.Brand?.[0] || opts.inventory.brand || "Unbranded",
+      title: opts.listing.title,
+      allowed: opts.allowedAspectValues?.get("brand"),
+    });
+    aspects.Brand = [brandValue];
+    const axisNames = new Set(
+      planned.specifications.map((row) => row.name.toLowerCase()),
+    );
+    for (const [name, values] of Object.entries(aspects)) {
+      if (axisNames.has(name.toLowerCase())) continue;
+      const value = String(values?.[0] || "").trim();
+      if (value) lockAspects[name] = value;
     }
     const variantPhotos = await hostImages(
       (variant?.imageUrls || []).slice(0, 4),

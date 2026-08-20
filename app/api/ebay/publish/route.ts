@@ -32,11 +32,13 @@ import { loadSellerDraftDefaults } from "@/lib/ebay/draft-defaults";
 import { ensureListableEbayCategory } from "@/lib/ebay/taxonomy-categories";
 import { fetchCategoryAspectMeta } from "@/lib/ebay/sanitize-aspects";
 import {
+  coerceSelectionAspects,
   ensureCompatibleAspects,
   ensureInferredElectricalAspects,
   ensureRequiredCategoryAspects,
   formatEbayVoltage,
   inferAspectValueFromText,
+  inferFilledAspectForEbayError,
   inferVoltageFromText,
   inferSizeTypeFromText,
   nextEbayVolumeValue,
@@ -621,6 +623,11 @@ async function postEbayPublish(request: Request) {
       aspectMeta.required,
       compatibleExtras,
     );
+    coerceSelectionAspects(inventory.aspects, aspectMeta.allowedValues, {
+      title: listing.title,
+      brand: listing.brand || inventory.brand,
+    });
+    inventory.brand = inventory.aspects.Brand?.[0] || "Unbranded";
 
     // Drop bad OCR UPCs before Inventory PUT (invalid checksum → eBay 25002).
     inventory.upc = undefined;
@@ -878,8 +885,66 @@ async function postEbayPublish(request: Request) {
       const message =
         offerError instanceof Error ? offerError.message : String(offerError);
 
-      // 25005: invalid/non-leaf category — force Taxonomy suggestion and retry once.
-      if (/25005|invalid category/i.test(message)) {
+      if (/25002/i.test(message)) {
+        let last: unknown = offerError;
+        const hay = [
+          listing.title,
+          listing.productType,
+          listing.type,
+          listing.categoryName,
+          listing.brand,
+          listing.model,
+          listing.size,
+        ]
+          .filter(Boolean)
+          .join(" ");
+        for (let attempt = 0; attempt < 3; attempt += 1) {
+          const retryMsg =
+            last instanceof Error ? last.message : String(last || "");
+          const missingAspect = parseMissingAspectFromEbayError(retryMsg);
+          if (!missingAspect) break;
+          let filled = inferFilledAspectForEbayError(missingAspect, hay, {
+            title: listing.title,
+            brand: listing.brand,
+            model: listing.model,
+            mpn: listing.mpn,
+            productType: listing.productType || listing.type,
+            categoryName: listing.categoryName,
+            categoryId: listing.categoryId,
+            department: listing.department,
+            size: listing.size,
+          });
+          if (/^volume$/i.test(missingAspect)) {
+            filled = nextEbayVolumeValue(
+              inventory.aspects?.Volume?.[0] || filled,
+              aspectMeta.allowedValues.get("volume"),
+            );
+          }
+          if (!filled) break;
+          inventory.aspects = {
+            ...(inventory.aspects || {}),
+            [missingAspect]: [filled],
+          };
+          if (/^brand$/i.test(missingAspect)) inventory.brand = filled;
+          coerceSelectionAspects(inventory.aspects, aspectMeta.allowedValues, {
+            title: listing.title,
+            brand: inventory.brand,
+          });
+          inventory.brand = inventory.aspects.Brand?.[0] || inventory.brand;
+          await createOrReplaceInventoryItem(accessToken, inventory, {
+            aspectCardinality,
+            allowedAspectValues: aspectMeta.allowedValues,
+          });
+          try {
+            ({ offerId } = await upsertOfferForSku(accessToken, offerInput));
+            last = null;
+            break;
+          } catch (retryError) {
+            last = retryError;
+          }
+        }
+        if (last) throw last;
+      } else if (/25005|invalid category/i.test(message)) {
         const forced = await ensureListableEbayCategory(accessToken, {
           categoryId: "",
           categoryName: listing.categoryName,

@@ -9,10 +9,23 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-const bodySchema = z.object({
-  productIds: z.array(z.string().min(1)).min(2).max(10),
-  message: z.string().optional(),
-});
+const bodySchema = z
+  .object({
+    productIds: z.array(z.string().min(1)).min(2).max(10),
+    message: z.string().optional(),
+    format: z.enum(["carousel", "collection"]).optional(),
+    coverProductId: z.string().optional(),
+    collectionTitle: z.string().optional(),
+  })
+  .superRefine((data, ctx) => {
+    if (data.format === "collection" && data.productIds.length < 3) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "La vitrina necesita al menos 3 productos.",
+        path: ["productIds"],
+      });
+    }
+  });
 
 export async function POST(request: Request) {
   if (!isSupabaseConfigured()) {
@@ -38,7 +51,7 @@ export async function POST(request: Request) {
     body = bodySchema.parse(await request.json());
   } catch {
     return NextResponse.json(
-      { error: "Pick 2 to 10 Don Baratón products." },
+      { error: "Elegí 2 a 10 productos (3 si es vitrina)." },
       { status: 400 },
     );
   }

@@ -105,6 +105,9 @@ export async function fetchDonBaratonPromoCatalog(input?: {
 export async function publishDonBaratonPromoCarousel(input: {
   productIds: string[];
   message?: string;
+  format?: "carousel" | "collection";
+  coverProductId?: string;
+  collectionTitle?: string;
 }): Promise<DonBaratonPromoPublishResult> {
   const config = getDonBaratonConfig();
   if (!config.enabled) {
@@ -128,6 +131,9 @@ export async function publishDonBaratonPromoCarousel(input: {
       body: JSON.stringify({
         productIds: input.productIds,
         message: input.message,
+        format: input.format,
+        coverProductId: input.coverProductId,
+        collectionTitle: input.collectionTitle,
       }),
     });
 

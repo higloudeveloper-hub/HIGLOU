@@ -10,7 +10,7 @@ export default function FacebookPromoPage() {
       <StudioFrame
         kicker="Pestaña Don Baratón"
         title="Promo Facebook"
-        hint="Elegí productos y publicá el carrusel"
+        hint="Carrusel Alibaba o vitrina Burberry"
         scroll={false}
       >
         <PromoCarouselStudio />

@@ -8,9 +8,15 @@ import { matchListingToShopProduct } from "@/lib/don-baraton/match-promo-listing
 import type { DonBaratonPromoProduct } from "@/lib/don-baraton/facebook-promo";
 
 const MIN = 2;
+const COLLECTION_MIN = 3;
 const MAX = 10;
 const DEFAULT_MESSAGE =
   "Ofertas Don Baratón. Deslizá y tocá Comprar en el que te guste.";
+const DEFAULT_COLLECTION_MESSAGE =
+  "Pensado para tu casa. Deslizá y descubrí estas ofertas.";
+const DEFAULT_COLLECTION_TITLE = "Ofertas Don Baratón";
+
+type PromoFormat = "carousel" | "collection";
 
 type HiglouListing = {
   id: string;
@@ -47,11 +53,17 @@ export function PromoCarouselStudio() {
   const [postUrl, setPostUrl] = useState<string | null>(null);
   const [ownerError, setOwnerError] = useState<string | null>(null);
   const [tab, setTab] = useState<"productos" | "publicar">("productos");
+  const [format, setFormat] = useState<PromoFormat>("carousel");
+  const [coverProductId, setCoverProductId] = useState<string | null>(null);
+  const [collectionTitle, setCollectionTitle] = useState(DEFAULT_COLLECTION_TITLE);
 
   const selectedIds = useMemo(
     () => new Set(selected.map((item) => item.id)),
     [selected],
   );
+  const minNeeded = format === "collection" ? COLLECTION_MIN : MIN;
+  const cover =
+    selected.find((item) => item.id === coverProductId) ?? selected[0] ?? null;
 
   const loadCatalog = async (nextQuery = "", skus: string[] = []) => {
     const params = new URLSearchParams();
@@ -180,19 +192,34 @@ export function PromoCarouselStudio() {
     setPostUrl(null);
     setSelected((current) => {
       if (current.some((item) => item.id === product.id)) {
-        return current.filter((item) => item.id !== product.id);
+        const next = current.filter((item) => item.id !== product.id);
+        if (coverProductId === product.id) {
+          setCoverProductId(next[0]?.id ?? null);
+        }
+        return next;
       }
       if (current.length >= MAX) {
         toast.error(`Facebook allows ${MAX} products per post.`);
         return current;
       }
+      if (!coverProductId) setCoverProductId(product.id);
       return [...current, product];
     });
   };
 
+  const chooseFormat = (next: PromoFormat) => {
+    setFormat(next);
+    setMessage((current) => {
+      if (next === "collection") {
+        return current === DEFAULT_MESSAGE ? DEFAULT_COLLECTION_MESSAGE : current;
+      }
+      return current === DEFAULT_COLLECTION_MESSAGE ? DEFAULT_MESSAGE : current;
+    });
+  };
+
   const publish = async () => {
-    if (selected.length < MIN) {
-      toast.error(`Pick at least ${MIN} products.`);
+    if (selected.length < minNeeded) {
+      toast.error(`Elegí al menos ${minNeeded} productos.`);
       return;
     }
     setPublishing(true);
@@ -204,6 +231,10 @@ export function PromoCarouselStudio() {
         body: JSON.stringify({
           productIds: selected.map((item) => item.id),
           message,
+          format,
+          coverProductId: cover?.id,
+          collectionTitle:
+            format === "collection" ? collectionTitle : undefined,
         }),
       });
       const body = (await res.json().catch(() => null)) as {
@@ -241,7 +272,7 @@ export function PromoCarouselStudio() {
           {(
             [
               { id: "productos" as const, label: "Productos", hint: "Elegí 2 a 10" },
-              { id: "publicar" as const, label: "Publicar", hint: "Carrusel Facebook" },
+              { id: "publicar" as const, label: "Publicar", hint: "Vista previa" },
             ] as const
           ).map((item) => (
             <button
@@ -278,10 +309,45 @@ export function PromoCarouselStudio() {
           tab !== "productos" && "max-lg:hidden",
         )}
       >
+        <div className="mb-4 grid grid-cols-2 gap-2">
+          <button
+            type="button"
+            onClick={() => chooseFormat("carousel")}
+            className={cn(
+              "rounded-2xl border px-3 py-3 text-left",
+              format === "carousel"
+                ? "border-[#191919] bg-white ring-2 ring-[#191919]"
+                : "border-[#e5e5e5] bg-white",
+            )}
+          >
+            <span className="block text-[13px] font-semibold text-[#191919]">
+              Carrusel
+            </span>
+            <span className="mt-1 block text-[12px] leading-snug text-[#707070]">
+              Cada producto es una tarjeta con Comprar, como Alibaba.
+            </span>
+          </button>
+          <button
+            type="button"
+            onClick={() => chooseFormat("collection")}
+            className={cn(
+              "rounded-2xl border px-3 py-3 text-left",
+              format === "collection"
+                ? "border-[#191919] bg-white ring-2 ring-[#191919]"
+                : "border-[#e5e5e5] bg-white",
+            )}
+          >
+            <span className="block text-[13px] font-semibold text-[#191919]">
+              Vitrina
+            </span>
+            <span className="mt-1 block text-[12px] leading-snug text-[#707070]">
+              Foto grande arriba y los productos en fila, como Burberry.
+            </span>
+          </button>
+        </div>
         <p className="mb-4 max-w-2xl text-[13px] leading-relaxed text-[#707070]">
-          Elegí 2 a 10 productos de tus listings (o del catálogo de la tienda).
-          Cada tarjeta del post lleva su propio enlace y Comprar, como Alibaba.
-          No pongas URL en el texto. Después promocioná el post.
+          Elegí {minNeeded} a {MAX} productos. En vitrina, tocá Portada en el
+          que va de foto grande. El texto no lleva URL.
         </p>
 
         <label className="relative mb-4 block">
@@ -297,7 +363,7 @@ export function PromoCarouselStudio() {
         {selected.length > 0 ? (
           <div className="mb-4 rounded-[16px] border border-[#e5e5e5] bg-white p-3">
             <p className="mb-2 text-[11px] font-semibold tracking-[0.14em] text-[#707070] uppercase">
-              Selected {selected.length}/{MAX}
+              Elegidos {selected.length}/{MAX}
             </p>
             <ol className="space-y-2">
               {selected.map((product, index) => (
@@ -314,6 +380,20 @@ export function PromoCarouselStudio() {
                   <p className="min-w-0 flex-1 truncate text-[13px] font-semibold text-[#191919]">
                     {product.name}
                   </p>
+                  {format === "collection" ? (
+                    <button
+                      type="button"
+                      onClick={() => setCoverProductId(product.id)}
+                      className={cn(
+                        "shrink-0 rounded-full px-2 py-1 text-[10px] font-semibold",
+                        cover?.id === product.id
+                          ? "bg-[#191919] text-white"
+                          : "bg-white text-[#707070]",
+                      )}
+                    >
+                      Portada
+                    </button>
+                  ) : null}
                   <button
                     type="button"
                     className="rounded p-1 text-[#9b9b9b] hover:text-[#191919]"
@@ -415,7 +495,7 @@ export function PromoCarouselStudio() {
             })}
           </div>
         </section>
-        {selected.length >= MIN ? (
+        {selected.length >= minNeeded ? (
           <button
             type="button"
             onClick={() => setTab("publicar")}
@@ -433,7 +513,9 @@ export function PromoCarouselStudio() {
         )}
       >
         <p className="text-[11px] font-semibold tracking-[0.16em] text-[#707070] uppercase">
-          Facebook preview
+          {format === "collection"
+            ? "Vista previa vitrina"
+            : "Vista previa carrusel"}
         </p>
         <div className="mt-3 overflow-hidden rounded-xl border border-[#dadde1] bg-[#f0f2f5]">
           <div className="bg-white px-3 pt-3 pb-3">
@@ -446,33 +528,74 @@ export function PromoCarouselStudio() {
               className="mt-3 w-full resize-none border-0 bg-transparent text-[14px] leading-snug text-[#050505] outline-none"
             />
           </div>
-          <div className="flex gap-2 overflow-x-auto bg-white px-2 pb-3">
-            {selected.length === 0 ? (
-              <div className="flex h-40 w-full items-center justify-center rounded-lg bg-[#f4f4f5] text-[13px] text-[#707070]">
-                Select 2–10 products
-              </div>
-            ) : (
-              selected.map((product) => (
-                <article
-                  key={product.id}
-                  className="w-[200px] shrink-0 overflow-hidden rounded-lg border border-[#dadde1] bg-white"
-                >
-                  <div className="relative aspect-square bg-[#f4f4f5]">
+          {format === "collection" ? (
+            <div className="bg-white">
+              {cover ? (
+                <div className="relative aspect-[4/5] bg-[#f4f4f5]">
+                  <Thumb url={cover.imageUrl} alt={cover.name} />
+                </div>
+              ) : (
+                <div className="flex aspect-[4/5] items-center justify-center bg-[#f4f4f5] text-[13px] text-[#707070]">
+                  Elegí {minNeeded} a {MAX} productos
+                </div>
+              )}
+              <p className="px-3 pt-3 text-[17px] font-semibold text-[#050505]">
+                {collectionTitle.trim() || DEFAULT_COLLECTION_TITLE}
+              </p>
+              <div className="flex gap-2 overflow-x-auto px-3 pb-3 pt-2">
+                {selected.map((product) => (
+                  <div
+                    key={product.id}
+                    className="size-[88px] shrink-0 overflow-hidden rounded-xl border border-[#dadde1] bg-white"
+                  >
                     <Thumb url={product.imageUrl} alt={product.name} />
                   </div>
-                  <div className="flex items-center gap-2 border-t border-[#dadde1] px-2 py-2">
-                    <p className="min-w-0 flex-1 truncate text-[13px] font-semibold">
-                      {product.name}
-                    </p>
-                    <span className="shrink-0 rounded-md bg-[#e4e6eb] px-2 py-1 text-[12px] font-semibold">
-                      Shop
-                    </span>
-                  </div>
-                </article>
-              ))
-            )}
-          </div>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <div className="flex gap-2 overflow-x-auto bg-white px-2 pb-3">
+              {selected.length === 0 ? (
+                <div className="flex h-40 w-full items-center justify-center rounded-lg bg-[#f4f4f5] text-[13px] text-[#707070]">
+                  Elegí {minNeeded} a {MAX} productos
+                </div>
+              ) : (
+                selected.map((product) => (
+                  <article
+                    key={product.id}
+                    className="w-[200px] shrink-0 overflow-hidden rounded-lg border border-[#dadde1] bg-white"
+                  >
+                    <div className="relative aspect-square bg-[#f4f4f5]">
+                      <Thumb url={product.imageUrl} alt={product.name} />
+                    </div>
+                    <div className="flex items-center gap-2 border-t border-[#dadde1] px-2 py-2">
+                      <p className="min-w-0 flex-1 truncate text-[13px] font-semibold">
+                        {product.name}
+                      </p>
+                      <span className="shrink-0 rounded-md bg-[#e4e6eb] px-2 py-1 text-[12px] font-semibold">
+                        Comprar
+                      </span>
+                    </div>
+                  </article>
+                ))
+              )}
+            </div>
+          )}
         </div>
+
+        {format === "collection" ? (
+          <label className="mt-3 block">
+            <span className="text-[11px] font-semibold tracking-[0.14em] text-[#707070] uppercase">
+              Título de la vitrina
+            </span>
+            <input
+              value={collectionTitle}
+              onChange={(event) => setCollectionTitle(event.target.value)}
+              placeholder={DEFAULT_COLLECTION_TITLE}
+              className="mt-1 h-10 w-full rounded-xl border border-[#e5e5e5] px-3 text-[14px] font-semibold text-[#191919] outline-none focus:border-[#191919]"
+            />
+          </label>
+        ) : null}
 
         <p className="mt-3 text-[12px] leading-relaxed text-[#707070]">
           After it posts, boost that Facebook post and set the destination to
@@ -493,7 +616,7 @@ export function PromoCarouselStudio() {
         <button
           type="button"
           onClick={() => void publish()}
-          disabled={publishing || selected.length < MIN}
+          disabled={publishing || selected.length < minNeeded}
           className="mt-4 inline-flex h-11 items-center justify-center gap-2 rounded-full bg-[#191919] px-5 text-[14px] font-semibold text-white disabled:opacity-40"
         >
           {publishing ? (
@@ -502,7 +625,7 @@ export function PromoCarouselStudio() {
               Publishing…
             </>
           ) : (
-            `Publish carousel (${selected.length})`
+            `Publicar ${format === "collection" ? "vitrina" : "carrusel"} (${selected.length})`
           )}
         </button>
       </aside>

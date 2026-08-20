@@ -665,8 +665,18 @@ async function postEbayPublish(request: Request) {
         offer: variationOffer,
         aspectCardinality,
         live: data.mode === "live",
+        hostImages: (urls) =>
+          ensureEbayCompatibleImageUrls({
+            urls,
+            userId: auth.user.id,
+            accessToken,
+          }),
       }).catch(async (error) => {
         const message = error instanceof Error ? error.message : String(error);
+        if (/VARIATIONS_TOO_COMPLEX|25013|too many trait values/i.test(message)) {
+          console.warn("[ebay/publish] variation group 25013, listing as one item");
+          return null;
+        }
         if (!/25001|core inventory service internal/i.test(message)) throw error;
         await new Promise((resolve) => setTimeout(resolve, 1500));
         return publishEbayVariationGroup({
@@ -677,9 +687,16 @@ async function postEbayPublish(request: Request) {
           offer: variationOffer,
           aspectCardinality,
           live: data.mode === "live",
+          hostImages: (urls) =>
+            ensureEbayCompatibleImageUrls({
+              urls,
+              userId: auth.user.id,
+              accessToken,
+            }),
         });
       });
-    } else {
+    }
+    if (!variationPublished) {
     try {
       await createOrReplaceInventoryItem(accessToken, inventory, {
         aspectCardinality,

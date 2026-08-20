@@ -739,6 +739,13 @@ export function humanizeEbayPublishError(raw: string): {
       detail: `This category requires ${aspect} before the listing can go live. ${sizeTypeHint}`,
     };
   }
+  if (/25013|too many trait values|VARIATIONS_TOO_COMPLEX/i.test(raw)) {
+    return {
+      headline: "Too many options for one eBay listing",
+      detail:
+        "eBay only allows about 60 colors or sizes on a variation listing. Uncheck extras in Options, or Try again — Higlou will list it as one item.",
+    };
+  }
   if (/eBay publish failed/i.test(raw)) {
     return {
       headline: "Couldn’t finish publish",

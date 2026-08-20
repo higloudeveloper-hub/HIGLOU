@@ -12,7 +12,7 @@ import {
   type EbayInventoryItemInput,
   type EbayOfferInput,
 } from "@/lib/ebay/inventory-api";
-import { toEbayInventorySku } from "@/lib/ebay/listing-helpers";
+import { toEbayInventorySku, sanitizeEbayPolicyCopy } from "@/lib/ebay/listing-helpers";
 import {
   ensureEbayBrandAspect,
   ensureInferredApparelAspects,
@@ -24,6 +24,21 @@ export type VariationGroupPlan = {
   groupKey: string;
   variantSkus: string[];
   specifications: Array<{ name: string; values: string[] }>;
+};
+
+/** eBay 25013: a variation specific may list at most ~60 values, and 2 names. */
+export const EBAY_MAX_VARIATION_AXES = 2;
+export const EBAY_MAX_VALUES_PER_AXIS = 60;
+
+const AXIS_RANK: Record<string, number> = {
+  color: 0,
+  colour: 0,
+  size: 1,
+  style: 2,
+  pattern: 3,
+  flavor: 4,
+  flavour: 4,
+  scent: 5,
 };
 
 function sleep(ms: number) {
@@ -38,14 +53,34 @@ function isEbay25001(error: unknown): boolean {
   return /25001|core inventory service internal/i.test(errorText(error));
 }
 
+function isEbay25013(error: unknown): boolean {
+  return /25013|too many trait values/i.test(errorText(error));
+}
+
+function oneTrait(raw: string): string {
+  return sanitizeEbayPolicyCopy(String(raw || "").replace(/\s+/g, " ")).slice(
+    0,
+    65,
+  );
+}
+
+function axisRank(name: string): number {
+  const key = name.trim().toLowerCase();
+  return AXIS_RANK[key] ?? 20;
+}
+
 export function planVariationGroup(
   set: ListingVariationSet,
   parentSku: string,
+  opts?: { maxAxes?: number; maxValuesPerAxis?: number },
 ): VariationGroupPlan | null {
   const variants = (set?.variants || []).filter(isVariantSelected);
   if (variants.length < 2) return null;
 
-  const specifications = (set.axisNames.length
+  const maxAxes = opts?.maxAxes ?? EBAY_MAX_VARIATION_AXES;
+  const maxValues = opts?.maxValuesPerAxis ?? EBAY_MAX_VALUES_PER_AXIS;
+
+  const rawSpecs = (set.axisNames.length
     ? set.axisNames
     : [...new Set(variants.flatMap((row) => Object.keys(row.aspects)))]
   )
@@ -53,13 +88,30 @@ export function planVariationGroup(
       name,
       values: [
         ...new Set(
-          variants.map((row) => String(row.aspects[name] || "").trim()).filter(Boolean),
+          variants
+            .map((row) => oneTrait(row.aspects[name] || ""))
+            .filter(Boolean),
         ),
       ],
     }))
-    .filter((row) => row.name && row.values.length >= 2);
+    .filter((row) => row.name && row.values.length >= 2)
+    .sort(
+      (a, b) =>
+        axisRank(a.name) - axisRank(b.name) ||
+        b.values.length - a.values.length,
+    )
+    .slice(0, Math.max(1, maxAxes));
+
+  const specifications = rawSpecs.map((row) => ({
+    name: row.name,
+    values: row.values.slice(0, maxValues),
+  }));
 
   if (!specifications.length) return null;
+
+  const allowed = new Map(
+    specifications.map((row) => [row.name, new Set(row.values)]),
+  );
 
   const seen = new Set<string>();
   const combos = new Set<string>();
@@ -67,17 +119,19 @@ export function planVariationGroup(
   for (const variant of variants) {
     const sku = toEbayInventorySku(variant.sku || `AMZ-${variant.asin}`);
     if (seen.has(sku)) continue;
-    const hasEveryAxis = specifications.every((axis) =>
-      String(variant.aspects[axis.name] || "").trim(),
-    );
+    const hasEveryAxis = specifications.every((axis) => {
+      const value = oneTrait(variant.aspects[axis.name] || "");
+      return value && allowed.get(axis.name)?.has(value);
+    });
     if (!hasEveryAxis) continue;
     const combo = specifications
-      .map((axis) => String(variant.aspects[axis.name] || "").trim())
+      .map((axis) => oneTrait(variant.aspects[axis.name] || ""))
       .join("|");
     if (combos.has(combo)) continue;
     seen.add(sku);
     combos.add(combo);
     variantSkus.push(sku);
+    if (variantSkus.length >= maxValues) break;
   }
   if (variantSkus.length < 2) return null;
 
@@ -92,6 +146,7 @@ function planFromAcceptedSkus(
   set: ListingVariationSet,
   parentSku: string,
   acceptedSkus: string[],
+  opts?: { maxAxes?: number; maxValuesPerAxis?: number },
 ): VariationGroupPlan | null {
   const want = new Set(acceptedSkus);
   return planVariationGroup(
@@ -102,6 +157,7 @@ function planFromAcceptedSkus(
       ),
     },
     parentSku,
+    opts,
   );
 }
 
@@ -111,19 +167,22 @@ async function putVariantInventory(opts: {
   inventory: EbayInventoryItemInput;
   sku: string;
   aspects: Record<string, string[]>;
+  lockAspects: Record<string, string>;
+  imageUrls: string[];
   aspectCardinality?: Map<string, "SINGLE" | "MULTI">;
 }): Promise<void> {
   const payload = {
     ...opts.inventory,
     sku: opts.sku,
     aspects: opts.aspects,
-    imageUrls: opts.inventory.imageUrls,
+    imageUrls: opts.imageUrls.length ? opts.imageUrls : opts.inventory.imageUrls,
   };
   ensureEbayBrandAspect(payload.aspects, opts.listing.brand || opts.inventory.brand);
   payload.brand = payload.aspects.Brand?.[0] || "Unbranded";
   try {
     await createOrReplaceInventoryItem(opts.accessToken, payload, {
       aspectCardinality: opts.aspectCardinality,
+      lockAspects: opts.lockAspects,
     });
     return;
   } catch (error) {
@@ -165,6 +224,7 @@ async function putVariantInventory(opts: {
     };
     await createOrReplaceInventoryItem(opts.accessToken, payload, {
       aspectCardinality: opts.aspectCardinality,
+      lockAspects: opts.lockAspects,
     });
   }
 }
@@ -177,6 +237,7 @@ export async function publishEbayVariationGroup(opts: {
   offer: EbayOfferInput;
   aspectCardinality?: Map<string, "SINGLE" | "MULTI">;
   live: boolean;
+  hostImages?: (urls: string[]) => Promise<string[]>;
 }): Promise<{ offerId: string; listingId: string; skipped?: number }> {
   const planned = planVariationGroup(opts.set, opts.listing.sku);
   if (!planned) {
@@ -200,17 +261,60 @@ export async function publishEbayVariationGroup(opts: {
     ]),
   );
 
+  const epsByUrl = new Map<string, string>();
+  const hostImages = async (urls: string[]): Promise<string[]> => {
+    const unique = [...new Set(urls.filter((url) => /^https:\/\//i.test(url)))];
+    if (!unique.length) return opts.inventory.imageUrls.slice(0, 8);
+    if (!opts.hostImages) {
+      return unique.slice(0, 8);
+    }
+    for (const url of unique.slice(0, 4)) {
+      if (epsByUrl.has(url)) continue;
+      try {
+        const hosted = await opts.hostImages([url]);
+        if (hosted[0]) epsByUrl.set(url, hosted[0]);
+      } catch {
+        /* keep Amazon URL only if EPS already exists; else parent gallery */
+      }
+    }
+    const out = unique
+      .map((url) => epsByUrl.get(url))
+      .filter((url): url is string => Boolean(url));
+    return out.length ? out.slice(0, 8) : opts.inventory.imageUrls.slice(0, 8);
+  };
+
   const acceptedSkus: string[] = [];
-  // eBay 25001: items first, then the group, then offers. Never attach Amazon
-  // CDN photos to a variant (parent inventory.imageUrls are already on EPS).
+  const variantHeroes: string[] = [];
+
   for (let i = 0; i < planned.variantSkus.length; i += 1) {
     const sku = planned.variantSkus[i]!;
     const variant = skuToVariant.get(sku);
     const aspects = { ...(opts.inventory.aspects || {}) };
-    for (const axis of planned.specifications) {
-      const value = variant?.aspects[axis.name];
-      if (value) aspects[axis.name] = [value];
+    const lockAspects: Record<string, string> = {};
+    for (const name of Object.keys(aspects)) {
+      if (/^(colou?r|size|style|pattern|scent|flavou?r)$/i.test(name)) {
+        delete aspects[name];
+      }
     }
+    for (const axis of planned.specifications) {
+      const value = oneTrait(variant?.aspects[axis.name] || "");
+      if (!value) continue;
+      aspects[axis.name] = [value];
+      lockAspects[axis.name] = value;
+    }
+    const scent = lockAspects.Color || lockAspects.Size || "";
+    if (scent) {
+      for (const name of Object.keys(aspects)) {
+        if (/^(fragrance\s*name|scent|notes)$/i.test(name) && !lockAspects[name]) {
+          aspects[name] = [scent];
+          lockAspects[name] = scent;
+        }
+      }
+    }
+    const variantPhotos = await hostImages(
+      (variant?.imageUrls || []).slice(0, 4),
+    );
+    if (variantPhotos[0]) variantHeroes.push(variantPhotos[0]);
     try {
       await putVariantInventory({
         accessToken: opts.accessToken,
@@ -218,6 +322,8 @@ export async function publishEbayVariationGroup(opts: {
         inventory: opts.inventory,
         sku,
         aspects,
+        lockAspects,
+        imageUrls: variantPhotos,
         aspectCardinality: opts.aspectCardinality,
       });
       await clearOffersForSku(opts.accessToken, sku);
@@ -241,28 +347,80 @@ export async function publishEbayVariationGroup(opts: {
     );
   }
 
-  const putGroup = async () =>
+  const groupImages = [
+    ...opts.inventory.imageUrls,
+    ...variantHeroes,
+  ].filter((url, index, all) => url && all.indexOf(url) === index);
+
+  const imageVariesBy = plan.specifications
+    .filter((axis) =>
+      plan.variantSkus.some((sku) => skuToVariant.get(sku)?.imageUrls[0]),
+    )
+    .map((axis) => axis.name)
+    .slice(0, 1);
+
+  const putGroup = async (current: VariationGroupPlan, withPhotos: boolean) =>
     createOrReplaceInventoryItemGroup(opts.accessToken, {
-      inventoryItemGroupKey: plan.groupKey,
-      variantSKUs: plan.variantSkus,
+      inventoryItemGroupKey: current.groupKey,
+      variantSKUs: current.variantSkus,
       title: opts.inventory.title,
       description: opts.inventory.description,
-      imageUrls: opts.inventory.imageUrls,
+      imageUrls: groupImages,
       variesBy: {
-        specifications: plan.specifications,
+        specifications: current.specifications,
+        ...(withPhotos && imageVariesBy.length
+          ? { aspectsImageVariesBy: imageVariesBy }
+          : {}),
       },
     });
 
-  try {
-    await putGroup();
-  } catch (error) {
-    if (!isEbay25001(error)) throw error;
-    await sleep(1500);
-    await putGroup();
+  const shrinkFor25013 = (current: VariationGroupPlan): VariationGroupPlan | null => {
+    if (current.specifications.length > 1) {
+      return planFromAcceptedSkus(opts.set, opts.listing.sku, acceptedSkus, {
+        maxAxes: 1,
+        maxValuesPerAxis: EBAY_MAX_VALUES_PER_AXIS,
+      });
+    }
+    if (current.specifications[0] && current.specifications[0].values.length > 12) {
+      return planFromAcceptedSkus(opts.set, opts.listing.sku, acceptedSkus, {
+        maxAxes: 1,
+        maxValuesPerAxis: 12,
+      });
+    }
+    return null;
+  };
+
+  let groupPlan = plan;
+  let withPhotos = true;
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    try {
+      await putGroup(groupPlan, withPhotos);
+      break;
+    } catch (error) {
+      if (isEbay25001(error)) {
+        await sleep(1500);
+        withPhotos = false;
+        if (attempt === 3) throw error;
+        continue;
+      }
+      if (isEbay25013(error)) {
+        withPhotos = false;
+        const next = shrinkFor25013(groupPlan);
+        if (!next || attempt === 3) {
+          throw new Error(
+            "VARIATIONS_TOO_COMPLEX: eBay will not take that many color/size options together. Higlou will list this as one item.",
+          );
+        }
+        groupPlan = next;
+        await sleep(400);
+        continue;
+      }
+      throw error;
+    }
   }
 
   let offerId = "";
-  for (const sku of plan.variantSkus) {
+  for (const sku of groupPlan.variantSkus) {
     const created = await upsertOfferForSku(opts.accessToken, {
       ...opts.offer,
       sku,
@@ -270,7 +428,7 @@ export async function publishEbayVariationGroup(opts: {
     if (!offerId) offerId = created.offerId;
   }
 
-  const skipped = planned.variantSkus.length - plan.variantSkus.length;
+  const skipped = planned.variantSkus.length - groupPlan.variantSkus.length;
 
   if (!opts.live) {
     return { offerId, listingId: "", skipped };
@@ -279,7 +437,7 @@ export async function publishEbayVariationGroup(opts: {
   try {
     const published = await publishOfferByInventoryItemGroup(
       opts.accessToken,
-      plan.groupKey,
+      groupPlan.groupKey,
     );
     return { offerId, listingId: published.listingId, skipped };
   } catch (error) {
@@ -288,7 +446,7 @@ export async function publishEbayVariationGroup(opts: {
     try {
       const published = await publishOfferByInventoryItemGroup(
         opts.accessToken,
-        plan.groupKey,
+        groupPlan.groupKey,
       );
       return { offerId, listingId: published.listingId, skipped };
     } catch {

@@ -140,12 +140,21 @@ function isAsin(value: string): boolean {
   return /^[A-Z0-9]{10}$/i.test(value);
 }
 
+function colorImageEntries(parsed: unknown): [string, unknown][] {
+  if (!parsed || typeof parsed !== "object") return [];
+  const rec = parsed as Record<string, unknown>;
+  const nested = rec.initial;
+  if (nested && typeof nested === "object" && !Array.isArray(nested)) {
+    return Object.entries(nested as Record<string, unknown>);
+  }
+  return Object.entries(rec);
+}
+
 function colorImageMap(html: string): Record<string, string[]> {
   const obj = blockAfterKey(html, "colorImages", "{");
   const parsed = parseJs(obj);
   const out: Record<string, string[]> = {};
-  if (!parsed || typeof parsed !== "object") return out;
-  for (const [color, rows] of Object.entries(parsed as Record<string, unknown>)) {
+  for (const [color, rows] of colorImageEntries(parsed)) {
     if (/^initial$/i.test(color) || !Array.isArray(rows)) continue;
     const urls: string[] = [];
     for (const row of rows) {
@@ -165,10 +174,15 @@ function imagesForColor(
   map: Record<string, string[]>,
   color: string,
 ): string[] {
+  const needle = color.trim().toLowerCase();
+  if (!needle) return [];
   if (map[color]?.length) return map[color];
-  const needle = color.toLowerCase();
   for (const [name, urls] of Object.entries(map)) {
     if (name.toLowerCase() === needle) return urls;
+  }
+  for (const [name, urls] of Object.entries(map)) {
+    const key = name.toLowerCase();
+    if (key.startsWith(needle) || needle.startsWith(key)) return urls;
   }
   return [];
 }
@@ -607,11 +621,17 @@ function fromHtmlSwatches(html: string): ListingVariationSet | null {
       continue;
     }
     seen.add(asin);
+    const img = (
+      inner.match(/(?:data-src|src)=["'](https:[^"']+)["']/i)?.[1] ||
+      nearby.match(/(?:data-src|src)=["'](https:[^"']+amazon[^"']+)["']/i)?.[1] ||
+      ""
+    ).replace(/&amp;/g, "&");
+    const photo = upgradeImage(img);
     variants.push({
       asin,
       sku: `AMZ-${asin}`,
       aspects: { Color: color },
-      imageUrls: [],
+      imageUrls: photo ? [photo] : [],
     });
     if (variants.length >= MAX_VARIANTS) break;
     match = tagRe.exec(html);
@@ -627,10 +647,19 @@ function attachColorImages(
   const map = colorImageMap(html);
   return {
     ...set,
-    variants: set.variants.map((row) => ({
-      ...row,
-      imageUrls: imagesForColor(map, row.aspects.Color || "") || row.imageUrls,
-    })),
+    variants: set.variants.map((row) => {
+      const fromMap = [
+        row.aspects.Color,
+        row.aspects.Size,
+        ...Object.values(row.aspects),
+      ]
+        .map((value) => imagesForColor(map, value || ""))
+        .find((urls) => urls.length);
+      return {
+        ...row,
+        imageUrls: fromMap?.length ? fromMap : row.imageUrls,
+      };
+    }),
   };
 }
 

@@ -141,7 +141,11 @@ function mapCondition(conditionId: string, conditionLabel: string): string {
 export async function createOrReplaceInventoryItem(
   accessToken: string,
   input: EbayInventoryItemInput,
-  options?: { aspectCardinality?: Map<string, "SINGLE" | "MULTI"> },
+  options?: {
+    aspectCardinality?: Map<string, "SINGLE" | "MULTI">;
+    /** Variation axes must stay one value — commas in scent names must not split. */
+    lockAspects?: Record<string, string>;
+  },
 ) {
   const product: Record<string, unknown> = {
     title: toEbayListingTitle(input.title),
@@ -174,6 +178,14 @@ export async function createOrReplaceInventoryItem(
   );
   aspects.Brand = [brand];
   aspects.MPN = [mpnProduct];
+  for (const [name, raw] of Object.entries(options?.lockAspects || {})) {
+    const value = String(raw || "")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 65);
+    if (!name.trim() || !value) continue;
+    aspects[name] = [value];
+  }
   // Never send invalid UPC in aspects either (same 25002 failure mode).
   for (const key of Object.keys(aspects)) {
     if (!/^upc$/i.test(key)) continue;

@@ -201,6 +201,14 @@ describe("compatible aspects (eBay 25002 Compatible Model)", () => {
     expect(msg.headline).toContain("Compatible Model");
     expect(msg.detail.toLowerCase()).toContain("try again");
   });
+
+  it("humanizes eBay 25013 too many trait values", () => {
+    const msg = humanizeEbayPublishError(
+      "Invalid data in the Inventory Item Group. Too many trait values in variation specifics of the variation [ebay 25013]",
+    );
+    expect(msg.headline.toLowerCase()).toContain("too many");
+    expect(msg.detail.toLowerCase()).toContain("try again");
+  });
 });
 
 describe("Model aspect (eBay 25002 Model)", () => {

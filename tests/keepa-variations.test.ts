@@ -23,6 +23,26 @@ describe("parseKeepaVariations", () => {
     ).toBe("Bamboo 11 Pack");
   });
 
+  it("keeps the Keepa child photo so eBay can show each option", () => {
+    const set = parseKeepaVariations({
+      variations: [
+        {
+          asin: "B0173HB5K0",
+          image: "71BAMBOO.jpg",
+          attributes: [{ dimension: "Color", value: "Bamboo 11 Pack" }],
+        },
+        {
+          asin: "B0ROSE8PK0",
+          image: "71ROSEGOLD.jpg",
+          attributes: [{ dimension: "Color", value: "Rose Gold 8 Pack" }],
+        },
+      ],
+    });
+    expect(
+      set?.variants.find((row) => row.asin === "B0173HB5K0")?.imageUrls[0],
+    ).toMatch(/71BAMBOO/);
+  });
+
   it("returns null when Keepa only has one child", () => {
     expect(
       parseKeepaVariations({

@@ -33,6 +33,40 @@ describe("parseAmazonVariations", () => {
     expect(black?.imageUrls[0]).toMatch(/71BLACK/);
   });
 
+  it("reads colorImages nested under initial and keeps swatch photos", () => {
+    const set = parseAmazonVariations(`
+      "variationDisplayLabels":["Color"]
+      "dimensionValuesDisplayData":{
+        "B0CANDY010":["Yara Candy"],
+        "B0AMBER010":["Amber, Fruity Vanilla"]
+      }
+      'colorImages': { 'initial': {
+        'Yara Candy': [{"hiRes":"https://m.media-amazon.com/images/I/71CANDY._AC_SL1500_.jpg"}],
+        'Amber, Fruity Vanilla': [{"hiRes":"https://m.media-amazon.com/images/I/71AMBER._AC_SL1500_.jpg"}]
+      }}
+    `);
+    expect(set?.variants).toHaveLength(2);
+    expect(
+      set?.variants.find((row) => row.asin === "B0CANDY010")?.imageUrls[0],
+    ).toMatch(/71CANDY/);
+    expect(
+      set?.variants.find((row) => row.asin === "B0AMBER010")?.imageUrls[0],
+    ).toMatch(/71AMBER/);
+  });
+
+  it("keeps a photo from the color swatch img src", () => {
+    const set = parseAmazonVariations(`
+      <li id="color_name_0" class="swatchSelect" data-defaultasin="B0CANDY010" title="Yara Candy">
+        <img alt="Yara Candy" src="https://m.media-amazon.com/images/I/41CANDY._SS40_.jpg" />
+      </li>
+      <li id="color_name_1" class="swatchAvailable" data-defaultasin="B0AMBER010" title="Amber, Fruity Vanilla">
+        <img alt="Amber, Fruity Vanilla" src="https://m.media-amazon.com/images/I/41AMBER._SS40_.jpg" />
+      </li>
+    `);
+    expect(set?.variants).toHaveLength(2);
+    expect(set?.variants[0]?.imageUrls[0]).toMatch(/41CANDY|71CANDY|_AC_SL1500_/);
+  });
+
   it("reads dimensionToAsinMap from mobile / inline twister JSON", () => {
     const set = parseAmazonVariations(`
       "dimensions":["color_name"]

@@ -31,6 +31,27 @@ function isAsin(value: string): boolean {
   return /^[A-Z0-9]{10}$/i.test(value);
 }
 
+function keepaVariantImages(rec: Record<string, unknown>): string[] {
+  const raw = String(rec.image || rec.imagesCSV || "")
+    .split(",")
+    .map((part) => part.trim())
+    .find(Boolean);
+  if (!raw) return [];
+  if (/^https:\/\//i.test(raw)) {
+    const id = raw.match(/\/images\/I\/([^/?#]+)/i)?.[1]
+      ?.replace(/\._.+$/i, "")
+      .replace(/\.(jpe?g|png|webp|gif)$/i, "");
+    return [
+      id && id.length >= 3
+        ? `https://m.media-amazon.com/images/I/${id}._AC_SL1500_.jpg`
+        : raw,
+    ];
+  }
+  const id = raw.replace(/\._.+$/i, "").replace(/\.(jpe?g|png|webp|gif)$/i, "");
+  if (id.length < 3) return [];
+  return [`https://m.media-amazon.com/images/I/${id}._AC_SL1500_.jpg`];
+}
+
 /** Keepa product.variations → Higlou Color/Size picker rows. */
 export function parseKeepaVariations(
   row: Record<string, unknown>,
@@ -68,7 +89,7 @@ export function parseKeepaVariations(
       asin,
       sku: `AMZ-${asin}`,
       aspects,
-      imageUrls: [],
+      imageUrls: keepaVariantImages(rec),
     });
     if (variants.length >= MAX_VARIANTS) break;
   }

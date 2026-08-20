@@ -93,4 +93,63 @@ describe("planVariationGroup", () => {
     );
     expect(plan).toBeNull();
   });
+
+  it("keeps a scent name with commas as one Color value", () => {
+    const plan = planVariationGroup(
+      {
+        axisNames: ["Color"],
+        variants: [
+          {
+            asin: "B0CANDY0010",
+            sku: "AMZ-B0CANDY0010",
+            aspects: { Color: "Yara Candy" },
+            imageUrls: ["https://m.media-amazon.com/images/I/71candy.jpg"],
+          },
+          {
+            asin: "B0AMBER0010",
+            sku: "AMZ-B0AMBER0010",
+            aspects: { Color: "Amber, Fruity Vanilla" },
+            imageUrls: ["https://m.media-amazon.com/images/I/71amber.jpg"],
+          },
+        ],
+      },
+      "AMZ-B0CANDY0010",
+    );
+    expect(plan?.specifications).toEqual([
+      {
+        name: "Color",
+        values: ["Yara Candy", "Amber, Fruity Vanilla"],
+      },
+    ]);
+  });
+
+  it("keeps at most two axes and 60 values so eBay 25013 cannot fire", () => {
+    const colors = Array.from({ length: 70 }, (_, i) => `Scent ${i + 1}`);
+    const plan = planVariationGroup(
+      {
+        axisNames: ["Color", "Size", "Style"],
+        variants: colors.flatMap((color, index) => [
+          {
+            asin: `B0COL${String(index).padStart(5, "0")}`.slice(0, 10),
+            sku: `AMZ-C${index}S`,
+            aspects: { Color: color, Size: "50ml", Style: "Spray" },
+            imageUrls: [],
+          },
+          {
+            asin: `B1COL${String(index).padStart(5, "0")}`.slice(0, 10),
+            sku: `AMZ-C${index}L`,
+            aspects: { Color: color, Size: "100ml", Style: "Tester" },
+            imageUrls: [],
+          },
+        ]),
+      },
+      "AMZ-PARENT01",
+    );
+    expect(plan?.specifications).toHaveLength(2);
+    expect(plan?.specifications.map((row) => row.name)).toEqual(["Color", "Size"]);
+    expect(
+      plan?.specifications.find((row) => row.name === "Color")?.values.length,
+    ).toBeLessThanOrEqual(60);
+    expect(plan?.variantSkus.length).toBeLessThanOrEqual(60);
+  });
 });

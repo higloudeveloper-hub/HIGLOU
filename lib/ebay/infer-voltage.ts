@@ -652,6 +652,36 @@ export function parseMissingAspectFromEbayError(message: string): string | null 
   return m?.[1]?.trim() || null;
 }
 
+/** Fill a missing required aspect so Inventory PUT can retry once. */
+export function inferFilledAspectForEbayError(
+  missingAspect: string,
+  hay: string,
+  extras?: Parameters<typeof inferAspectValueFromText>[2],
+): string {
+  const name = String(missingAspect || "").trim();
+  if (!name) return "";
+  if (/^voltage$/i.test(name)) {
+    return (
+      inferVoltageFromText(hay) ||
+      formatEbayVoltage(/\b(nacs|ccs|ev\s*charger|ev\s*adapter)\b/i.test(hay) ? 1000 : 0)
+    );
+  }
+  const inferred = inferAspectValueFromText(name, hay, extras) || "";
+  if (inferred) return inferred;
+  if (/^size\s*type$/i.test(name)) return inferSizeTypeFromText(hay);
+  if (/^(model|mpn|compatible\s|fragrance|scent)/i.test(name)) {
+    return "Does Not Apply";
+  }
+  if (/^item\s*(length|width|height)$/i.test(name)) {
+    return fallbackDimensionAspect(name, hay, {
+      lengthIn: extras?.packageLengthIn,
+      widthIn: extras?.packageWidthIn,
+      depthIn: extras?.packageDepthIn,
+    });
+  }
+  return "";
+}
+
 export function humanizeEbayPublishError(raw: string): {
   headline: string;
   detail: string;

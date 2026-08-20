@@ -12,6 +12,7 @@ import { StoreTemplatePicker } from "@/components/listing/store-template-picker"
 import type { StoreBranding } from "@/config/store-branding";
 import type { ConfidenceStatus } from "@/lib/ai/confidence-engine";
 import type { ProductListing } from "@/types/product";
+import { isVariationsSpecific } from "@/lib/listing/variations";
 import { cn } from "@/lib/utils";
 
 type FieldConfidence = Record<
@@ -273,7 +274,8 @@ export function AdvancedDrawer({
           <h4 className="text-xs font-semibold tracking-wide text-zinc-500">
             ITEM SPECIFICS
           </h4>
-          {listing.itemSpecifics.map((field, index) => (
+          {listing.itemSpecifics.map((field, index) =>
+            isVariationsSpecific(field) ? null : (
             <div
               key={field.key}
               className="grid gap-2 sm:grid-cols-[160px_1fr_auto]"

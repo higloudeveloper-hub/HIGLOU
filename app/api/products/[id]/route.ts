@@ -7,6 +7,11 @@ import {
   productBodySchema,
   syncRelated,
 } from "@/lib/products/persistence";
+import {
+  applyVariantSelection,
+  variationsFromListing,
+  withEncodedVariations,
+} from "@/lib/listing/variations";
 
 type RouteContext = {
   params: Promise<{ id: string }>;
@@ -68,7 +73,25 @@ export async function PATCH(request: Request, context: RouteContext) {
   const { id } = await context.params;
 
   try {
-    const json = await request.json();
+    const json = (await request.json()) as Record<string, unknown>;
+    const selectedRaw = json.selectedVariationAsins;
+    delete json.selectedVariationAsins;
+    if (Array.isArray(selectedRaw)) {
+      const current = await loadProductBundle(auth.supabase, auth.user.id, id);
+      if (!current) {
+        return NextResponse.json({ error: "Product not found" }, { status: 404 });
+      }
+      const set = variationsFromListing(current);
+      if (set) {
+        json.itemSpecifics = withEncodedVariations(
+          current.itemSpecifics,
+          applyVariantSelection(
+            set,
+            selectedRaw.map((value) => String(value || "")),
+          ),
+        );
+      }
+    }
     const { data, columns: patchColumns, requested } = parseProductPatch(json);
     const columns: Record<string, unknown> = {
       ...patchColumns,

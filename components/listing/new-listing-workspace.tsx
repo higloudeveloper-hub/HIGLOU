@@ -28,10 +28,13 @@ import {
   toEbayListingTitle,
 } from "@/lib/ebay/listing-helpers";
 import {
+  listingWithVariationSet,
   variationSummary,
   variationsFromListing,
   withEncodedVariations,
+  type ListingVariationSet,
 } from "@/lib/listing/variations";
+import { VariationPickerDialog } from "@/components/listing/variation-picker";
 import {
   estimatePackageAndShipping,
   listingHasMeasuredPackage,
@@ -271,6 +274,14 @@ export function NewListingWorkspace({
   >(false);
   const [batchItems, setBatchItems] = useState<BatchPriceItem[] | null>(null);
   const [batchProgress, setBatchProgress] = useState("");
+  const [variationDraft, setVariationDraft] = useState<ListingVariationSet | null>(
+    null,
+  );
+  const pendingAnalyzeRef = useRef<{
+    seeded: ProductListing;
+    images: ProductImage[];
+    hints: { brand?: string; upc?: string; notes?: string };
+  } | null>(null);
   const [analysisStep, setAnalysisStep] = useState(0);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
   const [analysisErrorCode, setAnalysisErrorCode] = useState<string | null>(
@@ -340,6 +351,9 @@ export function NewListingWorkspace({
   const ebayNameLockRef = useRef(false);
   const brandingSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
     null,
+  );
+  const variationSaveTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(
+    new Map(),
   );
   const analyzeAbortRef = useRef(false);
   const firstAttentionRef = useRef<HTMLDivElement | null>(null);
@@ -1168,6 +1182,19 @@ export function NewListingWorkspace({
           ? `${storeLabel} photos loaded — ${variationNote}.`
           : `${storeLabel} photos loaded — analyzing for eBay.`,
       );
+      if (body.variations && body.variations.variants.length >= 2) {
+        pendingAnalyzeRef.current = {
+          seeded,
+          images: body.images,
+          hints: {
+            brand: seeded.brand,
+            upc: seeded.upc,
+            notes: (body.features || []).slice(0, 8).join(" · "),
+          },
+        };
+        setVariationDraft(body.variations);
+        return true;
+      }
       await analyzeProduct({
         baseListing: seeded,
         images: body.images,
@@ -1232,6 +1259,7 @@ export function NewListingWorkspace({
             imageUrl?: string;
             price?: number | null;
             variationCount?: number;
+            variations?: ListingVariationSet | null;
           }>;
           id?: string;
           title?: string;
@@ -1267,6 +1295,7 @@ export function NewListingWorkspace({
             ebayPrice: row.price ?? null,
             status: "ready",
             variationCount: row.variationCount || 0,
+            variations: row.variations || null,
           });
         }
         if (body?.skipped?.length) {
@@ -2403,6 +2432,35 @@ export function NewListingWorkspace({
                 : prev,
             );
           }}
+          onVariationsChange={(id, set) => {
+            setBatchItems((prev) =>
+              prev
+                ? prev.map((row) =>
+                    row.id === id ? { ...row, variations: set } : row,
+                  )
+                : prev,
+            );
+            const timers = variationSaveTimersRef.current;
+            const prevTimer = timers.get(id);
+            if (prevTimer) clearTimeout(prevTimer);
+            timers.set(
+              id,
+              setTimeout(() => {
+                timers.delete(id);
+                void fetch(`/api/products/${id}`, {
+                  method: "PATCH",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    selectedVariationAsins: set.variants
+                      .filter((row) => row.selected !== false)
+                      .map((row) => row.asin),
+                  }),
+                }).catch(() => {
+                  toast.error("Could not save those options. Try again.");
+                });
+              }, 400),
+            );
+          }}
           onPublish={() => {
             void publishBatchListings();
           }}
@@ -2570,6 +2628,25 @@ export function NewListingWorkspace({
         />
       ) : null}
 
+      <VariationPickerDialog
+        open={Boolean(variationDraft)}
+        set={variationDraft}
+        onChange={setVariationDraft}
+        onConfirm={() => {
+          const pending = pendingAnalyzeRef.current;
+          const draft = variationDraft;
+          pendingAnalyzeRef.current = null;
+          setVariationDraft(null);
+          if (!pending) return;
+          const next = listingWithVariationSet(pending.seeded, draft);
+          setListing(next);
+          void analyzeProduct({
+            baseListing: next,
+            images: pending.images,
+            hints: pending.hints,
+          });
+        }}
+      />
       <MoreDetailsDialog
         open={moreOpen}
         onOpenChange={setMoreOpen}

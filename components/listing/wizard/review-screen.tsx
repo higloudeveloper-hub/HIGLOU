@@ -55,6 +55,12 @@ import type { StoreBranding } from "@/config/store-branding";
 import { cn } from "@/lib/utils";
 import { ImageUploader } from "@/components/uploader/image-uploader";
 import { AmazonSourceLink } from "@/components/listing/amazon-source-link";
+import { VariationPicker } from "@/components/listing/variation-picker";
+import {
+  isVariationsSpecific,
+  listingWithVariationSet,
+  variationsFromListing,
+} from "@/lib/listing/variations";
 
 function FieldNote({
   attentionFields,
@@ -140,7 +146,10 @@ export function ReviewScreen({
   const hero = photos[Math.min(activePhoto, Math.max(0, photos.length - 1))];
   const attentionCount = attentionFields.length;
   const perfectCategory = isCategoryPerfectMatch(listing);
-  const filledSpecs = listing.itemSpecifics.filter((f) => f.value?.trim());
+  const filledSpecs = listing.itemSpecifics.filter(
+    (f) => f.value?.trim() && !isVariationsSpecific(f),
+  );
+  const variationSet = variationsFromListing(listing);
   const titleLen = listing.title.length;
 
   const packageInfo = useMemo(
@@ -511,6 +520,20 @@ export function ReviewScreen({
             </div>
           ) : null}
 
+          {variationSet ? (
+            <div className="border-b border-border/60 px-4 py-4 sm:px-5">
+              <VariationPicker
+                set={variationSet}
+                onChange={(next) => {
+                  const updated = listingWithVariationSet(listing, next);
+                  onUpdate("itemSpecifics", updated.itemSpecifics);
+                  onUpdate("variations", updated.variations);
+                  onUpdate("variationAxes", updated.variationAxes);
+                }}
+              />
+            </div>
+          ) : null}
+
           {/* Tabbed details — switch panels instead of endless scroll */}
           <Tabs
             value={panel}
@@ -601,7 +624,8 @@ export function ReviewScreen({
                       </tr>
                     </thead>
                     <tbody>
-                      {listing.itemSpecifics.map((field, index) => (
+                      {listing.itemSpecifics.map((field, index) =>
+                        isVariationsSpecific(field) ? null : (
                         <tr
                           key={field.key}
                           className="border-t border-border/50"

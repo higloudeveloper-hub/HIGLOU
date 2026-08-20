@@ -35,6 +35,8 @@ export interface ListingVariation {
   sku: string;
   aspects: Record<string, string>;
   imageUrls: string[];
+  /** False = found on Amazon but not listed on eBay. Missing means selected. */
+  selected?: boolean;
 }
 
 export interface ProductListing {

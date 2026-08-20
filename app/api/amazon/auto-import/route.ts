@@ -26,7 +26,7 @@ import {
 } from "@/lib/ebay/description-html";
 import { STORE_BRANDING_DEFAULTS } from "@/config/store-branding";
 import { parseAmazonLink } from "@/lib/amazon/asin";
-import { withEncodedVariations } from "@/lib/listing/variations";
+import { compactVariationSet, withEncodedVariations } from "@/lib/listing/variations";
 import type { ListingVariationSet } from "@/lib/listing/variations";
 
 export const runtime = "nodejs";
@@ -592,6 +592,7 @@ async function postWinnerImport(request: Request) {
         imageUrl: item?.images[0]?.url || "",
         price: item?.price ?? null,
         variationCount: item?.variations?.variants.length || 0,
+        variations: compactVariationSet(item?.variations || null),
       };
     }),
     listings: saved.map((row) => {
@@ -603,6 +604,7 @@ async function postWinnerImport(request: Request) {
         imageUrl: item?.images[0]?.url || "",
         price: item?.price ?? null,
         variationCount: item?.variations?.variants.length || 0,
+        variations: compactVariationSet(item?.variations || null),
       };
     }),
     skipped,

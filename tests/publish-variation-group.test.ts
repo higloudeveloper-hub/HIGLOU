@@ -34,6 +34,42 @@ describe("planVariationGroup", () => {
     expect(plan?.groupKey).toMatch(/G$/);
   });
 
+  it("ignores Amazon options the seller unchecked", () => {
+    const plan = planVariationGroup(
+      {
+        axisNames: ["Color", "Size"],
+        variants: [
+          {
+            asin: "B0BK1MED01",
+            sku: "AMZ-B0BK1MED01",
+            aspects: { Color: "Black", Size: "M" },
+            imageUrls: [],
+            selected: true,
+          },
+          {
+            asin: "B0WH1LRG01",
+            sku: "AMZ-B0WH1LRG01",
+            aspects: { Color: "White", Size: "L" },
+            imageUrls: [],
+            selected: true,
+          },
+          {
+            asin: "B0RD1XLG01",
+            sku: "AMZ-B0RD1XLG01",
+            aspects: { Color: "Red", Size: "XL" },
+            imageUrls: [],
+            selected: false,
+          },
+        ],
+      },
+      "AMZ-B0BK1MED01",
+    );
+    expect(plan?.variantSkus).toHaveLength(2);
+    expect(plan?.specifications.find((row) => row.name === "Color")?.values).toEqual(
+      ["Black", "White"],
+    );
+  });
+
   it("drops an axis that does not vary and refuses a single leftover combo", () => {
     const plan = planVariationGroup(
       {

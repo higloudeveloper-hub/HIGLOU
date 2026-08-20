@@ -17,6 +17,10 @@ export function isVariationsSpecific(field: {
   return key === "__HIGLOU_VARIATIONS__" || /^higlou\s*variations$/i.test(label);
 }
 
+export function isVariantSelected(variant: ListingVariation): boolean {
+  return variant.selected !== false;
+}
+
 export function encodeVariationsSpecific(
   set: ListingVariationSet,
 ): ItemSpecificField {
@@ -25,7 +29,13 @@ export function encodeVariationsSpecific(
     label: "Higlou Variations",
     value: JSON.stringify({
       axisNames: set.axisNames,
-      variants: set.variants,
+      variants: set.variants.map((row) => ({
+        asin: row.asin,
+        sku: row.sku,
+        aspects: row.aspects,
+        imageUrls: row.imageUrls,
+        ...(row.selected === false ? { selected: false } : {}),
+      })),
     }),
     isCustom: true,
   };
@@ -66,12 +76,14 @@ export function decodeVariationsSet(raw: string): ListingVariationSet | null {
                   .filter((url) => /^https:\/\//i.test(url))
               : [];
             if (!asin || !Object.keys(aspects).length) return null;
-            return {
+            const variant: ListingVariation = {
               asin,
               sku: sku || `AMZ-${asin}`,
               aspects,
               imageUrls,
-            } satisfies ListingVariation;
+              selected: rec.selected !== false,
+            };
+            return variant;
           })
           .filter((row): row is ListingVariation => Boolean(row))
       : [];
@@ -93,6 +105,9 @@ export function variationsFromListing(
     variationAxes?: string[];
   },
 ): ListingVariationSet | null {
+  const field = (listing.itemSpecifics || []).find(isVariationsSpecific);
+  const fromBlob = field?.value ? decodeVariationsSet(field.value) : null;
+  if (fromBlob) return fromBlob;
   if (listing.variations && listing.variations.length >= 2) {
     return {
       axisNames:
@@ -102,8 +117,7 @@ export function variationsFromListing(
       variants: listing.variations,
     };
   }
-  const field = (listing.itemSpecifics || []).find(isVariationsSpecific);
-  return field?.value ? decodeVariationsSet(field.value) : null;
+  return null;
 }
 
 export function withEncodedVariations(
@@ -115,13 +129,84 @@ export function withEncodedVariations(
   return [encodeVariationsSpecific(set), ...without];
 }
 
+export function applyVariantSelection(
+  set: ListingVariationSet,
+  selectedAsins: Iterable<string>,
+): ListingVariationSet {
+  const want = new Set(
+    [...selectedAsins].map((asin) => String(asin || "").trim().toUpperCase()),
+  );
+  return {
+    axisNames: set.axisNames,
+    variants: set.variants.map((row) => ({
+      ...row,
+      selected: want.has(row.asin.toUpperCase()),
+    })),
+  };
+}
+
+export function selectedVariationSet(
+  set: ListingVariationSet | null | undefined,
+): ListingVariationSet | null {
+  if (!set?.variants.length) return null;
+  const variants = set.variants.filter(isVariantSelected);
+  if (!variants.length) return null;
+  return { axisNames: set.axisNames, variants };
+}
+
+export function variationCounts(set: ListingVariationSet | null | undefined): {
+  total: number;
+  selected: number;
+} {
+  const total = set?.variants.length || 0;
+  const selected = set?.variants.filter(isVariantSelected).length || 0;
+  return { total, selected };
+}
+
 export function variationSummary(set: ListingVariationSet | null): string {
   if (!set || set.variants.length < 2) return "";
-  const parts = set.axisNames.map((axis) => {
-    const n = new Set(
-      set.variants.map((row) => row.aspects[axis]).filter(Boolean),
-    ).size;
-    return n ? `${n} ${axis.toLowerCase()}${n === 1 ? "" : "s"}` : "";
-  }).filter(Boolean);
-  return `${set.variants.length} variations${parts.length ? ` · ${parts.join(" × ")}` : ""}`;
+  const { total, selected } = variationCounts(set);
+  const parts = set.axisNames
+    .map((axis) => {
+      const n = new Set(
+        set.variants
+          .filter(isVariantSelected)
+          .map((row) => row.aspects[axis])
+          .filter(Boolean),
+      ).size;
+      return n ? `${n} ${axis.toLowerCase()}${n === 1 ? "" : "s"}` : "";
+    })
+    .filter(Boolean);
+  if (selected === total) {
+    return `${total} variations${parts.length ? ` · ${parts.join(" × ")}` : ""}`;
+  }
+  return `${selected} of ${total} for your store${parts.length ? ` · ${parts.join(" × ")}` : ""}`;
+}
+
+export function listingWithVariationSet(
+  listing: ProductListing,
+  set: ListingVariationSet | null,
+): ProductListing {
+  return {
+    ...listing,
+    itemSpecifics: withEncodedVariations(listing.itemSpecifics, set),
+    variations: set?.variants,
+    variationAxes: set?.axisNames,
+  };
+}
+
+export function compactVariationSet(
+  set: ListingVariationSet | null | undefined,
+): ListingVariationSet | null {
+  if (!set || set.variants.length < 2) return null;
+  return {
+    axisNames: set.axisNames,
+    variants: set.variants.map((row) => ({
+      asin: row.asin,
+      sku: row.sku,
+      aspects: row.aspects,
+      imageUrls: row.imageUrls.slice(0, 1),
+      selected: row.selected !== false,
+    })),
+  };
 }

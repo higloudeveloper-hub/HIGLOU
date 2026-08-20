@@ -358,9 +358,17 @@ export function resolveEbayBrand(opts: {
     Boolean(raw) &&
     perfume &&
     title.toLowerCase().startsWith(raw.toLowerCase());
+  const titleLikeBrand =
+    Boolean(raw) &&
+    (/^(women'?s|men'?s|kids?'?|girls?'?|boys?'?|unisex|baby)\b/i.test(raw) ||
+      raw.split(/\s+/).length > 4 ||
+      (title && raw.toLowerCase() === title.toLowerCase()));
   const candidate =
-    !raw || PLACEHOLDER_BRAND.test(raw) || scentUsedAsBrand
-      ? byline || raw
+    !raw ||
+    PLACEHOLDER_BRAND.test(raw) ||
+    scentUsedAsBrand ||
+    titleLikeBrand
+      ? byline || ""
       : raw;
   return normalizeEbayBrand(candidate);
 }
@@ -748,13 +756,11 @@ export function inferFilledAspectForEbayError(
     );
   }
   const inferred = inferAspectValueFromText(name, hay, extras) || "";
-  if (inferred) return inferred;
   if (/^brand$/i.test(name)) {
-    return resolveEbayBrand({
-      brand: extras?.brand || "",
-      title: extras?.title || hay,
-    });
+    // 25002 Brand missing means eBay dropped the value we already sent.
+    return "Unbranded";
   }
+  if (inferred) return inferred;
   if (/^size\s*type$/i.test(name)) return inferSizeTypeFromText(hay);
   if (/^(model|mpn|compatible\s|fragrance|scent)/i.test(name)) {
     return "Does Not Apply";

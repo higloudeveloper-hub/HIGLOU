@@ -470,6 +470,28 @@ describe("Brand aspect (eBay 25002 Brand)", () => {
     expect(
       inferFilledAspectForEbayError("Brand", "Women's Floral Ruffle Sleeve Blouse"),
     ).toBe("Unbranded");
+    expect(
+      inferFilledAspectForEbayError(
+        "Brand",
+        "Women's High Waist Cotton Underwear - 6 Pack",
+        {
+          brand: "UNDER THE SEA",
+          title: "Women's High Waist Cotton Underwear - 6 Pack",
+        },
+      ),
+    ).toBe("Unbranded");
+  });
+
+  it("uses Unbranded for women's underwear with no Amazon maker", () => {
+    const listing = createEmptyListing();
+    listing.title = "Women's High Waist Cotton Underwear - 6 Pack";
+    listing.brand = "";
+    listing.categoryId = "11554";
+    listing.categoryName = "Panties";
+    listing.productType = "Underwear";
+    const item = listingToInventoryItem(listing);
+    expect(item.brand).toBe("Unbranded");
+    expect(item.aspects?.Brand?.[0]).toBe("Unbranded");
   });
 
   it("uses Lattafa from a perfume byline instead of the scent name", () => {

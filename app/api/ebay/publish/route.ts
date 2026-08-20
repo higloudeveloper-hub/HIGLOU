@@ -747,6 +747,9 @@ async function postEbayPublish(request: Request) {
               packageDepthIn: listing.packageDepthIn,
             }) || "";
         }
+        if (/^brand$/i.test(missingAspect)) {
+          filled = "Unbranded";
+        }
 
         if (
           !filled &&

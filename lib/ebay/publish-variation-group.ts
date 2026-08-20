@@ -69,6 +69,14 @@ function isEbay25013(error: unknown): boolean {
   return /25013|too many trait values/i.test(errorText(error));
 }
 
+function isBrandMissingError(error: unknown): boolean {
+  const message = errorText(error);
+  return (
+    /25002/i.test(message) &&
+    /item specific\s+brand\s+is missing|needs\s+[“"]?brand/i.test(message)
+  );
+}
+
 function parseDisallowedVariationSpecific(error: unknown): string {
   const message = errorText(error);
   const match = message.match(
@@ -388,6 +396,9 @@ export async function publishEbayVariationGroup(opts: {
 
   const acceptedSkus: string[] = [];
   const variantHeroes: string[] = [];
+  const locksBySku = new Map<string, Record<string, string>>();
+  const photosBySku = new Map<string, string[]>();
+  const aspectsBySku = new Map<string, Record<string, string[]>>();
 
   for (let i = 0; i < planned.variantSkus.length; i += 1) {
     const sku = planned.variantSkus[i]!;
@@ -422,6 +433,9 @@ export async function publishEbayVariationGroup(opts: {
       });
       await clearOffersForSku(opts.accessToken, sku);
       acceptedSkus.push(sku);
+      locksBySku.set(sku, lockAspects);
+      photosBySku.set(sku, variantPhotos);
+      aspectsBySku.set(sku, aspects);
     } catch (error) {
       console.warn(
         "[ebay/publish] skipped variant",
@@ -526,13 +540,48 @@ export async function publishEbayVariationGroup(opts: {
     }
   }
 
+  const restampUnbranded = async (skus: string[]) => {
+    opts.inventory.brand = "Unbranded";
+    if (!opts.inventory.aspects) opts.inventory.aspects = {};
+    opts.inventory.aspects.Brand = ["Unbranded"];
+    for (const sku of skus) {
+      await putVariantInventory({
+        accessToken: opts.accessToken,
+        listing: { ...opts.listing, brand: "Unbranded" },
+        inventory: opts.inventory,
+        sku,
+        aspects: {
+          ...(aspectsBySku.get(sku) || opts.inventory.aspects),
+          Brand: ["Unbranded"],
+        },
+        lockAspects: locksBySku.get(sku) || {},
+        imageUrls: photosBySku.get(sku) || opts.inventory.imageUrls,
+        aspectCardinality: opts.aspectCardinality,
+      });
+      await sleep(200);
+    }
+  };
+
   let offerId = "";
-  for (const sku of groupPlan.variantSkus) {
-    const created = await upsertOfferForSku(opts.accessToken, {
-      ...opts.offer,
-      sku,
-    });
-    if (!offerId) offerId = created.offerId;
+  try {
+    for (const sku of groupPlan.variantSkus) {
+      const created = await upsertOfferForSku(opts.accessToken, {
+        ...opts.offer,
+        sku,
+      });
+      if (!offerId) offerId = created.offerId;
+    }
+  } catch (error) {
+    if (!isBrandMissingError(error)) throw error;
+    await restampUnbranded(groupPlan.variantSkus);
+    offerId = "";
+    for (const sku of groupPlan.variantSkus) {
+      const created = await upsertOfferForSku(opts.accessToken, {
+        ...opts.offer,
+        sku,
+      });
+      if (!offerId) offerId = created.offerId;
+    }
   }
 
   const skipped = planned.variantSkus.length - groupPlan.variantSkus.length;
@@ -548,6 +597,14 @@ export async function publishEbayVariationGroup(opts: {
     );
     return { offerId, listingId: published.listingId, skipped };
   } catch (error) {
+    if (isBrandMissingError(error)) {
+      await restampUnbranded(groupPlan.variantSkus);
+      const published = await publishOfferByInventoryItemGroup(
+        opts.accessToken,
+        groupPlan.groupKey,
+      );
+      return { offerId, listingId: published.listingId, skipped };
+    }
     if (!isEbay25001(error)) throw error;
     await sleep(1500);
     try {

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Loader2, Search, X } from "lucide-react";
+import { ImagePlus, Loader2, Search, X } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { matchListingToShopProduct } from "@/lib/don-baraton/match-promo-listings";
@@ -24,8 +24,56 @@ type HiglouListing = {
   sku: string;
   status: string;
   coverUrl?: string | null;
+  photos?: string[];
   price?: number | null;
 };
+
+function productPhotos(product: DonBaratonPromoProduct): string[] {
+  const urls = product.imageUrls?.filter(Boolean) ?? [];
+  if (product.imageUrl && !urls.includes(product.imageUrl)) {
+    return [product.imageUrl, ...urls];
+  }
+  return urls.length > 0 ? urls : product.imageUrl ? [product.imageUrl] : [];
+}
+
+function fileToCoverDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    const objectUrl = URL.createObjectURL(file);
+    image.onload = () => {
+      const width = 1080;
+      const height = 1350;
+      const canvas = document.createElement("canvas");
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) {
+        URL.revokeObjectURL(objectUrl);
+        reject(new Error("No se pudo leer la foto."));
+        return;
+      }
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, width, height);
+      const scale = Math.max(width / image.width, height / image.height);
+      const drawWidth = image.width * scale;
+      const drawHeight = image.height * scale;
+      ctx.drawImage(
+        image,
+        (width - drawWidth) / 2,
+        (height - drawHeight) / 2,
+        drawWidth,
+        drawHeight,
+      );
+      URL.revokeObjectURL(objectUrl);
+      resolve(canvas.toDataURL("image/jpeg", 0.86));
+    };
+    image.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      reject(new Error("No se pudo abrir esa imagen."));
+    };
+    image.src = objectUrl;
+  });
+}
 
 function Thumb({ url, alt }: { url: string | null | undefined; alt: string }) {
   if (!url) {
@@ -55,6 +103,8 @@ export function PromoCarouselStudio() {
   const [tab, setTab] = useState<"productos" | "publicar">("productos");
   const [format, setFormat] = useState<PromoFormat>("carousel");
   const [coverProductId, setCoverProductId] = useState<string | null>(null);
+  const [coverImageUrl, setCoverImageUrl] = useState<string | null>(null);
+  const [coverImageDataUrl, setCoverImageDataUrl] = useState<string | null>(null);
   const [collectionTitle, setCollectionTitle] = useState(DEFAULT_COLLECTION_TITLE);
 
   const selectedIds = useMemo(
@@ -64,6 +114,34 @@ export function PromoCarouselStudio() {
   const minNeeded = format === "collection" ? COLLECTION_MIN : MIN;
   const cover =
     selected.find((item) => item.id === coverProductId) ?? selected[0] ?? null;
+  const coverPreview =
+    coverImageDataUrl ||
+    coverImageUrl ||
+    cover?.imageUrl ||
+    null;
+
+  const coverCandidates = useMemo(() => {
+    const seen = new Set<string>();
+    const items: Array<{ url: string; productId?: string }> = [];
+    const push = (url?: string | null, productId?: string) => {
+      const value = url?.trim();
+      if (!value || seen.has(value)) return;
+      seen.add(value);
+      items.push({ url: value, productId });
+    };
+    for (const product of selected) {
+      for (const url of productPhotos(product)) push(url, product.id);
+    }
+    for (const listing of listings) {
+      const photos = listing.photos?.length
+        ? listing.photos
+        : listing.coverUrl
+          ? [listing.coverUrl]
+          : [];
+      for (const url of photos) push(url);
+    }
+    return items.slice(0, 48);
+  }, [listings, selected]);
 
   const loadCatalog = async (nextQuery = "", skus: string[] = []) => {
     const params = new URLSearchParams();
@@ -207,6 +285,29 @@ export function PromoCarouselStudio() {
     });
   };
 
+  const pickCover = (url: string, productId?: string) => {
+    setPostUrl(null);
+    setCoverImageDataUrl(null);
+    setCoverImageUrl(url);
+    if (productId) setCoverProductId(productId);
+  };
+
+  const handleCoverFile = async (file: File | undefined) => {
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      toast.error("Elegí una foto (JPG, PNG o WebP).");
+      return;
+    }
+    try {
+      const dataUrl = await fileToCoverDataUrl(file);
+      setPostUrl(null);
+      setCoverImageUrl(null);
+      setCoverImageDataUrl(dataUrl);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "No se pudo usar esa foto.");
+    }
+  };
+
   const chooseFormat = (next: PromoFormat) => {
     setFormat(next);
     setMessage((current) => {
@@ -233,6 +334,8 @@ export function PromoCarouselStudio() {
           message,
           format,
           coverProductId: cover?.id,
+          coverImageUrl: coverImageDataUrl ? undefined : coverImageUrl ?? undefined,
+          coverImageBase64: coverImageDataUrl ?? undefined,
           collectionTitle:
             format === "collection" ? collectionTitle : undefined,
         }),
@@ -346,9 +449,67 @@ export function PromoCarouselStudio() {
           </button>
         </div>
         <p className="mb-4 max-w-2xl text-[13px] leading-relaxed text-[#707070]">
-          Elegí {minNeeded} a {MAX} productos. En vitrina, tocá Portada en el
-          que va de foto grande. El texto no lleva URL.
+          Elegí {minNeeded} a {MAX} productos. En vitrina, subí o tocá la
+          imagen principal (cualquier foto). El texto no lleva URL.
         </p>
+
+        {format === "collection" ? (
+          <div className="mb-4 rounded-[16px] border border-[#e5e5e5] bg-white p-3">
+            <p className="mb-2 text-[11px] font-semibold tracking-[0.14em] text-[#707070] uppercase">
+              Imagen principal
+            </p>
+            <div className="overflow-hidden rounded-xl bg-[#f4f4f5]">
+              <div className="relative mx-auto aspect-[4/5] max-h-64 w-full max-w-[220px]">
+                {coverPreview ? (
+                  <Thumb url={coverPreview} alt="Imagen principal" />
+                ) : (
+                  <div className="grid h-full place-items-center px-4 text-center text-[13px] text-[#707070]">
+                    Subí una foto o tocá una de abajo
+                  </div>
+                )}
+              </div>
+            </div>
+            <label className="mt-3 inline-flex h-11 w-full cursor-pointer items-center justify-center gap-2 rounded-full bg-[#191919] text-[14px] font-semibold text-white">
+              <ImagePlus className="size-4" />
+              Subir imagen principal
+              <input
+                type="file"
+                accept="image/*"
+                className="sr-only"
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  event.target.value = "";
+                  void handleCoverFile(file);
+                }}
+              />
+            </label>
+            {coverCandidates.length > 0 ? (
+              <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
+                {coverCandidates.map((item) => {
+                  const active =
+                    !coverImageDataUrl &&
+                    (coverImageUrl === item.url ||
+                      (!coverImageUrl && cover?.imageUrl === item.url));
+                  return (
+                    <button
+                      key={item.url}
+                      type="button"
+                      onClick={() => pickCover(item.url, item.productId)}
+                      className={cn(
+                        "size-16 shrink-0 overflow-hidden rounded-xl border bg-white",
+                        active
+                          ? "border-[#191919] ring-2 ring-[#191919]"
+                          : "border-[#e5e5e5]",
+                      )}
+                    >
+                      <Thumb url={item.url} alt="Elegir portada" />
+                    </button>
+                  );
+                })}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
 
         <label className="relative mb-4 block">
           <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-[#9b9b9b]" />
@@ -383,7 +544,9 @@ export function PromoCarouselStudio() {
                   {format === "collection" ? (
                     <button
                       type="button"
-                      onClick={() => setCoverProductId(product.id)}
+                      onClick={() =>
+                        pickCover(product.imageUrl ?? productPhotos(product)[0] ?? "", product.id)
+                      }
                       className={cn(
                         "shrink-0 rounded-full px-2 py-1 text-[10px] font-semibold",
                         cover?.id === product.id
@@ -530,9 +693,9 @@ export function PromoCarouselStudio() {
           </div>
           {format === "collection" ? (
             <div className="bg-white">
-              {cover ? (
+              {coverPreview ? (
                 <div className="relative aspect-[4/5] bg-[#f4f4f5]">
-                  <Thumb url={cover.imageUrl} alt={cover.name} />
+                  <Thumb url={coverPreview} alt="Imagen principal" />
                 </div>
               ) : (
                 <div className="flex aspect-[4/5] items-center justify-center bg-[#f4f4f5] text-[13px] text-[#707070]">

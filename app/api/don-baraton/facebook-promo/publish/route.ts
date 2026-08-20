@@ -15,6 +15,8 @@ const bodySchema = z
     message: z.string().optional(),
     format: z.enum(["carousel", "collection"]).optional(),
     coverProductId: z.string().optional(),
+    coverImageUrl: z.string().optional(),
+    coverImageBase64: z.string().optional(),
     collectionTitle: z.string().optional(),
   })
   .superRefine((data, ctx) => {

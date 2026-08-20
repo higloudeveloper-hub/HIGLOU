@@ -8,6 +8,7 @@ export type DonBaratonPromoProduct = {
   price: number;
   categoryName: string | null;
   imageUrl: string | null;
+  imageUrls?: string[];
   productUrl: string;
   pictureUrl: string;
 };
@@ -107,6 +108,8 @@ export async function publishDonBaratonPromoCarousel(input: {
   message?: string;
   format?: "carousel" | "collection";
   coverProductId?: string;
+  coverImageUrl?: string;
+  coverImageBase64?: string;
   collectionTitle?: string;
 }): Promise<DonBaratonPromoPublishResult> {
   const config = getDonBaratonConfig();
@@ -133,6 +136,8 @@ export async function publishDonBaratonPromoCarousel(input: {
         message: input.message,
         format: input.format,
         coverProductId: input.coverProductId,
+        coverImageUrl: input.coverImageUrl,
+        coverImageBase64: input.coverImageBase64,
         collectionTitle: input.collectionTitle,
       }),
     });

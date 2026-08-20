@@ -12,7 +12,12 @@ import type {
 } from "@/lib/ebay/inventory-api";
 import { sanitizeEbayAspects } from "@/lib/ebay/sanitize-aspects";
 import { sanitizeEbayPolicyCopy, toEbayInventorySku } from "@/lib/ebay/listing-helpers";
-import { ensureInferredElectricalAspects, inferModelAspect, listingHasAspect } from "@/lib/ebay/infer-voltage";
+import {
+  ensureInferredApparelAspects,
+  ensureInferredElectricalAspects,
+  inferModelAspect,
+  listingHasAspect,
+} from "@/lib/ebay/infer-voltage";
 import { ensureInferredDimensionAspects } from "@/lib/ebay/infer-item-dimensions";
 
 /** eBay Inventory API product.description must be 1–4000 chars. */
@@ -155,6 +160,13 @@ export function listingToInventoryItem(
     lengthIn: listing.packageLengthIn,
     widthIn: listing.packageWidthIn,
     depthIn: listing.packageDepthIn,
+  });
+  // Clothing 25002 Size Type (Regular unless title says Petite/Plus/etc.).
+  ensureInferredApparelAspects(aspects, {
+    title: listing.title,
+    productType: listing.productType || listing.type,
+    categoryName: listing.categoryName,
+    categoryId: listing.categoryId,
   });
 
   if (!listingHasAspect(aspects, "Model")) {

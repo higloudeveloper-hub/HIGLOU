@@ -12,6 +12,7 @@ import {
   ensureInferredElectricalAspects,
   ensureCompatibleAspects,
   ensureRequiredCategoryAspects,
+  inferSizeTypeFromText,
 } from "@/lib/ebay/infer-voltage";
 import { listingToInventoryItem } from "@/lib/ebay/listing-to-inventory";
 import { createEmptyListing } from "@/lib/demo/sample-listing";
@@ -353,5 +354,80 @@ describe("Department aspect (eBay 25002 Department)", () => {
       productType: "Wallet",
     });
     expect(aspects.Department).toEqual(["Unisex Adults"]);
+  });
+});
+
+describe("Size Type aspect (eBay 25002 Size Type)", () => {
+  it("parses Size Type from eBay 25002 text", () => {
+    expect(
+      parseMissingAspectFromEbayError(
+        "A user error has occurred. The item specific Size Type is missing. Add Size Type to this listing, enter a valid value, and then try again. [eBay 25002]",
+      ),
+    ).toBe("Size Type");
+  });
+
+  it("uses Regular for a women's strapless tube top", () => {
+    expect(inferSizeTypeFromText("Women's Black Strapless Tube Top")).toBe(
+      "Regular",
+    );
+    expect(
+      inferAspectValueFromText(
+        "Size Type",
+        "Trendy Queen Women's Strapless Bandeau Crop Top",
+        { title: "Women's Black Strapless Tube Top" },
+      ),
+    ).toBe("Regular");
+  });
+
+  it("uses Plus / Petite when the title says so", () => {
+    expect(inferSizeTypeFromText("Women's Plus Size Crop Top 3X-Large")).toBe(
+      "Plus",
+    );
+    expect(inferSizeTypeFromText("Women's Petite Bandeau Tank")).toBe("Petite");
+  });
+
+  it("keeps One Size for wallet Size, Regular for wallet Size Type", () => {
+    expect(
+      inferAspectValueFromText("Size", "Green RFID Blocking Wallet", {
+        title: "Green RFID Blocking Wallet",
+      }),
+    ).toBe("One Size");
+    expect(
+      inferAspectValueFromText("Size Type", "Green RFID Blocking Wallet", {
+        title: "Green RFID Blocking Wallet",
+      }),
+    ).toBe("Regular");
+  });
+
+  it("fills Size Type before Inventory PUT even if taxonomy omitted it", () => {
+    const aspects: Record<string, string[]> = { Brand: ["Trendy Queen"] };
+    ensureRequiredCategoryAspects(aspects, ["Color"], {
+      title: "Women's Black Strapless Tube Top",
+      productType: "Tube Top",
+      categoryName: "Women's Tops & Blouses",
+      categoryId: "53159",
+    });
+    expect(aspects["Size Type"]).toEqual(["Regular"]);
+  });
+
+  it("puts Size Type on the inventory item for women's tops", () => {
+    const listing = createEmptyListing();
+    listing.title = "Women's Black Strapless Tube Top";
+    listing.brand = "Trendy Queen";
+    listing.categoryId = "53159";
+    listing.categoryName = "Women's Tops & Blouses";
+    listing.productType = "Tube Top";
+    const item = listingToInventoryItem(listing);
+    expect(item.aspects?.["Size Type"]?.[0]).toBe("Regular");
+  });
+
+  it("does not invent Size Type for kettles", () => {
+    const aspects: Record<string, string[]> = { Brand: ["Pinky Up"] };
+    ensureRequiredCategoryAspects(aspects, ["Model"], {
+      title: "Pinky Up Electric Ceramic Kettle with Gooseneck Spout",
+      categoryName: "Electric Kettles",
+      categoryId: "20681",
+    });
+    expect(aspects["Size Type"]).toBeUndefined();
   });
 });

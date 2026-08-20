@@ -10,6 +10,7 @@ import {
   type EbayOfferInput,
 } from "@/lib/ebay/inventory-api";
 import { toEbayInventorySku } from "@/lib/ebay/listing-helpers";
+import { ensureInferredApparelAspects } from "@/lib/ebay/infer-voltage";
 
 export type VariationGroupPlan = {
   groupKey: string;
@@ -86,6 +87,14 @@ export async function publishEbayVariationGroup(opts: {
       "Higlou read the Amazon options, but eBay needs at least two complete Color/Size combinations.",
     );
   }
+
+  if (!opts.inventory.aspects) opts.inventory.aspects = {};
+  ensureInferredApparelAspects(opts.inventory.aspects, {
+    title: opts.listing.title,
+    productType: opts.listing.productType || opts.listing.type,
+    categoryName: opts.listing.categoryName,
+    categoryId: opts.listing.categoryId,
+  });
 
   const axisNames = plan.specifications.map((row) => row.name);
   const skuToVariant = new Map(

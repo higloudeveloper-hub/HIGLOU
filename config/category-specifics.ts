@@ -53,6 +53,14 @@ export const CATEGORY_SPECIFICS: CategorySpecificConfig[] = [
       "45258",
       "11507",
       "45238",
+      "53159",
+      "63862",
+      "63863",
+      "1059",
+      "155183",
+      "53557",
+      "11632",
+      "45220",
     ],
     fields: [
       { key: "brand", label: "Brand", csvColumn: "C:Brand", required: true },
@@ -165,6 +173,16 @@ export function resolveCategorySpecifics(
   if (/faucet|grifo|plumbing|tap\b/.test(hay)) {
     return (
       CATEGORY_SPECIFICS.find((cfg) => cfg.id === "faucets") ??
+      CATEGORY_SPECIFICS.find((cfg) => cfg.id === "generic")!
+    );
+  }
+  if (
+    /\b(shirt|blouse|dress|jean|hoodie|jacket|coat|tube\s*top|bandeau|crop\s*top|tank\s*top|sneaker|shoe|boot|sandal|wallet|underwear|panty|thong|sock|sweater|fashion)\b/i.test(
+      hay,
+    )
+  ) {
+    return (
+      CATEGORY_SPECIFICS.find((cfg) => cfg.id === "apparel") ??
       CATEGORY_SPECIFICS.find((cfg) => cfg.id === "generic")!
     );
   }

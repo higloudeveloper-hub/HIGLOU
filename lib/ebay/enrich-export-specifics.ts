@@ -1,5 +1,12 @@
 import { resolveCategorySpecifics } from "@/config/category-specifics";
-import { inferVoltageFromText, inferBatteryTechnologyFromText, inferModelAspect, inferDepartmentAspect } from "@/lib/ebay/infer-voltage";
+import {
+  inferVoltageFromText,
+  inferBatteryTechnologyFromText,
+  inferModelAspect,
+  inferDepartmentAspect,
+  inferSizeTypeFromText,
+  listingLooksLikeApparel,
+} from "@/lib/ebay/infer-voltage";
 import {
   formatEbayInches,
   inferItemDimsFromText,
@@ -225,6 +232,12 @@ export function enrichItemSpecificsForExport(input: {
       productType: input.productType,
       department: firstNonEmpty(columns["C:Department"], input.department),
     }),
+    sizeType: firstNonEmpty(
+      columns["C:Size Type"],
+      inferSizeTypeFromText(
+        [input.title, input.productType, input.categoryName].join(" "),
+      ),
+    ),
   };
 
   // eBay BrandMPN (25002): Brand without a valid MPN is rejected.
@@ -291,6 +304,18 @@ export function enrichItemSpecificsForExport(input: {
     );
   if (wantsDepartment && !columns["C:Department"]?.trim() && derived.department) {
     columns["C:Department"] = derived.department;
+  }
+
+  const wantsSizeType =
+    family.fields.some((field) => field.key === "sizeType") ||
+    listingLooksLikeApparel({
+      title: input.title,
+      productType: input.productType,
+      categoryName: input.categoryName,
+      categoryId: input.categoryId,
+    });
+  if (wantsSizeType && !columns["C:Size Type"]?.trim() && derived.sizeType) {
+    columns["C:Size Type"] = derived.sizeType;
   }
 
   // Voltage required in many electrical / EV categories (eBay 25002).

@@ -28,6 +28,7 @@ const FORCE_SINGLE_ASPECTS = new Set(
     "Finish",
     "Material",
     "Size",
+    "Size Type",
     "Style",
     "Room",
     "Department",

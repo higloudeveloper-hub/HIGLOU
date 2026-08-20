@@ -147,6 +147,85 @@ export function inferBatteryTechnologyFromText(text: string): string | null {
   return null;
 }
 
+const APPAREL_SIZE_TYPE_TEXT =
+  /\b(t-?shirts?|tees?\b|blouse|dresses?|jeans?\b|hoodie|sweatshirt|jacket|coat|tube\s*top|bandeau|crop\s*top|tank\s*top|cami|camisole|legging|pants?\b|shorts?\b|skirt|sneakers?|shoes?\b|boots?\b|sandals?|wallet|underwear|pant(y|ies)|thong|bra\b|socks?\b|beanie|sweater|cardigan|romper|jumpsuit|swimsuit|bikini|fashion)\b/i;
+
+/** eBay Size Type values for clothing / shoes. Never "Does Not Apply". */
+export function inferSizeTypeFromText(text: string): string {
+  const hay = String(text || "");
+  if (/\bpetite\b/i.test(hay)) return "Petite";
+  if (/\bmaternity\b/i.test(hay)) return "Maternity";
+  if (/\bjuniors?\b/i.test(hay)) return "Juniors";
+  if (/\bbig\s*[&+]?\s*tall\b/i.test(hay)) return "Big & Tall";
+  if (/\b(plus\s*size|plus-size|\d+\s*x(\s|-)?(large|l)?)\b/i.test(hay)) {
+    return "Plus";
+  }
+  return "Regular";
+}
+
+export function listingLooksLikeApparel(extras?: {
+  title?: string;
+  productType?: string;
+  categoryName?: string;
+  categoryId?: string;
+}): boolean {
+  const id = String(extras?.categoryId || "").trim();
+  if (
+    [
+      "11483",
+      "57988",
+      "15709",
+      "95672",
+      "24087",
+      "3034",
+      "11554",
+      "15687",
+      "57990",
+      "2996",
+      "45258",
+      "11507",
+      "45238",
+      "53159",
+      "63862",
+      "63863",
+      "1059",
+      "155183",
+      "53557",
+      "11632",
+      "45220",
+    ].includes(id)
+  ) {
+    return true;
+  }
+  return APPAREL_SIZE_TYPE_TEXT.test(
+    [extras?.title, extras?.productType, extras?.categoryName].join(" "),
+  );
+}
+
+/**
+ * Clothing / shoes 25002 Size Type. Mutates aspects; returns keys added.
+ */
+export function ensureInferredApparelAspects(
+  aspects: Record<string, string[]>,
+  extras: {
+    title?: string;
+    productType?: string;
+    categoryName?: string;
+    categoryId?: string;
+  },
+): string[] {
+  const added: string[] = [];
+  if (listingHasAspect(aspects, "Size Type")) return added;
+  if (!listingLooksLikeApparel(extras)) return added;
+  aspects["Size Type"] = [
+    inferSizeTypeFromText(
+      [extras.title, extras.productType, extras.categoryName].filter(Boolean).join(" "),
+    ),
+  ];
+  added.push("Size Type");
+  return added;
+}
+
 /** Infer a value for a missing required aspect name (eBay 25002 retry). */
 export function inferAspectValueFromText(
   aspectName: string,
@@ -158,6 +237,7 @@ export function inferAspectValueFromText(
     mpn?: string;
     productType?: string;
     categoryName?: string;
+    categoryId?: string;
     department?: string;
     packageLengthIn?: number | null;
     packageWidthIn?: number | null;
@@ -197,13 +277,16 @@ export function inferAspectValueFromText(
       department: extras?.department,
     });
   }
+  if (name === "size type") {
+    return inferSizeTypeFromText(extras?.title || text);
+  }
   if (
-    (name === "size" || name === "size type") &&
+    name === "size" &&
     /\b(wallet|rfid|keychain|key\s*chain)\b/i.test(
       [extras?.title || text, extras?.productType, extras?.categoryName].join(" "),
     )
   ) {
-    return name === "size type" ? "Regular" : "One Size";
+    return "One Size";
   }
   const compatible = inferCompatibleAspect(aspectName, {
     title: extras?.title || text,
@@ -468,6 +551,7 @@ export function ensureRequiredCategoryAspects(
     mpn?: string;
     productType?: string;
     categoryName?: string;
+    categoryId?: string;
     department?: string;
     packageLengthIn?: number | null;
     packageWidthIn?: number | null;
@@ -516,6 +600,8 @@ export function ensureRequiredCategoryAspects(
     ];
     added.push("Model");
   }
+
+  added.push(...ensureInferredApparelAspects(aspects, extras));
 
   return added;
 }
@@ -572,9 +658,12 @@ export function humanizeEbayPublishError(raw: string): {
 } {
   const aspect = parseMissingAspectFromEbayError(raw);
   if (aspect) {
+    const sizeTypeHint = /^size\s*type$/i.test(aspect)
+      ? "Try again — Higlou fills Regular unless the title says Petite, Plus, Maternity, or Juniors."
+      : "Try again — Higlou fills it from the product (or Does Not Apply).";
     return {
       headline: `eBay needs “${aspect}”`,
-      detail: `This category requires ${aspect} before the listing can go live. Try again — Higlou fills it from the product (or Does Not Apply).`,
+      detail: `This category requires ${aspect} before the listing can go live. ${sizeTypeHint}`,
     };
   }
   if (/eBay publish failed/i.test(raw)) {

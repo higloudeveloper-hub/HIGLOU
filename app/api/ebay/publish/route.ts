@@ -38,6 +38,7 @@ import {
   formatEbayVoltage,
   inferAspectValueFromText,
   inferVoltageFromText,
+  inferSizeTypeFromText,
   parseMissingAspectFromEbayError,
 } from "@/lib/ebay/infer-voltage";
 import { ensureInferredDimensionAspects, fallbackDimensionAspect } from "@/lib/ebay/infer-item-dimensions";
@@ -601,6 +602,7 @@ async function postEbayPublish(request: Request) {
       mpn: listing.mpn,
       productType: listing.productType || listing.type,
       categoryName: listing.categoryName,
+      categoryId: listing.categoryId,
       department: listing.department,
       packageLengthIn: listing.packageLengthIn,
       packageWidthIn: listing.packageWidthIn,
@@ -721,6 +723,7 @@ async function postEbayPublish(request: Request) {
               mpn: listing.mpn,
               productType: listing.productType || listing.type,
               categoryName: listing.categoryName,
+              categoryId: listing.categoryId,
               department: listing.department,
               packageLengthIn: listing.packageLengthIn,
               packageWidthIn: listing.packageWidthIn,
@@ -733,6 +736,9 @@ async function postEbayPublish(request: Request) {
           /^(model|mpn|compatible\s|fragrance|scent)/i.test(missingAspect)
         ) {
           filled = "Does Not Apply";
+        }
+        if (!filled && /^size\s*type$/i.test(missingAspect)) {
+          filled = inferSizeTypeFromText(hay);
         }
         if (!filled && /^item\s*(length|width|height)$/i.test(missingAspect)) {
           filled = fallbackDimensionAspect(missingAspect, hay, {

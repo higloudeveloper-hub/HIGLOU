@@ -105,4 +105,18 @@ describe("enrichItemSpecificsForExport", () => {
     });
     expect(columns["C:Brand"]).toBe("Moen");
   });
+
+  it("does not export ASIN as an eBay item specific", () => {
+    const { columns, attributePairs } = enrichItemSpecificsForExport({
+      categoryId: "163574",
+      brand: "Generic",
+      title: "RFID Blocking Wallet",
+      itemSpecifics: [
+        { key: "C:ASIN", value: "B0CHS1BVBC" },
+        { key: "C:Type", value: "Wallet" },
+      ],
+    });
+    expect(columns["C:ASIN"]).toBeUndefined();
+    expect(attributePairs.some((p) => /asin/i.test(p.name))).toBe(false);
+  });
 });

@@ -97,8 +97,24 @@ describe("toEbayListingTitle", () => {
 });
 
 describe("toEbayInventorySku", () => {
-  it("strips hyphens from Amazon import SKUs so eBay Inventory accepts them", () => {
-    expect(toEbayInventorySku("AMZ-B0CHS1BVBC")).toBe("AMZB0CHS1BVBC");
+  it("maps Amazon import SKUs to a neutral eBay Custom label (no AMZ, no ASIN)", () => {
+    const sku = toEbayInventorySku("AMZ-B0CHS1BVBC");
+    expect(sku).toMatch(/^HG[A-Z0-9]{7}$/);
+    expect(sku).not.toMatch(/AMZ/i);
+    expect(sku).not.toContain("B0CHS1BVBC");
+    expect(toEbayInventorySku("AMZB0CHS1BVBC")).toBe(sku);
+    expect(toEbayInventorySku(sku)).toBe(sku);
     expect(toEbayInventorySku("")).toBe("ITEM");
+  });
+
+  it("maps Home Depot import SKUs away from HD item ids", () => {
+    const sku = toEbayInventorySku("HD-301460651");
+    expect(sku).toMatch(/^HG[A-Z0-9]{7}$/);
+    expect(sku).not.toMatch(/^HD/i);
+    expect(sku).not.toContain("301460651");
+  });
+
+  it("leaves seller-made SKUs alphanumeric without rewriting them", () => {
+    expect(toEbayInventorySku("MILW-48-73-1430")).toBe("MILW48731430");
   });
 });

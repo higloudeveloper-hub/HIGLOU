@@ -13,6 +13,7 @@ import {
   buildExportFileName,
   buildItemPhotoUrlValue,
   toAsciiHttpHeaderValue,
+  toEbayInventorySku,
 } from "@/lib/ebay/listing-helpers";
 import {
   draftDefaultsToPolicyValues,
@@ -328,7 +329,7 @@ export async function POST(request: Request) {
           ?.name || `Category ${categoryId}`;
     }
 
-    setIfPresent(["Custom label (SKU)"], data.sku);
+    setIfPresent(["Custom label (SKU)"], toEbayInventorySku(data.sku));
     // Always write Category ID even if the active template uses an alias header.
     {
       const categoryHeader =

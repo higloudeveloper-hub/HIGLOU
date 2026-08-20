@@ -27,12 +27,41 @@ export function generateSku(parts: {
   return `${brand}${model}${size}${color}`.slice(0, 50);
 }
 
+/** Stable 32-bit fingerprint so the same Higlou SKU always maps to the same eBay label. */
+function skuFingerprint(raw: string): string {
+  let hash = 2166136261;
+  const text = String(raw)
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, "");
+  for (let i = 0; i < text.length; i++) {
+    hash ^= text.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(36).toUpperCase().padStart(7, "0");
+}
+
 /**
- * Inventory SKUs must be alphanumeric (eBay 25707). Keep AMZ-ASINs in Higlou
- * for Amazon; strip hyphens only when talking to eBay Inventory.
+ * Amazon (`AMZ-B0…`) and Home Depot (`HD-123`) import SKUs. Keep those inside
+ * Higlou for source lookup — never as the eBay Custom label.
+ */
+export function isMarketplaceImportSku(raw: string): boolean {
+  const compact = String(raw || "")
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, "");
+  return /^AMZ[A-Z0-9]{10}$/.test(compact) || /^HD\d{5,}$/.test(compact);
+}
+
+/**
+ * eBay Custom label / Inventory SKU (alphanumeric, max 50 — error 25707).
+ * Keep AMZ-/HD- SKUs in Higlou; send a neutral HG label so the listing
+ * does not advertise Amazon or Home Depot as the source.
  */
 export function toEbayInventorySku(raw: string): string {
-  const cleaned = String(raw || "")
+  const original = String(raw || "").trim();
+  if (isMarketplaceImportSku(original)) {
+    return `HG${skuFingerprint(original)}`.slice(0, 50);
+  }
+  const cleaned = original
     .toUpperCase()
     .replace(/[^A-Z0-9]+/g, "")
     .slice(0, 50);

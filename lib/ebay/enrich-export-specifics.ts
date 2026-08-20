@@ -374,6 +374,12 @@ export function enrichItemSpecificsForExport(input: {
     }
   }
 
+  for (const key of Object.keys(columns)) {
+    if (/^C:(asin|amazon\s*asin|epid)$/i.test(key)) {
+      delete columns[key];
+    }
+  }
+
   const attributePairs = Object.entries(columns)
     .filter(([, value]) => value.trim())
     .map(([key, value]) => ({

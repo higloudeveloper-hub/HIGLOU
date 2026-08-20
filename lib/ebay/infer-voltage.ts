@@ -746,6 +746,13 @@ export function humanizeEbayPublishError(raw: string): {
         "eBay only allows about 60 colors or sizes on a variation listing. Uncheck extras in Options, or Try again — Higlou will list it as one item.",
     };
   }
+  if (/not allowed as a variation specific/i.test(raw)) {
+    return {
+      headline: "eBay needs Color or Size, not Scent",
+      detail:
+        "Try again — Higlou lists perfume aromas as Color so eBay can show the dropdown.",
+    };
+  }
   if (/eBay publish failed/i.test(raw)) {
     return {
       headline: "Couldn’t finish publish",

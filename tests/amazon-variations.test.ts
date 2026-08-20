@@ -179,6 +179,19 @@ describe("parseAmazonVariations", () => {
     expect(set?.variants).toHaveLength(2);
   });
 
+  it("maps Amazon scent_name to Color so eBay can use it as a variation", () => {
+    const set = parseAmazonVariations(`
+      "dimensions":["scent_name"]
+      "variationDisplayLabels":["Scent"]
+      "variationValues":{"scent_name":["Yara Candy","Amber, Fruity Vanilla"]}
+      "dimensionToAsinMap":{"0":"B0CANDY010","1":"B0AMBER010"}
+    `);
+    expect(set?.axisNames).toEqual(["Color"]);
+    expect(
+      set?.variants.find((row) => row.asin === "B0CANDY010")?.aspects.Color,
+    ).toBe("Yara Candy");
+  });
+
   it("attaches variations to the Amazon product draft", () => {
     const product = parseAmazonProductPage(
       `<span id="productTitle">Sexy Thong</span>${TWISTER}`,

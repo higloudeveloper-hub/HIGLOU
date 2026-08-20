@@ -209,6 +209,14 @@ describe("compatible aspects (eBay 25002 Compatible Model)", () => {
     expect(msg.headline.toLowerCase()).toContain("too many");
     expect(msg.detail.toLowerCase()).toContain("try again");
   });
+
+  it("humanizes eBay 25002 Scent is not a variation specific", () => {
+    const msg = humanizeEbayPublishError(
+      "A user error has occurred. Scent is not allowed as a variation specific. [ebay 25002]",
+    );
+    expect(msg.headline.toLowerCase()).toContain("color");
+    expect(msg.detail.toLowerCase()).toContain("try again");
+  });
 });
 
 describe("Model aspect (eBay 25002 Model)", () => {

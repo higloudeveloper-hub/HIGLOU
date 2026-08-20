@@ -117,7 +117,7 @@ function asinFromUnknown(value: unknown): string {
 
 function axisName(raw: string): string {
   const key = String(raw || "").trim().toLowerCase().replace(/[\s-]+/g, "_");
-  if (/^colou?r/.test(key)) return "Color";
+  if (/^colou?r/.test(key) || /^(scent|fragrance|flavou?r)/.test(key)) return "Color";
   if (/^size/.test(key)) return "Size";
   if (/^style/.test(key)) return "Style";
   if (/^pattern/.test(key)) return "Pattern";

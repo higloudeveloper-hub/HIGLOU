@@ -36,10 +36,21 @@ const AXIS_RANK: Record<string, number> = {
   size: 1,
   style: 2,
   pattern: 3,
-  flavor: 4,
-  flavour: 4,
-  scent: 5,
 };
+
+/** Amazon calls perfume options Scent; eBay only allows Color/Size as variation specifics. */
+export function toEbayVariationAxis(name: string): string {
+  const key = String(name || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[\s-]+/g, "_");
+  if (!key) return "";
+  if (/^(colou?r|scent|fragrance|flavou?r)(_name)?$/.test(key)) return "Color";
+  if (/^size/.test(key) && !/type/.test(key)) return "Size";
+  if (/^style/.test(key)) return "Style";
+  if (/^pattern/.test(key)) return "Pattern";
+  return String(name || "").trim();
+}
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -57,6 +68,44 @@ function isEbay25013(error: unknown): boolean {
   return /25013|too many trait values/i.test(errorText(error));
 }
 
+function parseDisallowedVariationSpecific(error: unknown): string {
+  const message = errorText(error);
+  const match = message.match(
+    /([A-Za-z][A-Za-z0-9 /_-]{0,40}?)\s+is not allowed as a variation specific/i,
+  );
+  return String(match?.[1] || "").trim();
+}
+
+function dropDisallowedSpec(
+  current: VariationGroupPlan,
+  badName: string,
+): VariationGroupPlan | null {
+  const mapped = toEbayVariationAxis(badName);
+  const rename =
+    mapped && mapped.toLowerCase() !== badName.toLowerCase() ? mapped : "";
+  const next: VariationGroupPlan["specifications"] = [];
+  for (const row of current.specifications) {
+    const isBad = row.name.toLowerCase() === badName.toLowerCase();
+    const name = isBad ? rename : row.name;
+    if (!name) continue;
+    const existing = next.find((item) => item.name.toLowerCase() === name.toLowerCase());
+    if (existing) {
+      existing.values = [...new Set([...existing.values, ...row.values])];
+    } else {
+      next.push({ name, values: [...row.values] });
+    }
+  }
+  if (!next.length) return null;
+  const unchanged =
+    next.length === current.specifications.length &&
+    next.every(
+      (row, index) =>
+        row.name.toLowerCase() === current.specifications[index]?.name.toLowerCase(),
+    );
+  if (unchanged) return null;
+  return { ...current, specifications: next };
+}
+
 function oneTrait(raw: string): string {
   return sanitizeEbayPolicyCopy(String(raw || "").replace(/\s+/g, " ")).slice(
     0,
@@ -67,6 +116,30 @@ function oneTrait(raw: string): string {
 function axisRank(name: string): number {
   const key = name.trim().toLowerCase();
   return AXIS_RANK[key] ?? 20;
+}
+
+function axisValue(
+  variant: { aspects?: Record<string, string> } | undefined,
+  ebayName: string,
+): string {
+  if (!variant?.aspects) return "";
+  if (/^color$/i.test(ebayName)) {
+    for (const key of Object.keys(variant.aspects)) {
+      if (/^(colou?r|scent|fragrance|flavou?r)$/i.test(key)) {
+        const value = oneTrait(variant.aspects[key] || "");
+        if (value) return value;
+      }
+    }
+  }
+  if (/^size$/i.test(ebayName)) {
+    for (const key of Object.keys(variant.aspects)) {
+      if (/^size/i.test(key) && !/type/i.test(key)) {
+        const value = oneTrait(variant.aspects[key] || "");
+        if (value) return value;
+      }
+    }
+  }
+  return oneTrait(variant.aspects[ebayName] || "");
 }
 
 export function planVariationGroup(
@@ -80,17 +153,20 @@ export function planVariationGroup(
   const maxAxes = opts?.maxAxes ?? EBAY_MAX_VARIATION_AXES;
   const maxValues = opts?.maxValuesPerAxis ?? EBAY_MAX_VALUES_PER_AXIS;
 
-  const rawSpecs = (set.axisNames.length
-    ? set.axisNames
-    : [...new Set(variants.flatMap((row) => Object.keys(row.aspects)))]
+  const sourceNames = (
+    set.axisNames.length
+      ? set.axisNames
+      : [...new Set(variants.flatMap((row) => Object.keys(row.aspects)))]
   )
+    .map((name) => toEbayVariationAxis(name))
+    .filter(Boolean);
+
+  const rawSpecs = [...new Set(sourceNames)]
     .map((name) => ({
       name,
       values: [
         ...new Set(
-          variants
-            .map((row) => oneTrait(row.aspects[name] || ""))
-            .filter(Boolean),
+          variants.map((row) => axisValue(row, name)).filter(Boolean),
         ),
       ],
     }))
@@ -120,12 +196,12 @@ export function planVariationGroup(
     const sku = toEbayInventorySku(variant.sku || `AMZ-${variant.asin}`);
     if (seen.has(sku)) continue;
     const hasEveryAxis = specifications.every((axis) => {
-      const value = oneTrait(variant.aspects[axis.name] || "");
+      const value = axisValue(variant, axis.name);
       return value && allowed.get(axis.name)?.has(value);
     });
     if (!hasEveryAxis) continue;
     const combo = specifications
-      .map((axis) => oneTrait(variant.aspects[axis.name] || ""))
+      .map((axis) => axisValue(variant, axis.name))
       .join("|");
     if (combos.has(combo)) continue;
     seen.add(sku);
@@ -292,24 +368,15 @@ export async function publishEbayVariationGroup(opts: {
     const aspects = { ...(opts.inventory.aspects || {}) };
     const lockAspects: Record<string, string> = {};
     for (const name of Object.keys(aspects)) {
-      if (/^(colou?r|size|style|pattern|scent|flavou?r)$/i.test(name)) {
+      if (/^(colou?r|size|style|pattern|scent|fragrance|flavou?r|notes)$/i.test(name)) {
         delete aspects[name];
       }
     }
     for (const axis of planned.specifications) {
-      const value = oneTrait(variant?.aspects[axis.name] || "");
+      const value = axisValue(variant, axis.name);
       if (!value) continue;
       aspects[axis.name] = [value];
       lockAspects[axis.name] = value;
-    }
-    const scent = lockAspects.Color || lockAspects.Size || "";
-    if (scent) {
-      for (const name of Object.keys(aspects)) {
-        if (/^(fragrance\s*name|scent|notes)$/i.test(name) && !lockAspects[name]) {
-          aspects[name] = [scent];
-          lockAspects[name] = scent;
-        }
-      }
     }
     const variantPhotos = await hostImages(
       (variant?.imageUrls || []).slice(0, 4),
@@ -409,6 +476,19 @@ export async function publishEbayVariationGroup(opts: {
         if (!next || attempt === 3) {
           throw new Error(
             "VARIATIONS_TOO_COMPLEX: eBay will not take that many color/size options together. Higlou will list this as one item.",
+          );
+        }
+        groupPlan = next;
+        await sleep(400);
+        continue;
+      }
+      const disallowed = parseDisallowedVariationSpecific(error);
+      if (disallowed) {
+        withPhotos = false;
+        const next = dropDisallowedSpec(groupPlan, disallowed);
+        if (!next || attempt === 3) {
+          throw new Error(
+            "VARIATIONS_TOO_COMPLEX: eBay will not take that option name as a dropdown. Higlou will list this as one item.",
           );
         }
         groupPlan = next;

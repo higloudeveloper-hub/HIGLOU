@@ -123,6 +123,35 @@ describe("planVariationGroup", () => {
     ]);
   });
 
+  it("maps Amazon Scent options to eBay Color so 25002 cannot fire", () => {
+    const plan = planVariationGroup(
+      {
+        axisNames: ["Scent"],
+        variants: [
+          {
+            asin: "B0CANDY010",
+            sku: "AMZ-B0CANDY010",
+            aspects: { Scent: "Yara Candy" },
+            imageUrls: [],
+          },
+          {
+            asin: "B0AMBER010",
+            sku: "AMZ-B0AMBER010",
+            aspects: { Scent: "Amber, Fruity Vanilla" },
+            imageUrls: [],
+          },
+        ],
+      },
+      "AMZ-B0CANDY010",
+    );
+    expect(plan?.specifications).toEqual([
+      {
+        name: "Color",
+        values: ["Yara Candy", "Amber, Fruity Vanilla"],
+      },
+    ]);
+  });
+
   it("keeps at most two axes and 60 values so eBay 25013 cannot fire", () => {
     const colors = Array.from({ length: 70 }, (_, i) => `Scent ${i + 1}`);
     const plan = planVariationGroup(

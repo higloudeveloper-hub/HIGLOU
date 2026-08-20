@@ -14,6 +14,7 @@ import {
   ensureRequiredCategoryAspects,
   inferSizeTypeFromText,
   inferFilledAspectForEbayError,
+  inferVolumeFromText,
   normalizeEbayBrand,
   resolveEbayBrand,
 } from "@/lib/ebay/infer-voltage";
@@ -327,6 +328,43 @@ describe("Fragrance Name aspect (eBay 25002 Fragrance Name)", () => {
 
   it("uses Does Not Apply when the title has no scent line", () => {
     expect(inferFragranceName({ title: "", brand: "" })).toBe("Does Not Apply");
+  });
+});
+
+describe("Volume aspect (eBay 25002 Volume)", () => {
+  it("maps 100ml perfume bottles to 3.4 fl oz", () => {
+    expect(inferVolumeFromText("Lattafa Yara Candy 100ml Eau de Parfum")).toBe(
+      "3.4 fl oz",
+    );
+    expect(inferVolumeFromText("3.4 Fl Oz Eau de Parfum")).toBe("3.4 fl oz");
+  });
+
+  it("fills Volume on a perfume with no size in the title", () => {
+    const listing = createEmptyListing();
+    listing.title =
+      "Yara Candy Eau de Parfum by Lattafa - Amber Fruity Vanilla Fragrance for Women";
+    listing.brand = "Lattafa";
+    listing.categoryId = "11854";
+    listing.categoryName = "Fragrances";
+    listing.productType = "Eau de Parfum";
+    const item = listingToInventoryItem(listing);
+    expect(item.aspects?.Volume?.[0]).toBe("3.4 fl oz");
+    expect(
+      inferFilledAspectForEbayError(
+        "Volume",
+        listing.title,
+        { title: listing.title, productType: "Eau de Parfum" },
+      ),
+    ).toBe("3.4 fl oz");
+  });
+
+  it("does not invent Volume for underwear", () => {
+    const listing = createEmptyListing();
+    listing.title = "Women's High Waist Cotton Underwear - 6 Pack";
+    listing.categoryName = "Panties";
+    listing.productType = "Underwear";
+    const item = listingToInventoryItem(listing);
+    expect(item.aspects?.Volume).toBeUndefined();
   });
 });
 

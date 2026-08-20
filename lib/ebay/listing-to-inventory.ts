@@ -16,6 +16,7 @@ import {
   ensureEbayBrandAspect,
   ensureInferredApparelAspects,
   ensureInferredElectricalAspects,
+  ensureInferredFragranceAspects,
   inferModelAspect,
   listingHasAspect,
   resolveEbayBrand,
@@ -170,6 +171,12 @@ export function listingToInventoryItem(
     productType: listing.productType || listing.type,
     categoryName: listing.categoryName,
     categoryId: listing.categoryId,
+  });
+  ensureInferredFragranceAspects(aspects, {
+    title: listing.title,
+    productType: listing.productType || listing.type,
+    categoryName: listing.categoryName,
+    size: listing.size,
   });
 
   if (!listingHasAspect(aspects, "Model")) {

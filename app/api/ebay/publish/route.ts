@@ -607,6 +607,7 @@ async function postEbayPublish(request: Request) {
       packageLengthIn: listing.packageLengthIn,
       packageWidthIn: listing.packageWidthIn,
       packageDepthIn: listing.packageDepthIn,
+      size: listing.size,
     };
     if (!inventory.aspects) inventory.aspects = {};
     ensureCompatibleAspects(

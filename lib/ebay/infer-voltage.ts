@@ -242,6 +242,7 @@ export function inferAspectValueFromText(
     packageLengthIn?: number | null;
     packageWidthIn?: number | null;
     packageDepthIn?: number | null;
+    size?: string;
   },
 ): string | null {
   const name = String(aspectName || "").trim().toLowerCase();
@@ -260,6 +261,18 @@ export function inferAspectValueFromText(
       brand: extras?.brand,
       model: extras?.model,
     });
+  }
+  if (name === "volume" || name === "item volume" || name === "size/volume") {
+    return (
+      inferVolumeFromText(
+        [extras?.size, extras?.title || text, extras?.productType].join(" "),
+        looksLikeFragranceProduct(
+          [extras?.title || text, extras?.productType, extras?.categoryName].join(
+            " ",
+          ),
+        ),
+      ) || null
+    );
   }
   if (name === "model") {
     return inferModelAspect({
@@ -413,6 +426,62 @@ export function inferFragranceName(opts: {
   }
   if (brand.length >= 2 && !EMPTY_ASPECT.test(brand)) return brand.slice(0, 65);
   return "Does Not Apply";
+}
+
+const ML_TO_FL_OZ: Record<number, string> = {
+  10: "0.33 fl oz",
+  15: "0.5 fl oz",
+  30: "1 fl oz",
+  50: "1.7 fl oz",
+  75: "2.5 fl oz",
+  100: "3.4 fl oz",
+  125: "4.2 fl oz",
+  150: "5 fl oz",
+  200: "6.7 fl oz",
+};
+
+function looksLikeFragranceProduct(text: string): boolean {
+  return /\b(eau de parfum|eau de toilette|\bedp\b|\bedt\b|fragrance|perfume|parfum|cologne)\b/i.test(
+    text,
+  );
+}
+
+/** eBay fragrance 25002 Volume — ml/oz from the title or size, else a typical EDP fill. */
+export function inferVolumeFromText(text: string, fallbackForPerfume = false): string {
+  const raw = String(text || "");
+  const flOz = raw.match(
+    /(\d+(?:\.\d+)?)\s*(?:fl\.?\s*)?(?:oz|ounces?)\b/i,
+  );
+  if (flOz) return `${flOz[1]} fl oz`;
+  const ml = raw.match(/(\d+(?:\.\d+)?)\s*m(?:l|illilit(?:er|re)s?)\b/i);
+  if (ml) {
+    const n = Number(ml[1]);
+    if (Number.isFinite(n) && ML_TO_FL_OZ[n]) return ML_TO_FL_OZ[n]!;
+    if (Number.isFinite(n) && n > 0) return `${ml[1]} ml`;
+  }
+  if (fallbackForPerfume && looksLikeFragranceProduct(raw)) return "3.4 fl oz";
+  return "";
+}
+
+export function ensureInferredFragranceAspects(
+  aspects: Record<string, string[]>,
+  extras: {
+    title?: string;
+    productType?: string;
+    categoryName?: string;
+    size?: string;
+  },
+): string[] {
+  const hay = [extras.title, extras.productType, extras.categoryName, extras.size]
+    .filter(Boolean)
+    .join(" ");
+  if (!looksLikeFragranceProduct(hay)) return [];
+  const added: string[] = [];
+  if (!listingHasAspect(aspects, "Volume")) {
+    aspects.Volume = [inferVolumeFromText(hay, true) || "3.4 fl oz"];
+    added.push("Volume");
+  }
+  return added;
 }
 
 function looksLikeFragranceLine(value: string): boolean {
@@ -622,6 +691,7 @@ const DNA_REQUIRED = new Set(
     "Fragrance Name",
     "Scent",
     "Fragrance",
+    "Volume",
   ].map((n) => n.toLowerCase()),
 );
 
@@ -644,6 +714,7 @@ export function ensureRequiredCategoryAspects(
     packageLengthIn?: number | null;
     packageWidthIn?: number | null;
     packageDepthIn?: number | null;
+    size?: string;
   },
 ): string[] {
   const added: string[] = [];
@@ -655,6 +726,7 @@ export function ensureRequiredCategoryAspects(
     extras.productType,
     extras.categoryName,
     extras.department,
+    extras.size,
   ]
     .filter(Boolean)
     .join(" ");
@@ -690,6 +762,7 @@ export function ensureRequiredCategoryAspects(
   }
 
   added.push(...ensureInferredApparelAspects(aspects, extras));
+  added.push(...ensureInferredFragranceAspects(aspects, extras));
   added.push(...ensureEbayBrandAspect(aspects, extras.brand, extras.title));
 
   return added;
@@ -759,6 +832,11 @@ export function inferFilledAspectForEbayError(
   if (/^brand$/i.test(name)) {
     // 25002 Brand missing means eBay dropped the value we already sent.
     return "Unbranded";
+  }
+  if (/^volume$/i.test(name)) {
+    return (
+      inferVolumeFromText(hay, looksLikeFragranceProduct(hay)) || "3.4 fl oz"
+    );
   }
   if (inferred) return inferred;
   if (/^size\s*type$/i.test(name)) return inferSizeTypeFromText(hay);

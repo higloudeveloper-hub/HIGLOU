@@ -16,7 +16,9 @@ import { toEbayInventorySku, sanitizeEbayPolicyCopy } from "@/lib/ebay/listing-h
 import {
   ensureEbayBrandAspect,
   ensureInferredApparelAspects,
+  ensureInferredFragranceAspects,
   inferFilledAspectForEbayError,
+  inferVolumeFromText,
   parseMissingAspectFromEbayError,
   resolveEbayBrand,
 } from "@/lib/ebay/infer-voltage";
@@ -364,6 +366,12 @@ export async function publishEbayVariationGroup(opts: {
     categoryName: opts.listing.categoryName,
     categoryId: opts.listing.categoryId,
   });
+  ensureInferredFragranceAspects(opts.inventory.aspects, {
+    title: opts.listing.title,
+    productType: opts.listing.productType || opts.listing.type,
+    categoryName: opts.listing.categoryName,
+    size: opts.listing.size,
+  });
 
   const skuToVariant = new Map(
     opts.set.variants.map((row) => [
@@ -415,6 +423,28 @@ export async function publishEbayVariationGroup(opts: {
       if (!value) continue;
       aspects[axis.name] = [value];
       lockAspects[axis.name] = value;
+    }
+    const perfumeHay = [
+      opts.listing.title,
+      opts.listing.productType,
+      opts.listing.categoryName,
+      opts.listing.size,
+    ]
+      .filter(Boolean)
+      .join(" ");
+    if (
+      aspects.Volume?.[0] ||
+      /\b(fragrance|perfume|parfum|cologne|eau de)\b/i.test(perfumeHay)
+    ) {
+      const volume =
+        inferVolumeFromText(
+          [variant?.aspects.Size, opts.listing.size, perfumeHay].join(" "),
+          true,
+        ) ||
+        aspects.Volume?.[0] ||
+        "3.4 fl oz";
+      aspects.Volume = [volume];
+      lockAspects.Volume = volume;
     }
     const variantPhotos = await hostImages(
       (variant?.imageUrls || []).slice(0, 4),

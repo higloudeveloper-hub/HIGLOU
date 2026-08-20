@@ -365,7 +365,7 @@ export async function withdrawOffer(accessToken: string, offerId: string) {
   }
 }
 
-async function clearOffersForSku(accessToken: string, sku: string) {
+export async function clearOffersForSku(accessToken: string, sku: string) {
   const existing = await getOffersForSku(accessToken, sku);
   for (const offer of existing) {
     if (!offer.offerId) continue;

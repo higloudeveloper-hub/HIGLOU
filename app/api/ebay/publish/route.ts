@@ -20,7 +20,7 @@ import {
   listingToInventoryItem,
   listingToOfferInput,
 } from "@/lib/ebay/listing-to-inventory";
-import { publishEbayVariationGroup } from "@/lib/ebay/publish-variation-group";
+import { publishEbayVariationGroup, planVariationGroup } from "@/lib/ebay/publish-variation-group";
 import { variationsFromListing } from "@/lib/listing/variations";
 import { toEbayListingTitle } from "@/lib/ebay/listing-helpers";
 import { ensureEbayCompatibleImageUrls } from "@/lib/ebay/ensure-ebay-images";
@@ -631,7 +631,7 @@ async function postEbayPublish(request: Request) {
       ReturnType<typeof prepareStoreCategoriesForPublish>
     > | null = null;
 
-    if (variationSet && variationSet.variants.length >= 2) {
+    if (variationSet && planVariationGroup(variationSet, listing.sku)) {
       const variationOffer = listingToOfferInput(listing, {
         fulfillmentPolicyId: listing.shippingPolicyId,
         paymentPolicyId: listing.paymentPolicyId,
@@ -663,6 +663,19 @@ async function postEbayPublish(request: Request) {
         offer: variationOffer,
         aspectCardinality,
         live: data.mode === "live",
+      }).catch(async (error) => {
+        const message = error instanceof Error ? error.message : String(error);
+        if (!/25001|core inventory service internal/i.test(message)) throw error;
+        await new Promise((resolve) => setTimeout(resolve, 1500));
+        return publishEbayVariationGroup({
+          accessToken,
+          listing,
+          set: variationSet,
+          inventory,
+          offer: variationOffer,
+          aspectCardinality,
+          live: data.mode === "live",
+        });
       });
     } else {
     try {

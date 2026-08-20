@@ -46,6 +46,7 @@ export function PromoCarouselStudio() {
   const [publishing, setPublishing] = useState(false);
   const [postUrl, setPostUrl] = useState<string | null>(null);
   const [ownerError, setOwnerError] = useState<string | null>(null);
+  const [tab, setTab] = useState<"productos" | "publicar">("productos");
 
   const selectedIds = useMemo(
     () => new Set(selected.map((item) => item.id)),
@@ -231,8 +232,52 @@ export function PromoCarouselStudio() {
   }
 
   return (
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="sticky top-0 z-10 border-b border-[#e5e5e5] bg-white px-4 py-2 md:px-5">
+        <div
+          role="tablist"
+          className="grid grid-cols-2 rounded-full border border-[#e5e5e5] bg-[#f7f7f7] p-1"
+        >
+          {(
+            [
+              { id: "productos" as const, label: "Productos", hint: "Elegí 2 a 10" },
+              { id: "publicar" as const, label: "Publicar", hint: "Carrusel Facebook" },
+            ] as const
+          ).map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              role="tab"
+              aria-selected={tab === item.id}
+              onClick={() => setTab(item.id)}
+              className={cn(
+                "rounded-full px-2 py-2 text-center transition",
+                tab === item.id
+                  ? "bg-[#1877F2] text-white shadow-sm"
+                  : "text-[#707070] hover:text-[#191919]",
+              )}
+            >
+              <span className="block text-[13px] font-semibold">{item.label}</span>
+              <span
+                className={cn(
+                  "mt-0.5 hidden text-[11px] sm:block",
+                  tab === item.id ? "text-white/80" : "text-[#9b9b9b]",
+                )}
+              >
+                {item.hint}
+              </span>
+            </button>
+          ))}
+        </div>
+      </div>
+
     <div className="grid min-h-0 flex-1 lg:grid-cols-[minmax(0,1fr)_340px]">
-      <div className="min-h-0 overflow-y-auto bg-[#f7f7f7] p-4 md:p-5">
+      <div
+        className={cn(
+          "min-h-0 overflow-y-auto bg-[#f7f7f7] p-4 md:p-5",
+          tab !== "productos" && "max-lg:hidden",
+        )}
+      >
         <p className="mb-4 max-w-2xl text-[13px] leading-relaxed text-[#707070]">
           Elegí 2 a 10 productos de tus listings (o del catálogo de la tienda).
           Cada tarjeta del post lleva su propio enlace y Comprar, como Alibaba.
@@ -370,9 +415,23 @@ export function PromoCarouselStudio() {
             })}
           </div>
         </section>
+        {selected.length >= MIN ? (
+          <button
+            type="button"
+            onClick={() => setTab("publicar")}
+            className="mt-5 inline-flex h-11 w-full items-center justify-center rounded-full bg-[#1877F2] text-[14px] font-semibold text-white lg:hidden"
+          >
+            Continuar a publicar ({selected.length})
+          </button>
+        ) : null}
       </div>
 
-      <aside className="flex min-h-0 flex-col border-t border-[#e5e5e5] bg-white p-4 lg:border-t-0 lg:border-l">
+      <aside
+        className={cn(
+          "flex min-h-0 flex-col border-t border-[#e5e5e5] bg-white p-4 lg:border-t-0 lg:border-l",
+          tab !== "publicar" && "max-lg:hidden",
+        )}
+      >
         <p className="text-[11px] font-semibold tracking-[0.16em] text-[#707070] uppercase">
           Facebook preview
         </p>
@@ -447,6 +506,7 @@ export function PromoCarouselStudio() {
           )}
         </button>
       </aside>
+    </div>
     </div>
   );
 }

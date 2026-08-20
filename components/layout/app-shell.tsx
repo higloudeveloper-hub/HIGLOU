@@ -2,9 +2,11 @@
 
 import { useState } from "react";
 import { Menu } from "lucide-react";
+import Link from "next/link";
 import { AppSidebar } from "@/components/layout/app-sidebar";
 import { HiglouLogo } from "@/components/brand/higlou-logo";
 import { NewListingButton } from "@/components/brand/new-listing-button";
+import { FacebookFMark } from "@/components/brand/store-marks";
 import {
   Sheet,
   SheetContent,
@@ -66,6 +68,13 @@ export function AppShell({
             </SheetContent>
           </Sheet>
           <HiglouLogo href="/home" size={28} />
+          <Link
+            href="/facebook"
+            className="inline-flex h-8 items-center gap-1.5 rounded-full border border-[#1877F2]/30 bg-[#1877F2]/10 px-2.5 text-[12px] font-semibold text-[#1877F2]"
+          >
+            <FacebookFMark className="size-3.5" />
+            Promo FB
+          </Link>
           <NewListingButton size="sm" className="ml-auto" label="New" />
         </div>
 

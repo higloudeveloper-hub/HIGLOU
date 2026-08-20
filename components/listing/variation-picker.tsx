@@ -236,6 +236,45 @@ export function VariationPicker({
   );
 }
 
+export function AmazonVariationPanel({
+  set,
+  onChange,
+  onReload,
+  reloading = false,
+  canReload = false,
+}: {
+  set: ListingVariationSet | null;
+  onChange: (next: ListingVariationSet) => void;
+  onReload?: () => void;
+  reloading?: boolean;
+  canReload?: boolean;
+}) {
+  if (set && set.variants.length >= 2) {
+    return <VariationPicker set={set} onChange={onChange} />;
+  }
+  return (
+    <div className="rounded-xl border border-[#e8e8e8] bg-white px-4 py-3">
+      <p className="text-[15px] font-medium tracking-tight text-[#141414]">
+        Options for your store
+      </p>
+      <p className="mt-1 text-[13px] text-[#707070]">
+        Higlou did not find extra Amazon colors or sizes on this page yet.
+        Read the product again to load the picker.
+      </p>
+      {canReload && onReload ? (
+        <button
+          type="button"
+          disabled={reloading}
+          onClick={onReload}
+          className="mt-3 h-9 rounded-lg bg-[#f4c928] px-3 text-[13px] font-semibold text-[#141414] disabled:opacity-40"
+        >
+          {reloading ? "Reading Amazon…" : "Find Amazon options"}
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
 export function VariationPickerDialog({
   open,
   set,

@@ -33,6 +33,45 @@ describe("parseAmazonVariations", () => {
     expect(black?.imageUrls[0]).toMatch(/71BLACK/);
   });
 
+  it("reads dimensionToAsinMap from mobile / inline twister JSON", () => {
+    const set = parseAmazonVariations(`
+      "dimensions":["color_name"]
+      "variationDisplayLabels":["Color"]
+      "variationValues":{"color_name":["Multicolor 8 Pack","Blue 4 Pack"]}
+      "dimensionToAsinMap":{"0":"B0GT3QBGYR","1":"B0BLUE4PK0"}
+    `);
+    expect(set?.axisNames).toEqual(["Color"]);
+    expect(set?.variants.map((row) => row.asin).sort()).toEqual([
+      "B0BLUE4PK0",
+      "B0GT3QBGYR",
+    ]);
+    expect(
+      set?.variants.find((row) => row.asin === "B0GT3QBGYR")?.aspects.Color,
+    ).toBe("Multicolor 8 Pack");
+  });
+
+  it("reads variations from an a-state script tag", () => {
+    const set = parseAmazonVariations(`
+      <script type="a-state" data-a-state="{&quot;key&quot;:&quot;twister-plus-inline-twister&quot;}">
+      {"dimensions":["color_name"],"variationDisplayLabels":["Color"],"variationValues":{"color_name":["Multicolor 8 Pack","Green 8 Pack"]},"dimensionToAsinMap":{"0":"B0GT3QBGYR","1":"B0GREEN8PK"}}
+      </script>
+    `);
+    expect(set?.variants).toHaveLength(2);
+    expect(set?.variants.map((row) => row.aspects.Color).sort()).toEqual([
+      "Green 8 Pack",
+      "Multicolor 8 Pack",
+    ]);
+  });
+
+  it("reads color swatches from desktop HTML", () => {
+    const set = parseAmazonVariations(`
+      <li id="color_name_0" class="swatchSelect" data-defaultasin="B0GT3QBGYR" title="Multicolor 8 Pack"></li>
+      <li id="color_name_1" class="swatchAvailable" data-defaultasin="B0BLUE4PK0" title="Blue 4 Pack"></li>
+    `);
+    expect(set?.variants).toHaveLength(2);
+    expect(set?.variants[0]?.aspects.Color).toBe("Multicolor 8 Pack");
+  });
+
   it("falls back to colorToAsin when size is not in the page", () => {
     const set = parseAmazonVariations(`
       'colorToAsin': { 'initial': { 'Black': 'B0BLACK001', 'Red': 'B0RED00001' } }

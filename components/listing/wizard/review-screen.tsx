@@ -55,7 +55,7 @@ import type { StoreBranding } from "@/config/store-branding";
 import { cn } from "@/lib/utils";
 import { ImageUploader } from "@/components/uploader/image-uploader";
 import { AmazonSourceLink } from "@/components/listing/amazon-source-link";
-import { VariationPicker } from "@/components/listing/variation-picker";
+import { AmazonVariationPanel } from "@/components/listing/variation-picker";
 import {
   isVariationsSpecific,
   listingWithVariationSet,
@@ -110,6 +110,8 @@ export function ReviewScreen({
   onStoreBrandingChange,
   onImagesChange,
   productId,
+  onReloadAmazonOptions,
+  reloadingAmazonOptions,
 }: {
   listing: ProductListing;
   attentionFields: AttentionField[];
@@ -130,6 +132,8 @@ export function ReviewScreen({
   onStoreBrandingChange?: (next: StoreBranding) => void;
   onImagesChange?: (images: ProductImage[]) => void;
   productId?: string;
+  onReloadAmazonOptions?: () => void;
+  reloadingAmazonOptions?: boolean;
 }) {
   const reduceMotion = usePrefersReducedMotion();
   const [activePhoto, setActivePhoto] = useState(0);
@@ -520,9 +524,9 @@ export function ReviewScreen({
             </div>
           ) : null}
 
-          {variationSet ? (
+          {listing.amazonAsin || listing.amazonUrl || variationSet ? (
             <div className="border-b border-border/60 px-4 py-4 sm:px-5">
-              <VariationPicker
+              <AmazonVariationPanel
                 set={variationSet}
                 onChange={(next) => {
                   const updated = listingWithVariationSet(listing, next);
@@ -530,6 +534,9 @@ export function ReviewScreen({
                   onUpdate("variations", updated.variations);
                   onUpdate("variationAxes", updated.variationAxes);
                 }}
+                canReload={Boolean(listing.amazonAsin || listing.amazonUrl)}
+                onReload={onReloadAmazonOptions}
+                reloading={reloadingAmazonOptions}
               />
             </div>
           ) : null}

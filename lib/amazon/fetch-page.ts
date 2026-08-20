@@ -25,9 +25,20 @@ function galleryCount(html: string, asin?: string): number {
   return collectAmazonImageUrlsFromHtml(html, asin).length;
 }
 
+function variationHintCount(html: string): number {
+  if (!html) return 0;
+  return (html.match(
+    /dimensionToAsinMap|dimensionValuesDisplayData|colorToAsin|inline-twister|twister-plus/gi,
+  ) || []).length;
+}
+
 function scoreHtml(html: string, asin?: string): number {
   if (!html || isCaptchaPage(html)) return 0;
-  return html.length + galleryCount(html, asin) * 40_000;
+  return (
+    html.length +
+    galleryCount(html, asin) * 40_000 +
+    variationHintCount(html) * 80_000
+  );
 }
 
 async function readPage(url: string, userAgent: string): Promise<string> {

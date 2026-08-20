@@ -277,6 +277,7 @@ export function NewListingWorkspace({
   const [variationDraft, setVariationDraft] = useState<ListingVariationSet | null>(
     null,
   );
+  const [reloadingAmazonOptions, setReloadingAmazonOptions] = useState(false);
   const pendingAnalyzeRef = useRef<{
     seeded: ProductListing;
     images: ProductImage[];
@@ -2572,6 +2573,56 @@ export function NewListingWorkspace({
           onStoreBrandingChange={handleStoreBrandingChange}
           onImagesChange={(images) => update("images", images)}
           productId={listing.id}
+          reloadingAmazonOptions={reloadingAmazonOptions}
+          onReloadAmazonOptions={() => {
+            void (async () => {
+              const url =
+                listing.amazonUrl ||
+                (listing.amazonAsin
+                  ? `https://www.amazon.com/dp/${listing.amazonAsin}`
+                  : "");
+              if (!url) {
+                toast.error("This listing has no Amazon link to read.");
+                return;
+              }
+              setReloadingAmazonOptions(true);
+              try {
+                const response = await fetch("/api/amazon/import", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ url }),
+                });
+                const body = (await response.json().catch(() => null)) as {
+                  ok?: boolean;
+                  error?: string;
+                  variations?: ListingVariationSet | null;
+                } | null;
+                if (!response.ok || !body?.ok) {
+                  throw new Error(body?.error || "Could not read Amazon options");
+                }
+                if (body.variations && body.variations.variants.length >= 2) {
+                  setListing((prev) =>
+                    listingWithVariationSet(prev, body.variations || null),
+                  );
+                  toast.success(
+                    `Found ${variationSummary(body.variations)}. Uncheck what you will not stock.`,
+                  );
+                } else {
+                  toast.message(
+                    "Amazon only showed one option on that page.",
+                  );
+                }
+              } catch (error) {
+                toast.error(
+                  error instanceof Error
+                    ? error.message
+                    : "Could not read Amazon options",
+                );
+              } finally {
+                setReloadingAmazonOptions(false);
+              }
+            })();
+          }}
         />
       ) : null}
 

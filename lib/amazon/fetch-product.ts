@@ -78,11 +78,23 @@ async function resolveShortLink(url: string): Promise<string> {
 }
 
 function pickRicherHtml(current: string, next: string, asin: string): string {
-  if (galleryCount(next, asin) > galleryCount(current, asin)) return next;
-  if (
-    galleryCount(next, asin) === galleryCount(current, asin) &&
-    next.length > current.length
-  ) {
+  const nextGallery = galleryCount(next, asin);
+  const currentGallery = galleryCount(current, asin);
+  const nextHints = (
+    next.match(
+      /dimensionToAsinMap|dimensionValuesDisplayData|colorToAsin|inline-twister|twister-plus/gi,
+    ) || []
+  ).length;
+  const currentHints = (
+    current.match(
+      /dimensionToAsinMap|dimensionValuesDisplayData|colorToAsin|inline-twister|twister-plus/gi,
+    ) || []
+  ).length;
+  if (nextHints > currentHints && nextGallery >= Math.min(2, currentGallery)) {
+    return next;
+  }
+  if (nextGallery > currentGallery) return next;
+  if (nextGallery === currentGallery && next.length > current.length) {
     return next;
   }
   return current;
@@ -126,7 +138,12 @@ export async function fetchAmazonProduct(
       );
     }
 
-    if (galleryCount(html, asin) < 3) {
+    if (
+      galleryCount(html, asin) < 3 ||
+      !/dimensionToAsinMap|dimensionValuesDisplayData|colorToAsin|twister-plus-inline-twister/i.test(
+        html,
+      )
+    ) {
       try {
         html = pickRicherHtml(html, await readUrl(canonical, DESKTOP_UA), asin);
       } catch {

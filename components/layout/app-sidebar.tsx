@@ -8,6 +8,7 @@ import {
   Home,
   Images,
   LogOut,
+  Megaphone,
   Search,
   Settings,
 } from "lucide-react";
@@ -47,6 +48,14 @@ export const STUDIO_NAV = [
     match: (path: string) =>
       path === "/listings" ||
       (path.startsWith("/listings/") && path !== "/listings/new"),
+  },
+  {
+    href: "/facebook",
+    label: "Promo Facebook",
+    hint: "Elegí productos",
+    icon: Megaphone,
+    match: (path: string) =>
+      path === "/facebook" || path.startsWith("/facebook/"),
   },
   {
     href: "/exports",

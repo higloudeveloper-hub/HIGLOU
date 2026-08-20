@@ -15,6 +15,9 @@ export function ListingCard({
   badgeTone = "muted",
   priority = false,
   amazonHref,
+  selected = false,
+  selectIndex = null,
+  onToggleSelect,
 }: {
   href: string;
   photo?: string | null;
@@ -26,9 +29,37 @@ export function ListingCard({
   badgeTone?: "muted" | "ready";
   priority?: boolean;
   amazonHref?: string | null;
+  selected?: boolean;
+  selectIndex?: number | null;
+  onToggleSelect?: () => void;
 }) {
   return (
-    <article className="overflow-hidden rounded-[20px] bg-white shadow-[0_1px_3px_rgba(15,17,17,0.08),0_8px_24px_-14px_rgba(15,17,17,0.18)] transition duration-200 hover:-translate-y-1 hover:shadow-[0_16px_36px_-16px_rgba(15,17,17,0.28)]">
+    <article
+      className={cn(
+        "relative overflow-hidden rounded-[20px] bg-white shadow-[0_1px_3px_rgba(15,17,17,0.08),0_8px_24px_-14px_rgba(15,17,17,0.18)] transition duration-200 hover:-translate-y-1 hover:shadow-[0_16px_36px_-16px_rgba(15,17,17,0.28)]",
+        selected && "ring-2 ring-[#191919]",
+      )}
+    >
+      {onToggleSelect ? (
+        <button
+          type="button"
+          onClick={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            onToggleSelect();
+          }}
+          aria-pressed={selected}
+          aria-label={selected ? "Quitar de la promo de Facebook" : "Elegir para Facebook"}
+          className={cn(
+            "absolute top-2.5 left-2.5 z-10 flex size-8 items-center justify-center rounded-full border-2 text-[12px] font-bold shadow-sm",
+            selected
+              ? "border-[#191919] bg-[#191919] text-white"
+              : "border-[#ccc] bg-white text-[#9b9b9b] hover:border-[#191919]",
+          )}
+        >
+          {selected ? (selectIndex ?? "✓") : "+"}
+        </button>
+      ) : null}
       <Link href={href} className="group block">
         <div className="relative aspect-[16/10] bg-[#f3f3f3]">
           {photo ? (

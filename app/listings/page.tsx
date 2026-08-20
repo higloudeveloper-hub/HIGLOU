@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Search } from "lucide-react";
+import Link from "next/link";
 import { AppShell } from "@/components/layout/app-shell";
 import { StudioFrame } from "@/components/layout/studio-frame";
 import { EmptyPanel, SkeletonBlock } from "@/components/ui/studio";
@@ -42,6 +43,9 @@ export default function ListingsPage() {
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<"all" | "draft" | "ready">("all");
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+
+  const MAX_PROMO = 10;
 
   useEffect(() => {
     let cancelled = false;
@@ -94,13 +98,38 @@ export default function ListingsPage() {
   const draftCount = products.filter((p) => !readiness(p.status).ready).length;
   const readyCount = products.length - draftCount;
 
+  const togglePromo = (id: string) => {
+    setSelectedIds((current) => {
+      if (current.includes(id)) return current.filter((item) => item !== id);
+      if (current.length >= MAX_PROMO) return current;
+      return [...current, id];
+    });
+  };
+
+  const promoHref =
+    selectedIds.length >= 2
+      ? `/facebook?ids=${selectedIds.join(",")}`
+      : "/facebook";
+
   return (
     <AppShell hideHeader flush>
       <StudioFrame
         kicker="Library"
         title="Listings"
         hint={`${products.length} in the store`}
-        action={<NewListingButton size="sm" />}
+        action={
+          <div className="flex items-center gap-2">
+            <Link
+              href={promoHref}
+              className="inline-flex h-8 items-center rounded-full bg-[#191919] px-3 text-[12px] font-semibold text-white"
+            >
+              {selectedIds.length > 0
+                ? `Facebook (${selectedIds.length})`
+                : "Elegir para Facebook"}
+            </Link>
+            <NewListingButton size="sm" />
+          </div>
+        }
         scroll={false}
       >
         <div className="grid min-h-0 flex-1 lg:grid-cols-[220px_minmax(0,1fr)]">
@@ -197,9 +226,17 @@ export default function ListingsPage() {
                 />
               </div>
             ) : (
+              <div className="relative pb-24">
+                <p className="mb-4 rounded-2xl bg-[#f7f7f7] px-4 py-3 text-[13px] leading-relaxed text-[#565959]">
+                  Tocá el círculo <span className="font-semibold text-[#191919]">+</span> en
+                  cada producto (2 a 10) y después{" "}
+                  <span className="font-semibold text-[#191919]">Facebook</span> para el
+                  carrusel con enlace en cada foto.
+                </p>
               <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
                 {filtered.map((product, i) => {
                   const ready = readiness(product.status);
+                  const selected = selectedIds.includes(product.id);
                   return (
                     <ListingCard
                       key={product.id}
@@ -216,6 +253,11 @@ export default function ListingsPage() {
                       badge={ready.label}
                       badgeTone={ready.ready ? "ready" : "muted"}
                       priority={i < 4}
+                      selected={selected}
+                      selectIndex={
+                        selected ? selectedIds.indexOf(product.id) + 1 : null
+                      }
+                      onToggleSelect={() => togglePromo(product.id)}
                       amazonHref={
                         amazonListingUrl({
                           sku: product.sku,
@@ -225,6 +267,24 @@ export default function ListingsPage() {
                     />
                   );
                 })}
+              </div>
+              {selectedIds.length > 0 ? (
+                <div className="sticky bottom-4 z-20 mx-auto mt-4 flex max-w-xl items-center justify-between gap-3 rounded-full bg-[#191919] px-4 py-2.5 text-white shadow-lg">
+                  <p className="text-[13px] font-medium">
+                    {selectedIds.length} para Facebook
+                    {selectedIds.length < 2 ? " · elegí al menos 2" : ""}
+                  </p>
+                  <Link
+                    href={promoHref}
+                    className={cn(
+                      "rounded-full bg-white px-4 py-1.5 text-[13px] font-semibold text-[#191919]",
+                      selectedIds.length < 2 && "pointer-events-none opacity-50",
+                    )}
+                  >
+                    Continuar
+                  </Link>
+                </div>
+              ) : null}
               </div>
             )}
           </div>

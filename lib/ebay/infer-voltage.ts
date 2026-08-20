@@ -280,6 +280,9 @@ export function inferAspectValueFromText(
   if (name === "size type") {
     return inferSizeTypeFromText(extras?.title || text);
   }
+  if (name === "brand" || name === "manufacturer") {
+    return normalizeEbayBrand(extras?.brand || "");
+  }
   if (
     name === "size" &&
     /\b(wallet|rfid|keychain|key\s*chain)\b/i.test(
@@ -304,6 +307,42 @@ export function inferAspectValueFromText(
 }
 
 const EMPTY_ASPECT = /^(n\/?a|none|null|unknown|-|does\s*not\s*apply)$/i;
+
+const PLACEHOLDER_BRAND =
+  /^(n\/?a|none|null|unknown|-|does\s*not\s*apply|generic|not\s*applicable)$/i;
+
+/**
+ * Clothing 25002 Brand. eBay does not accept empty / Does Not Apply here —
+ * Unbranded is the valid value when Amazon has no maker.
+ */
+export function normalizeEbayBrand(raw: string): string {
+  const value = String(raw || "")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!value || PLACEHOLDER_BRAND.test(value) || /^https?:\/\//i.test(value)) {
+    return "Unbranded";
+  }
+  return value.slice(0, 65);
+}
+
+/** Put a valid Brand on Inventory aspects (mutates). */
+export function ensureEbayBrandAspect(
+  aspects: Record<string, string[]>,
+  brand?: string,
+): string[] {
+  const current = Object.entries(aspects || {}).find(
+    ([key]) => key.trim().toLowerCase() === "brand",
+  )?.[1]?.[0];
+  const next = normalizeEbayBrand(brand || current || "");
+  for (const key of Object.keys(aspects || {})) {
+    if (key.trim().toLowerCase() === "brand" && key !== "Brand") {
+      delete aspects[key];
+    }
+  }
+  const same = aspects.Brand?.[0] === next;
+  aspects.Brand = [next];
+  return same ? [] : ["Brand"];
+}
 
 /**
  * Perfume / cologne categories require Fragrance Name (eBay 25002).
@@ -602,6 +641,7 @@ export function ensureRequiredCategoryAspects(
   }
 
   added.push(...ensureInferredApparelAspects(aspects, extras));
+  added.push(...ensureEbayBrandAspect(aspects, extras.brand));
 
   return added;
 }
@@ -668,6 +708,7 @@ export function inferFilledAspectForEbayError(
   }
   const inferred = inferAspectValueFromText(name, hay, extras) || "";
   if (inferred) return inferred;
+  if (/^brand$/i.test(name)) return normalizeEbayBrand(extras?.brand || "");
   if (/^size\s*type$/i.test(name)) return inferSizeTypeFromText(hay);
   if (/^(model|mpn|compatible\s|fragrance|scent)/i.test(name)) {
     return "Does Not Apply";
@@ -690,6 +731,8 @@ export function humanizeEbayPublishError(raw: string): {
   if (aspect) {
     const sizeTypeHint = /^size\s*type$/i.test(aspect)
       ? "Try again — Higlou fills Regular unless the title says Petite, Plus, Maternity, or Juniors."
+      : /^brand$/i.test(aspect)
+        ? "Try again — Higlou fills the Amazon brand, or Unbranded if Amazon has none."
       : "Try again — Higlou fills it from the product (or Does Not Apply).";
     return {
       headline: `eBay needs “${aspect}”`,

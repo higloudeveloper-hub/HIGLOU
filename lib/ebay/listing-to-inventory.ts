@@ -13,10 +13,12 @@ import type {
 import { sanitizeEbayAspects } from "@/lib/ebay/sanitize-aspects";
 import { sanitizeEbayPolicyCopy, toEbayInventorySku } from "@/lib/ebay/listing-helpers";
 import {
+  ensureEbayBrandAspect,
   ensureInferredApparelAspects,
   ensureInferredElectricalAspects,
   inferModelAspect,
   listingHasAspect,
+  normalizeEbayBrand,
 } from "@/lib/ebay/infer-voltage";
 import { ensureInferredDimensionAspects } from "@/lib/ebay/infer-item-dimensions";
 
@@ -117,10 +119,9 @@ export function listingToInventoryItem(
     .filter(Boolean);
 
   const aspects = listingToEbayAspects(listing);
-  const brand =
-    aspects.Brand?.[0]?.trim() ||
-    String(listing.brand || "").trim() ||
-    "Unbranded";
+  const brand = normalizeEbayBrand(
+    aspects.Brand?.[0] || String(listing.brand || ""),
+  );
   const mpn =
     aspects.MPN?.[0]?.trim() ||
     resolveBrandMpn({
@@ -132,6 +133,7 @@ export function listingToInventoryItem(
   const mpnCompact = mpn.replace(/\s+/g, "").slice(0, 65) || "Does Not Apply";
   aspects.Brand = [brand];
   aspects.MPN = [mpnCompact === "DoesNotApply" ? "Does Not Apply" : mpnCompact];
+  ensureEbayBrandAspect(aspects, brand);
 
   // Strip identifiers eBay Inventory does not want as aspects.
   for (const key of Object.keys(aspects)) {

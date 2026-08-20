@@ -14,6 +14,7 @@ import {
 } from "@/lib/ebay/inventory-api";
 import { toEbayInventorySku } from "@/lib/ebay/listing-helpers";
 import {
+  ensureEbayBrandAspect,
   ensureInferredApparelAspects,
   inferFilledAspectForEbayError,
   parseMissingAspectFromEbayError,
@@ -118,6 +119,8 @@ async function putVariantInventory(opts: {
     aspects: opts.aspects,
     imageUrls: opts.inventory.imageUrls,
   };
+  ensureEbayBrandAspect(payload.aspects, opts.listing.brand || opts.inventory.brand);
+  payload.brand = payload.aspects.Brand?.[0] || "Unbranded";
   try {
     await createOrReplaceInventoryItem(opts.accessToken, payload, {
       aspectCardinality: opts.aspectCardinality,

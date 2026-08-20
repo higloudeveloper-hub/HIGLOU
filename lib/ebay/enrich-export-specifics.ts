@@ -6,6 +6,7 @@ import {
   inferDepartmentAspect,
   inferSizeTypeFromText,
   listingLooksLikeApparel,
+  normalizeEbayBrand,
 } from "@/lib/ebay/infer-voltage";
 import {
   formatEbayInches,
@@ -139,6 +140,12 @@ function isFaucetLike(input: {
 function inferBrandFromTitle(title?: string): string {
   const raw = String(title || "").trim();
   if (!raw) return "";
+  // Apparel titles start with Women's / Men's — that is not a brand.
+  if (
+    /^(women'?s|men'?s|kids?'?|girls?'?|boys?'?|unisex|baby)\b/i.test(raw)
+  ) {
+    return "";
+  }
 
   // "Brand Name Line Collection …" → Brand Name (drop the collection code)
   const withCollection = raw.match(
@@ -241,7 +248,7 @@ export function enrichItemSpecificsForExport(input: {
   };
 
   // eBay BrandMPN (25002): Brand without a valid MPN is rejected.
-  const brandOrUnbranded = derived.brand || "Unbranded";
+  const brandOrUnbranded = normalizeEbayBrand(derived.brand);
   derived.brand = brandOrUnbranded;
   derived.mpn = resolveBrandMpn({
     brand: brandOrUnbranded,
@@ -292,6 +299,7 @@ export function enrichItemSpecificsForExport(input: {
     if (!value?.trim()) continue;
     if (!columns[key]?.trim()) columns[key] = value.trim();
   }
+  columns["C:Brand"] = normalizeEbayBrand(columns["C:Brand"] || derived.brand);
   // Force MPN whenever Brand is present (overwrite empty / whitespace).
   if (columns["C:Brand"]?.trim() && !columns["C:MPN"]?.trim()) {
     columns["C:MPN"] = derived.mpn;

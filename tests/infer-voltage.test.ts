@@ -13,6 +13,8 @@ import {
   ensureCompatibleAspects,
   ensureRequiredCategoryAspects,
   inferSizeTypeFromText,
+  inferFilledAspectForEbayError,
+  normalizeEbayBrand,
 } from "@/lib/ebay/infer-voltage";
 import { listingToInventoryItem } from "@/lib/ebay/listing-to-inventory";
 import { createEmptyListing } from "@/lib/demo/sample-listing";
@@ -429,5 +431,60 @@ describe("Size Type aspect (eBay 25002 Size Type)", () => {
       categoryId: "20681",
     });
     expect(aspects["Size Type"]).toBeUndefined();
+  });
+});
+
+describe("Brand aspect (eBay 25002 Brand)", () => {
+  it("parses Brand from eBay 25002 text", () => {
+    expect(
+      parseMissingAspectFromEbayError(
+        "A user error has occurred. The item specific Brand is missing. Add Brand to this listing, enter a valid value, and then try again. 2=Brand] [ebay 25002]",
+      ),
+    ).toBe("Brand");
+  });
+
+  it("uses Unbranded when Amazon has no maker", () => {
+    expect(normalizeEbayBrand("")).toBe("Unbranded");
+    expect(normalizeEbayBrand("Does Not Apply")).toBe("Unbranded");
+    expect(normalizeEbayBrand("N/A")).toBe("Unbranded");
+    expect(inferAspectValueFromText("Brand", "Women's Floral Ruffle Sleeve Blouse")).toBe(
+      "Unbranded",
+    );
+    expect(
+      inferFilledAspectForEbayError("Brand", "Women's Floral Ruffle Sleeve Blouse"),
+    ).toBe("Unbranded");
+  });
+
+  it("keeps a real Amazon brand", () => {
+    expect(normalizeEbayBrand("ASTRID")).toBe("ASTRID");
+    expect(
+      inferAspectValueFromText("Brand", "ASTRID Women's Floral Blouse", {
+        brand: "ASTRID",
+      }),
+    ).toBe("ASTRID");
+  });
+
+  it("replaces Does Not Apply Brand before Inventory PUT", () => {
+    const aspects: Record<string, string[]> = { Brand: ["Does Not Apply"] };
+    ensureRequiredCategoryAspects(aspects, ["Brand"], {
+      title: "Women's Floral Ruffle Sleeve Blouse",
+      productType: "Blouse",
+      categoryName: "Women's Tops & Blouses",
+      categoryId: "53159",
+    });
+    expect(aspects.Brand).toEqual(["Unbranded"]);
+  });
+
+  it("puts Unbranded on a blouse with no Amazon brand", () => {
+    const listing = createEmptyListing();
+    listing.title = "Women's Floral Ruffle Sleeve Blouse";
+    listing.brand = "";
+    listing.categoryId = "53159";
+    listing.categoryName = "Women's Tops & Blouses";
+    listing.productType = "Blouse";
+    listing.itemSpecifics = [{ key: "C:Brand", value: "Does Not Apply", label: "Brand" }];
+    const item = listingToInventoryItem(listing);
+    expect(item.brand).toBe("Unbranded");
+    expect(item.aspects?.Brand?.[0]).toBe("Unbranded");
   });
 });

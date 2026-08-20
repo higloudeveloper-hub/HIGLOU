@@ -3,6 +3,7 @@ import { sanitizeEbayAspects } from "@/lib/ebay/sanitize-aspects";
 import { HIGLOU_WAREHOUSE } from "@/config/warehouse";
 import { validateBarcode } from "@/lib/barcode/validators";
 import { toEbayListingTitle, toEbayInventorySku } from "@/lib/ebay/listing-helpers";
+import { normalizeEbayBrand } from "@/lib/ebay/infer-voltage";
 
 /**
  * Only send UPC/EAN values eBay will accept (valid GS1 checksum).
@@ -150,10 +151,9 @@ export async function createOrReplaceInventoryItem(
 
   // BrandMPN (25002): product.brand + product.mpn must both be present for branded items.
   // Production rejects product.mpn as string[] (2004 serialize) — send a plain string.
-  const brand =
-    String(input.brand || "").trim() ||
-    String(input.aspects?.Brand?.[0] || "").trim() ||
-    "Unbranded";
+  const brand = normalizeEbayBrand(
+    String(input.brand || "") || String(input.aspects?.Brand?.[0] || ""),
+  );
   const mpnRaw =
     String(input.mpn || "").trim() ||
     String(input.aspects?.MPN?.[0] || "").trim();

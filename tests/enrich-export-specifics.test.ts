@@ -106,6 +106,16 @@ describe("enrichItemSpecificsForExport", () => {
     expect(columns["C:Brand"]).toBe("Moen");
   });
 
+  it("does not treat Women's in an apparel title as Brand", () => {
+    const { columns } = enrichItemSpecificsForExport({
+      categoryId: "53159",
+      categoryName: "Women's Tops & Blouses",
+      title: "Women's Floral Ruffle Sleeve Blouse",
+      itemSpecifics: [{ key: "C:Brand", value: "Does Not Apply" }],
+    });
+    expect(columns["C:Brand"]).toBe("Unbranded");
+  });
+
   it("does not export ASIN as an eBay item specific", () => {
     const { columns, attributePairs } = enrichItemSpecificsForExport({
       categoryId: "163574",

@@ -692,28 +692,35 @@ export function PromoCarouselStudio() {
             />
           </div>
           {format === "collection" ? (
-            <div className="bg-white">
-              {coverPreview ? (
-                <div className="relative aspect-[4/5] bg-[#f4f4f5]">
-                  <Thumb url={coverPreview} alt="Imagen principal" />
+            <div className="aspect-[4/5] bg-white">
+              <div className="flex h-full flex-col">
+                <div className="relative min-h-0 flex-1 bg-[#f4f4f5]">
+                  {coverPreview ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={coverPreview}
+                      alt="Imagen principal"
+                      className="absolute inset-0 h-full w-full object-cover"
+                    />
+                  ) : (
+                    <div className="grid h-full place-items-center px-4 text-center text-[13px] text-[#707070]">
+                      Elegí {minNeeded} a {MAX} productos
+                    </div>
+                  )}
                 </div>
-              ) : (
-                <div className="flex aspect-[4/5] items-center justify-center bg-[#f4f4f5] text-[13px] text-[#707070]">
-                  Elegí {minNeeded} a {MAX} productos
+                <p className="px-3 pt-2.5 text-[16px] font-semibold text-[#050505]">
+                  {collectionTitle.trim() || DEFAULT_COLLECTION_TITLE}
+                </p>
+                <div className="flex gap-2 overflow-hidden px-3 pb-3 pt-1.5">
+                  {selected.map((product) => (
+                    <div
+                      key={product.id}
+                      className="size-[72px] shrink-0 overflow-hidden rounded-xl border border-[#dadde1] bg-white"
+                    >
+                      <Thumb url={product.imageUrl} alt={product.name} />
+                    </div>
+                  ))}
                 </div>
-              )}
-              <p className="px-3 pt-3 text-[17px] font-semibold text-[#050505]">
-                {collectionTitle.trim() || DEFAULT_COLLECTION_TITLE}
-              </p>
-              <div className="flex gap-2 overflow-x-auto px-3 pb-3 pt-2">
-                {selected.map((product) => (
-                  <div
-                    key={product.id}
-                    className="size-[88px] shrink-0 overflow-hidden rounded-xl border border-[#dadde1] bg-white"
-                  >
-                    <Thumb url={product.imageUrl} alt={product.name} />
-                  </div>
-                ))}
               </div>
             </div>
           ) : (

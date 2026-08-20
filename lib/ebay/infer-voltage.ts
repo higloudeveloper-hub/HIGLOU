@@ -203,7 +203,8 @@ export function listingLooksLikeApparel(extras?: {
 }
 
 /**
- * Clothing / shoes 25002 Size Type. Mutates aspects; returns keys added.
+ * Clothing / shoes 25002 Size Type and Department.
+ * Mutates aspects; returns keys added.
  */
 export function ensureInferredApparelAspects(
   aspects: Record<string, string[]>,
@@ -212,17 +213,35 @@ export function ensureInferredApparelAspects(
     productType?: string;
     categoryName?: string;
     categoryId?: string;
+    department?: string;
   },
 ): string[] {
   const added: string[] = [];
-  if (listingHasAspect(aspects, "Size Type")) return added;
   if (!listingLooksLikeApparel(extras)) return added;
-  aspects["Size Type"] = [
-    inferSizeTypeFromText(
-      [extras.title, extras.productType, extras.categoryName].filter(Boolean).join(" "),
-    ),
-  ];
-  added.push("Size Type");
+  if (!listingHasAspect(aspects, "Size Type")) {
+    aspects["Size Type"] = [
+      inferSizeTypeFromText(
+        [extras.title, extras.productType, extras.categoryName]
+          .filter(Boolean)
+          .join(" "),
+      ),
+    ];
+    added.push("Size Type");
+  }
+  const department = inferDepartmentAspect({
+    title: extras.title,
+    categoryName: extras.categoryName,
+    productType: extras.productType,
+    department: extras.department || aspects.Department?.[0],
+  });
+  const current = Object.entries(aspects).find(
+    ([key]) => key.trim().toLowerCase() === "department",
+  );
+  if (!current || current[1]?.[0] !== department) {
+    if (current && current[0] !== "Department") delete aspects[current[0]];
+    aspects.Department = [department];
+    added.push("Department");
+  }
   return added;
 }
 
@@ -832,6 +851,14 @@ export function inferFilledAspectForEbayError(
   if (/^brand$/i.test(name)) {
     // 25002 Brand missing means eBay dropped the value we already sent.
     return "Unbranded";
+  }
+  if (/^department$/i.test(name)) {
+    return inferDepartmentAspect({
+      title: extras?.title || hay,
+      categoryName: extras?.categoryName,
+      productType: extras?.productType,
+      department: extras?.department,
+    });
   }
   if (/^volume$/i.test(name)) {
     return (

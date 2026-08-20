@@ -71,14 +71,6 @@ function isEbay25013(error: unknown): boolean {
   return /25013|too many trait values/i.test(errorText(error));
 }
 
-function isBrandMissingError(error: unknown): boolean {
-  const message = errorText(error);
-  return (
-    /25002/i.test(message) &&
-    /item specific\s+brand\s+is missing|needs\s+[“"]?brand/i.test(message)
-  );
-}
-
 function parseDisallowedVariationSpecific(error: unknown): string {
   const message = errorText(error);
   const match = message.match(
@@ -365,6 +357,7 @@ export async function publishEbayVariationGroup(opts: {
     productType: opts.listing.productType || opts.listing.type,
     categoryName: opts.listing.categoryName,
     categoryId: opts.listing.categoryId,
+    department: opts.listing.department,
   });
   ensureInferredFragranceAspects(opts.inventory.aspects, {
     title: opts.listing.title,
@@ -423,6 +416,12 @@ export async function publishEbayVariationGroup(opts: {
       if (!value) continue;
       aspects[axis.name] = [value];
       lockAspects[axis.name] = value;
+    }
+    if (aspects.Department?.[0]) {
+      lockAspects.Department = aspects.Department[0];
+    }
+    if (aspects["Size Type"]?.[0]) {
+      lockAspects["Size Type"] = aspects["Size Type"][0];
     }
     const perfumeHay = [
       opts.listing.title,
@@ -570,26 +569,61 @@ export async function publishEbayVariationGroup(opts: {
     }
   }
 
-  const restampUnbranded = async (skus: string[]) => {
-    opts.inventory.brand = "Unbranded";
+  const fillHay = [
+    opts.listing.title,
+    opts.listing.productType,
+    opts.listing.type,
+    opts.listing.categoryName,
+    opts.listing.brand,
+    opts.listing.department,
+    opts.listing.size,
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  const restampMissingAspect = async (error: unknown): Promise<boolean> => {
+    const message = errorText(error);
+    const missing = parseMissingAspectFromEbayError(message);
+    if (!/25002/i.test(message) || !missing) return false;
+    const filled = inferFilledAspectForEbayError(missing, fillHay, {
+      title: opts.listing.title,
+      brand: opts.listing.brand,
+      productType: opts.listing.productType || opts.listing.type,
+      categoryName: opts.listing.categoryName,
+      categoryId: opts.listing.categoryId,
+      department: opts.listing.department,
+      size: opts.listing.size,
+    });
+    if (!filled) return false;
+    if (/^brand$/i.test(missing)) {
+      opts.inventory.brand = filled;
+    }
     if (!opts.inventory.aspects) opts.inventory.aspects = {};
-    opts.inventory.aspects.Brand = ["Unbranded"];
-    for (const sku of skus) {
+    opts.inventory.aspects[missing] = [filled];
+    for (const sku of groupPlan.variantSkus) {
+      const aspects = {
+        ...(aspectsBySku.get(sku) || opts.inventory.aspects),
+        [missing]: [filled],
+      };
+      const lockAspects = {
+        ...(locksBySku.get(sku) || {}),
+        [missing]: filled,
+      };
+      aspectsBySku.set(sku, aspects);
+      locksBySku.set(sku, lockAspects);
       await putVariantInventory({
         accessToken: opts.accessToken,
-        listing: { ...opts.listing, brand: "Unbranded" },
+        listing: opts.listing,
         inventory: opts.inventory,
         sku,
-        aspects: {
-          ...(aspectsBySku.get(sku) || opts.inventory.aspects),
-          Brand: ["Unbranded"],
-        },
-        lockAspects: locksBySku.get(sku) || {},
+        aspects,
+        lockAspects,
         imageUrls: photosBySku.get(sku) || opts.inventory.imageUrls,
         aspectCardinality: opts.aspectCardinality,
       });
       await sleep(200);
     }
+    return true;
   };
 
   let offerId = "";
@@ -602,8 +636,7 @@ export async function publishEbayVariationGroup(opts: {
       if (!offerId) offerId = created.offerId;
     }
   } catch (error) {
-    if (!isBrandMissingError(error)) throw error;
-    await restampUnbranded(groupPlan.variantSkus);
+    if (!(await restampMissingAspect(error))) throw error;
     offerId = "";
     for (const sku of groupPlan.variantSkus) {
       const created = await upsertOfferForSku(opts.accessToken, {
@@ -627,8 +660,7 @@ export async function publishEbayVariationGroup(opts: {
     );
     return { offerId, listingId: published.listingId, skipped };
   } catch (error) {
-    if (isBrandMissingError(error)) {
-      await restampUnbranded(groupPlan.variantSkus);
+    if (await restampMissingAspect(error)) {
       const published = await publishOfferByInventoryItemGroup(
         opts.accessToken,
         groupPlan.groupKey,

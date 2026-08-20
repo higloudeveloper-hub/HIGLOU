@@ -465,6 +465,20 @@ describe("Size Type aspect (eBay 25002 Size Type)", () => {
       categoryId: "53159",
     });
     expect(aspects["Size Type"]).toEqual(["Regular"]);
+    expect(aspects.Department).toEqual(["Women"]);
+  });
+
+  it("fills Department on women's underwear even when Size Type is already set", () => {
+    const listing = createEmptyListing();
+    listing.title = "Women's High Waist Cotton Underwear - 6 Pack";
+    listing.brand = "";
+    listing.categoryId = "11554";
+    listing.categoryName = "Panties";
+    listing.productType = "Underwear";
+    listing.department = "Women's Clothing";
+    const item = listingToInventoryItem(listing);
+    expect(item.aspects?.["Size Type"]?.[0]).toBe("Regular");
+    expect(item.aspects?.Department?.[0]).toBe("Women");
   });
 
   it("puts Size Type on the inventory item for women's tops", () => {

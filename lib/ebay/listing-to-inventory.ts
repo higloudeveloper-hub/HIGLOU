@@ -171,6 +171,7 @@ export function listingToInventoryItem(
     productType: listing.productType || listing.type,
     categoryName: listing.categoryName,
     categoryId: listing.categoryId,
+    department: listing.department,
   });
   ensureInferredFragranceAspects(aspects, {
     title: listing.title,

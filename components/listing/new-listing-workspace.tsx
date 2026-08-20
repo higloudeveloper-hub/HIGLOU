@@ -358,6 +358,9 @@ export function NewListingWorkspace({
   );
   const analyzeAbortRef = useRef(false);
   const firstAttentionRef = useRef<HTMLDivElement | null>(null);
+  const triedAmazonOptionsRef = useRef("");
+  const listingRef = useRef(listing);
+  listingRef.current = listing;
 
   useEffect(() => {
     let cancelled = false;
@@ -1669,6 +1672,71 @@ export function NewListingWorkspace({
     await persistDraft({ quiet: false });
   };
 
+  const reloadAmazonOptions = async () => {
+    const current = listingRef.current;
+    const url = amazonListingUrl({
+      amazonUrl: current.amazonUrl,
+      amazonAsin: current.amazonAsin,
+      sku: current.sku,
+      description: current.descriptionHtml,
+      itemSpecifics: current.itemSpecifics,
+    });
+    if (!url) {
+      toast.error("This listing has no Amazon link to read.");
+      return;
+    }
+    setReloadingAmazonOptions(true);
+    try {
+      const response = await fetch("/api/amazon/import", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url }),
+      });
+      const body = (await response.json().catch(() => null)) as {
+        ok?: boolean;
+        error?: string;
+        variations?: ListingVariationSet | null;
+      } | null;
+      if (!response.ok || !body?.ok) {
+        throw new Error(body?.error || "Could not read Amazon options");
+      }
+      if (body.variations && body.variations.variants.length >= 2) {
+        const next = listingWithVariationSet(current, body.variations);
+        setListing(next);
+        await persistDraft({ quiet: true, draft: next });
+        toast.success(
+          `Found ${variationSummary(body.variations)}. Uncheck what you will not stock.`,
+        );
+      } else {
+        toast.message("Amazon only showed one option on that page.");
+      }
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Could not read Amazon options",
+      );
+    } finally {
+      setReloadingAmazonOptions(false);
+    }
+  };
+
+  useEffect(() => {
+    if (step !== "review") return;
+    const current = listingRef.current;
+    if (variationsFromListing(current)) return;
+    const url = amazonListingUrl({
+      amazonUrl: current.amazonUrl,
+      amazonAsin: current.amazonAsin,
+      sku: current.sku,
+      description: current.descriptionHtml,
+      itemSpecifics: current.itemSpecifics,
+    });
+    if (!url) return;
+    const key = `${current.id}:${url}`;
+    if (triedAmazonOptionsRef.current === key) return;
+    triedAmazonOptionsRef.current = key;
+    void reloadAmazonOptions();
+  }, [step, listing.id]);
+
   const generateCsv = async (): Promise<boolean> => {
     // Rebuild Description from current fields BEFORE save/export.
     const fresh = withFreshDescription(listing, storeBranding);
@@ -2575,53 +2643,7 @@ export function NewListingWorkspace({
           productId={listing.id}
           reloadingAmazonOptions={reloadingAmazonOptions}
           onReloadAmazonOptions={() => {
-            void (async () => {
-              const url =
-                listing.amazonUrl ||
-                (listing.amazonAsin
-                  ? `https://www.amazon.com/dp/${listing.amazonAsin}`
-                  : "");
-              if (!url) {
-                toast.error("This listing has no Amazon link to read.");
-                return;
-              }
-              setReloadingAmazonOptions(true);
-              try {
-                const response = await fetch("/api/amazon/import", {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ url }),
-                });
-                const body = (await response.json().catch(() => null)) as {
-                  ok?: boolean;
-                  error?: string;
-                  variations?: ListingVariationSet | null;
-                } | null;
-                if (!response.ok || !body?.ok) {
-                  throw new Error(body?.error || "Could not read Amazon options");
-                }
-                if (body.variations && body.variations.variants.length >= 2) {
-                  setListing((prev) =>
-                    listingWithVariationSet(prev, body.variations || null),
-                  );
-                  toast.success(
-                    `Found ${variationSummary(body.variations)}. Uncheck what you will not stock.`,
-                  );
-                } else {
-                  toast.message(
-                    "Amazon only showed one option on that page.",
-                  );
-                }
-              } catch (error) {
-                toast.error(
-                  error instanceof Error
-                    ? error.message
-                    : "Could not read Amazon options",
-                );
-              } finally {
-                setReloadingAmazonOptions(false);
-              }
-            })();
+            void reloadAmazonOptions();
           }}
         />
       ) : null}

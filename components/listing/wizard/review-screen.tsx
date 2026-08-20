@@ -54,11 +54,14 @@ import type { ProductImage, ProductListing } from "@/types/product";
 import type { StoreBranding } from "@/config/store-branding";
 import { cn } from "@/lib/utils";
 import { ImageUploader } from "@/components/uploader/image-uploader";
+import { amazonAsinFromListing } from "@/lib/amazon/asin";
 import { AmazonSourceLink } from "@/components/listing/amazon-source-link";
 import { AmazonVariationPanel } from "@/components/listing/variation-picker";
 import {
   isVariationsSpecific,
   listingWithVariationSet,
+  variationCounts,
+  variationSummary,
   variationsFromListing,
 } from "@/lib/listing/variations";
 
@@ -137,7 +140,9 @@ export function ReviewScreen({
 }) {
   const reduceMotion = usePrefersReducedMotion();
   const [activePhoto, setActivePhoto] = useState(0);
-  const [panel, setPanel] = useState("listing");
+  const [panel, setPanel] = useState(
+    listing.amazonAsin || listing.sku.startsWith("AMZ-") ? "options" : "listing",
+  );
 
   const photos = useMemo(
     () =>
@@ -154,6 +159,16 @@ export function ReviewScreen({
     (f) => f.value?.trim() && !isVariationsSpecific(f),
   );
   const variationSet = variationsFromListing(listing);
+  const amazonAsin = amazonAsinFromListing({
+    amazonAsin: listing.amazonAsin,
+    sku: listing.sku,
+    description: listing.descriptionHtml,
+    itemSpecifics: listing.itemSpecifics,
+  });
+  const showAmazonOptions = Boolean(
+    amazonAsin || listing.amazonUrl || variationSet,
+  );
+  const optionCounts = variationCounts(variationSet);
   const titleLen = listing.title.length;
 
   const packageInfo = useMemo(
@@ -524,21 +539,23 @@ export function ReviewScreen({
             </div>
           ) : null}
 
-          {listing.amazonAsin || listing.amazonUrl || variationSet ? (
-            <div className="border-b border-border/60 px-4 py-4 sm:px-5">
-              <AmazonVariationPanel
-                set={variationSet}
-                onChange={(next) => {
-                  const updated = listingWithVariationSet(listing, next);
-                  onUpdate("itemSpecifics", updated.itemSpecifics);
-                  onUpdate("variations", updated.variations);
-                  onUpdate("variationAxes", updated.variationAxes);
-                }}
-                canReload={Boolean(listing.amazonAsin || listing.amazonUrl)}
-                onReload={onReloadAmazonOptions}
-                reloading={reloadingAmazonOptions}
-              />
-            </div>
+          {showAmazonOptions ? (
+            <button
+              type="button"
+              onClick={() => setPanel("options")}
+              className="flex w-full items-center justify-between gap-3 border-b border-[#f4c928]/50 bg-[#fff8d4] px-4 py-3 text-left sm:px-5"
+            >
+              <span className="text-[13px] font-medium text-[#141414]">
+                {reloadingAmazonOptions
+                  ? "Reading Amazon colors…"
+                  : variationSet
+                    ? `${variationSummary(variationSet)} — tap to choose what goes to your store`
+                    : "Amazon has colors. Tap here to load them for your store."}
+              </span>
+              <span className="shrink-0 rounded-full bg-[#f4c928] px-2 py-0.5 text-[11px] font-semibold text-[#141414]">
+                Options
+              </span>
+            </button>
           ) : null}
 
           {/* Tabbed details — switch panels instead of endless scroll */}
@@ -560,6 +577,17 @@ export function ReviewScreen({
                 >
                   Overview
                 </TabsTrigger>
+                {showAmazonOptions ? (
+                  <TabsTrigger
+                    value="options"
+                    className="h-11 flex-none rounded-none px-3 text-[13px] data-active:bg-transparent"
+                  >
+                    Options
+                    <span className="ml-1 rounded-full bg-[#f4c928] px-1.5 text-[10px] font-semibold text-[#141414]">
+                      {optionCounts.total >= 2 ? optionCounts.selected : "!"}
+                    </span>
+                  </TabsTrigger>
+                ) : null}
                 <TabsTrigger
                   value="specifics"
                   className="h-11 flex-none rounded-none px-3 text-[13px] data-active:bg-transparent"
@@ -583,6 +611,23 @@ export function ReviewScreen({
                 </TabsTrigger>
               </TabsList>
             </div>
+
+            {showAmazonOptions ? (
+              <TabsContent value="options" className="p-4 sm:p-5">
+                <AmazonVariationPanel
+                  set={variationSet}
+                  onChange={(next) => {
+                    const updated = listingWithVariationSet(listing, next);
+                    onUpdate("itemSpecifics", updated.itemSpecifics);
+                    onUpdate("variations", updated.variations);
+                    onUpdate("variationAxes", updated.variationAxes);
+                  }}
+                  canReload={showAmazonOptions}
+                  onReload={onReloadAmazonOptions}
+                  reloading={reloadingAmazonOptions}
+                />
+              </TabsContent>
+            ) : null}
 
             <TabsContent value="listing" className="p-4 sm:p-5">
               <dl className="grid gap-x-6 gap-y-2 text-[13px] sm:grid-cols-3">

@@ -18,7 +18,7 @@ import {
   ensureInferredElectricalAspects,
   inferModelAspect,
   listingHasAspect,
-  normalizeEbayBrand,
+  resolveEbayBrand,
 } from "@/lib/ebay/infer-voltage";
 import { ensureInferredDimensionAspects } from "@/lib/ebay/infer-item-dimensions";
 
@@ -119,9 +119,10 @@ export function listingToInventoryItem(
     .filter(Boolean);
 
   const aspects = listingToEbayAspects(listing);
-  const brand = normalizeEbayBrand(
-    aspects.Brand?.[0] || String(listing.brand || ""),
-  );
+  const brand = resolveEbayBrand({
+    brand: aspects.Brand?.[0] || String(listing.brand || ""),
+    title: listing.title,
+  });
   const mpn =
     aspects.MPN?.[0]?.trim() ||
     resolveBrandMpn({
@@ -133,7 +134,7 @@ export function listingToInventoryItem(
   const mpnCompact = mpn.replace(/\s+/g, "").slice(0, 65) || "Does Not Apply";
   aspects.Brand = [brand];
   aspects.MPN = [mpnCompact === "DoesNotApply" ? "Does Not Apply" : mpnCompact];
-  ensureEbayBrandAspect(aspects, brand);
+  ensureEbayBrandAspect(aspects, brand, listing.title);
 
   // Strip identifiers eBay Inventory does not want as aspects.
   for (const key of Object.keys(aspects)) {

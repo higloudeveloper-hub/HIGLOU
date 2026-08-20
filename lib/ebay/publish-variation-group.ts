@@ -18,6 +18,7 @@ import {
   ensureInferredApparelAspects,
   inferFilledAspectForEbayError,
   parseMissingAspectFromEbayError,
+  resolveEbayBrand,
 } from "@/lib/ebay/infer-voltage";
 
 export type VariationGroupPlan = {
@@ -253,7 +254,11 @@ async function putVariantInventory(opts: {
     aspects: opts.aspects,
     imageUrls: opts.imageUrls.length ? opts.imageUrls : opts.inventory.imageUrls,
   };
-  ensureEbayBrandAspect(payload.aspects, opts.listing.brand || opts.inventory.brand);
+  ensureEbayBrandAspect(
+    payload.aspects,
+    opts.listing.brand || opts.inventory.brand,
+    opts.listing.title,
+  );
   payload.brand = payload.aspects.Brand?.[0] || "Unbranded";
   try {
     await createOrReplaceInventoryItem(opts.accessToken, payload, {
@@ -290,14 +295,25 @@ async function putVariantInventory(opts: {
       packageDepthIn: opts.listing.packageDepthIn,
     });
     if (!filled) throw error;
+    const brand =
+      /^brand$/i.test(missingAspect)
+        ? resolveEbayBrand({
+            brand: filled,
+            title: opts.listing.title,
+          })
+        : "";
     opts.inventory.aspects = {
       ...(opts.inventory.aspects || {}),
-      [missingAspect]: [filled],
+      [missingAspect]: [brand || filled],
     };
     payload.aspects = {
       ...opts.aspects,
-      [missingAspect]: [filled],
+      [missingAspect]: [brand || filled],
     };
+    if (brand) {
+      payload.brand = brand;
+      ensureEbayBrandAspect(payload.aspects, brand, opts.listing.title);
+    }
     await createOrReplaceInventoryItem(opts.accessToken, payload, {
       aspectCardinality: opts.aspectCardinality,
       lockAspects: opts.lockAspects,
@@ -323,6 +339,17 @@ export async function publishEbayVariationGroup(opts: {
   }
 
   if (!opts.inventory.aspects) opts.inventory.aspects = {};
+  ensureEbayBrandAspect(
+    opts.inventory.aspects,
+    opts.listing.brand || opts.inventory.brand,
+    opts.listing.title,
+  );
+  opts.inventory.brand =
+    opts.inventory.aspects.Brand?.[0] ||
+    resolveEbayBrand({
+      brand: opts.listing.brand || opts.inventory.brand,
+      title: opts.listing.title,
+    });
   ensureInferredApparelAspects(opts.inventory.aspects, {
     title: opts.listing.title,
     productType: opts.listing.productType || opts.listing.type,

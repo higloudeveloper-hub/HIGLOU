@@ -15,6 +15,7 @@ import {
   inferSizeTypeFromText,
   inferFilledAspectForEbayError,
   normalizeEbayBrand,
+  resolveEbayBrand,
 } from "@/lib/ebay/infer-voltage";
 import { listingToInventoryItem } from "@/lib/ebay/listing-to-inventory";
 import { createEmptyListing } from "@/lib/demo/sample-listing";
@@ -469,6 +470,26 @@ describe("Brand aspect (eBay 25002 Brand)", () => {
     expect(
       inferFilledAspectForEbayError("Brand", "Women's Floral Ruffle Sleeve Blouse"),
     ).toBe("Unbranded");
+  });
+
+  it("uses Lattafa from a perfume byline instead of the scent name", () => {
+    expect(
+      resolveEbayBrand({
+        brand: "Yara Candy",
+        title:
+          "Yara Candy Eau de Parfum by Lattafa - Amber Fruity Vanilla Fragrance for Women",
+      }),
+    ).toBe("Lattafa");
+    const listing = createEmptyListing();
+    listing.title =
+      "Yara Candy Eau de Parfum by Lattafa - Amber Fruity Vanilla Fragrance for Women";
+    listing.brand = "Yara Candy";
+    listing.categoryId = "11854";
+    listing.categoryName = "Fragrances";
+    listing.productType = "Eau de Parfum";
+    const item = listingToInventoryItem(listing);
+    expect(item.brand).toBe("Lattafa");
+    expect(item.aspects?.Brand?.[0]).toBe("Lattafa");
   });
 
   it("keeps a real Amazon brand", () => {

@@ -3,7 +3,7 @@ import { sanitizeEbayAspects } from "@/lib/ebay/sanitize-aspects";
 import { HIGLOU_WAREHOUSE } from "@/config/warehouse";
 import { validateBarcode } from "@/lib/barcode/validators";
 import { toEbayListingTitle, toEbayInventorySku } from "@/lib/ebay/listing-helpers";
-import { normalizeEbayBrand } from "@/lib/ebay/infer-voltage";
+import { resolveEbayBrand } from "@/lib/ebay/infer-voltage";
 
 /**
  * Only send UPC/EAN values eBay will accept (valid GS1 checksum).
@@ -155,9 +155,10 @@ export async function createOrReplaceInventoryItem(
 
   // BrandMPN (25002): product.brand + product.mpn must both be present for branded items.
   // Production rejects product.mpn as string[] (2004 serialize) — send a plain string.
-  const brand = normalizeEbayBrand(
-    String(input.brand || "") || String(input.aspects?.Brand?.[0] || ""),
-  );
+  const brand = resolveEbayBrand({
+    brand: String(input.brand || "") || String(input.aspects?.Brand?.[0] || ""),
+    title: input.title,
+  });
   const mpnRaw =
     String(input.mpn || "").trim() ||
     String(input.aspects?.MPN?.[0] || "").trim();
@@ -186,6 +187,7 @@ export async function createOrReplaceInventoryItem(
     if (!name.trim() || !value) continue;
     aspects[name] = [value];
   }
+  aspects.Brand = [brand];
   // Never send invalid UPC in aspects either (same 25002 failure mode).
   for (const key of Object.keys(aspects)) {
     if (!/^upc$/i.test(key)) continue;

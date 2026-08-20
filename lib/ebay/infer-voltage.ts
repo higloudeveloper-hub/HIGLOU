@@ -281,7 +281,10 @@ export function inferAspectValueFromText(
     return inferSizeTypeFromText(extras?.title || text);
   }
   if (name === "brand" || name === "manufacturer") {
-    return normalizeEbayBrand(extras?.brand || "");
+    return resolveEbayBrand({
+      brand: extras?.brand || "",
+      title: extras?.title || text,
+    });
   }
   if (
     name === "size" &&
@@ -325,15 +328,53 @@ export function normalizeEbayBrand(raw: string): string {
   return value.slice(0, 65);
 }
 
+function brandFromByline(title?: string): string {
+  const raw = String(title || "").trim();
+  const found = raw.match(
+    /\bby\s+([A-Z][A-Za-z0-9&.\-']+(?:\s+[A-Z][A-Za-z0-9&.\-']+){0,2})(?=\s*[-|,]|\s*$)/,
+  )?.[1];
+  const value = String(found || "").trim();
+  if (!value || /^(women|men|amazon|the)\b/i.test(value)) return "";
+  return value.slice(0, 65);
+}
+
+/**
+ * Perfume titles often start with the scent ("Yara Candy … by Lattafa").
+ * eBay then rejects that scent as Brand (25002 missing). Prefer "by Maker".
+ */
+export function resolveEbayBrand(opts: {
+  brand?: string;
+  title?: string;
+}): string {
+  const title = String(opts.title || "").trim();
+  const raw = String(opts.brand || "")
+    .replace(/\s+/g, " ")
+    .trim();
+  const byline = brandFromByline(title);
+  const perfume = /\b(eau de parfum|eau de toilette|\bedp\b|\bedt\b|fragrance|perfume|cologne)\b/i.test(
+    title,
+  );
+  const scentUsedAsBrand =
+    Boolean(raw) &&
+    perfume &&
+    title.toLowerCase().startsWith(raw.toLowerCase());
+  const candidate =
+    !raw || PLACEHOLDER_BRAND.test(raw) || scentUsedAsBrand
+      ? byline || raw
+      : raw;
+  return normalizeEbayBrand(candidate);
+}
+
 /** Put a valid Brand on Inventory aspects (mutates). */
 export function ensureEbayBrandAspect(
   aspects: Record<string, string[]>,
   brand?: string,
+  title?: string,
 ): string[] {
   const current = Object.entries(aspects || {}).find(
     ([key]) => key.trim().toLowerCase() === "brand",
   )?.[1]?.[0];
-  const next = normalizeEbayBrand(brand || current || "");
+  const next = resolveEbayBrand({ brand: brand || current || "", title });
   for (const key of Object.keys(aspects || {})) {
     if (key.trim().toLowerCase() === "brand" && key !== "Brand") {
       delete aspects[key];
@@ -641,7 +682,7 @@ export function ensureRequiredCategoryAspects(
   }
 
   added.push(...ensureInferredApparelAspects(aspects, extras));
-  added.push(...ensureEbayBrandAspect(aspects, extras.brand));
+  added.push(...ensureEbayBrandAspect(aspects, extras.brand, extras.title));
 
   return added;
 }
@@ -708,7 +749,12 @@ export function inferFilledAspectForEbayError(
   }
   const inferred = inferAspectValueFromText(name, hay, extras) || "";
   if (inferred) return inferred;
-  if (/^brand$/i.test(name)) return normalizeEbayBrand(extras?.brand || "");
+  if (/^brand$/i.test(name)) {
+    return resolveEbayBrand({
+      brand: extras?.brand || "",
+      title: extras?.title || hay,
+    });
+  }
   if (/^size\s*type$/i.test(name)) return inferSizeTypeFromText(hay);
   if (/^(model|mpn|compatible\s|fragrance|scent)/i.test(name)) {
     return "Does Not Apply";

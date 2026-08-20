@@ -147,6 +147,18 @@ function inferBrandFromTitle(title?: string): string {
     return "";
   }
 
+  const byMaker = raw.match(
+    /\bby\s+([A-Z][A-Za-z0-9&.\-']+(?:\s+[A-Z][A-Za-z0-9&.\-']+){0,2})(?=\s*[-|,]|\s*$)/,
+  )?.[1];
+  if (byMaker && !/^(women|men|amazon|the)\b/i.test(byMaker)) {
+    return byMaker.trim();
+  }
+  if (
+    /\b(eau de parfum|eau de toilette|fragrance|perfume|cologne)\b/i.test(raw)
+  ) {
+    return "";
+  }
+
   // "Brand Name Line Collection …" → Brand Name (drop the collection code)
   const withCollection = raw.match(
     /^((?:[A-Z][A-Za-z0-9&.\-']+\s+){1,3})[A-Z][A-Za-z0-9&.\-']+\s+Collection\b/,

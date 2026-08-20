@@ -4,6 +4,7 @@
  */
 
 import { fallbackDimensionAspect, inferItemDimensionAspect } from "@/lib/ebay/infer-item-dimensions";
+import { DEFAULT_EBAY_VOLUME_VALUES } from "@/lib/ebay/ebay-volume-values";
 
 export function formatEbayVoltage(value: string | number): string {
   const n = Number(String(value).replace(/[^\d.]/g, ""));
@@ -331,6 +332,13 @@ export function inferAspectValueFromText(
     return null;
   }
   if (
+    name === "unit of measure" ||
+    name === "volume unit" ||
+    name === "unit of measurement"
+  ) {
+    return "fl oz";
+  }
+  if (
     name === "size" &&
     /\b(wallet|rfid|keychain|key\s*chain)\b/i.test(
       [extras?.title || text, extras?.productType, extras?.categoryName].join(" "),
@@ -530,15 +538,15 @@ export function inferFragranceName(opts: {
 }
 
 const ML_TO_OZ: Record<number, string> = {
-  10: "0.33 oz",
-  15: "0.5 oz",
-  30: "1 oz",
-  50: "1.7 oz",
-  75: "2.5 oz",
-  100: "3.4 oz",
-  125: "4.2 oz",
-  150: "5 oz",
-  200: "6.7 oz",
+  10: "0.33 fl. oz.",
+  15: "0.5 fl. oz.",
+  30: "1 fl. oz.",
+  50: "1.7 fl. oz.",
+  75: "2.5 fl. oz.",
+  100: "3.4 fl. oz.",
+  125: "4.2 fl. oz.",
+  150: "5 fl. oz.",
+  200: "6.7 fl. oz.",
 };
 
 const OZ_TO_ML: Record<string, string> = {
@@ -553,12 +561,12 @@ const OZ_TO_ML: Record<string, string> = {
   "6.7": "200 ml",
 };
 
-/** eBay fragrance Volume is selection-only — "3.4 fl oz" is dropped; "3.4 oz" is kept. */
+/** eBay fragrance Volume dropdown uses "3.4 fl. oz." — "3.4 oz" and "3.4 fl oz" are dropped. */
 export function normalizeEbayVolume(raw: string): string {
   const t = String(raw || "").replace(/\s+/g, " ").trim();
   if (!t || EMPTY_ASPECT.test(t)) return "";
   const fl = t.match(/(\d+(?:\.\d+)?)\s*(?:fl\.?\s*)?(?:oz|ounces?)\b/i);
-  if (fl) return `${fl[1]} oz`;
+  if (fl) return `${fl[1]} fl. oz.`;
   const ml = t.match(/(\d+(?:\.\d+)?)\s*m(?:l|illilit(?:er|re)s?)\b/i);
   if (ml) {
     const n = Number(ml[1]);
@@ -576,7 +584,7 @@ export function pickAllowedAspectValue(
   if (!raw || !allowed?.length) return raw;
   const exact = allowed.find((row) => row.toLowerCase() === raw.toLowerCase());
   if (exact) return exact;
-  const compact = (s: string) => s.toLowerCase().replace(/[^a-z0-9.]/g, "");
+  const compact = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
   const byCompact = allowed.find((row) => compact(row) === compact(raw));
   if (byCompact) return byCompact;
   const num = raw.match(/(\d+(?:\.\d+)?)/)?.[1];
@@ -588,13 +596,14 @@ export function pickAllowedAspectValue(
     if (rowNum !== num) return false;
     if (wantOz && /oz/i.test(row)) return true;
     if (wantMl && /\bml\b/i.test(row)) return true;
+    if (/^\d+(?:\.\d+)?$/.test(row) && /^\d+(?:\.\d+)?$/.test(raw)) return true;
     return false;
   });
   return hit || raw;
 }
 
 export function ebayVolumeCandidates(raw: string): string[] {
-  const text = String(raw || "").trim() || "3.4 oz";
+  const text = String(raw || "").trim() || "3.4 fl. oz.";
   const normalized = normalizeEbayVolume(text) || text;
   const n =
     normalized.match(/(\d+(?:\.\d+)?)/)?.[1] ||
@@ -608,11 +617,15 @@ export function ebayVolumeCandidates(raw: string): string[] {
     out.push(next);
   };
   add(normalized);
-  add(`${n} oz`);
+  add(`${n} fl. oz.`);
   add(`${n} fl oz`);
-  add(`${n} Fl Oz`);
+  add(`${n} oz`);
+  add(`${n} Fl. Oz.`);
+  add(`${n} fl.oz.`);
+  add(n);
   if (OZ_TO_ML[n]) add(OZ_TO_ML[n]!);
   if (/\bml\b/i.test(text)) add(`${n} ml`);
+  for (const known of DEFAULT_EBAY_VOLUME_VALUES) add(known);
   return out;
 }
 
@@ -620,50 +633,46 @@ export function resolveEbayVolume(
   raw: string,
   allowed?: string[],
 ): string {
-  const candidates = ebayVolumeCandidates(raw || "3.4 oz");
-  if (allowed?.length) {
-    for (const candidate of candidates) {
-      const hit = pickAllowedAspectValue(candidate, allowed);
-      if (allowed.some((row) => row.toLowerCase() === hit.toLowerCase())) {
-        return hit;
-      }
-    }
-    const n = candidates[0]?.match(/(\d+(?:\.\d+)?)/)?.[1];
-    if (n) {
-      const near = allowed.find(
-        (row) => row.includes(n) && /(oz|ml)/i.test(row),
-      );
-      if (near) return near;
+  const list = allowed?.length ? allowed : DEFAULT_EBAY_VOLUME_VALUES;
+  const candidates = ebayVolumeCandidates(raw || "3.4 fl. oz.");
+  for (const candidate of candidates) {
+    const hit = pickAllowedAspectValue(candidate, list);
+    if (list.some((row) => row.toLowerCase() === hit.toLowerCase())) {
+      return hit;
     }
   }
-  return normalizeEbayVolume(candidates[0] || "") || "3.4 oz";
+  const n = candidates[0]?.match(/(\d+(?:\.\d+)?)/)?.[1];
+  if (n) {
+    const near = list.find(
+      (row) => row.includes(n) && !/^other$/i.test(row),
+    );
+    if (near) return near;
+  }
+  return (
+    list.find((row) => /3\.4/i.test(row) && !/^other$/i.test(row)) ||
+    list[0] ||
+    "3.4 fl. oz."
+  );
 }
 
 export function nextEbayVolumeValue(
   current: string,
   allowed?: string[],
 ): string {
-  const candidates = ebayVolumeCandidates(current || "3.4 oz");
-  if (allowed?.length) {
-    const mapped = [
-      ...new Set(
-        candidates
-          .map((row) => resolveEbayVolume(row, allowed))
-          .filter(Boolean),
-      ),
-    ];
-    const idx = mapped.findIndex(
-      (row) => row.toLowerCase() === String(current).trim().toLowerCase(),
-    );
-    if (mapped.length > 1) {
-      return mapped[(idx + 1) % mapped.length]!;
-    }
-    return mapped[0] || resolveEbayVolume(current, allowed);
-  }
-  const idx = candidates.findIndex(
+  const list = (allowed?.length ? allowed : DEFAULT_EBAY_VOLUME_VALUES).filter(
+    (row) => !/^other$/i.test(row),
+  );
+  const idx = list.findIndex(
     (row) => row.toLowerCase() === String(current).trim().toLowerCase(),
   );
-  return candidates[idx + 1] || candidates[0] || "3.4 oz";
+  if (list.length) {
+    return list[(idx + 1) % list.length]!;
+  }
+  const candidates = ebayVolumeCandidates(current || "3.4 fl. oz.");
+  const pos = candidates.findIndex(
+    (row) => row.toLowerCase() === String(current).trim().toLowerCase(),
+  );
+  return candidates[pos + 1] || candidates[0] || "3.4 fl. oz.";
 }
 
 export function applyEbayVolumeAspect(
@@ -692,7 +701,7 @@ export function inferVolumeFromText(text: string, fallbackForPerfume = false): s
   const raw = String(text || "");
   const fromSize = normalizeEbayVolume(raw);
   if (fromSize) return fromSize;
-  if (fallbackForPerfume && looksLikeFragranceProduct(raw)) return "3.4 oz";
+  if (fallbackForPerfume && looksLikeFragranceProduct(raw)) return "3.4 fl. oz.";
   return "";
 }
 
@@ -717,7 +726,7 @@ export function ensureInferredFragranceAspects(
     const next = applyEbayVolumeAspect(aspects, current);
     return next !== current ? ["Volume"] : [];
   }
-  applyEbayVolumeAspect(aspects, inferVolumeFromText(hay, true) || "3.4 oz");
+  applyEbayVolumeAspect(aspects, inferVolumeFromText(hay, true) || "3.4 fl. oz.");
   return ["Volume"];
 }
 
@@ -1079,7 +1088,7 @@ export function inferFilledAspectForEbayError(
   }
   if (/^volume$/i.test(name)) {
     return resolveEbayVolume(
-      inferVolumeFromText(hay, looksLikeFragranceProduct(hay)) || "3.4 oz",
+      inferVolumeFromText(hay, looksLikeFragranceProduct(hay)) || "3.4 fl. oz.",
     );
   }
   if (inferred) return inferred;
@@ -1108,7 +1117,7 @@ export function humanizeEbayPublishError(raw: string): {
       : /^brand$/i.test(aspect)
         ? "Try again — Higlou fills the Amazon brand, or Unbranded if Amazon has none."
       : /^volume$/i.test(aspect)
-        ? "Try again — Higlou fills the bottle size (3.4 oz for a 100 ml perfume)."
+        ? "Try again — Higlou fills the bottle size (3.4 fl. oz. for a 100 ml perfume)."
       : "Try again — Higlou fills it from the product (or Does Not Apply).";
     return {
       headline: `eBay needs “${aspect}”`,

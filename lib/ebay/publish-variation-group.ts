@@ -471,7 +471,7 @@ export async function publishEbayVariationGroup(opts: {
           true,
         ) ||
           aspects.Volume?.[0] ||
-          "3.4 oz",
+          "3.4 fl. oz.",
         opts.allowedAspectValues?.get("volume"),
       );
       aspects.Volume = [volume];
@@ -701,7 +701,7 @@ export async function publishEbayVariationGroup(opts: {
     offerId = await putOffers();
   } catch (error) {
     let last: unknown = error;
-    for (let attempt = 0; attempt < 3; attempt += 1) {
+    for (let attempt = 0; attempt < 8; attempt += 1) {
       if (!(await restampMissingAspect(last))) throw last;
       try {
         offerId = await putOffers();

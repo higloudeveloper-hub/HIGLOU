@@ -764,7 +764,7 @@ async function postEbayPublish(request: Request) {
         }
         if (/^volume$/i.test(missingAspect)) {
           filled = nextEbayVolumeValue(
-            inventory.aspects?.Volume?.[0] || filled || "3.4 oz",
+            inventory.aspects?.Volume?.[0] || filled || "3.4 fl. oz.",
             aspectMeta.allowedValues.get("volume"),
           );
         }
@@ -898,7 +898,7 @@ async function postEbayPublish(request: Request) {
         ]
           .filter(Boolean)
           .join(" ");
-        for (let attempt = 0; attempt < 3; attempt += 1) {
+        for (let attempt = 0; attempt < 8; attempt += 1) {
           const retryMsg =
             last instanceof Error ? last.message : String(last || "");
           const missingAspect = parseMissingAspectFromEbayError(retryMsg);

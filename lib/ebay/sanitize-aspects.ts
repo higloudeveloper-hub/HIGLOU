@@ -1,5 +1,6 @@
 import type { EbayAspects } from "@/lib/ebay/inventory-api";
 import { getEbayConfig } from "@/lib/ebay/config";
+import { DEFAULT_EBAY_VOLUME_VALUES } from "@/lib/ebay/ebay-volume-values";
 
 export type AspectCardinality = "SINGLE" | "MULTI";
 
@@ -129,8 +130,10 @@ type TaxonomyAspect = {
     itemToAspectCardinality?: string;
     aspectRequired?: boolean;
     aspectUsage?: string;
+    aspectDataType?: string;
+    aspectMode?: string;
   };
-  aspectValues?: Array<{ localizedValue?: string }>;
+  aspectValues?: Array<{ localizedValue?: string; value?: string }>;
 };
 
 export type CategoryAspectMeta = {
@@ -164,6 +167,8 @@ export async function fetchCategoryAspectMeta(
           Authorization: `Bearer ${accessToken}`,
           Accept: "application/json",
           "Accept-Language": "en-US",
+          "Content-Language": "en-US",
+          "X-EBAY-C-MARKETPLACE-ID": "EBAY_US",
         },
       },
     );
@@ -185,12 +190,27 @@ export async function fetchCategoryAspectMeta(
       if (aspect.aspectConstraint?.aspectRequired || usage === "REQUIRED") {
         required.push(name);
       }
-      const cap = name.toLowerCase() === "brand" ? 3000 : 400;
+      const cap = name.toLowerCase() === "brand" ? 3000 : name.toLowerCase() === "volume" ? 80 : 400;
       const allowed = (aspect.aspectValues || [])
-        .map((row) => String(row.localizedValue || "").trim())
+        .map((row) =>
+          String(row.localizedValue || row.value || "").trim(),
+        )
         .filter(Boolean)
         .slice(0, cap);
       if (allowed.length) allowedValues.set(name.toLowerCase(), allowed);
+      else if (
+        name.toLowerCase() === "volume" &&
+        String(aspect.aspectConstraint?.aspectDataType || "").toUpperCase() ===
+          "NUMBER"
+      ) {
+        allowedValues.set("volume", ["3.4", "1.7", "1", "0.5", "2.5", "100"]);
+      }
+    }
+    if (
+      required.some((name) => name.toLowerCase() === "volume") &&
+      !allowedValues.has("volume")
+    ) {
+      allowedValues.set("volume", [...DEFAULT_EBAY_VOLUME_VALUES]);
     }
   } catch {
     // Non-fatal — sanitize with defaults.

@@ -337,19 +337,23 @@ describe("Fragrance Name aspect (eBay 25002 Fragrance Name)", () => {
 });
 
 describe("Volume aspect (eBay 25002 Volume)", () => {
-  it("maps 100ml perfume bottles to 3.4 oz", () => {
+  it("maps 100ml perfume bottles to 3.4 fl. oz.", () => {
     expect(inferVolumeFromText("Lattafa Yara Candy 100ml Eau de Parfum")).toBe(
-      "3.4 oz",
+      "3.4 fl. oz.",
     );
-    expect(inferVolumeFromText("3.4 Fl Oz Eau de Parfum")).toBe("3.4 oz");
+    expect(inferVolumeFromText("3.4 Fl Oz Eau de Parfum")).toBe("3.4 fl. oz.");
   });
 
-  it("maps inferred fl oz onto eBay's closed Volume list", () => {
-    expect(resolveEbayVolume("3.4 fl oz", ["3.4 oz", "1.7 oz"])).toBe("3.4 oz");
-    expect(resolveEbayVolume("100 ml", ["3.4 fl oz", "1.7 fl oz"])).toBe(
-      "3.4 fl oz",
+  it("maps inferred sizes onto eBay's closed Volume list including dotted fl. oz.", () => {
+    expect(
+      resolveEbayVolume("3.4 oz", ["3.4 fl. oz.", "1.7 fl. oz."]),
+    ).toBe("3.4 fl. oz.");
+    expect(resolveEbayVolume("100 ml", ["3.4 fl. oz.", "1.7 fl. oz."])).toBe(
+      "3.4 fl. oz.",
     );
-    expect(nextEbayVolumeValue("3.4 oz")).toBe("3.4 fl oz");
+    expect(resolveEbayVolume("3.4 fl oz")).toBe("3.4 fl. oz.");
+    expect(nextEbayVolumeValue("3.4 fl. oz.")).toBe("3.4 fl oz");
+    expect(resolveEbayVolume("3.4 fl oz", ["3.4", "1.7"])).toBe("3.4");
   });
 
   it("overwrites Does Not Apply Volume on perfume", () => {
@@ -358,7 +362,7 @@ describe("Volume aspect (eBay 25002 Volume)", () => {
       title: "Yara Candy Eau de Parfum by Lattafa",
       productType: "Eau de Parfum",
     });
-    expect(aspects.Volume).toEqual(["3.4 oz"]);
+    expect(aspects.Volume).toEqual(["3.4 fl. oz."]);
   });
 
   it("fills Volume on a perfume with no size in the title", () => {
@@ -366,18 +370,18 @@ describe("Volume aspect (eBay 25002 Volume)", () => {
     listing.title =
       "Yara Candy Eau de Parfum by Lattafa - Amber Fruity Vanilla Fragrance for Women";
     listing.brand = "Lattafa";
-    listing.categoryId = "11854";
+    listing.categoryId = "11838";
     listing.categoryName = "Fragrances";
     listing.productType = "Eau de Parfum";
     const item = listingToInventoryItem(listing);
-    expect(item.aspects?.Volume?.[0]).toBe("3.4 oz");
+    expect(item.aspects?.Volume?.[0]).toBe("3.4 fl. oz.");
     expect(
       inferFilledAspectForEbayError(
         "Volume",
         listing.title,
         { title: listing.title, productType: "Eau de Parfum" },
       ),
-    ).toBe("3.4 oz");
+    ).toBe("3.4 fl. oz.");
   });
 
   it("does not invent Volume for underwear", () => {

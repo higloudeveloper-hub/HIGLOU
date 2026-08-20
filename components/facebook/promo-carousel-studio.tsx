@@ -4,7 +4,10 @@ import { useEffect, useMemo, useState } from "react";
 import { ImagePlus, Loader2, Search, X } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { matchListingToShopProduct } from "@/lib/don-baraton/match-promo-listings";
+import {
+  matchListingToShopProduct,
+  promoSkuLookupKeys,
+} from "@/lib/don-baraton/match-promo-listings";
 import type { DonBaratonPromoProduct } from "@/lib/don-baraton/facebook-promo";
 
 const MIN = 2;
@@ -175,18 +178,38 @@ export function PromoCarouselStudio() {
           products?: HiglouListing[];
         } | null;
         const nextListings = listingBody?.products ?? [];
-        const skus = nextListings
-          .map((item) => String(item.sku || "").trim())
-          .filter(Boolean);
+        const skus = [
+          ...new Set(
+            nextListings.flatMap((item) => promoSkuLookupKeys(item.sku)),
+          ),
+        ];
         const [recent, matched] = await Promise.all([
           loadCatalog(""),
           skus.length > 0 ? loadCatalog("", skus) : Promise.resolve([]),
         ]);
-        if (cancelled) return;
         const merged = new Map<string, DonBaratonPromoProduct>();
         for (const product of [...matched, ...recent]) {
           merged.set(product.id, product);
         }
+        const unmatched = nextListings.filter(
+          (listing) =>
+            !matchListingToShopProduct(
+              listing.sku,
+              [...merged.values()],
+              listing.title,
+            ),
+        );
+        if (unmatched.length > 0) {
+          const extras = await Promise.all(
+            unmatched.slice(0, 8).map((listing) =>
+              loadCatalog(listing.title).catch(() => [] as DonBaratonPromoProduct[]),
+            ),
+          );
+          for (const products of extras) {
+            for (const product of products) merged.set(product.id, product);
+          }
+        }
+        if (cancelled) return;
         setListings(nextListings);
         const shopProducts = [...merged.values()];
         setShop(shopProducts);
@@ -202,7 +225,11 @@ export function PromoCarouselStudio() {
           for (const id of requestedIds) {
             const listing = nextListings.find((item) => item.id === id);
             const shopProduct = listing
-              ? matchListingToShopProduct(listing.sku, shopProducts)
+              ? matchListingToShopProduct(
+                  listing.sku,
+                  shopProducts,
+                  listing.title,
+                )
               : null;
             if (shopProduct) picked.push(shopProduct);
             else missing += 1;
@@ -210,7 +237,7 @@ export function PromoCarouselStudio() {
           setSelected(picked.slice(0, MAX));
           if (missing > 0) {
             toast.error(
-              `${missing} listing(s) are not on donbaraton.shop yet. Publish them first.`,
+              `${missing} listing(s) no aparecen como publicados. Recargá Promo Facebook; si sigue, publicá de nuevo a Don Baratón.`,
             );
           }
         }
@@ -256,7 +283,11 @@ export function PromoCarouselStudio() {
     );
     return listings
       .map((listing) => {
-        const shopProduct = matchListingToShopProduct(listing.sku, shop);
+        const shopProduct = matchListingToShopProduct(
+          listing.sku,
+          shop,
+          listing.title,
+        );
         return { listing, shopProduct };
       })
       .sort((a, b) => {

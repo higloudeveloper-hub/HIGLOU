@@ -70,9 +70,25 @@ export async function fetchDonBaratonPromoCatalog(input?: {
     };
   }
 
+  const uniqueSkus = [
+    ...new Set((input?.skus ?? []).map((sku) => sku.trim()).filter(Boolean)),
+  ];
+  const skuChunkSize = 30;
+  if (!input?.query?.trim() && uniqueSkus.length > skuChunkSize) {
+    const merged = new Map<string, DonBaratonPromoProduct>();
+    for (let index = 0; index < uniqueSkus.length; index += skuChunkSize) {
+      const part = await fetchDonBaratonPromoCatalog({
+        skus: uniqueSkus.slice(index, index + skuChunkSize),
+      });
+      if (part.status === "error" || part.status === "skipped") return part;
+      for (const product of part.products) merged.set(product.id, product);
+    }
+    return { status: "ok", products: [...merged.values()] };
+  }
+
   const params = new URLSearchParams();
   if (input?.query?.trim()) params.set("q", input.query.trim());
-  if (input?.skus?.length) params.set("skus", input.skus.join(","));
+  if (uniqueSkus.length) params.set("skus", uniqueSkus.join(","));
   const qs = params.toString();
 
   try {

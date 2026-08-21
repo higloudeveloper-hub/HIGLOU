@@ -21,6 +21,7 @@ import {
   httpStatusForAnalysisFailure,
   type AnalysisFailureCode,
 } from "@/types/analysis-failures";
+import { isCatalogCdnImageUrl } from "@/lib/images/catalog-hosts";
 import { cleanEnvUrl, cleanHttpsUrl } from "@/lib/images/url-sanitize";
 
 export const runtime = "nodejs";
@@ -74,9 +75,7 @@ function isOwnedSupabaseImageUrl(url: string, userId?: string): boolean {
   if (!base || !userId) return true;
   const prefix = `${base}/storage/v1/object/public/`;
   if (!clean.startsWith(prefix)) {
-    return /amazon|media-amazon|ssl-images-amazon|ebayimg\.com|ebaystatic\.com/i.test(
-      clean,
-    );
+    return isCatalogCdnImageUrl(clean);
   }
   return clean.includes(`/${userId}/`);
 }

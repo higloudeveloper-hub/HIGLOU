@@ -24,6 +24,10 @@ describe("Walmart import stays on Higlou", () => {
     expect(readRepo("public/brands/walmart-spark.svg")).toMatch(/#FFC220/);
     expect(readRepo("components/studio/listing-pipeline.tsx")).toMatch(/WaitingWalmart/);
     expect(readRepo("components/studio/drop-stage.tsx")).toMatch(/WalmartMark/);
+    expect(readRepo("app/api/analyze-product/route.ts")).toMatch(
+      /isCatalogCdnImageUrl/,
+    );
+    expect(readRepo("lib/images/catalog-hosts.ts")).toMatch(/walmartimages/);
   });
 
   it("does not treat a bare Home Depot id as Walmart", () => {

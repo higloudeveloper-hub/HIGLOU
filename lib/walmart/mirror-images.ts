@@ -30,23 +30,36 @@ export type MirroredWalmartImage = {
 
 const IPHONE_UA =
   "Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Mobile/15E148 Safari/604.1";
+const DESKTOP_UA =
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36";
+
+function looksLikeImage(raw: Buffer): boolean {
+  if (raw.byteLength < 400) return false;
+  const head = raw.subarray(0, 80).toString("utf8");
+  return !/^\s*<(!doctype|html|head|body)/i.test(head);
+}
 
 async function fetchBuffer(url: string): Promise<Buffer | null> {
-  try {
-    const res = await fetch(url, {
-      headers: {
-        "User-Agent": IPHONE_UA,
-        Accept: "image/jpeg,image/png,image/webp;q=0.8,*/*;q=0.5",
-        Referer: "https://www.walmart.com/",
-      },
-      cache: "no-store",
-      signal: AbortSignal.timeout(20_000),
-    });
-    if (!res.ok) return null;
-    return Buffer.from(await res.arrayBuffer());
-  } catch {
-    return null;
+  for (const ua of [DESKTOP_UA, IPHONE_UA]) {
+    try {
+      const res = await fetch(url, {
+        headers: {
+          "User-Agent": ua,
+          Accept: "image/avif,image/webp,image/apng,image/jpeg,image/png,image/*,*/*;q=0.8",
+          Referer: "https://www.walmart.com/",
+          Origin: "https://www.walmart.com",
+        },
+        cache: "no-store",
+        signal: AbortSignal.timeout(20_000),
+      });
+      if (!res.ok) continue;
+      const raw = Buffer.from(await res.arrayBuffer());
+      if (looksLikeImage(raw)) return raw;
+    } catch {
+      /* try next UA */
+    }
   }
+  return null;
 }
 
 async function downloadLargestWalmartImage(url: string): Promise<Buffer | null> {

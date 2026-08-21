@@ -1,6 +1,7 @@
 import { loadSharp } from "@/lib/images/load-sharp";
 import { PRODUCT_IMAGES_BUCKET } from "@/lib/images/storage";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { catalogImageFetchHeaders } from "@/lib/images/catalog-hosts";
 import { cleanHttpsUrl } from "@/lib/images/url-sanitize";
 import {
   createEbayEpsFromUrl,
@@ -64,7 +65,7 @@ async function fetchImageBuffer(sourceUrl: string): Promise<Buffer> {
 
   const res = await fetch(sourceUrl, {
     cache: "no-store",
-    headers: {
+    headers: catalogImageFetchHeaders(sourceUrl) ?? {
       Accept: "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
       "User-Agent":
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",

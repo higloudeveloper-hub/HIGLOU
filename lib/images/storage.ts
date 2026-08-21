@@ -1,4 +1,5 @@
 import { catalogImageFetchHeaders } from "@/lib/images/catalog-hosts";
+import { coerceCatalogImageToJpeg } from "@/lib/images/coerce-catalog-image";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
   ACCEPTED_UPLOAD_MIME_TYPES,
@@ -65,7 +66,12 @@ export async function fetchProductImageBuffer(options: {
     headers: catalogImageFetchHeaders(options.url),
   });
   if (response.ok) {
-    return Buffer.from(await response.arrayBuffer());
+    const raw = Buffer.from(await response.arrayBuffer());
+    if (/walmartimages|walmart\.com/i.test(options.url)) {
+      const jpeg = await coerceCatalogImageToJpeg(raw);
+      if (jpeg) return jpeg;
+    }
+    return raw;
   }
 
   if (options.storagePath) {

@@ -1,5 +1,6 @@
 import { createHash } from "crypto";
 import { loadSharp } from "@/lib/images/load-sharp";
+import { coerceCatalogImageToJpeg } from "@/lib/images/coerce-catalog-image";
 import {
   resolveImageMime,
   type NormalizedImageMimeType,
@@ -50,7 +51,15 @@ export async function normalizeImageForAnalysis(
     maxEdge?: number;
   },
 ): Promise<NormalizedImage> {
-  const resolved = resolveImageMime(inputBuffer, options?.claimedMime);
+  let workBuffer = inputBuffer;
+  let resolved = resolveImageMime(workBuffer, options?.claimedMime);
+  if (!resolved.mime) {
+    const coerced = await coerceCatalogImageToJpeg(workBuffer);
+    if (coerced) {
+      workBuffer = coerced;
+      resolved = resolveImageMime(workBuffer, "image/jpeg");
+    }
+  }
   if (!resolved.mime) {
     throw new ImageNormalizeError(
       "UNSUPPORTED_INPUT_FORMAT",
@@ -60,12 +69,12 @@ export async function normalizeImageForAnalysis(
     );
   }
 
-  const sourceHash = hashBuffer(inputBuffer);
+  const sourceHash = hashBuffer(workBuffer);
   const maxEdge = options?.maxEdge ?? 4096;
 
   try {
     const sharp = await loadSharp();
-    const pipeline = sharp(inputBuffer, {
+    const pipeline = sharp(workBuffer, {
       failOn: "none",
       animated: false,
     }).rotate();

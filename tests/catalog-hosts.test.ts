@@ -19,11 +19,13 @@ describe("catalog image hosts", () => {
     expect(isCatalogCdnImageUrl("https://evil.example/photo.jpg")).toBe(false);
   });
 
-  it("fetches Walmart photos with a walmart.com referer", () => {
+  it("fetches Walmart photos with a walmart.com referer and JPEG-first Accept", () => {
     const headers = catalogImageFetchHeaders(
       "https://i5.walmartimages.com/asr/abcd.jpeg",
     );
     expect(headers?.Referer).toBe("https://www.walmart.com/");
+    expect(headers?.Accept).toMatch(/^image\/jpeg/);
+    expect(headers?.Accept).not.toMatch(/image\/avif/);
   });
 
   it("is wired into analyze-product", () => {

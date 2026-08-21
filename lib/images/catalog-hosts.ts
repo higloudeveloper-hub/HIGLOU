@@ -12,8 +12,9 @@ export function catalogImageFetchHeaders(
   url: string,
 ): Record<string, string> | undefined {
   if (/walmartimages|walmart\.com/i.test(url)) {
+    // Prefer JPEG — Walmart will otherwise hand AVIF, which AI Draft rejects.
     return {
-      Accept: "image/avif,image/webp,image/apng,image/jpeg,image/png,image/*,*/*;q=0.8",
+      Accept: "image/jpeg,image/png,image/webp;q=0.8,*/*;q=0.5",
       Referer: "https://www.walmart.com/",
       Origin: "https://www.walmart.com",
       "User-Agent": CATALOG_UA,

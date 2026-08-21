@@ -9,6 +9,7 @@ import {
 } from "@/lib/images/storage";
 import { getPublicSupabaseUrl } from "@/lib/images/url-sanitize";
 import { resolveImageMime } from "@/config/supported-image-formats";
+import { coerceCatalogImageToJpeg } from "@/lib/images/coerce-catalog-image";
 import { walmartImageCandidates } from "@/lib/walmart/parse-product";
 import { EBAY_MIN_LONG_SIDE } from "@/lib/ebay/ensure-ebay-images";
 
@@ -45,7 +46,7 @@ async function fetchBuffer(url: string): Promise<Buffer | null> {
       const res = await fetch(url, {
         headers: {
           "User-Agent": ua,
-          Accept: "image/avif,image/webp,image/apng,image/jpeg,image/png,image/*,*/*;q=0.8",
+          Accept: "image/jpeg,image/png,image/webp;q=0.8,*/*;q=0.5",
           Referer: "https://www.walmart.com/",
           Origin: "https://www.walmart.com",
         },
@@ -142,21 +143,19 @@ export async function mirrorWalmartImages(options: {
     try {
       const raw = await downloadLargestWalmartImage(imageUrl);
       if (!raw) return null;
-      const resolved = resolveImageMime(raw, "image/jpeg");
+      const jpeg =
+        (await coerceCatalogImageToJpeg(raw)) ||
+        (resolveImageMime(raw, "image/jpeg").mime ? raw : null);
+      if (!jpeg) return null;
+      const resolved = resolveImageMime(jpeg, "image/jpeg");
       if (!resolved.mime) return null;
-      const compressed = await compressImageBuffer(raw);
-      const ext =
-        resolved.mime === "image/png"
-          ? "png"
-          : resolved.mime === "image/webp"
-            ? "webp"
-            : "jpg";
-      const fileName = `${options.itemId}-${index + 1}.${ext}`;
+      const compressed = await compressImageBuffer(jpeg);
+      const fileName = `${options.itemId}-${index + 1}.jpg`;
       const storagePath = `${options.userId}/walmart/${options.itemId}/${randomUUID()}-${fileName}`;
       const { error } = await admin.storage
         .from(PRODUCT_IMAGES_BUCKET)
         .upload(storagePath, compressed, {
-          contentType: resolved.mime,
+          contentType: "image/jpeg",
           upsert: false,
         });
       if (error) return null;
@@ -164,7 +163,7 @@ export async function mirrorWalmartImages(options: {
         publicUrl: publicObjectUrl(storagePath),
         storagePath,
         fileName,
-        mimeType: resolved.mime,
+        mimeType: "image/jpeg",
         sizeBytes: compressed.byteLength,
       };
       return row;

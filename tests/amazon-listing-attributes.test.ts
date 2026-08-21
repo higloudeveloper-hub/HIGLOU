@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  amazonImageLocatorAttributes,
   amazonListingHasPrice,
+  amazonListingGalleryUrls,
   buildAmazonListingAttributes,
   buildAmazonOfferOnlyAttributes,
   copyAmazonCatalogAttributes,
@@ -178,6 +180,77 @@ describe("Amazon complete listing attributes", () => {
       (attributes.main_product_image_locator as Array<{ media_location: string }>)[0].media_location,
     ).toMatch(/^https:/);
     expect(attributes.generic_keyword).toBeTruthy();
+  });
+
+  it("sends the full seller gallery, not only the main Amazon photo", () => {
+    const gallery = [
+      "https://images.example.com/hero.jpg",
+      "https://images.example.com/side.jpg",
+      "https://images.example.com/box.jpg",
+      "https://images.example.com/label.jpg",
+    ];
+    expect(
+      amazonListingGalleryUrls(
+        { images: gallery },
+        { images: ["https://images.example.com/catalog-main.jpg"] },
+      ),
+    ).toEqual(gallery);
+
+    const locators = amazonImageLocatorAttributes(
+      gallery,
+      AMAZON_US_MARKETPLACE_ID,
+    );
+    expect(
+      (locators.main_product_image_locator as Array<{ media_location: string }>)[0]
+        .media_location,
+    ).toBe(gallery[0]);
+    expect(
+      (locators.other_product_image_locator_1 as Array<{ media_location: string }>)[0]
+        .media_location,
+    ).toBe(gallery[1]);
+    expect(
+      (locators.other_product_image_locator_3 as Array<{ media_location: string }>)[0]
+        .media_location,
+    ).toBe(gallery[3]);
+
+    const attributes = buildAmazonListingAttributes({
+      marketplaceId: AMAZON_US_MARKETPLACE_ID,
+      asin: "B0DSGCDMPT",
+      schema: thermostatSchema,
+      catalog: {
+        asin: "B0DSGCDMPT",
+        title: "Honeywell Home X2S Smart Wi-Fi Thermostat, Gray",
+        productType: "HVAC_CONTROL_THERMOSTAT",
+        images: ["https://images.example.com/catalog-main.jpg"],
+        attributes: {
+          brand: [{ value: "Honeywell Home", language_tag: "en_US" }],
+        },
+      },
+      listing: {
+        title: "Honeywell Home RTH2CWF-N Smart Thermostat",
+        brand: "Honeywell",
+        price: 70,
+        quantity: 1,
+        description: "Wi-Fi thermostat imported from Home Depot with scheduling and app control.",
+        features: ["Wi-Fi app control", "Energy Star scheduling"],
+        images: gallery,
+        countryOfManufacture: "United States",
+        categoryName: "Programmable Thermostats",
+      },
+    });
+    expect(
+      (attributes.main_product_image_locator as Array<{ media_location: string }>)[0]
+        .media_location,
+    ).toBe(gallery[0]);
+    expect(
+      (attributes.other_product_image_locator_1 as Array<{ media_location: string }>)[0]
+        .media_location,
+    ).toBe(gallery[1]);
+    expect(
+      (attributes.other_product_image_locator_2 as Array<{ media_location: string }>)[0]
+        .media_location,
+    ).toBe(gallery[2]);
+    expect(attributes.other_product_image_locator_3).toBeTruthy();
   });
 
   it("builds an existing-ASIN offer without brand title or images", () => {

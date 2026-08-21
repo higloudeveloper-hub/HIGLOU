@@ -896,3 +896,43 @@ export async function putAmazonListingOffer(opts: {
     issues,
   };
 }
+
+export async function patchAmazonListingAttributes(opts: {
+  accessToken: string;
+  sellerId: string;
+  sku: string;
+  marketplaceId: string;
+  productType: string;
+  patches: Array<{ op: "add" | "replace" | "delete"; path: string; value?: unknown }>;
+}): Promise<{ sku: string; status: string; issues: AmazonSpIssue[] }> {
+  const params = new URLSearchParams({
+    marketplaceIds: opts.marketplaceId,
+    includedData: "issues",
+    issueLocale: "en_US",
+  });
+  const { ok, status, json } = await amazonFetch(
+    opts.accessToken,
+    `/listings/2021-08-01/items/${encodeURIComponent(opts.sellerId)}/${encodeURIComponent(opts.sku)}?${params.toString()}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({
+        productType: opts.productType || "PRODUCT",
+        patches: opts.patches,
+      }),
+    },
+  );
+  const issues = (json.issues as AmazonSpIssue[] | undefined) || [];
+  const listingStatus = String(json.status || (ok ? "ACCEPTED" : "INVALID"));
+  if (!ok || /^INVALID$/i.test(listingStatus)) {
+    throw new Error(
+      amazonIncompleteListingReason(issues, listingStatus) ||
+        amazonIssuesText(json) ||
+        `Amazon image update failed (${status})`,
+    );
+  }
+  return {
+    sku: String(json.sku || opts.sku),
+    status: listingStatus,
+    issues,
+  };
+}

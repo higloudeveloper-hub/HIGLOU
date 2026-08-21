@@ -1,6 +1,9 @@
 import { sanitizeEbayUpc } from "@/lib/ebay/inventory-api";
 import { resolveAmazonCatalogMatch } from "@/lib/amazon/catalog-resolve";
 import {
+  amazonImageLocatorAttributes,
+  amazonImageLocatorPatches,
+  amazonListingGalleryUrls,
   amazonListingHasPrice,
   buildAmazonOfferOnlyAttributes,
   type AmazonListingDraft,
@@ -19,6 +22,7 @@ import {
   getAmazonListingItem,
   getAmazonListingsRestrictions,
   getAmazonProductTypeSchema,
+  patchAmazonListingAttributes,
   putAmazonListingOffer,
   AmazonPublishBlockedError,
   type AmazonRestrictionsCheck,
@@ -42,6 +46,57 @@ export type AmazonPublishResult = {
 
 const NO_EXACT_MATCH =
   "This product does not have a confirmed exact match on Amazon. Review it before creating a new ASIN. Higlou will not pick a similar listing from photos or title.";
+
+async function publishAmazonListingImages(opts: {
+  accessToken: string;
+  sellerId: string;
+  sku: string;
+  marketplaceId: string;
+  productType: string;
+  listing: AmazonListingDraft;
+}): Promise<void> {
+  const urls = amazonListingGalleryUrls(opts.listing);
+  if (urls.length < 2) return;
+  const productType = opts.productType || "PRODUCT";
+  const locators = amazonImageLocatorAttributes(urls, opts.marketplaceId);
+  const patches = amazonImageLocatorPatches(urls, opts.marketplaceId);
+  try {
+    await patchAmazonListingAttributes({
+      accessToken: opts.accessToken,
+      sellerId: opts.sellerId,
+      sku: opts.sku,
+      marketplaceId: opts.marketplaceId,
+      productType,
+      patches,
+    });
+    return;
+  } catch {
+    /* Offer-only SKUs and catalog ASINs may reject PATCH. Try a listing merge. */
+  }
+  try {
+    const live = await getAmazonListingItem({
+      accessToken: opts.accessToken,
+      sellerId: opts.sellerId,
+      sku: opts.sku,
+      marketplaceId: opts.marketplaceId,
+    });
+    if (!Object.keys(live.attributes || {}).length) return;
+    await putAmazonListingOffer({
+      accessToken: opts.accessToken,
+      sellerId: opts.sellerId,
+      sku: opts.sku,
+      marketplaceId: opts.marketplaceId,
+      productType,
+      requirements: "LISTING",
+      attributes: {
+        ...live.attributes,
+        ...locators,
+      },
+    });
+  } catch {
+    /* Existing catalog ASINs often reject seller photos. Offer can still be live. */
+  }
+}
 
 export async function publishAmazonOffer(opts: {
   accessToken: string;
@@ -176,6 +231,15 @@ export async function publishAmazonOffer(opts: {
   const result = await putAmazonListingOffer({
     ...putBase,
     attributes,
+  });
+
+  await publishAmazonListingImages({
+    accessToken: opts.accessToken,
+    sellerId: opts.sellingPartnerId,
+    sku: result.sku || sku,
+    marketplaceId: cfg.marketplaceId,
+    productType: catalog.productType || resolved.productType || "PRODUCT",
+    listing: opts.listing,
   });
 
   try {

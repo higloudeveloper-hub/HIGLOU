@@ -65,6 +65,72 @@ const AMAZON_OFFER_ATTRIBUTE_KEYS = [
   "merchant_shipping_group",
 ] as const;
 
+/** Amazon accepts 1 main photo plus 8 extra locators. */
+export const AMAZON_MAX_LISTING_IMAGES = 9;
+
+export function amazonIsImageLocatorKey(name: string): boolean {
+  return (
+    name === "main_product_image_locator" ||
+    /^other_product_image_locator_\d+$/.test(name)
+  );
+}
+
+export function amazonHttpsImageUrls(urls: string[] | undefined): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const raw of urls || []) {
+    const url = String(raw || "").trim();
+    if (!/^https:\/\//i.test(url) || seen.has(url)) continue;
+    seen.add(url);
+    out.push(url);
+  }
+  return out;
+}
+
+export function amazonImageLocatorAttributes(
+  urls: string[],
+  marketplaceId: string,
+): Record<string, unknown> {
+  const https = amazonHttpsImageUrls(urls).slice(0, AMAZON_MAX_LISTING_IMAGES);
+  if (!https.length) return {};
+  const out: Record<string, unknown> = {
+    main_product_image_locator: [
+      { media_location: https[0], marketplace_id: marketplaceId },
+    ],
+  };
+  https.slice(1).forEach((url, index) => {
+    out[`other_product_image_locator_${index + 1}`] = [
+      { media_location: url, marketplace_id: marketplaceId },
+    ];
+  });
+  return out;
+}
+
+export function amazonImageLocatorPatches(
+  urls: string[],
+  marketplaceId: string,
+): Array<{ op: "replace"; path: string; value: unknown }> {
+  const locators = amazonImageLocatorAttributes(urls, marketplaceId);
+  return Object.entries(locators).map(([key, value]) => ({
+    op: "replace" as const,
+    path: `/attributes/${key}`,
+    value,
+  }));
+}
+
+/** Seller gallery first. Catalog MAIN is only a fallback when Higlou has no photos. */
+export function amazonListingGalleryUrls(
+  listing: Pick<AmazonListingDraft, "images">,
+  catalog?: Pick<AmazonCatalogSnapshot, "images"> | null,
+): string[] {
+  const fromListing = amazonHttpsImageUrls(listing.images).slice(
+    0,
+    AMAZON_MAX_LISTING_IMAGES,
+  );
+  if (fromListing.length) return fromListing;
+  return amazonHttpsImageUrls(catalog?.images).slice(0, AMAZON_MAX_LISTING_IMAGES);
+}
+
 export function amazonIsBrandLockIssue(issue: {
   code?: string;
   message?: string;
@@ -1119,7 +1185,7 @@ export function finalizeAmazonListingAttributes(opts: {
   if (!allowed) return trimmed;
   const out: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(trimmed)) {
-    if (allowed.has(key)) out[key] = value;
+    if (allowed.has(key) || amazonIsImageLocatorKey(key)) out[key] = value;
   }
   return out;
 }
@@ -1165,28 +1231,12 @@ function listingDescription(listing: AmazonListingDraft): string {
   return listing.title.slice(0, 2000);
 }
 
-function httpsImages(urls: string[] | undefined): string[] {
-  return [...new Set((urls || []).filter((url) => /^https:\/\//i.test(url)))];
-}
-
 function applyImages(
   attributes: Record<string, unknown>,
   urls: string[],
   marketplaceId: string,
-  schema?: AmazonProductTypeSchema | null,
 ) {
-  const allowed = schemaKeys(schema);
-  if (!urls.length) return;
-  if (keepKey("main_product_image_locator", allowed)) {
-    attributes.main_product_image_locator = [
-      { media_location: urls[0], marketplace_id: marketplaceId },
-    ];
-  }
-  urls.slice(1, 9).forEach((url, index) => {
-    const key = `other_product_image_locator_${index + 1}`;
-    if (!keepKey(key, allowed)) return;
-    attributes[key] = [{ media_location: url, marketplace_id: marketplaceId }];
-  });
+  Object.assign(attributes, amazonImageLocatorAttributes(urls, marketplaceId));
 }
 
 function valueType(prop: Record<string, unknown> | null): string {
@@ -1653,9 +1703,8 @@ export function buildAmazonListingAttributes(opts: {
 
   applyImages(
     attributes,
-    httpsImages([...(opts.listing.images || []), ...(opts.catalog?.images || [])]),
+    amazonListingGalleryUrls(opts.listing, opts.catalog),
     opts.marketplaceId,
-    opts.schema,
   );
 
   const filled = fillAmazonRequiredAttributes({

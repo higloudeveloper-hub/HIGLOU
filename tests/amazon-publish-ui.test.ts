@@ -81,9 +81,12 @@ describe("Amazon seller publish stays on Higlou", () => {
     expect(publish).toMatch(/requirements: "LISTING_OFFER_ONLY"/);
     expect(publish).toMatch(/productType: "PRODUCT"/);
     expect(publish).toMatch(/buildAmazonOfferOnlyAttributes/);
+    expect(publish).toMatch(/patchAmazonListingAttributes/);
+    expect(publish).toMatch(/amazonImageLocatorPatches/);
     expect(publish).not.toMatch(/lockAmazonBrandAttributes/);
     expect(attributes).toMatch(/merchant_shipping_group/);
     expect(attributes).toMatch(/buildAmazonOfferOnlyAttributes/);
+    expect(attributes).toMatch(/amazonImageLocatorAttributes/);
     expect(exportScreen).toMatch(/confirmed Amazon ASIN/);
     expect(exportScreen).toMatch(/Request approval on Amazon/);
     expect(exportScreen).toMatch(/Amazon restriction response/);

@@ -24,7 +24,11 @@ import {
 } from "@/lib/ebay/listing-to-inventory";
 import { planVariationGroup } from "@/lib/ebay/publish-variation-group";
 import { variationsFromListing } from "@/lib/listing/variations";
-import { toEbayListingTitle, toEbayInventorySku } from "@/lib/ebay/listing-helpers";
+import {
+  isEbayKycCategoryBlock,
+  toEbayListingTitle,
+  toEbayInventorySku,
+} from "@/lib/ebay/listing-helpers";
 import { ensureEbayCompatibleImageUrls } from "@/lib/ebay/ensure-ebay-images";
 import {
   ensureHiglouBusinessPolicies,
@@ -976,6 +980,8 @@ async function postEbayPublish(request: Request) {
           paymentPolicyId: listing.paymentPolicyId,
           returnPolicyId: listing.returnPolicyId,
         }));
+      } else if (isEbayKycCategoryBlock(message)) {
+        throw new Error(message);
       } else if (
         /25019|improper words|looks like a sex doll|sexual wellness/i.test(
           message,

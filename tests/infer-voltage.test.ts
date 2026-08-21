@@ -224,6 +224,16 @@ describe("compatible aspects (eBay 25002 Compatible Model)", () => {
     expect(msg.headline.toLowerCase()).toContain("color");
     expect(msg.detail.toLowerCase()).toContain("try again");
   });
+
+  it("humanizes eBay 25019 KYC category blocks instead of dumping Seller Hub HTML", () => {
+    const msg = humanizeEbayPublishError(
+      "Cannot revise listing. The item cannot be listed or modified. To maintain a safe trading environment, eBay places restrictions on specific products sellers can list. We need to verify your information before you are able to list this type of product. SRM_Category_Risk_Management_Block_with_KYC_remedy [eBay 25019]",
+    );
+    expect(msg.headline.toLowerCase()).toContain("paused this product type");
+    expect(msg.detail.toLowerCase()).toContain("seller hub");
+    expect(msg.detail.toLowerCase()).toContain("don baratón");
+    expect(msg.detail).not.toMatch(/<a href/i);
+  });
 });
 
 describe("Model aspect (eBay 25002 Model)", () => {

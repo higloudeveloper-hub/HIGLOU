@@ -5,6 +5,7 @@
 
 import { fallbackDimensionAspect, inferItemDimensionAspect } from "@/lib/ebay/infer-item-dimensions";
 import { DEFAULT_EBAY_VOLUME_VALUES } from "@/lib/ebay/ebay-volume-values";
+import { isEbayKycCategoryBlock } from "@/lib/ebay/listing-helpers";
 
 export function formatEbayVoltage(value: string | number): string {
   const n = Number(String(value).replace(/[^\d.]/g, ""));
@@ -1136,6 +1137,13 @@ export function humanizeEbayPublishError(raw: string): {
       headline: "eBay needs Color or Size, not Scent",
       detail:
         "Try again — Higlou lists perfume aromas as Color so eBay can show the dropdown.",
+    };
+  }
+  if (isEbayKycCategoryBlock(raw)) {
+    return {
+      headline: "eBay paused this product type on your store",
+      detail:
+        "eBay needs to verify this seller account before this category can go live (often outdoor fryers and similar cookware). Open Seller Hub and wait for the review — it usually takes about 2 business days. Meanwhile the offer is already saved: use Create unpublished draft, or Publish to Don Baratón. Retrying live will fail until eBay clears you.",
     };
   }
   if (/eBay publish failed/i.test(raw)) {

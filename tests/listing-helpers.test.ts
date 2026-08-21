@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildAttachmentContentDisposition,
   buildExportFileName,
+  isEbayKycCategoryBlock,
   toAsciiFileName,
   toAsciiHttpHeaderValue,
   toEbayInventorySku,
@@ -65,6 +66,21 @@ describe("HTTP header ASCII safety", () => {
   });
 });
 
+describe("isEbayKycCategoryBlock", () => {
+  it("detects Seller Risk KYC 25019 without treating it as adult slang", () => {
+    expect(
+      isEbayKycCategoryBlock(
+        "Cannot revise listing. SRM_Category_Risk_Management_Block_with_KYC_remedy [eBay 25019]",
+      ),
+    ).toBe(true);
+    expect(
+      isEbayKycCategoryBlock(
+        "eBay blocked this adult item (25019). photos may show nudity",
+      ),
+    ).toBe(false);
+  });
+});
+
 describe("toEbayListingTitle", () => {
   it("cleans adult slang so eBay 25019 does not fire on the title", () => {
     expect(
@@ -112,6 +128,13 @@ describe("toEbayInventorySku", () => {
     expect(sku).toMatch(/^HG[A-Z0-9]{7}$/);
     expect(sku).not.toMatch(/^HD/i);
     expect(sku).not.toContain("301460651");
+  });
+
+  it("maps Walmart import SKUs away from WM item ids", () => {
+    const sku = toEbayInventorySku("WM-10449411");
+    expect(sku).toMatch(/^HG[A-Z0-9]{7}$/);
+    expect(sku).not.toMatch(/^WM/i);
+    expect(sku).not.toContain("10449411");
   });
 
   it("leaves seller-made SKUs alphanumeric without rewriting them", () => {

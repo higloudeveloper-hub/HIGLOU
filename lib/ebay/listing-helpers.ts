@@ -41,20 +41,25 @@ function skuFingerprint(raw: string): string {
 }
 
 /**
- * Amazon (`AMZ-B0…`) and Home Depot (`HD-123`) import SKUs. Keep those inside
- * Higlou for source lookup — never as the eBay Custom label.
+ * Amazon (`AMZ-B0…`), Home Depot (`HD-123`), and Walmart (`WM-123`) import
+ * SKUs. Keep those inside Higlou for source lookup — never as the eBay
+ * Custom label.
  */
 export function isMarketplaceImportSku(raw: string): boolean {
   const compact = String(raw || "")
     .toUpperCase()
     .replace(/[^A-Z0-9]/g, "");
-  return /^AMZ[A-Z0-9]{10}$/.test(compact) || /^HD\d{5,}$/.test(compact);
+  return (
+    /^AMZ[A-Z0-9]{10}$/.test(compact) ||
+    /^HD\d{5,}$/.test(compact) ||
+    /^WM\d{5,}$/.test(compact)
+  );
 }
 
 /**
  * eBay Custom label / Inventory SKU (alphanumeric, max 50 — error 25707).
- * Keep AMZ-/HD- SKUs in Higlou; send a neutral HG label so the listing
- * does not advertise Amazon or Home Depot as the source.
+ * Keep AMZ-/HD-/WM- SKUs in Higlou; send a neutral HG label so the listing
+ * does not advertise Amazon, Home Depot, or Walmart as the source.
  */
 export function toEbayInventorySku(raw: string): string {
   const original = String(raw || "").trim();
@@ -77,6 +82,22 @@ export const ADULT_SEXUAL_WELLNESS_RE =
 
 export function isAdultSexualWellnessText(text: string): boolean {
   return ADULT_SEXUAL_WELLNESS_RE.test(String(text || ""));
+}
+
+/**
+ * eBay 25019 also covers Seller Risk / KYC category blocks (not adult slang).
+ * Outdoor cookers, turkey fryers, and other restricted types pause until
+ * the seller finishes verification in Seller Hub.
+ */
+export function isEbayKycCategoryBlock(raw: string): boolean {
+  const text = String(raw || "");
+  return (
+    /SRM_Category_Risk_Management_Block_with_KYC_remedy/i.test(text) ||
+    (/25019/.test(text) &&
+      /verify your information before you are able to list this type of product/i.test(
+        text,
+      ))
+  );
 }
 
 /**

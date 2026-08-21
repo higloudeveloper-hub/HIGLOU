@@ -341,9 +341,11 @@ export function parseWalmartProductPage(
   meta: { itemId: string; url: string },
 ): WalmartProductDraft {
   const next = nextDataJson(html);
-  const product = findProductNode(next) || {};
-  const data = asRecord(asRecord(asRecord(asRecord(next)?.props)?.pageProps)?.initialData)?.data;
-  const idml = asRecord(data?.idml) || asRecord(product.idml);
+  const product: Record<string, unknown> = findProductNode(next) ?? {};
+  const data = asRecord(
+    asRecord(asRecord(asRecord(next)?.props)?.pageProps)?.initialData,
+  )?.data;
+  const idml = asRecord(asRecord(data)?.idml) || asRecord(product.idml);
 
   const ld = jsonLdProducts(html)[0] || {};
   const ldName = String(ld.name || "");

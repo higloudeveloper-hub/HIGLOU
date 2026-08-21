@@ -16,6 +16,7 @@ import {
   FacebookMark,
   ShopifyMark,
   SiteMark,
+  WalmartMark,
 } from "@/components/brand/store-marks";
 import { cn } from "@/lib/utils";
 import { AdminLivePanel } from "@/components/studio/admin-live-panel";
@@ -58,21 +59,22 @@ function stepIndex(id: StepId) {
 const FALL_TO = [
   { x: 16, y: 38, name: "eBay" },
   { x: 50, y: 38, name: "Amazon" },
-  { x: 84, y: 38, name: "Facebook" },
-  { x: 24, y: 70, name: "Shopify" },
-  { x: 76, y: 70, name: "Your site" },
+  { x: 84, y: 38, name: "Walmart" },
+  { x: 16, y: 70, name: "Facebook" },
+  { x: 50, y: 70, name: "Shopify" },
+  { x: 84, y: 70, name: "Your site" },
 ] as const;
 
 const SALE_TICKET = [
   "eBay",
   "Amazon",
+  "Walmart",
   "eBay",
   "Shopify",
   "Amazon",
   "Facebook",
   "eBay",
-  "Shopify",
-  "Amazon",
+  "Walmart",
 ] as const;
 
 const CURSOR_OFF: ReadonlySet<string> = new Set([
@@ -172,6 +174,7 @@ function StoreTargets({ compact = false }: { compact?: boolean }) {
   const stores = [
     { key: "ebay", node: <EbayMark className="h-[18px]" /> },
     { key: "amazon", node: <AmazonMark className="h-4" /> },
+    { key: "walmart", node: <WalmartMark className="h-4" /> },
     { key: "facebook", node: <FacebookMark className="h-4" /> },
     { key: "shopify", node: <ShopifyMark className="h-5" /> },
     { key: "site", node: <SiteMark className="h-5" /> },
@@ -186,7 +189,7 @@ function StoreTargets({ compact = false }: { compact?: boolean }) {
     >
       {compact ? null : (
         <p className="mb-2.5 text-center text-[11px] font-medium tracking-[0.16em] text-[#8a8a8a] uppercase">
-          Publishes to five stores
+          Publishes to six stores
         </p>
       )}
       <div className="flex flex-wrap items-center justify-center gap-2">
@@ -344,7 +347,7 @@ function YourTurn({ onReplay }: { onReplay: () => void }) {
           List one of yours.
         </p>
         <p className="mt-2 text-[14px] leading-relaxed text-[#707070]">
-          One photo. Higlou writes the listing. Five stores go live.
+          One photo. Higlou writes the listing. Six stores go live.
         </p>
         <Link
           href="/listings/new"
@@ -657,6 +660,27 @@ function WaitingAmazon() {
   );
 }
 
+function WaitingWalmart() {
+  return (
+    <WaitingStore
+      mark={<WalmartMark className="h-7 sm:h-9" />}
+      header={
+        <div className="flex shrink-0 items-center gap-1.5 bg-[#0071DC] px-2 py-1">
+          <WalmartMark spark className="h-5" />
+          <div className="flex min-w-0 flex-1 overflow-hidden rounded-full">
+            <span className="min-w-0 flex-1 truncate bg-white px-2 py-0.5 text-[10px] text-[#888]">
+              Search Walmart
+            </span>
+            <span className="grid w-7 shrink-0 place-items-center bg-[#FFC220] text-[#041E42]">
+              <Search className="size-3" strokeWidth={2.4} />
+            </span>
+          </div>
+        </div>
+      }
+    />
+  );
+}
+
 function WaitingFacebook() {
   return (
     <WaitingStore
@@ -793,6 +817,43 @@ function AmazonStorefront({
         ) : null}
         <p className="mt-1.5 grid h-7 place-items-center rounded-full bg-[#FFD814] text-[10px] font-semibold text-[#0F1111]">
           Add to Cart
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function WalmartStorefront({
+  src,
+  title,
+  price,
+}: {
+  src: string;
+  title: string;
+  price: string;
+}) {
+  return (
+    <div className="grid h-full min-h-0 flex-1 grid-rows-[auto_minmax(0,1fr)_auto] bg-white">
+      <div className="flex shrink-0 items-center gap-1.5 bg-[#0071DC] px-2 py-1">
+        <WalmartMark spark className="h-5" />
+        <div className="flex min-w-0 flex-1 overflow-hidden rounded-full">
+          <span className="min-w-0 flex-1 truncate bg-white px-2 py-0.5 text-[10px] text-[#888]">
+            Search Walmart
+          </span>
+          <span className="grid w-7 shrink-0 place-items-center bg-[#FFC220] text-[#041E42]">
+            <Search className="size-3" strokeWidth={2.4} />
+          </span>
+        </div>
+        <ShoppingCart className="size-3.5 shrink-0 text-white" />
+      </div>
+      <LivePhoto src={src} mark={<WalmartMark spark className="h-5" />} />
+      <div className="shrink-0 px-2 pb-2 pt-1">
+        <p className="line-clamp-1 text-[11px] leading-snug text-[#2E2F32]">{title}</p>
+        <p className="mt-0.5 text-[20px] font-bold tabular-nums leading-none text-[#2E2F32]">
+          {price}
+        </p>
+        <p className="mt-1.5 grid h-7 place-items-center rounded-full bg-[#FFC220] text-[10px] font-semibold text-[#2E2F32]">
+          Add to cart
         </p>
       </div>
     </div>
@@ -1095,15 +1156,16 @@ export function ListingPipeline({
   const priceOn = at("desc");
   const ebayIn = landed >= 1;
   const amazonIn = landed >= 2;
-  const facebookIn = landed >= 3;
-  const shopifyIn = landed >= 4;
-  const webIn = landed >= 5;
+  const walmartIn = landed >= 3;
+  const facebookIn = landed >= 4;
+  const shopifyIn = landed >= 5;
+  const webIn = landed >= 6;
   const readyOn = at("ready");
   const packing = is("publish");
   const dispatching = is("dispatch");
   const publishing = packing || dispatching;
   const liveOn = at("dispatch");
-  const allLive = landed >= 5;
+  const allLive = landed >= 6;
   const dragPhase =
     is("grab") ? "grab" : is("drag") ? "drag" : is("drop") ? "drop" : "gone";
   const priceLabel = `$${item.price.toFixed(2)}`;
@@ -1233,19 +1295,19 @@ export function ListingPipeline({
   useEffect(() => {
     if (dropMode) return;
     if (reduce || resting) {
-      setLanded(5);
+      setLanded(6);
       return;
     }
     if (step.id === "dispatch") {
       setLanded(0);
-      const times = [1000, 1300, 1600, 1900, 2200];
+      const times = [1000, 1300, 1600, 1900, 2200, 2500];
       const timers = times.map((ms, i) =>
         window.setTimeout(() => setLanded(i + 1), ms),
       );
       return () => timers.forEach((id) => window.clearTimeout(id));
     }
     if (step.id === "sales" || step.id === "hold") {
-      setLanded(5);
+      setLanded(6);
       return;
     }
     setLanded(0);
@@ -1538,6 +1600,19 @@ export function ListingPipeline({
           )}
         </ChannelShell>
 
+        <ChannelShell dim={publishing && !walmartIn} className="col-span-2">
+          {walmartIn ? (
+            <WalmartStorefront
+              key={`wm-${cover}`}
+              src={cover}
+              title={item.title}
+              price={priceLabel}
+            />
+          ) : (
+            <WaitingWalmart />
+          )}
+        </ChannelShell>
+
         <ChannelShell dim={publishing && !facebookIn} className="col-span-2">
           {facebookIn ? (
             <FacebookStorefront
@@ -1552,7 +1627,7 @@ export function ListingPipeline({
           )}
         </ChannelShell>
 
-        <ChannelShell dim={publishing && !shopifyIn} className="col-span-3">
+        <ChannelShell dim={publishing && !shopifyIn} className="col-span-2">
           {shopifyIn ? (
             <ShopifyStorefront key={`shop-${cover}`} src={cover} title={item.title} price={priceLabel} />
           ) : (
@@ -1560,7 +1635,7 @@ export function ListingPipeline({
           )}
         </ChannelShell>
 
-        <ChannelShell dim={publishing && !webIn} className="col-span-3">
+        <ChannelShell dim={publishing && !webIn} className="col-span-2">
           {webIn ? (
             <SiteStorefront
               key={`web-${cover}`}

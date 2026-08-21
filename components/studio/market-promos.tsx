@@ -8,6 +8,7 @@ import {
   FacebookFMark,
   ShopifyMark,
   SiteMark,
+  WalmartMark,
 } from "@/components/brand/store-marks";
 import { READY_LISTINGS, type ReadyListing } from "@/components/studio/ready-catalog";
 import { cn } from "@/lib/utils";
@@ -22,9 +23,10 @@ function money(n: number) {
 
 function LiveOnMarks() {
   return (
-    <div className="flex items-center gap-2" aria-label="Lists to five stores">
+    <div className="flex items-center gap-2" aria-label="Lists to six stores">
       <EbayMark className="h-3" />
       <AmazonMark className="h-2.5" />
+      <WalmartMark className="h-2.5" />
       <FacebookFMark className="h-3.5" />
       <ShopifyMark className="h-3.5" />
       <SiteMark className="h-3.5" />

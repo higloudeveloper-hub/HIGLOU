@@ -8,6 +8,7 @@ import {
   FacebookMark,
   ShopifyMark,
   SiteMark,
+  WalmartMark,
 } from "@/components/brand/store-marks";
 import { cn } from "@/lib/utils";
 
@@ -50,6 +51,7 @@ function StoreMarks({ className }: { className?: string }) {
     <div className={cn("flex items-center gap-2", className)}>
       <EbayMark className="h-3" />
       <AmazonMark className="h-2.5" />
+      <WalmartMark className="h-2.5" />
       <FacebookMark className="h-2.5" />
       <ShopifyMark className="h-3.5" />
       <SiteMark className="h-3.5" />
@@ -79,6 +81,7 @@ export function AdminLivePanel({
   const channels: { key: string; mark: ReactNode }[] = [
     { key: "ebay", mark: <EbayMark className="h-[15px]" /> },
     { key: "amazon", mark: <AmazonMark className="h-3.5" /> },
+    { key: "walmart", mark: <WalmartMark className="h-3.5" /> },
     { key: "facebook", mark: <FacebookMark className="h-3.5" /> },
     { key: "shopify", mark: <ShopifyMark className="h-4" /> },
     { key: "site", mark: <SiteMark className="h-4" /> },
@@ -86,12 +89,13 @@ export function AdminLivePanel({
   const kpis = [
     { label: "Available", value: money(risen) },
     { label: "Orders", value: String(orders) },
-    { label: "Live listings", value: "5" },
+    { label: "Live listings", value: "6" },
     { label: "Watchers", value: String(watchers) },
   ] as const;
   const feed = [
     { mark: <EbayMark className="h-3" />, text: `Live on eBay · ${shop}`, when: "just now" },
     { mark: <AmazonMark className="h-2.5" />, text: "Live on Amazon", when: "just now" },
+    { mark: <WalmartMark className="h-2.5" />, text: "Live on Walmart", when: "just now" },
     { mark: <FacebookMark className="h-2.5" />, text: "Live on Marketplace", when: "just now" },
     { mark: <ShopifyMark className="h-3.5" />, text: "Live on Shopify", when: "just now" },
     { mark: <SiteMark className="h-3.5" />, text: `Sold · ${price}`, when: "now" },

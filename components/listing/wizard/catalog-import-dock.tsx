@@ -147,14 +147,14 @@ export function CatalogImportDock({
           onClick={() => choose("walmart")}
           header={
             <div className="flex items-center gap-1.5 bg-[#0071DC] px-2 py-1.5">
-              <WalmartMark className="h-5 sm:h-6" />
+              <WalmartMark spark className="h-6 sm:h-7" />
               <span className="min-w-0 flex-1 truncate rounded-sm bg-white px-2 py-0.5 text-[10px] text-[#888]">
                 walmart.com
               </span>
             </div>
           }
         >
-          <WalmartMark className="h-10 sm:h-12" />
+          <WalmartMark className="h-7 sm:h-9" />
           <span className="mt-1 text-[11px] font-medium text-[#141414] sm:text-[12px]">
             Walmart
           </span>

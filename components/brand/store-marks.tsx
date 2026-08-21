@@ -61,9 +61,26 @@ export function HomeDepotMark({
   );
 }
 
-/** Official Walmart spark. */
-export function WalmartMark({ className, title = "Walmart" }: MarkProps) {
-  return <BrandImg src="/brands/walmart.svg" title={title} className={className} />;
+/** Official 2025 Walmart wordmark, or the yellow Spark for tight chrome. */
+export function WalmartMark({
+  className,
+  invert = false,
+  spark = false,
+  title = "Walmart",
+}: MarkProps & { invert?: boolean; spark?: boolean }) {
+  return (
+    <BrandImg
+      src={
+        spark
+          ? "/brands/walmart-spark.svg"
+          : invert
+            ? "/brands/walmart-white.svg"
+            : "/brands/walmart.svg"
+      }
+      title={title}
+      className={className}
+    />
+  );
 }
 
 /** Official Facebook wordmark. */

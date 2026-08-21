@@ -7,6 +7,7 @@ import {
   FacebookMark,
   ShopifyMark,
   SiteMark,
+  WalmartMark,
 } from "@/components/brand/store-marks";
 import { cn } from "@/lib/utils";
 
@@ -14,9 +15,10 @@ const EASE = [0.22, 1, 0.36, 1] as const;
 
 function LiveOnMarks() {
   return (
-    <div className="flex items-center gap-2.5" aria-label="Five stores">
+    <div className="flex items-center gap-2.5" aria-label="Six stores">
       <EbayMark className="h-3.5" />
       <AmazonMark className="h-3" />
+      <WalmartMark className="h-3" />
       <FacebookMark className="h-3" />
       <ShopifyMark className="h-4" />
       <SiteMark className="h-4" />
@@ -65,7 +67,7 @@ export function DropStage({
           <p className="mt-1 text-[13px] text-[#707070] sm:text-[14px]">
             {freezeDrop
               ? "Higlou will write the listing from this shot."
-              : "On this pad. Higlou writes the listing. Five stores go live."}
+              : "On this pad. Higlou writes the listing. Six stores go live."}
           </p>
         </div>
         )}

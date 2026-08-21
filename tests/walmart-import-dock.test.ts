@@ -12,7 +12,7 @@ describe("Walmart import stays on Higlou", () => {
     const workspace = readRepo("components/listing/new-listing-workspace.tsx");
     const detect = readRepo("lib/catalog/detect-store.ts");
     const route = readRepo("app/api/walmart/import/route.ts");
-    expect(dock).toMatch(/WalmartMark/);
+    expect(dock).toMatch(/WalmartMark spark/);
     expect(dock).toMatch(/walmart\.com/);
     expect(workspace).toMatch(/\/api\/walmart\/import/);
     expect(workspace).toMatch(/store === "walmart"/);
@@ -20,6 +20,10 @@ describe("Walmart import stays on Higlou", () => {
     expect(detect).toMatch(/"walmart"/);
     expect(route).toMatch(/fetchWalmartProduct/);
     expect(route).toMatch(/WM-\$\{product\.itemId\}/);
+    expect(readRepo("public/brands/walmart.svg")).toMatch(/#0053E2/);
+    expect(readRepo("public/brands/walmart-spark.svg")).toMatch(/#FFC220/);
+    expect(readRepo("components/studio/listing-pipeline.tsx")).toMatch(/WaitingWalmart/);
+    expect(readRepo("components/studio/drop-stage.tsx")).toMatch(/WalmartMark/);
   });
 
   it("does not treat a bare Home Depot id as Walmart", () => {

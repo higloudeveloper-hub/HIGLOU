@@ -14,7 +14,7 @@ export type BatchPriceItem = {
   id: string;
   title: string;
   imageUrl: string;
-  store: "amazon" | "homedepot";
+  store: "amazon" | "homedepot" | "walmart";
   sourcePrice: number | null;
   ebayPrice: number | null;
   status: "ready" | "publishing" | "live" | "error";

@@ -270,7 +270,7 @@ export function NewListingWorkspace({
   const [step, setStep] = useState<WizardStep>("photos");
   const [analyzing, setAnalyzing] = useState(false);
   const [catalogImporting, setCatalogImporting] = useState<
-    false | "amazon" | "homedepot" | "batch"
+    false | "amazon" | "homedepot" | "walmart" | "batch"
   >(false);
   const [batchItems, setBatchItems] = useState<BatchPriceItem[] | null>(null);
   const [batchProgress, setBatchProgress] = useState("");
@@ -1088,15 +1088,20 @@ export function NewListingWorkspace({
     if (catalogImporting || analyzing) return false;
     const store = detectCatalogStore(url);
     if (!store) {
-      const message = "Paste an Amazon or Home Depot product link.";
+      const message = "Paste an Amazon, Home Depot, or Walmart product link.";
       setAnalysisError(message);
       toast.error(message);
       return false;
     }
 
-    const storeLabel = store === "amazon" ? "Amazon" : "Home Depot";
+    const storeLabel =
+      store === "amazon" ? "Amazon" : store === "walmart" ? "Walmart" : "Home Depot";
     const endpoint =
-      store === "amazon" ? "/api/amazon/import" : "/api/homedepot/import";
+      store === "amazon"
+        ? "/api/amazon/import"
+        : store === "walmart"
+          ? "/api/walmart/import"
+          : "/api/homedepot/import";
 
     setCatalogImporting(store);
     setAnalysisError(null);
@@ -1135,9 +1140,12 @@ export function NewListingWorkspace({
       const newCondition = "New";
       const match = CONDITION_OPTIONS.find((c) => c.label === newCondition);
       const fromHomeDepot = store === "homedepot";
+      const fromWalmart = store === "walmart";
       const importedAsin = fromHomeDepot
         ? ""
-        : String(body.asin || "").trim().toUpperCase();
+        : fromWalmart
+          ? ""
+          : String(body.asin || "").trim().toUpperCase();
       const withoutAsin = listing.itemSpecifics.filter(
         (field) => !/^(asin|amazon\s*asin)$/i.test(field.label.replace(/^C:/, "")),
       );
@@ -1147,18 +1155,20 @@ export function NewListingWorkspace({
         brand: body.brand || listing.brand,
         model: body.model || listing.model,
         price: body.price ?? listing.price,
-        upc: fromHomeDepot ? body.upc || "" : body.upc || listing.upc,
+        upc: fromHomeDepot ? body.upc || "" : fromWalmart ? body.upc || "" : body.upc || listing.upc,
         sku: body.sku || listing.sku,
-        amazonAsin: fromHomeDepot ? "" : importedAsin || listing.amazonAsin,
+        amazonAsin: fromHomeDepot ? "" : fromWalmart ? "" : importedAsin || listing.amazonAsin,
         amazonUrl: fromHomeDepot
           ? ""
-          : String(body.amazonUrl || "").trim() ||
-            listing.amazonUrl ||
-            (importedAsin ? `https://www.amazon.com/dp/${importedAsin}` : ""),
+          : fromWalmart
+            ? ""
+            : String(body.amazonUrl || "").trim() ||
+              listing.amazonUrl ||
+              (importedAsin ? `https://www.amazon.com/dp/${importedAsin}` : ""),
         features: body.features?.length ? body.features : listing.features,
         images: body.images,
-        descriptionHtml: fromHomeDepot ? "" : listing.descriptionHtml,
-        descriptionSummary: fromHomeDepot ? "" : listing.descriptionSummary,
+        descriptionHtml: fromHomeDepot ? "" : fromWalmart ? "" : listing.descriptionHtml,
+        descriptionSummary: fromHomeDepot ? "" : fromWalmart ? "" : listing.descriptionSummary,
         itemSpecifics: withEncodedVariations(
           importedAsin
             ? [
@@ -1171,8 +1181,10 @@ export function NewListingWorkspace({
               ]
             : fromHomeDepot
               ? withoutAsin
-              : listing.itemSpecifics,
-          fromHomeDepot ? null : body.variations,
+              : fromWalmart
+                ? withoutAsin
+                : listing.itemSpecifics,
+          fromHomeDepot || fromWalmart ? null : body.variations,
         ),
         condition: newCondition,
         conditionId: match?.conditionId ?? listing.conditionId,
@@ -1225,7 +1237,7 @@ export function NewListingWorkspace({
     const { links, skipped } = parseBatchCatalogLinks(urls.join("\n"));
     if (!links.length) {
       const message = skipped.length
-        ? "Paste Amazon or Home Depot product links."
+        ? "Paste Amazon, Home Depot, or Walmart product links."
         : "Paste up to 5 product links.";
       toast.error(message);
       return false;
@@ -1239,6 +1251,7 @@ export function NewListingWorkspace({
     try {
       const amazon = links.filter((row) => row.store === "amazon");
       const homedepot = links.filter((row) => row.store === "homedepot");
+      const walmart = links.filter((row) => row.store === "walmart");
 
       if (amazon.length) {
         setBatchProgress(
@@ -1410,6 +1423,110 @@ export function NewListingWorkspace({
           title: saved.product?.title || body.title || "",
           imageUrl: body.images[0]?.url || "",
           store: "homedepot",
+          sourcePrice: body.price ?? null,
+          ebayPrice,
+          status: "ready",
+        });
+      }
+
+      for (let i = 0; i < walmart.length; i += 1) {
+        const link = walmart[i]!;
+        setBatchProgress(
+          `Reading Walmart (${i + 1} of ${walmart.length})…`,
+        );
+        const response = await fetch("/api/walmart/import", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ url: link.url }),
+        });
+        const body = (await response.json().catch(() => null)) as {
+          ok?: boolean;
+          error?: string;
+          title?: string;
+          brand?: string;
+          model?: string;
+          price?: number | null;
+          upc?: string;
+          features?: string[];
+          sku?: string;
+          images?: Array<{
+            url: string;
+            storagePath?: string;
+            fileName?: string;
+            mimeType?: string;
+            sizeBytes?: number;
+          }>;
+        } | null;
+        if (!response.ok || !body?.ok || !body.images?.length) {
+          items.push({
+            id: `wm-fail-${link.key}`,
+            title: body?.title || link.url,
+            imageUrl: "",
+            store: "walmart",
+            sourcePrice: body?.price ?? null,
+            ebayPrice: null,
+            status: "error",
+            error: body?.error || "Walmart import failed",
+          });
+          continue;
+        }
+        const category = resolveEbayCategory({
+          title: body.title,
+          brand: body.brand,
+          productType: body.model,
+        });
+        const ebayPrice = ebayProfitPrice(body.price ?? null);
+        const save = await fetch("/api/products", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            title: toEbayListingTitle(body.title || ""),
+            brand: body.brand || "",
+            model: body.model || "",
+            sku: body.sku || `WM-${link.key}`,
+            upc: body.upc || "",
+            categoryId: category.categoryId,
+            categoryName: category.categoryName,
+            condition: "New",
+            conditionId: "1000",
+            price: ebayPrice,
+            quantity: 1,
+            features: body.features || [],
+            status: "Ready",
+            images: body.images.map((img, index) => ({
+              publicUrl: img.url,
+              storagePath: img.storagePath || "",
+              fileName: img.fileName || `wm-${index + 1}.jpg`,
+              sortOrder: index,
+              isPrimary: index === 0,
+              mimeType: img.mimeType || "image/jpeg",
+              sizeBytes: img.sizeBytes || 0,
+            })),
+          }),
+        });
+        const saved = (await save.json().catch(() => null)) as {
+          product?: { id?: string; title?: string };
+          error?: string;
+        } | null;
+        const id = saved?.product?.id;
+        if (!save.ok || !id) {
+          items.push({
+            id: `wm-fail-${link.key}`,
+            title: body.title || link.url,
+            imageUrl: body.images[0]?.url || "",
+            store: "walmart",
+            sourcePrice: body.price ?? null,
+            ebayPrice,
+            status: "error",
+            error: saved?.error || "Could not save Walmart draft",
+          });
+          continue;
+        }
+        items.push({
+          id,
+          title: saved.product?.title || body.title || "",
+          imageUrl: body.images[0]?.url || "",
+          store: "walmart",
           sourcePrice: body.price ?? null,
           ebayPrice,
           status: "ready",

@@ -6,6 +6,7 @@ import {
   AmazonMark,
   EbayMark,
   HomeDepotMark,
+  WalmartMark,
 } from "@/components/brand/store-marks";
 import { detectCatalogStore, type CatalogStore } from "@/lib/catalog/detect-store";
 import { parseBatchCatalogLinks, BATCH_IMPORT_LIMIT } from "@/lib/catalog/parse-batch-links";
@@ -32,14 +33,17 @@ export function CatalogImportDock({
 
   const placeholder = useMemo(() => {
     if (active === "homedepot") return "https://www.homedepot.com/p/…";
+    if (active === "walmart") return "https://www.walmart.com/ip/…";
     if (active === "amazon") return "https://www.amazon.com/dp/…";
-    return "Paste an Amazon or Home Depot product link";
+    return "Paste an Amazon, Home Depot, or Walmart product link";
   }, [active]);
 
   const submitLabel =
     importing === "homedepot"
       ? "Reading Home Depot…"
-      : importing === "amazon"
+      : importing === "walmart"
+        ? "Reading Walmart…"
+        : importing === "amazon"
         ? "Reading Amazon…"
         : importing === "batch"
           ? "Importing…"
@@ -55,7 +59,7 @@ export function CatalogImportDock({
   return (
     <div className="shrink-0 border-b border-[#e5e5e5] bg-white px-4 py-4">
       <p className="text-[15px] font-medium tracking-tight text-[#141414]">
-        Import from Amazon or Home Depot
+        Import from Amazon, Home Depot, or Walmart
       </p>
       <p className="mt-0.5 text-[13px] text-[#707070]">
         {mode === "five"
@@ -93,7 +97,7 @@ export function CatalogImportDock({
         </div>
       ) : null}
 
-      <div className="mt-3 grid grid-cols-3 gap-2 sm:gap-3">
+      <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-3">
         <StoreCard
           active={active === "amazon"}
           busy={importing === "amazon"}
@@ -136,6 +140,26 @@ export function CatalogImportDock({
           </span>
         </StoreCard>
 
+        <StoreCard
+          active={active === "walmart"}
+          busy={importing === "walmart"}
+          disabled={busy}
+          onClick={() => choose("walmart")}
+          header={
+            <div className="flex items-center gap-1.5 bg-[#0071DC] px-2 py-1.5">
+              <WalmartMark className="h-5 sm:h-6" />
+              <span className="min-w-0 flex-1 truncate rounded-sm bg-white px-2 py-0.5 text-[10px] text-[#888]">
+                walmart.com
+              </span>
+            </div>
+          }
+        >
+          <WalmartMark className="h-10 sm:h-12" />
+          <span className="mt-1 text-[11px] font-medium text-[#141414] sm:text-[12px]">
+            Walmart
+          </span>
+        </StoreCard>
+
         <div className="flex min-h-[108px] flex-col overflow-hidden bg-white ring-1 ring-[#e5e5e5] sm:min-h-[124px]">
           <div className="flex items-center gap-1.5 border-b border-[#e5e5e5] bg-white px-2 py-1.5">
             <EbayMark className="h-3.5 sm:h-4" />
@@ -170,7 +194,7 @@ export function CatalogImportDock({
           <textarea
             value={batchText}
             onChange={(e) => setBatchText(e.target.value)}
-            placeholder={"https://www.amazon.com/dp/…\nhttps://www.homedepot.com/p/…"}
+            placeholder={"https://www.amazon.com/dp/…\nhttps://www.homedepot.com/p/…\nhttps://www.walmart.com/ip/…"}
             disabled={busy}
             rows={5}
             className="min-h-[120px] w-full resize-y border border-[#ccc] bg-white px-3 py-2 text-[14px] outline-none focus:border-[#141414] disabled:opacity-60"

@@ -1,5 +1,6 @@
 import { parseAmazonLink } from "@/lib/amazon/asin";
 import { parseHomeDepotLink } from "@/lib/homedepot/item-id";
+import { parseWalmartLink } from "@/lib/walmart/item-id";
 import { detectCatalogStore, type CatalogStore } from "@/lib/catalog/detect-store";
 
 export const BATCH_IMPORT_LIMIT = 5;
@@ -16,6 +17,9 @@ function catalogKey(url: string, store: CatalogStore): string {
   if (store === "amazon") {
     return parseAmazonLink(url)?.asin || url;
   }
+  if (store === "walmart") {
+    return parseWalmartLink(url)?.itemId || url;
+  }
   return parseHomeDepotLink(url)?.itemId || url;
 }
 
@@ -23,10 +27,13 @@ function canonicalUrl(raw: string, store: CatalogStore): string {
   if (store === "amazon") {
     return parseAmazonLink(raw)?.canonicalUrl || raw;
   }
+  if (store === "walmart") {
+    return parseWalmartLink(raw)?.canonicalUrl || raw;
+  }
   return parseHomeDepotLink(raw)?.canonicalUrl || raw;
 }
 
-/** Split pasted text into up to 5 unique Amazon / Home Depot product links. */
+/** Split pasted text into up to 5 unique Amazon / Home Depot / Walmart product links. */
 export function parseBatchCatalogLinks(input: string): {
   links: BatchCatalogLink[];
   skipped: string[];

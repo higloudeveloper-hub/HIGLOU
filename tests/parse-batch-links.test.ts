@@ -26,9 +26,13 @@ describe("parseBatchCatalogLinks", () => {
 
   it("accepts mixed Amazon and Home Depot links", () => {
     const { links, skipped } = parseBatchCatalogLinks(
-      "https://www.homedepot.com/p/Foo/123456789\nhttps://www.amazon.com/dp/B08N5WRWNW\nnot-a-link",
+      "https://www.homedepot.com/p/Foo/123456789\nhttps://www.amazon.com/dp/B08N5WRWNW\nhttps://www.walmart.com/ip/Great-Value-Milk/10449411\nnot-a-link",
     );
-    expect(links.map((row) => row.store)).toEqual(["homedepot", "amazon"]);
+    expect(links.map((row) => row.store)).toEqual([
+      "homedepot",
+      "amazon",
+      "walmart",
+    ]);
     expect(skipped.some((row) => /not-a-link/.test(row))).toBe(true);
   });
 });

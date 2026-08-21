@@ -61,6 +61,11 @@ export function HomeDepotMark({
   );
 }
 
+/** Official Walmart spark. */
+export function WalmartMark({ className, title = "Walmart" }: MarkProps) {
+  return <BrandImg src="/brands/walmart.svg" title={title} className={className} />;
+}
+
 /** Official Facebook wordmark. */
 export function FacebookMark({ className, title = "Facebook" }: MarkProps) {
   return <BrandImg src="/brands/facebook.svg" title={title} className={className} />;

@@ -7,6 +7,7 @@ import { CatalogImportDock } from "@/components/listing/wizard/catalog-import-do
 import { AmazonSourceLink } from "@/components/listing/amazon-source-link";
 import { CONDITION_OPTIONS } from "@/config/condition-map";
 import type { ProductImage, ProductListing } from "@/types/product";
+import type { CatalogStore } from "@/lib/catalog/detect-store";
 import { cn } from "@/lib/utils";
 
 export function PhotosScreen({
@@ -42,7 +43,7 @@ export function PhotosScreen({
   onContinue: () => void;
   onCatalogImport?: (url: string) => Promise<boolean | void>;
   onBatchImport?: (urls: string[]) => Promise<boolean | void>;
-  catalogImporting?: false | "amazon" | "homedepot" | "batch";
+  catalogImporting?: false | CatalogStore | "batch";
   sourceListing?: ProductListing;
   onPhotoIntakeSessionChange?: (session: unknown) => void;
 }) {
@@ -128,7 +129,9 @@ export function PhotosScreen({
             : importing
               ? catalogImporting === "homedepot"
                 ? "Reading Home Depot…"
-                : "Reading Amazon…"
+                : catalogImporting === "walmart"
+                  ? "Reading Walmart…"
+                  : "Reading Amazon…"
               : "Drop a photo, or import — then delete, add, or reorder"}
         </span>
         {sourceListing ? <AmazonSourceLink listing={sourceListing} /> : null}

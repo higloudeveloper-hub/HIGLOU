@@ -5,8 +5,10 @@ import { ImagePlus, Loader2, Search, X } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import {
+  ebayItemUrl,
   matchListingToShopProduct,
   promoSkuLookupKeys,
+  uniqueListingCardsByShopProduct,
 } from "@/lib/don-baraton/match-promo-listings";
 import type { DonBaratonPromoProduct } from "@/lib/don-baraton/facebook-promo";
 
@@ -20,6 +22,7 @@ const DEFAULT_COLLECTION_MESSAGE =
 const DEFAULT_COLLECTION_TITLE = "Ofertas Don Baratón";
 
 type PromoFormat = "carousel" | "collection";
+type LinkDestination = "shop" | "ebay";
 
 type HiglouListing = {
   id: string;
@@ -29,6 +32,7 @@ type HiglouListing = {
   coverUrl?: string | null;
   photos?: string[];
   price?: number | null;
+  ebayListingId?: string | null;
 };
 
 function productPhotos(product: DonBaratonPromoProduct): string[] {
@@ -109,6 +113,7 @@ export function PromoCarouselStudio() {
   const [coverImageUrl, setCoverImageUrl] = useState<string | null>(null);
   const [coverImageDataUrl, setCoverImageDataUrl] = useState<string | null>(null);
   const [collectionTitle, setCollectionTitle] = useState(DEFAULT_COLLECTION_TITLE);
+  const [linkDestination, setLinkDestination] = useState<LinkDestination>("shop");
 
   const selectedIds = useMemo(
     () => new Set(selected.map((item) => item.id)),
@@ -231,8 +236,10 @@ export function PromoCarouselStudio() {
                   listing.title,
                 )
               : null;
-            if (shopProduct) picked.push(shopProduct);
-            else missing += 1;
+            if (shopProduct) {
+              if (picked.some((item) => item.id === shopProduct.id)) continue;
+              picked.push(shopProduct);
+            } else missing += 1;
           }
           setSelected(picked.slice(0, MAX));
           if (missing > 0) {
@@ -281,21 +288,41 @@ export function PromoCarouselStudio() {
         .map((id) => id.trim())
         .filter(Boolean),
     );
-    return listings
-      .map((listing) => {
-        const shopProduct = matchListingToShopProduct(
-          listing.sku,
-          shop,
-          listing.title,
-        );
-        return { listing, shopProduct };
-      })
-      .sort((a, b) => {
-        const aHit = requested.has(a.listing.id) ? 0 : 1;
-        const bHit = requested.has(b.listing.id) ? 0 : 1;
-        return aHit - bHit;
-      });
+    return uniqueListingCardsByShopProduct(
+      listings
+        .map((listing) => {
+          const shopProduct = matchListingToShopProduct(
+            listing.sku,
+            shop,
+            listing.title,
+          );
+          return { listing, shopProduct };
+        })
+        .sort((a, b) => {
+          const aHit = requested.has(a.listing.id) ? 0 : 1;
+          const bHit = requested.has(b.listing.id) ? 0 : 1;
+          return aHit - bHit;
+        }),
+    );
   }, [listings, shop]);
+
+  const ebayUrlByShopId = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const listing of listings) {
+      const shopProduct = matchListingToShopProduct(
+        listing.sku,
+        shop,
+        listing.title,
+      );
+      const url = ebayItemUrl(listing.ebayListingId);
+      if (!shopProduct || !url || map.has(shopProduct.id)) continue;
+      map.set(shopProduct.id, url);
+    }
+    return map;
+  }, [listings, shop]);
+  const missingEbayNames = selected
+    .filter((product) => !ebayUrlByShopId.has(product.id))
+    .map((product) => product.name);
 
   const toggleShopProduct = (product: DonBaratonPromoProduct) => {
     setPostUrl(null);
@@ -354,6 +381,12 @@ export function PromoCarouselStudio() {
       toast.error(`Elegí al menos ${minNeeded} productos.`);
       return;
     }
+    if (linkDestination === "ebay" && missingEbayNames.length > 0) {
+      toast.error(
+        `Falta el listing de eBay para: ${missingEbayNames.join(", ")}.`,
+      );
+      return;
+    }
     setPublishing(true);
     setPostUrl(null);
     try {
@@ -369,6 +402,15 @@ export function PromoCarouselStudio() {
           coverImageBase64: coverImageDataUrl ?? undefined,
           collectionTitle:
             format === "collection" ? collectionTitle : undefined,
+          linkDestination,
+          productLinks:
+            linkDestination === "ebay"
+              ? Object.fromEntries(
+                  selected
+                    .map((item) => [item.id, ebayUrlByShopId.get(item.id) ?? ""] as const)
+                    .filter(([, url]) => url),
+                )
+              : undefined,
         }),
       });
       const body = (await res.json().catch(() => null)) as {
@@ -485,6 +527,47 @@ export function PromoCarouselStudio() {
           foto primero, después cada producto con Comprar. El texto no lleva
           URL.
         </p>
+        <div className="mb-4 grid grid-cols-2 gap-2">
+          <button
+            type="button"
+            onClick={() => setLinkDestination("shop")}
+            className={cn(
+              "rounded-2xl border px-3 py-3 text-left",
+              linkDestination === "shop"
+                ? "border-[#191919] bg-white ring-2 ring-[#191919]"
+                : "border-[#e5e5e5] bg-white",
+            )}
+          >
+            <span className="block text-[13px] font-semibold text-[#191919]">
+              Enlaces Don Baratón
+            </span>
+            <span className="mt-1 block text-[12px] leading-snug text-[#707070]">
+              Comprar abre donbaraton.shop.
+            </span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setLinkDestination("ebay")}
+            className={cn(
+              "rounded-2xl border px-3 py-3 text-left",
+              linkDestination === "ebay"
+                ? "border-[#191919] bg-white ring-2 ring-[#191919]"
+                : "border-[#e5e5e5] bg-white",
+            )}
+          >
+            <span className="block text-[13px] font-semibold text-[#191919]">
+              Enlaces eBay
+            </span>
+            <span className="mt-1 block text-[12px] leading-snug text-[#707070]">
+              Comprar abre el listing de eBay.
+            </span>
+          </button>
+        </div>
+        {linkDestination === "ebay" && missingEbayNames.length > 0 ? (
+          <p className="mb-4 text-[12px] leading-relaxed text-[#b45309]">
+            Falta eBay en: {missingEbayNames.join(", ")}.
+          </p>
+        ) : null}
 
         {format === "collection" ? (
           <div className="mb-4 rounded-[16px] border border-[#e5e5e5] bg-white p-3">
@@ -618,7 +701,7 @@ export function PromoCarouselStudio() {
                   : false;
                 return (
                   <button
-                    key={listing.id}
+                    key={shopProduct?.id ?? listing.id}
                     type="button"
                     disabled={!shopProduct}
                     onClick={() => shopProduct && toggleShopProduct(shopProduct)}
@@ -807,8 +890,9 @@ export function PromoCarouselStudio() {
         ) : null}
 
         <p className="mt-3 text-[12px] leading-relaxed text-[#707070]">
-          After it posts, boost that Facebook post and set the destination to
-          donbaraton.shop. Do not put a link in the caption.
+          {linkDestination === "ebay"
+            ? "Comprar abre eBay. No pongas el link en el texto."
+            : "Comprar abre donbaraton.shop. No pongas el link en el texto."}
         </p>
 
         {postUrl ? (
@@ -825,7 +909,11 @@ export function PromoCarouselStudio() {
         <button
           type="button"
           onClick={() => void publish()}
-          disabled={publishing || selected.length < minNeeded}
+          disabled={
+            publishing ||
+            selected.length < minNeeded ||
+            (linkDestination === "ebay" && missingEbayNames.length > 0)
+          }
           className="mt-4 inline-flex h-11 items-center justify-center gap-2 rounded-full bg-[#191919] px-5 text-[14px] font-semibold text-white disabled:opacity-40"
         >
           {publishing ? (

@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { matchListingToShopProduct } from "../lib/don-baraton/match-promo-listings";
+import {
+  ebayItemUrl,
+  matchListingToShopProduct,
+  uniqueListingCardsByShopProduct,
+} from "../lib/don-baraton/match-promo-listings";
 import { toEbayInventorySku } from "../lib/ebay/listing-helpers";
 
 describe("matchListingToShopProduct", () => {
@@ -58,5 +62,26 @@ describe("matchListingToShopProduct", () => {
         'Ryobi 320W 5" Random Orbit Sander with Dust Bag',
       )?.id,
     ).toBe("5");
+  });
+
+  it("keeps one listing card when several Higlou rows map to the same shop product", () => {
+    const cards = uniqueListingCardsByShopProduct([
+      { shopProduct: { id: "shop-1" } },
+      { shopProduct: { id: "shop-1" } },
+      { shopProduct: { id: "shop-1" } },
+      { shopProduct: { id: "shop-2" } },
+      { shopProduct: null },
+    ]);
+    expect(cards).toHaveLength(3);
+    expect(cards.map((card) => card.shopProduct?.id ?? null)).toEqual([
+      "shop-1",
+      "shop-2",
+      null,
+    ]);
+  });
+
+  it("builds an eBay item URL from a listing id", () => {
+    expect(ebayItemUrl(" 286123456789 ")).toBe("https://www.ebay.com/itm/286123456789");
+    expect(ebayItemUrl("abc")).toBeNull();
   });
 });

@@ -127,6 +127,8 @@ export async function publishDonBaratonPromoCarousel(input: {
   coverImageUrl?: string;
   coverImageBase64?: string;
   collectionTitle?: string;
+  linkDestination?: "shop" | "ebay";
+  productLinks?: Record<string, string>;
 }): Promise<DonBaratonPromoPublishResult> {
   const config = getDonBaratonConfig();
   if (!config.enabled) {
@@ -155,6 +157,8 @@ export async function publishDonBaratonPromoCarousel(input: {
         coverImageUrl: input.coverImageUrl,
         coverImageBase64: input.coverImageBase64,
         collectionTitle: input.collectionTitle,
+        linkDestination: input.linkDestination,
+        productLinks: input.productLinks,
       }),
     });
 

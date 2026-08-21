@@ -62,6 +62,7 @@ export async function GET() {
           coverUrl: coverByProduct.get(String(row.id)) ?? null,
           photos,
           photoCount: photos.length,
+          ebayListingId: String(row.ebay_listing_id || "").trim() || null,
         };
       }),
     });
@@ -75,6 +76,7 @@ export async function GET() {
         coverUrl: coverByProduct.get(String(row.id)) ?? null,
         photos: [] as string[],
         photoCount: 0,
+        ebayListingId: String(row.ebay_listing_id || "").trim() || null,
       };
     }),
   });

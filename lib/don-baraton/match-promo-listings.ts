@@ -63,3 +63,25 @@ export function matchListingToShopProduct<T extends PromoShopProduct>(
   );
   return titleHits.length === 1 ? titleHits[0] : null;
 }
+
+export function uniqueListingCardsByShopProduct<
+  T extends { shopProduct: { id: string } | null },
+>(cards: T[]): T[] {
+  const seen = new Set<string>();
+  const unique: T[] = [];
+  for (const card of cards) {
+    const shopId = card.shopProduct?.id;
+    if (shopId) {
+      if (seen.has(shopId)) continue;
+      seen.add(shopId);
+    }
+    unique.push(card);
+  }
+  return unique;
+}
+
+export function ebayItemUrl(listingId: string | null | undefined): string | null {
+  const id = String(listingId || "").replace(/\D/g, "");
+  if (id.length < 8 || id.length > 20) return null;
+  return `https://www.ebay.com/itm/${id}`;
+}

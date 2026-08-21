@@ -18,6 +18,8 @@ const bodySchema = z
     coverImageUrl: z.string().optional(),
     coverImageBase64: z.string().optional(),
     collectionTitle: z.string().optional(),
+    linkDestination: z.enum(["shop", "ebay"]).optional(),
+    productLinks: z.record(z.string(), z.string()).optional(),
   })
   .superRefine((data, ctx) => {
     if (data.format === "collection" && data.productIds.length < 3) {

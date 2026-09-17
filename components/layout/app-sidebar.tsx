@@ -16,6 +16,7 @@ import { signOut } from "@/app/login/sign-out";
 import { HiglouLogo } from "@/components/brand/higlou-logo";
 import { NewListingButton } from "@/components/brand/new-listing-button";
 import { FacebookFMark } from "@/components/brand/store-marks";
+import { MoneyNavLink } from "@/components/money/money-nav-link";
 
 type NavItem = {
   href: string;
@@ -26,7 +27,7 @@ type NavItem = {
   mark?: "facebook";
 };
 
-const WORKSPACE_NAV: NavItem[] = [
+const WORKSPACE_NAV_TOP: NavItem[] = [
   {
     href: "/home",
     label: "Home",
@@ -41,6 +42,9 @@ const WORKSPACE_NAV: NavItem[] = [
     icon: Search,
     match: (path) => path === "/winners" || path.startsWith("/winners/"),
   },
+];
+
+const WORKSPACE_NAV_BOTTOM: NavItem[] = [
   {
     href: "/stats",
     label: "Stats",
@@ -169,7 +173,17 @@ export function AppSidebar({
             Workspace
           </p>
           <div className="space-y-1">
-            <NavLinks items={WORKSPACE_NAV} pathname={pathname} onNavigate={onNavigate} />
+            <NavLinks
+              items={WORKSPACE_NAV_TOP}
+              pathname={pathname}
+              onNavigate={onNavigate}
+            />
+            <MoneyNavLink pathname={pathname} onNavigate={onNavigate} />
+            <NavLinks
+              items={WORKSPACE_NAV_BOTTOM}
+              pathname={pathname}
+              onNavigate={onNavigate}
+            />
           </div>
         </div>
 

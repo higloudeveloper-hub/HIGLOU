@@ -64,6 +64,7 @@ import {
   variationSummary,
   variationsFromListing,
 } from "@/lib/listing/variations";
+import { ProductMoneyCard } from "@/components/money/product-money-card";
 
 function FieldNote({
   attentionFields,
@@ -968,6 +969,13 @@ export function ReviewScreen({
             </TabsContent>
           </Tabs>
         </div>
+
+        <ProductMoneyCard
+          productId={productId}
+          asin={amazonAsin}
+          ebayPrice={listing.price}
+          className="mt-6"
+        />
 
         <EditPromoStrip
           photoSrc={hero?.previewUrl || hero?.url}

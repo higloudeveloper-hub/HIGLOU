@@ -36,6 +36,12 @@ Apply migration:
 
 Env: `AUTOPILOT_ENABLED=true` (requires `MONEY_ENGINE_ENABLED=true`).
 
+## Settings → Money (API panel)
+
+`/settings#money` shows every integration with live status, preference switches, Associate Tracking ID field, and an animated how-to under each card.
+
+Also apply: `supabase/migrations/20260917_money_machine_settings.sql`
+
 ## Rules
 
 - REAL DATA > UNKNOWN > FAKE DATA

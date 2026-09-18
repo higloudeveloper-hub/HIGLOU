@@ -55,6 +55,15 @@ async function resolveAssociateTag(
   }
 }
 
+/** Settings tag first, then AMAZON_ASSOCIATE_TAG env. */
+export async function resolveUserAssociateTag(
+  supabase: SupabaseClient,
+  userId: string,
+  override?: string | null,
+): Promise<string> {
+  return resolveAssociateTag(supabase, userId, override);
+}
+
 export async function createAffiliateLink(
   supabase: SupabaseClient,
   input: CreateAffiliateLinkInput,

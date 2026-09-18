@@ -37,17 +37,33 @@ function amazonSellerStatus(input: MonetizationInput): {
     return {
       available: false,
       status: "NOT_CONNECTED",
-      message: "Amazon seller not connected",
+      message: "Amazon seller not connected — connect in Settings → Stores",
     };
   }
   const el = input.amazonEligibility;
+  const asin = String(input.asin || "")
+    .trim()
+    .toUpperCase();
+  const hasAsin = /^[A-Z0-9]{10}$/.test(asin);
+
   if (!el || el === "UNKNOWN") {
+    if (input.amazonSellerConnected === true && !hasAsin) {
+      return {
+        available: false,
+        status: "UNKNOWN",
+        message:
+          input.amazonEligibilityMessage ||
+          "Amazon connected — add an ASIN to check eligibility",
+      };
+    }
     return {
       available: false,
       status: "UNKNOWN",
       message:
         input.amazonEligibilityMessage ||
-        "Amazon eligibility unknown — API required",
+        (input.amazonSellerConnected === true
+          ? "Amazon eligibility not checked yet"
+          : "Amazon eligibility unknown — connect Amazon or add ASIN"),
     };
   }
   if (el === "API_ERROR") {

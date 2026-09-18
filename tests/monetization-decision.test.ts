@@ -41,6 +41,16 @@ describe("monetization sell channels", () => {
     expect(channel.available).toBe(false);
     expect(channel.status).toBe("APPROVAL_REQUIRED");
   });
+
+  it("asks for ASIN when Amazon is connected but product has none", () => {
+    const channel = evaluateAmazonSellChannel({
+      amazonSellerConnected: true,
+      amazonEligibility: "UNKNOWN",
+    });
+    expect(channel.status).toBe("UNKNOWN");
+    expect(channel.message).toMatch(/ASIN/i);
+    expect(channel.message).not.toMatch(/API required/i);
+  });
 });
 
 describe("money score", () => {

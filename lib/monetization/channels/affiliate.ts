@@ -50,7 +50,8 @@ export function evaluateAmazonAffiliateChannel(
         availability: "api_required",
         label: "Associate tag not configured",
       },
-      message: "Amazon Affiliate — configure Associate Tag (Phase 2)",
+      message:
+        "Amazon Affiliate — paste Associate Tracking ID in Settings → Money",
     };
   }
 

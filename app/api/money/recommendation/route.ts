@@ -7,6 +7,7 @@ import {
   isMoneyEngineEnabled,
 } from "@/lib/monetization/flags";
 import { getMonetizationRecommendation } from "@/lib/monetization/decision-engine";
+import { enrichMonetizationInput } from "@/lib/monetization/enrich-input";
 import { logMonetizationEvent } from "@/lib/monetization/observability";
 import type { MonetizationInput } from "@/lib/monetization/types";
 import { createAdminClient, isSupabaseConfigured } from "@/lib/supabase/admin";
@@ -175,7 +176,12 @@ export async function GET(request: Request) {
   }
 
   const fromDb = await loadProductInput(auth.user.id, productId);
-  const decision = getMonetizationRecommendation(fromDb);
+  const enriched = await enrichMonetizationInput(
+    auth.supabase,
+    auth.user.id,
+    fromDb,
+  );
+  const decision = getMonetizationRecommendation(enriched);
   return NextResponse.json({
     enabled: true,
     flags: getMonetizationFlags(),
@@ -183,6 +189,8 @@ export async function GET(request: Request) {
       productId: fromDb.productId ?? productId,
       asin: fromDb.asin ?? null,
       hasCost: fromDb.cost != null,
+      amazonSellerConnected: enriched.amazonSellerConnected ?? false,
+      affiliateTagConfigured: enriched.affiliateTagConfigured ?? false,
     },
     decision,
   });
@@ -219,10 +227,21 @@ export async function POST(request: Request) {
     ),
   };
 
-  const decision = getMonetizationRecommendation(merged);
+  const enriched = await enrichMonetizationInput(
+    auth.supabase,
+    auth.user.id,
+    merged,
+  );
+  const decision = getMonetizationRecommendation(enriched);
   return NextResponse.json({
     enabled: true,
     flags: getMonetizationFlags(),
+    input: {
+      asin: enriched.asin ?? null,
+      amazonSellerConnected: enriched.amazonSellerConnected ?? false,
+      affiliateTagConfigured: enriched.affiliateTagConfigured ?? false,
+      amazonEligibility: enriched.amazonEligibility ?? null,
+    },
     decision,
   });
 }

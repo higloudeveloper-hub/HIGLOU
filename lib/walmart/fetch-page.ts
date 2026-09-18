@@ -38,7 +38,12 @@ async function readPage(url: string, userAgent: string): Promise<string> {
     cache: "no-store",
     signal: AbortSignal.timeout(18_000),
   });
-  return res.text();
+  const text = await res.text();
+  // PerimeterX: 307/200 into /blocked?url=…
+  if (/\/blocked\?/i.test(String(res.url || "")) || isWalmartBlockedPage(text)) {
+    return "";
+  }
+  return text;
 }
 
 /** Fetch a Walmart product page. Safe for Edge (no Node APIs). */

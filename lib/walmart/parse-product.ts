@@ -49,9 +49,13 @@ const WALMART_JUNK =
 export function isWalmartBlockedPage(html: string): boolean {
   const text = String(html || "");
   if (!text) return true;
-  return /px-captcha|enablejs|robot check|access denied|blocked|pardon our interruption|verify you are human/i.test(
+  // Real PDPs always ship Next data or product CDN photos.
+  if (/__NEXT_DATA__/i.test(text) || /walmartimages\.com\/(asr|seo)\//i.test(text)) {
+    return false;
+  }
+  return /\/blocked\?|px-captcha|enablejs|robot check|access denied|pardon our interruption|verify you are human/i.test(
     text,
-  ) && !/__NEXT_DATA__|walmartimages/i.test(text);
+  );
 }
 
 export function walmartImageId(url: string): string | null {
@@ -180,39 +184,60 @@ function extractBalancedObject(source: string, start: number): string {
   return "";
 }
 
-function looksLikeProduct(rec: Record<string, unknown>): boolean {
+function looksLikeProduct(
+  rec: Record<string, unknown>,
+  preferredItemId?: string,
+): boolean {
   const id = String(rec.usItemId || rec.itemId || rec.id || "").trim();
   const name = String(rec.name || rec.productName || rec.title || "").trim();
   if (!/^\d{5,15}$/.test(id) || name.length < 3) return false;
+  if (preferredItemId && id === preferredItemId) return true;
   return Boolean(
     rec.imageInfo || rec.priceInfo || rec.brand || rec.shortDescription,
   );
 }
 
-function findProductNode(value: unknown, depth = 0): Record<string, unknown> | null {
+function findProductNode(
+  value: unknown,
+  preferredItemId?: string,
+  depth = 0,
+): Record<string, unknown> | null {
   if (!value || depth > 14) return null;
   if (Array.isArray(value)) {
+    let fallback: Record<string, unknown> | null = null;
     for (const item of value) {
-      const hit = findProductNode(item, depth + 1);
-      if (hit) return hit;
+      const hit = findProductNode(item, preferredItemId, depth + 1);
+      if (!hit) continue;
+      const id = String(hit.usItemId || hit.itemId || "").replace(/\D/g, "");
+      if (preferredItemId && id === preferredItemId) return hit;
+      if (!fallback) fallback = hit;
     }
-    return null;
+    return fallback;
   }
   if (typeof value !== "object") return null;
   const rec = value as Record<string, unknown>;
-  if (looksLikeProduct(rec)) return rec;
+  if (looksLikeProduct(rec, preferredItemId)) {
+    const id = String(rec.usItemId || rec.itemId || "").replace(/\D/g, "");
+    if (!preferredItemId || id === preferredItemId) return rec;
+  }
   const nested = rec.product;
   if (nested && typeof nested === "object") {
-    const hit = findProductNode(nested, depth + 1);
+    const hit = findProductNode(nested, preferredItemId, depth + 1);
     if (hit) return hit;
   }
+  let fallback: Record<string, unknown> | null = null;
   for (const child of Object.values(rec)) {
     if (child && typeof child === "object") {
-      const hit = findProductNode(child, depth + 1);
-      if (hit) return hit;
+      const hit = findProductNode(child, preferredItemId, depth + 1);
+      if (!hit) continue;
+      const id = String(hit.usItemId || hit.itemId || "").replace(/\D/g, "");
+      if (preferredItemId && id === preferredItemId) return hit;
+      if (!fallback) fallback = hit;
     }
   }
-  return null;
+  // Last pass: accept any product-shaped node if we still have nothing.
+  if (!fallback && looksLikeProduct(rec)) return rec;
+  return fallback;
 }
 
 function collectImageUrls(value: unknown, out: string[], depth = 0) {
@@ -307,10 +332,13 @@ function featureBullets(product: Record<string, unknown>, html: string): string[
   return isUsableCatalogBullet(meta) ? [meta.slice(0, 220)] : [];
 }
 
-export function collectWalmartImageUrlsFromHtml(html: string): string[] {
+export function collectWalmartImageUrlsFromHtml(
+  html: string,
+  preferredItemId?: string,
+): string[] {
   const decoded = String(html || "");
   const next = nextDataJson(decoded);
-  const product = findProductNode(next);
+  const product = findProductNode(next, preferredItemId);
   const fromJson: string[] = [];
   if (product) collectImageUrls(product.imageInfo || product, fromJson);
   const ldImages: string[] = [];
@@ -341,7 +369,8 @@ export function parseWalmartProductPage(
   meta: { itemId: string; url: string },
 ): WalmartProductDraft {
   const next = nextDataJson(html);
-  const product: Record<string, unknown> = findProductNode(next) ?? {};
+  const product: Record<string, unknown> =
+    findProductNode(next, meta.itemId) ?? {};
   const data = asRecord(
     asRecord(asRecord(asRecord(next)?.props)?.pageProps)?.initialData,
   )?.data;
@@ -386,7 +415,7 @@ export function parseWalmartProductPage(
     model,
     price,
     features: featureBullets(product, html),
-    imageUrls: collectWalmartImageUrlsFromHtml(html).slice(
+    imageUrls: collectWalmartImageUrlsFromHtml(html, meta.itemId).slice(
       0,
       DEFAULT_VALUES.maxImages,
     ),

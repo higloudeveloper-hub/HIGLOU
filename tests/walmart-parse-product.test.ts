@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  isWalmartBlockedPage,
   parseWalmartProductPage,
   upgradeWalmartImage,
 } from "@/lib/walmart/parse-product";
@@ -91,5 +92,17 @@ describe("parseWalmartProductPage", () => {
         "https://i5.walmartimages.com/asr/abcd.jpeg?odnHeight=180&odnWidth=180&odnBg=ffffff",
       ),
     ).toMatch(/odnHeight=2000/i);
+  });
+
+  it("treats PerimeterX /blocked shells as blocked", () => {
+    expect(
+      isWalmartBlockedPage(
+        "<html><body>Pardon Our Interruption — /blocked?url=L2lwLzEw</body></html>",
+      ),
+    ).toBe(true);
+  });
+
+  it("does not treat a real PDP with Next data as blocked", () => {
+    expect(isWalmartBlockedPage(HTML)).toBe(false);
   });
 });

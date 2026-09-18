@@ -6,10 +6,18 @@ import { useRouter } from "next/navigation";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { toast } from "sonner";
 import { ExternalLink, Loader2, Radio, Sparkles } from "lucide-react";
+import {
+  AmazonMark,
+  EbayMark,
+  FacebookFMark,
+  HomeDepotMark,
+  ShopifyMark,
+  WalmartMark,
+} from "@/components/brand/store-marks";
 import type { MarketDropPublic } from "@/lib/market/from-opportunity";
 import { marketPulseLabels, marketSpread } from "@/lib/market/catalog";
 import { PriceDrop } from "@/components/market/price-drop";
-import { cn } from "@/lib/utils";
+import { MarketTile } from "@/components/market/market-tile";
 
 const EASE = [0.22, 1, 0.36, 1] as const;
 
@@ -19,12 +27,6 @@ function money(n: number) {
     currency: "USD",
     maximumFractionDigits: 0,
   }).format(n);
-}
-
-function heatLabel(heat: MarketDropPublic["heat"]) {
-  if (heat === "hot") return "Hot";
-  if (heat === "warm") return "Moving";
-  return "New";
 }
 
 export function DropMarketStudio() {
@@ -72,7 +74,10 @@ export function DropMarketStudio() {
     };
   }, []);
 
-  const pulseLines = useMemo(() => marketPulseLabels(Date.now()), [drops.length]);
+  const pulseLines = useMemo(
+    () => marketPulseLabels(Date.now()),
+    [drops.length],
+  );
 
   useEffect(() => {
     if (reduce) return;
@@ -180,18 +185,17 @@ export function DropMarketStudio() {
   }, []);
 
   return (
-    <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-[#f4f6f8]">
+    <div className="relative min-h-0 flex-1 overflow-y-auto bg-[#f5f5f5]">
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-0 opacity-[0.45]"
+        className="pointer-events-none absolute inset-x-0 top-0 h-[70vh] opacity-60"
         style={{
           backgroundImage:
-            "radial-gradient(ellipse 80% 50% at 20% -10%, #d7e4ff 0%, transparent 55%), radial-gradient(ellipse 60% 40% at 90% 10%, #ffe8d6 0%, transparent 50%), linear-gradient(180deg, #f4f6f8 0%, #eef1f4 100%)",
+            "radial-gradient(ellipse 70% 45% at 15% 0%, #dce8ff 0%, transparent 55%), radial-gradient(ellipse 50% 35% at 90% 5%, #ffe8d2 0%, transparent 50%)",
         }}
       />
 
-      {/* Live analysis strip */}
-      <div className="relative z-[2] flex shrink-0 items-center gap-3 border-b border-[#0c0c0c]/10 bg-[#0c0c0c] px-4 py-2.5 text-white sm:px-6">
+      <div className="relative z-[2] sticky top-0 flex items-center gap-3 border-b border-[#0c0c0c]/10 bg-[#0c0c0c] px-4 py-2.5 text-white sm:px-6">
         <span className="relative flex size-2">
           <span className="absolute inline-flex size-full animate-ping rounded-full bg-[#e85d04] opacity-60" />
           <span className="relative inline-flex size-2 rounded-full bg-[#e85d04]" />
@@ -219,77 +223,80 @@ export function DropMarketStudio() {
         </p>
       </div>
 
-      <section className="relative z-[1] grid lg:min-h-[70svh] lg:grid-cols-[0.95fr_1.05fr]">
-        <div className="relative flex flex-col justify-between px-5 pt-7 pb-8 sm:px-8 lg:px-12 lg:pt-10">
-          <div>
-            <p className="text-[11px] font-semibold tracking-[0.28em] text-[#5a6472] uppercase">
-              Higlou Market
-            </p>
-            <h1 className="mt-3 max-w-[11ch] font-[family-name:var(--font-instrument-serif)] text-[44px] leading-[0.94] tracking-tight text-[#0c0c0c] sm:text-[64px] lg:text-[76px]">
-              Always{" "}
-              <span className="italic text-[#e85d04]">scanning</span>
-            </h1>
-            <p className="mt-4 max-w-md text-[14px] leading-relaxed text-[#4a5563]">
-              {loading
-                ? "Stocking the floor…"
-                : note ||
-                  "A living marketplace of drops — claim to your store or earn with your Associate tag."}
-            </p>
-            <div className="mt-5 flex flex-wrap gap-4 text-[12px] text-[#5a6472]">
-              <span>
-                Open est. spread{" "}
-                <strong className="tabular-nums text-[#0c0c0c]">
-                  {money(openSpread)}
-                </strong>
-              </span>
-              <span>
-                Ledger ASINs{" "}
-                <strong className="tabular-nums text-[#0c0c0c]">
-                  {ledgerCount}
-                </strong>
-              </span>
-              <span>
-                {tagReady ? "Tag ready" : "Set tag in Settings"}
-              </span>
-            </div>
-            <div className="mt-7 flex flex-wrap items-center gap-3">
+      {/* Compact hero — not full viewport so floor stays visible */}
+      <section className="relative z-[1] grid gap-0 border-b border-[#e5e5e5] bg-white lg:grid-cols-[1fr_1.05fr]">
+        <div className="flex flex-col justify-center px-5 py-8 sm:px-8 lg:px-12 lg:py-10">
+          <p className="text-[11px] font-semibold tracking-[0.28em] text-[#5a6472] uppercase">
+            Higlou Market
+          </p>
+          <h1 className="mt-2 max-w-[12ch] font-[family-name:var(--font-instrument-serif)] text-[40px] leading-[0.95] tracking-tight text-[#0c0c0c] sm:text-[56px]">
+            Always <span className="italic text-[#e85d04]">scanning</span>
+          </h1>
+          <p className="mt-3 max-w-md text-[14px] leading-relaxed text-[#4a5563]">
+            {loading
+              ? "Stocking the floor…"
+              : note ||
+                "Clean store tiles — one click into your shop, revenue floating on every drop."}
+          </p>
+          <div className="mt-4 flex flex-wrap items-center gap-3 opacity-90">
+            <AmazonMark className="h-4" />
+            <EbayMark className="h-3.5" />
+            <WalmartMark className="h-3.5" />
+            <HomeDepotMark className="h-4" />
+            <ShopifyMark className="h-4" />
+            <FacebookFMark className="h-4.5" />
+          </div>
+          <div className="mt-4 flex flex-wrap gap-4 text-[12px] text-[#5a6472]">
+            <span>
+              Open est.{" "}
+              <strong className="tabular-nums text-[#0c0c0c]">
+                {money(openSpread)}
+              </strong>
+            </span>
+            <span>
+              Ledger{" "}
+              <strong className="tabular-nums text-[#0c0c0c]">
+                {ledgerCount}
+              </strong>
+            </span>
+            <span>{tagReady ? "Tag ready" : "Set tag in Settings"}</span>
+          </div>
+          <div className="mt-6 flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              disabled={!drop || busy === drop.id}
+              onClick={() => drop && void claim(drop.id)}
+              className="inline-flex h-11 items-center gap-2 bg-[#0c0c0c] px-5 text-[12px] font-semibold tracking-wide text-white uppercase disabled:opacity-50"
+            >
+              {busy === drop?.id ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <Sparkles className="size-4" />
+              )}
+              Add to my store
+            </button>
+            {drop?.asin ? (
               <button
                 type="button"
-                disabled={!drop || busy === drop.id}
-                onClick={() => drop && void claim(drop.id)}
-                className="inline-flex h-11 items-center gap-2 bg-[#0c0c0c] px-5 text-[12px] font-semibold tracking-wide text-white uppercase disabled:opacity-50"
+                disabled={busy === `aff-${drop.id}`}
+                onClick={() => void earnLink(drop)}
+                className="inline-flex h-11 items-center gap-2 border border-[#0c0c0c] bg-white px-4 text-[12px] font-semibold tracking-wide text-[#0c0c0c] uppercase disabled:opacity-50"
               >
-                {busy === drop?.id ? (
-                  <Loader2 className="size-4 animate-spin" />
-                ) : (
-                  <Sparkles className="size-4" />
-                )}
-                Add to my store
+                <ExternalLink className="size-4" />
+                Earn link
               </button>
-              {drop?.asin ? (
-                <button
-                  type="button"
-                  disabled={busy === `aff-${drop.id}`}
-                  onClick={() => void earnLink(drop)}
-                  className="inline-flex h-11 items-center gap-2 border border-[#0c0c0c] bg-white px-4 text-[12px] font-semibold tracking-wide text-[#0c0c0c] uppercase disabled:opacity-50"
-                >
-                  <ExternalLink className="size-4" />
-                  Earn link
-                </button>
-              ) : null}
-              <Link
-                href="/winners"
-                className="text-[12px] font-semibold tracking-wide text-[#0c0c0c] underline-offset-4 hover:underline"
-              >
-                Feed with Find Winners →
-              </Link>
-            </div>
+            ) : null}
+            <Link
+              href="/winners"
+              className="text-[12px] font-semibold tracking-wide text-[#0c0c0c] underline-offset-4 hover:underline"
+            >
+              Feed with Find Winners →
+            </Link>
           </div>
-
           {drop ? (
-            <div className="mt-10 border-t border-[#0c0c0c]/10 pt-5">
+            <div className="mt-8 border-t border-[#eee] pt-5">
               <p className="text-[11px] font-semibold tracking-[0.16em] text-[#8a93a0] uppercase">
-                Price compression
+                Spotlight ask → list
               </p>
               <PriceDrop
                 key={drop.id}
@@ -303,51 +310,31 @@ export function DropMarketStudio() {
                 <span className="font-semibold tabular-nums text-[#0c0c0c]">
                   {money(drop.netProfit ?? spread)}
                 </span>
-                <span className="text-[#8a93a0]"> · {drop.note}</span>
               </p>
             </div>
           ) : null}
         </div>
 
-        <div className="relative min-h-[42vh] lg:min-h-0">
+        <div className="relative min-h-[280px] bg-[#f7f7f7] lg:min-h-[420px]">
           <AnimatePresence mode="wait">
             {drop ? (
               <motion.div
                 key={drop.id}
-                initial={reduce ? false : { opacity: 0, scale: 1.03 }}
-                animate={{ opacity: 1, scale: 1 }}
+                initial={reduce ? false : { opacity: 0 }}
+                animate={{ opacity: 1 }}
                 exit={reduce ? undefined : { opacity: 0 }}
-                transition={{ duration: 0.5, ease: EASE }}
-                className="absolute inset-0"
+                transition={{ duration: 0.45, ease: EASE }}
+                className="absolute inset-0 flex items-center justify-center p-8"
               >
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={drop.photo}
                   alt={drop.title}
-                  className="size-full object-cover"
+                  className="max-h-full max-w-full object-contain drop-shadow-xl"
                 />
-                <div className="absolute inset-0 bg-gradient-to-t from-[#0c0c0c]/60 via-transparent to-[#0c0c0c]/15" />
-                <div className="absolute right-5 bottom-5 left-5 text-white sm:right-8 sm:bottom-8 sm:left-8">
-                  <div className="flex flex-wrap gap-2">
-                    <span className="bg-[#e85d04] px-2 py-0.5 text-[10px] font-bold tracking-[0.12em] uppercase">
-                      {drop.real ? "Ledger" : heatLabel(drop.heat)}
-                    </span>
-                    {autoRotate ? (
-                      <span className="bg-white/15 px-2 py-0.5 text-[10px] font-semibold tracking-[0.1em] uppercase backdrop-blur-sm">
-                        Auto-rotating
-                      </span>
-                    ) : null}
-                  </div>
-                  <p className="mt-3 font-[family-name:var(--font-instrument-serif)] text-[26px] leading-tight sm:text-[34px]">
-                    {drop.title}
-                  </p>
-                  <p className="mt-1.5 max-w-lg text-[13px] text-white/80">
-                    {drop.blurb}
-                  </p>
-                </div>
               </motion.div>
             ) : (
-              <div className="absolute inset-0 flex items-center justify-center bg-[#e8ecf0] text-[13px] text-[#6b7280]">
+              <div className="absolute inset-0 flex items-center justify-center text-[13px] text-[#6b7280]">
                 {loading ? "Loading…" : "No drops"}
               </div>
             )}
@@ -355,16 +342,20 @@ export function DropMarketStudio() {
         </div>
       </section>
 
-      {/* Dense floor */}
-      <section className="relative z-[1] border-t border-[#0c0c0c]/10 bg-white/90 px-3 py-8 backdrop-blur-sm sm:px-6 lg:px-10">
-        <div className="mb-5 flex items-end justify-between gap-3">
+      {/* Full scrollable store floor — eBay-clean tiles */}
+      <section className="relative z-[1] bg-[#f5f5f5] px-3 py-8 sm:px-6 lg:px-10 lg:py-10">
+        <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
           <div>
             <p className="text-[11px] font-semibold tracking-[0.2em] text-[#8a93a0] uppercase">
               Live floor
             </p>
-            <h2 className="mt-1 font-[family-name:var(--font-instrument-serif)] text-[28px] tracking-tight text-[#0c0c0c]">
+            <h2 className="mt-1 font-[family-name:var(--font-instrument-serif)] text-[28px] tracking-tight text-[#0c0c0c] sm:text-[34px]">
               {drops.length} products calling
             </h2>
+            <p className="mt-1 text-[13px] text-[#6b7280]">
+              Clean store tiles · floating keep · list across Amazon, eBay &
+              more
+            </p>
           </div>
           <button
             type="button"
@@ -375,91 +366,29 @@ export function DropMarketStudio() {
           </button>
         </div>
 
-        <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
-          {drops.map((item, i) => {
-            const selected = i === active;
-            const itemSpread = item.netProfit ?? marketSpread(item);
-            return (
-              <div
-                key={item.id}
-                role="button"
-                tabIndex={0}
-                onClick={() => {
-                  setActive(i);
-                  setAutoRotate(false);
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault();
-                    setActive(i);
-                    setAutoRotate(false);
-                  }
-                }}
-                className={cn(
-                  "group relative cursor-pointer overflow-hidden bg-white text-left transition",
-                  selected
-                    ? "ring-2 ring-[#0c0c0c]"
-                    : "ring-1 ring-[#0c0c0c]/08 hover:ring-[#0c0c0c]/25",
-                )}
-              >
-                <div className="relative aspect-square overflow-hidden bg-[#e8ecf0]">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={item.photo}
-                    alt=""
-                    className="size-full object-cover transition duration-500 group-hover:scale-[1.04]"
-                    loading="lazy"
-                  />
-                  <span className="absolute top-1.5 left-1.5 bg-[#0c0c0c]/75 px-1.5 py-0.5 text-[9px] font-bold tracking-wide text-white uppercase backdrop-blur-sm">
-                    {item.real ? "Win" : heatLabel(item.heat)}
-                  </span>
-                  <span className="absolute right-1.5 bottom-1.5 bg-[#e85d04] px-1.5 py-0.5 text-[10px] font-bold tabular-nums text-white">
-                    {money(itemSpread)}
-                  </span>
-                </div>
-                <div className="p-2.5">
-                  <p className="line-clamp-2 text-[12px] font-medium leading-snug text-[#0c0c0c]">
-                    {item.title}
-                  </p>
-                  <div className="mt-1.5 flex items-baseline gap-1.5">
-                    <span className="text-[10px] text-[#9ca3af] line-through tabular-nums">
-                      {money(item.comps)}
-                    </span>
-                    <span className="text-[13px] font-semibold tabular-nums text-[#0c0c0c]">
-                      {money(item.sell)}
-                    </span>
-                  </div>
-                  <div className="mt-2 flex gap-1">
-                    <button
-                      type="button"
-                      disabled={busy === item.id}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        void claim(item.id);
-                      }}
-                      className="h-7 flex-1 bg-[#0c0c0c] text-[9px] font-semibold tracking-wide text-white uppercase disabled:opacity-50"
-                    >
-                      {busy === item.id ? "…" : "Add"}
-                    </button>
-                    {item.asin ? (
-                      <button
-                        type="button"
-                        disabled={busy === `aff-${item.id}`}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          void earnLink(item);
-                        }}
-                        className="h-7 px-2 text-[9px] font-semibold tracking-wide text-[#0c0c0c] uppercase ring-1 ring-[#0c0c0c]/15 disabled:opacity-50"
-                      >
-                        Earn
-                      </button>
-                    ) : null}
-                  </div>
-                </div>
-              </div>
-            );
-          })}
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+          {drops.map((item, i) => (
+            <MarketTile
+              key={item.id}
+              item={item}
+              index={i}
+              selected={i === active}
+              busy={busy === item.id || busy === `aff-${item.id}`}
+              onSelect={() => {
+                setActive(i);
+                setAutoRotate(false);
+              }}
+              onClaim={() => void claim(item.id)}
+              onEarn={item.asin ? () => void earnLink(item) : undefined}
+            />
+          ))}
         </div>
+
+        {!loading && drops.length === 0 ? (
+          <p className="py-16 text-center text-[14px] text-[#6b7280]">
+            No drops on the floor yet.
+          </p>
+        ) : null}
       </section>
     </div>
   );

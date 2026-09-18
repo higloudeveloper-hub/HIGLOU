@@ -38,6 +38,9 @@ describe("higlou market catalog", () => {
     expect(readRepo("components/market/drop-market.tsx")).toMatch(
       /Live floor/,
     );
+    expect(readRepo("components/market/market-tile.tsx")).toMatch(/You keep/);
+    expect(readRepo("components/market/market-tile.tsx")).toMatch(/AmazonMark/);
+    expect(readRepo("components/market/market-tile.tsx")).toMatch(/EbayMark/);
     expect(readRepo("components/market/price-drop.tsx")).toMatch(/vs ask/);
     expect(readRepo("lib/market/from-opportunity.ts")).toMatch(
       /Always stock the floor/,

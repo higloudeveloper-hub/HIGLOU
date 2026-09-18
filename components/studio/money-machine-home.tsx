@@ -116,15 +116,21 @@ export function MoneyMachineHome({
               </p>
             </div>
             <Link
-              href="/listings/new"
+              href="/market"
               className="shrink-0 text-[13px] font-medium text-[#3665F3]"
             >
-              List one
+              Open market
             </Link>
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-4">
             <MarketPromos activeIndex={resting ? -1 : story.sku} listings={listings} />
-            {drafts.length > 0 ? (
+            <p className="mt-3 text-[12px] text-[#707070]">
+              Hot drops with price motion live in{" "}
+              <Link href="/market" className="font-medium text-[#3665F3]">
+                Higlou Market
+              </Link>
+              .
+            </p>            {drafts.length > 0 ? (
               <div className="mt-6">
                 <div className="mb-3 flex items-center justify-between">
                   <p className="text-[13px] font-semibold text-[#191919]">Your drafts</p>

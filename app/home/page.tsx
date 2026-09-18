@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { AppShell } from "@/components/layout/app-shell";
 import { createClient } from "@/lib/supabase/client";
 import { ReturningHome } from "@/components/studio/returning-home";
+import { MarketDropPopup } from "@/components/market/market-drop-popup";
 import { pickBestReadyListings } from "@/lib/studio/ready-from-products";
 
 type ProductRow = {
@@ -156,6 +157,7 @@ export default function HomeWorkspacePage() {
           showRestCta={!hasInventory}
         />
       )}
+      {ready ? <MarketDropPopup /> : null}
     </AppShell>
   );
 }

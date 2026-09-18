@@ -10,6 +10,7 @@ import {
   LogOut,
   Search,
   Settings,
+  Store,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { signOut } from "@/app/login/sign-out";
@@ -34,6 +35,13 @@ const WORKSPACE_NAV_TOP: NavItem[] = [
     hint: "Money machine",
     icon: Home,
     match: (path) => path === "/home",
+  },
+  {
+    href: "/market",
+    label: "Market",
+    hint: "Hot drops",
+    icon: Store,
+    match: (path) => path === "/market" || path.startsWith("/market/"),
   },
   {
     href: "/winners",

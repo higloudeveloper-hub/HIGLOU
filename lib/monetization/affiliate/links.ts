@@ -1,5 +1,10 @@
 import { customAlphabet } from "nanoid";
-import { getAffiliateProvider } from "@/lib/monetization/affiliate/amazon-associates";
+import {
+  getAmazonAssociateTag,
+  getAffiliateProvider,
+  isAmazonAssociatesConfigured,
+} from "@/lib/monetization/affiliate/amazon-associates";
+import { buildAmazonAssociatesUrl } from "@/lib/monetization/channels/affiliate";
 import { getMonetizationFlags } from "@/lib/monetization/flags";
 import { logMonetizationEvent } from "@/lib/monetization/observability";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -14,6 +19,7 @@ export type CreateAffiliateLinkInput = {
   campaignName?: string | null;
   source?: string | null;
   providerId?: string;
+  associateTag?: string | null;
 };
 
 export type AffiliateLinkRow = {
@@ -30,6 +36,25 @@ export type AffiliateLinkRow = {
   created_at: string;
 };
 
+async function resolveAssociateTag(
+  supabase: SupabaseClient,
+  userId: string,
+  override?: string | null,
+): Promise<string> {
+  const direct = getAmazonAssociateTag(override);
+  if (direct) return direct;
+  try {
+    const { data } = await supabase
+      .from("money_machine_settings")
+      .select("associate_tag")
+      .eq("user_id", userId)
+      .maybeSingle();
+    return getAmazonAssociateTag(data?.associate_tag);
+  } catch {
+    return "";
+  }
+}
+
 export async function createAffiliateLink(
   supabase: SupabaseClient,
   input: CreateAffiliateLinkInput,
@@ -40,11 +65,16 @@ export async function createAffiliateLink(
   }
 
   const providerId = input.providerId || "amazon_associates";
-  const provider = getAffiliateProvider(providerId);
-  if (!provider || !provider.isConfigured()) {
+  const associateTag = await resolveAssociateTag(
+    supabase,
+    input.userId,
+    input.associateTag,
+  );
+  if (!isAmazonAssociatesConfigured(associateTag)) {
     return {
       ok: false,
-      error: "Affiliate provider not configured (set AMAZON_ASSOCIATE_TAG)",
+      error:
+        "Associate tag missing — paste it in Settings → Money, or set AMAZON_ASSOCIATE_TAG",
     };
   }
 
@@ -53,10 +83,10 @@ export async function createAffiliateLink(
     return { ok: false, error: "Valid ASIN required" };
   }
 
-  const destinationUrl = provider.buildProductUrl({
-    asinOrSku: asin,
-    campaignId: input.campaignId,
-  });
+  const provider = getAffiliateProvider(providerId);
+  const destinationUrl =
+    provider?.buildProductUrl({ asinOrSku: asin, campaignId: input.campaignId }) ||
+    buildAmazonAssociatesUrl({ asin, associateTag });
   if (!destinationUrl) {
     return { ok: false, error: "Could not build destination URL" };
   }
@@ -85,8 +115,6 @@ export async function createAffiliateLink(
   }
 
   const track = trackingId();
-  const associateTag =
-    (process.env.AMAZON_ASSOCIATE_TAG || "").trim() || "";
 
   const { data, error } = await supabase
     .from("affiliate_links")

@@ -13,20 +13,23 @@ import { EbayStoreOrganizeForm } from "@/components/settings/ebay-store-organize
 import { EbaySetupStory } from "@/components/settings/ebay-setup-story";
 import { AiSettingsForm } from "@/components/settings/ai-settings-form";
 import { BudgetSettingsForm } from "@/components/settings/budget-settings-form";
+import { MoneyMachineSetupForm } from "@/components/settings/money-machine-setup";
 import { StudioFrame } from "@/components/layout/studio-frame";
 import { EXPECTED_SEED_TEMPLATE_SHA256 } from "@/types/ebay";
 import { cn } from "@/lib/utils";
 
-type Tab = "ebay" | "brand" | "tools";
+type Tab = "ebay" | "brand" | "tools" | "money";
 
 const TABS: { id: Tab; label: string; hint: string }[] = [
   { id: "ebay", label: "Stores", hint: "eBay & Amazon" },
+  { id: "money", label: "Money", hint: "APIs & piloto" },
   { id: "brand", label: "Look", hint: "Store branding" },
   { id: "tools", label: "Tools", hint: "AI, folders, CSV" },
 ];
 
 function tabFromHash(hash: string): Tab {
   if (hash === "#branding") return "brand";
+  if (hash === "#money" || hash === "#money-machine") return "money";
   if (hash === "#amazon-store") return "ebay";
   if (
     hash === "#organize-store" ||
@@ -56,7 +59,13 @@ export function SettingsStudio() {
   function go(next: Tab) {
     setTab(next);
     const hash =
-      next === "brand" ? "#branding" : next === "tools" ? "#ai" : "#ebay-store";
+      next === "brand"
+        ? "#branding"
+        : next === "tools"
+          ? "#ai"
+          : next === "money"
+            ? "#money"
+            : "#ebay-store";
     window.history.replaceState({}, "", `/settings${hash}`);
   }
 
@@ -64,13 +73,13 @@ export function SettingsStudio() {
     <StudioFrame
       kicker="Store"
       title="Settings"
-      hint="Connect eBay and Amazon, lock policies, then Higlou can publish."
+      hint="Connect stores, wire Money Machine APIs, then Higlou can find and monetize."
       scroll
     >
       <div className="sticky top-0 z-10 border-b border-[#e5e5e5] bg-white px-5 py-2">
         <div
           role="tablist"
-          className="grid grid-cols-3 rounded-full border border-[#e5e5e5] bg-[#f7f7f7] p-1"
+          className="grid grid-cols-2 gap-1 rounded-full border border-[#e5e5e5] bg-[#f7f7f7] p-1 sm:grid-cols-4"
         >
           {TABS.map((item) => (
             <button
@@ -166,6 +175,12 @@ export function SettingsStudio() {
                 </div>
               </section>
             </div>
+          ) : null}
+
+          {tab === "money" ? (
+            <section id="money" className="scroll-mt-24">
+              <MoneyMachineSetupForm />
+            </section>
           ) : null}
 
           {tab === "brand" ? (

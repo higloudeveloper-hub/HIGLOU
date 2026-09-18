@@ -1,7 +1,9 @@
 import { buildAmazonAssociatesUrl } from "@/lib/monetization/channels/affiliate";
 import type { AffiliateProviderAdapter } from "@/lib/monetization/affiliate/provider";
 
-export function getAmazonAssociateTag(): string {
+export function getAmazonAssociateTag(override?: string | null): string {
+  const fromOverride = String(override || "").trim();
+  if (fromOverride) return fromOverride;
   return (process.env.AMAZON_ASSOCIATE_TAG || "").trim();
 }
 
@@ -19,8 +21,8 @@ export function getAmazonAssociateHost(): string {
     .replace(/\/$/, "");
 }
 
-export function isAmazonAssociatesConfigured(): boolean {
-  return Boolean(getAmazonAssociateTag());
+export function isAmazonAssociatesConfigured(override?: string | null): boolean {
+  return Boolean(getAmazonAssociateTag(override));
 }
 
 /**

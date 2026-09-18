@@ -54,7 +54,7 @@ create table if not exists public.affiliate_conversions (
   provider_id text not null default 'amazon_associates',
   revenue numeric(12, 2),
   attributed boolean not null default false,
-  note text not null default 'Requires provider report — not invented',
+  note text not null default 'Requires provider report - not invented',
   occurred_at timestamptz,
   created_at timestamptz not null default now()
 );

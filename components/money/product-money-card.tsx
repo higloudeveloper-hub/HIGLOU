@@ -2,11 +2,14 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { toast } from "sonner";
-import { ExternalLink, Eye, Link2, QrCode, Store } from "lucide-react";
+import { ExternalLink, Eye, Link2, Loader2, QrCode, Store } from "lucide-react";
 import type { MonetizationDecision, MonetizationInput } from "@/lib/monetization/types";
 import { takeOpportunityMoneySeed } from "@/lib/monetization/from-opportunity";
 import { cn } from "@/lib/utils";
+
+const EASE = [0.22, 1, 0.36, 1] as const;
 
 function formatMoney(value: number | null | undefined) {
   if (value == null || !Number.isFinite(value)) return "Insufficient Data";
@@ -22,18 +25,18 @@ function StatusRow({
   ok: boolean | "warn";
   detail: string;
 }) {
-  const mark = ok === true ? "✓" : ok === "warn" ? "⚠" : "·";
+  const mark = ok === true ? "OK" : ok === "warn" ? "WARN" : "—";
   const color =
     ok === true
       ? "text-emerald-700"
       : ok === "warn"
         ? "text-amber-800"
-        : "text-muted-foreground";
+        : "text-[#9b9b9b]";
   return (
     <div className="flex items-start justify-between gap-3 text-[13px]">
-      <span className="text-muted-foreground">{label}</span>
+      <span className="text-[#707070]">{label}</span>
       <span className={cn("text-right font-medium", color)}>
-        {mark} {detail}
+        {mark} · {detail}
       </span>
     </div>
   );
@@ -57,12 +60,14 @@ export function ProductMoneyCard({
   ebayPrice?: number | null;
   className?: string;
 }) {
+  const reduce = useReducedMotion() ?? false;
   const [decision, setDecision] = useState<MonetizationDecision | null>(null);
   const [flags, setFlags] = useState<MoneyFlags | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
   const [smartPath, setSmartPath] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
@@ -94,16 +99,22 @@ export function ProductMoneyCard({
           }),
         });
         if (res.status === 404) {
-          if (!cancelled) setFlags({
-            moneyEngine: false,
-            affiliateEngine: false,
-            smartLinks: false,
-            moneyScore: false,
-          });
+          if (!cancelled) {
+            setFlags({
+              moneyEngine: false,
+              affiliateEngine: false,
+              smartLinks: false,
+              moneyScore: false,
+            });
+            setLoading(false);
+          }
           return;
         }
         if (!res.ok) {
-          if (!cancelled) setError("Money recommendation unavailable");
+          if (!cancelled) {
+            setError("Money recommendation unavailable");
+            setLoading(false);
+          }
           return;
         }
         const body = (await res.json()) as {
@@ -121,8 +132,12 @@ export function ProductMoneyCard({
           },
         );
         setDecision(body.decision ?? null);
+        setLoading(false);
       } catch {
-        if (!cancelled) setError("Money recommendation failed");
+        if (!cancelled) {
+          setError("Money recommendation failed");
+          setLoading(false);
+        }
       }
     })();
     return () => {
@@ -203,6 +218,18 @@ export function ProductMoneyCard({
   }, [productId, asin]);
 
   if (!flags?.moneyEngine) return null;
+  if (loading) {
+    return (
+      <div
+        className={cn(
+          "flex min-h-[120px] items-center justify-center rounded-2xl border border-[#e5e5e5] bg-white",
+          className,
+        )}
+      >
+        <Loader2 className="size-4 animate-spin text-[#9b9b9b]" />
+      </div>
+    );
+  }
   if (!decision && !error) return null;
 
   const amz = decision?.channels.amazonSeller;
@@ -210,167 +237,166 @@ export function ProductMoneyCard({
   const aff = decision?.channels.amazonAffiliate;
 
   return (
-    <section
+    <motion.section
+      initial={reduce ? false : { opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.4, ease: EASE }}
       className={cn(
-        "rounded-2xl border border-border/80 bg-surface p-5 shadow-xs",
+        "overflow-hidden rounded-2xl border border-[#e5e5e5] bg-white",
         className,
       )}
       data-money-card
     >
-      <div className="mb-4 flex items-start justify-between gap-3">
+      <div className="flex items-start justify-between gap-3 border-b border-[#e5e5e5] px-5 py-4">
         <div>
-          <p className="text-[11px] font-semibold tracking-[0.14em] text-muted-foreground uppercase">
+          <p className="text-[10px] font-semibold tracking-[0.16em] text-[#9b9b9b] uppercase">
             Money Engine
           </p>
-          <h3 className="font-display text-xl tracking-tight text-foreground">
+          <h3 className="mt-0.5 text-[16px] font-semibold tracking-tight text-[#191919]">
             Make Money With This Product
           </h3>
         </div>
-        <div className="rounded-lg bg-brand-soft px-3 py-2 text-right">
-          <p className="text-[10px] font-semibold tracking-[0.12em] text-muted-foreground uppercase">
+        <div className="rounded-xl border border-[#e5e5e5] bg-[#f7f7f7] px-3 py-2 text-right">
+          <p className="text-[10px] font-semibold tracking-[0.12em] text-[#9b9b9b] uppercase">
             Money Score
           </p>
-          <p className="text-lg font-semibold tabular-nums text-foreground">
+          <p className="text-lg font-semibold tabular-nums text-[#191919]">
             {!flags.moneyScore ||
             decision?.moneyScoreAvailability === "insufficient" ||
             decision?.moneyScore == null
-              ? "Insufficient Data"
+              ? "—"
               : `${decision.moneyScore}/100`}
           </p>
         </div>
       </div>
 
-      {error ? (
-        <p className="text-sm text-amber-800">{error}</p>
-      ) : decision ? (
-        <>
-          <div className="space-y-2 border-b border-border/60 pb-4">
-            <StatusRow
-              label="Amazon Seller"
-              ok={
-                amz?.status === "SELLABLE"
-                  ? true
-                  : amz?.status === "APPROVAL_REQUIRED"
-                    ? "warn"
-                    : false
-              }
-              detail={amz?.message || "Unknown"}
-            />
-            <StatusRow
-              label="eBay Seller"
-              ok={Boolean(ebay?.available)}
-              detail={ebay?.message || "Unknown"}
-            />
-            <StatusRow
-              label="Amazon Affiliate"
-              ok={aff?.configured ? (aff.available ? true : "warn") : false}
-              detail={aff?.message || "Not configured"}
-            />
-            <StatusRow
-              label="Estimated Profit"
-              ok={ebay?.netProfit.value != null && ebay.netProfit.value > 0}
-              detail={formatMoney(ebay?.netProfit.value ?? null)}
-            />
-          </div>
-
-          <div className="mt-4 space-y-2">
-            <p className="text-[11px] font-semibold tracking-[0.12em] text-muted-foreground uppercase">
-              Recommendation
-            </p>
-            <p className="text-base font-semibold text-foreground">
-              {decision.primaryAction}
-            </p>
-            {decision.secondaryAction ? (
-              <p className="text-sm text-muted-foreground">
-                Secondary: {decision.secondaryAction}
-              </p>
-            ) : null}
-            <ul className="mt-2 space-y-1">
-              {decision.reasons.slice(0, 4).map((reason) => (
-                <li
-                  key={reason.text}
-                  className="text-[12.5px] text-muted-foreground"
-                >
-                  • {reason.text}
-                </li>
-              ))}
-            </ul>
-            {decision.warnings.length ? (
-              <div className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-[12px] text-amber-900">
-                {decision.warnings[0]}
+      <div className="space-y-4 p-5">
+        {error ? (
+          <p className="text-sm text-amber-800">{error}</p>
+        ) : decision ? (
+          <AnimatePresence>
+            <motion.div
+              initial={reduce ? false : { opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="space-y-4"
+            >
+              <div className="space-y-2.5 rounded-xl border border-[#e5e5e5] bg-[#fafafa] p-3.5">
+                <StatusRow
+                  label="Amazon Seller"
+                  ok={
+                    amz?.status === "SELLABLE"
+                      ? true
+                      : amz?.status === "APPROVAL_REQUIRED"
+                        ? "warn"
+                        : false
+                  }
+                  detail={amz?.message || "Unknown"}
+                />
+                <StatusRow
+                  label="eBay Seller"
+                  ok={Boolean(ebay?.available)}
+                  detail={ebay?.message || "Unknown"}
+                />
+                <StatusRow
+                  label="Amazon Affiliate"
+                  ok={aff?.configured ? (aff.available ? true : "warn") : false}
+                  detail={aff?.message || "Not configured"}
+                />
+                <StatusRow
+                  label="Estimated Profit"
+                  ok={ebay?.netProfit.value != null && ebay.netProfit.value > 0}
+                  detail={formatMoney(ebay?.netProfit.value ?? null)}
+                />
               </div>
-            ) : null}
-          </div>
 
-          <div className="mt-5 flex flex-wrap gap-2">
-            <Link
-              href={productId ? `/listings/${productId}` : "/listings/new"}
-              className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border bg-background px-3 text-[12.5px] font-medium text-foreground"
-            >
-              <Store className="size-3.5" />
-              Publish
-            </Link>
-            <button
-              type="button"
-              disabled={!flags.affiliateEngine || busy === "affiliate"}
-              onClick={() => void createAffiliate()}
-              title={
-                flags.affiliateEngine
-                  ? "Create Amazon Associates link"
-                  : "Enable AFFILIATE_ENGINE_ENABLED"
-              }
-              className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border bg-background px-3 text-[12.5px] font-medium text-foreground disabled:opacity-40"
-            >
-              <ExternalLink className="size-3.5" />
-              Create Affiliate Link
-            </button>
-            <button
-              type="button"
-              disabled={!flags.smartLinks || busy === "affiliate"}
-              onClick={() => void createSmartOnly()}
-              title={
-                flags.smartLinks
-                  ? "Create tracked /go link"
-                  : "Enable SMART_LINKS_ENABLED"
-              }
-              className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border bg-background px-3 text-[12.5px] font-medium text-foreground disabled:opacity-40"
-            >
-              <Link2 className="size-3.5" />
-              Create Smart Link
-            </button>
-            <button
-              type="button"
-              disabled={!qrDataUrl && !smartPath}
-              onClick={() => {
-                if (qrDataUrl) {
-                  const w = window.open("");
-                  w?.document.write(
-                    `<img alt="QR" src="${qrDataUrl}" /><p>${smartPath || ""}</p>`,
-                  );
-                } else toast.message("Create a Smart Link first");
-              }}
-              className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border bg-background px-3 text-[12.5px] font-medium text-foreground disabled:opacity-40"
-            >
-              <QrCode className="size-3.5" />
-              Generate QR
-            </button>
-            <button
-              type="button"
-              disabled={busy === "watch"}
-              onClick={() => void watchProduct()}
-              className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border bg-background px-3 text-[12.5px] font-medium text-foreground disabled:opacity-40"
-            >
-              <Eye className="size-3.5" />
-              Watch Product
-            </button>
-          </div>
-          {smartPath ? (
-            <p className="mt-3 text-[12px] text-muted-foreground">
-              Smart link: <span className="font-medium text-foreground">{smartPath}</span>
-            </p>
-          ) : null}
-        </>
-      ) : null}
-    </section>
+              <div>
+                <p className="text-[10px] font-semibold tracking-[0.14em] text-[#9b9b9b] uppercase">
+                  Recommendation
+                </p>
+                <p className="mt-1 text-[15px] font-semibold text-[#191919]">
+                  {decision.primaryAction}
+                </p>
+                {decision.secondaryAction ? (
+                  <p className="mt-1 text-[13px] text-[#707070]">
+                    Secondary: {decision.secondaryAction}
+                  </p>
+                ) : null}
+                <ul className="mt-2 space-y-1">
+                  {decision.reasons.slice(0, 4).map((reason) => (
+                    <li key={reason.text} className="text-[12.5px] text-[#707070]">
+                      · {reason.text}
+                    </li>
+                  ))}
+                </ul>
+                {decision.warnings.length ? (
+                  <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[12px] text-amber-900">
+                    {decision.warnings[0]}
+                  </div>
+                ) : null}
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                <Link
+                  href={productId ? `/listings/${productId}` : "/listings/new"}
+                  className="inline-flex h-9 items-center gap-1.5 rounded-full bg-[#191919] px-3.5 text-[12.5px] font-semibold text-white"
+                >
+                  <Store className="size-3.5" />
+                  Publish
+                </Link>
+                <button
+                  type="button"
+                  disabled={!flags.affiliateEngine || busy === "affiliate"}
+                  onClick={() => void createAffiliate()}
+                  className="inline-flex h-9 items-center gap-1.5 rounded-full border border-[#e5e5e5] bg-white px-3.5 text-[12.5px] font-medium text-[#191919] disabled:opacity-40"
+                >
+                  <ExternalLink className="size-3.5" />
+                  Affiliate Link
+                </button>
+                <button
+                  type="button"
+                  disabled={!flags.smartLinks || busy === "affiliate"}
+                  onClick={() => void createSmartOnly()}
+                  className="inline-flex h-9 items-center gap-1.5 rounded-full border border-[#e5e5e5] bg-white px-3.5 text-[12.5px] font-medium text-[#191919] disabled:opacity-40"
+                >
+                  <Link2 className="size-3.5" />
+                  Smart Link
+                </button>
+                <button
+                  type="button"
+                  disabled={!qrDataUrl && !smartPath}
+                  onClick={() => {
+                    if (qrDataUrl) {
+                      const w = window.open("");
+                      w?.document.write(
+                        `<img alt="QR" src="${qrDataUrl}" /><p>${smartPath || ""}</p>`,
+                      );
+                    } else toast.message("Create a Smart Link first");
+                  }}
+                  className="inline-flex h-9 items-center gap-1.5 rounded-full border border-[#e5e5e5] bg-white px-3.5 text-[12.5px] font-medium text-[#191919] disabled:opacity-40"
+                >
+                  <QrCode className="size-3.5" />
+                  QR
+                </button>
+                <button
+                  type="button"
+                  disabled={busy === "watch"}
+                  onClick={() => void watchProduct()}
+                  className="inline-flex h-9 items-center gap-1.5 rounded-full border border-[#e5e5e5] bg-white px-3.5 text-[12.5px] font-medium text-[#191919] disabled:opacity-40"
+                >
+                  <Eye className="size-3.5" />
+                  Watch
+                </button>
+              </div>
+              {smartPath ? (
+                <p className="text-[12px] text-[#707070]">
+                  Smart link:{" "}
+                  <span className="font-medium text-[#191919]">{smartPath}</span>
+                </p>
+              ) : null}
+            </motion.div>
+          </AnimatePresence>
+        ) : null}
+      </div>
+    </motion.section>
   );
 }

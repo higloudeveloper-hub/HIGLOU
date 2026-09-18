@@ -37,20 +37,18 @@ export function WinnerMoneyBadge({
 
   const tone =
     decision.recommendation === "SELL" || decision.recommendation === "BOTH"
-      ? "bg-[#0f1111] text-[#f4c928]"
+      ? "border-[#191919] bg-[#191919] text-white"
       : decision.recommendation === "SKIP"
-        ? "bg-[#f3f3f3] text-[#565959]"
-        : "bg-[#232f3e] text-white";
+        ? "border-[#e5e5e5] bg-[#f7f7f7] text-[#707070]"
+        : "border-[#e5e5e5] bg-white text-[#191919]";
 
   const score =
-    decision.moneyScore == null
-      ? "—"
-      : String(decision.moneyScore);
+    decision.moneyScore == null ? "—" : String(decision.moneyScore);
 
   return (
     <span
       className={cn(
-        "inline-flex flex-col gap-0.5 rounded px-1.5 py-1 text-[10px] font-semibold tracking-wide",
+        "inline-flex flex-col gap-0.5 rounded-md border px-1.5 py-1 text-[10px] font-semibold tracking-wide",
         tone,
       )}
       title={[

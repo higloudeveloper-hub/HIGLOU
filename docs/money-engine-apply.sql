@@ -1,5 +1,5 @@
--- Higlou Money Engine — run once in Supabase SQL Editor
--- Safe to re-run (IF NOT EXISTS / DROP POLICY IF EXISTS)
+-- Higlou Money Engine - paste ALL of this into Supabase SQL Editor and Run
+-- Safe to re-run. ASCII only (no smart quotes / em dashes).
 
 create table if not exists public.affiliate_campaigns (
   id uuid primary key default gen_random_uuid(),
@@ -28,8 +28,7 @@ create table if not exists public.affiliate_links (
   unique (user_id, tracking_id)
 );
 
-create index if not exists affiliate_links_tracking_idx
-  on public.affiliate_links (tracking_id);
+create index if not exists affiliate_links_tracking_idx on public.affiliate_links (tracking_id);
 
 create table if not exists public.affiliate_clicks (
   id uuid primary key default gen_random_uuid(),
@@ -44,8 +43,7 @@ create table if not exists public.affiliate_clicks (
   created_at timestamptz not null default now()
 );
 
-create index if not exists affiliate_clicks_link_created_idx
-  on public.affiliate_clicks (link_id, created_at desc);
+create index if not exists affiliate_clicks_link_created_idx on public.affiliate_clicks (link_id, created_at desc);
 
 create table if not exists public.affiliate_conversions (
   id uuid primary key default gen_random_uuid(),
@@ -54,7 +52,7 @@ create table if not exists public.affiliate_conversions (
   provider_id text not null default 'amazon_associates',
   revenue numeric(12, 2),
   attributed boolean not null default false,
-  note text not null default 'Requires provider report — not invented',
+  note text not null default 'Requires provider report - not invented',
   occurred_at timestamptz,
   created_at timestamptz not null default now()
 );
@@ -88,8 +86,7 @@ create table if not exists public.money_scores (
   updated_at timestamptz not null default now()
 );
 
-create index if not exists money_scores_product_idx
-  on public.money_scores (user_id, product_id);
+create index if not exists money_scores_product_idx on public.money_scores (user_id, product_id);
 
 create table if not exists public.monetization_opportunities (
   id uuid primary key default gen_random_uuid(),
@@ -129,6 +126,7 @@ create table if not exists public.money_machine_settings (
   updated_at timestamptz not null default now()
 );
 
+-- RLS (full table names on one line - do not split)
 alter table public.affiliate_campaigns enable row level security;
 alter table public.affiliate_links enable row level security;
 alter table public.affiliate_clicks enable row level security;
@@ -139,29 +137,46 @@ alter table public.monetization_opportunities enable row level security;
 alter table public.product_watchlist enable row level security;
 alter table public.money_machine_settings enable row level security;
 
-drop policy if exists "affiliate_campaigns_own" on public.affiliate_campaigns;
-create policy "affiliate_campaigns_own" on public.affiliate_campaigns for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+drop policy if exists affiliate_campaigns_own on public.affiliate_campaigns;
+create policy affiliate_campaigns_own on public.affiliate_campaigns for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
-drop policy if exists "affiliate_links_own" on public.affiliate_links;
-create policy "affiliate_links_own" on public.affiliate_links for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+drop policy if exists affiliate_links_own on public.affiliate_links;
+create policy affiliate_links_own on public.affiliate_links for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
-drop policy if exists "affiliate_clicks_own" on public.affiliate_clicks;
-create policy "affiliate_clicks_own" on public.affiliate_clicks for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+drop policy if exists affiliate_clicks_own on public.affiliate_clicks;
+create policy affiliate_clicks_own on public.affiliate_clicks for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
-drop policy if exists "affiliate_conversions_own" on public.affiliate_conversions;
-create policy "affiliate_conversions_own" on public.affiliate_conversions for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+drop policy if exists affiliate_conversions_own on public.affiliate_conversions;
+create policy affiliate_conversions_own on public.affiliate_conversions for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
-drop policy if exists "smart_links_own" on public.smart_links;
-create policy "smart_links_own" on public.smart_links for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+drop policy if exists smart_links_own on public.smart_links;
+create policy smart_links_own on public.smart_links for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
-drop policy if exists "money_scores_own" on public.money_scores;
-create policy "money_scores_own" on public.money_scores for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+drop policy if exists money_scores_own on public.money_scores;
+create policy money_scores_own on public.money_scores for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
-drop policy if exists "monetization_opportunities_own" on public.monetization_opportunities;
-create policy "monetization_opportunities_own" on public.monetization_opportunities for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+drop policy if exists monetization_opportunities_own on public.monetization_opportunities;
+create policy monetization_opportunities_own on public.monetization_opportunities for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
-drop policy if exists "product_watchlist_own" on public.product_watchlist;
-create policy "product_watchlist_own" on public.product_watchlist for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+drop policy if exists product_watchlist_own on public.product_watchlist;
+create policy product_watchlist_own on public.product_watchlist for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
-drop policy if exists "money_machine_settings_own" on public.money_machine_settings;
-create policy "money_machine_settings_own" on public.money_machine_settings for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+drop policy if exists money_machine_settings_own on public.money_machine_settings;
+create policy money_machine_settings_own on public.money_machine_settings for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+-- Verify (should return 9 rows)
+select tablename
+from pg_tables
+where schemaname = 'public'
+  and tablename in (
+    'affiliate_campaigns',
+    'affiliate_links',
+    'affiliate_clicks',
+    'affiliate_conversions',
+    'smart_links',
+    'money_scores',
+    'monetization_opportunities',
+    'product_watchlist',
+    'money_machine_settings'
+  )
+order by tablename;

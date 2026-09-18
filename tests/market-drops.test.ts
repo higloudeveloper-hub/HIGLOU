@@ -13,8 +13,8 @@ function readRepo(rel: string) {
 }
 
 describe("higlou market catalog", () => {
-  it("has claimable drops with positive estimated spread", () => {
-    expect(MARKET_DROPS.length).toBeGreaterThanOrEqual(4);
+  it("stocks a dense floor of claimable drops", () => {
+    expect(MARKET_DROPS.length).toBeGreaterThanOrEqual(24);
     for (const drop of MARKET_DROPS) {
       expect(drop.id).toBeTruthy();
       expect(drop.sell).toBeGreaterThan(drop.buy);
@@ -27,14 +27,20 @@ describe("higlou market catalog", () => {
   it("wires market page, claim API, home popup, and nav", () => {
     expect(readRepo("app/market/page.tsx")).toMatch(/DropMarketStudio/);
     expect(readRepo("app/api/market/claim/route.ts")).toMatch(/market_drop_claimed/);
-    expect(readRepo("app/api/market/feed/route.ts")).toMatch(/MARKET_DROPS/);
+    expect(readRepo("app/api/market/feed/route.ts")).toMatch(/limit: 40/);
     expect(readRepo("app/home/page.tsx")).toMatch(/MarketDropPopup/);
     expect(readRepo("components/layout/app-sidebar.tsx")).toMatch(
       /href: "\/market"/,
     );
     expect(readRepo("components/market/drop-market.tsx")).toMatch(
-      /Add to my store/,
+      /Always/,
+    );
+    expect(readRepo("components/market/drop-market.tsx")).toMatch(
+      /Live floor/,
     );
     expect(readRepo("components/market/price-drop.tsx")).toMatch(/vs ask/);
+    expect(readRepo("lib/market/from-opportunity.ts")).toMatch(
+      /Always stock the floor/,
+    );
   });
 });

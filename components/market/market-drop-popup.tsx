@@ -6,12 +6,13 @@ import { useRouter } from "next/navigation";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { toast } from "sonner";
 import { X } from "lucide-react";
-import { pickMarketDrop, marketSpread, type MarketDrop } from "@/lib/market/catalog";
+import type { MarketDropPublic } from "@/lib/market/from-opportunity";
+import { marketSpread } from "@/lib/market/catalog";
 import { PriceDrop } from "@/components/market/price-drop";
 
 const STORAGE_KEY = "higlou_market_popup_v1";
-const COOLDOWN_MS = 3 * 60 * 60 * 1000; // 3h between controlled pops
-const SHOW_DELAY_MS = 4500;
+const COOLDOWN_MS = 2.5 * 60 * 60 * 1000;
+const SHOW_DELAY_MS = 3800;
 
 function money(n: number) {
   return new Intl.NumberFormat("en-US", {
@@ -41,41 +42,59 @@ function writeStored(data: Stored) {
   }
 }
 
-/**
- * Controlled home popup — rate-limited so every visit can monetize
- * without nagging. One drop at a time; dismiss = cooldown.
- */
+/** Controlled home popup — rotates hot drops from the live market feed. */
 export function MarketDropPopup() {
   const router = useRouter();
   const reduce = useReducedMotion() ?? false;
   const [open, setOpen] = useState(false);
-  const [drop, setDrop] = useState<MarketDrop | null>(null);
+  const [drop, setDrop] = useState<MarketDropPublic | null>(null);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     const stored = readStored();
     if (stored && Date.now() - stored.dismissedAt < COOLDOWN_MS) return;
 
+    let cancelled = false;
     const timer = window.setTimeout(() => {
-      const next = pickMarketDrop(Date.now());
-      if (stored?.lastDropId === next.id) {
-        setDrop(pickMarketDrop(Date.now() + 17));
-      } else {
-        setDrop(next);
-      }
-      setOpen(true);
+      void (async () => {
+        try {
+          const res = await fetch("/api/market/feed");
+          if (!res.ok || cancelled) return;
+          const body = (await res.json()) as { drops?: MarketDropPublic[] };
+          const list = body.drops || [];
+          if (!list.length) return;
+          const hot = list.filter((d) => d.heat === "hot" || d.real);
+          const pool = hot.length ? hot : list;
+          let next =
+            pool[Math.floor(Math.random() * pool.length)] || list[0]!;
+          if (stored?.lastDropId === next.id && pool.length > 1) {
+            next = pool.find((d) => d.id !== stored.lastDropId) || next;
+          }
+          if (cancelled) return;
+          setDrop(next);
+          setOpen(true);
+        } catch {
+          /* silent */
+        }
+      })();
     }, SHOW_DELAY_MS);
 
-    return () => window.clearTimeout(timer);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
   }, []);
 
-  const dismiss = useCallback((dropId?: string) => {
-    setOpen(false);
-    writeStored({
-      dismissedAt: Date.now(),
-      lastDropId: dropId || drop?.id,
-    });
-  }, [drop?.id]);
+  const dismiss = useCallback(
+    (dropId?: string) => {
+      setOpen(false);
+      writeStored({
+        dismissedAt: Date.now(),
+        lastDropId: dropId || drop?.id,
+      });
+    },
+    [drop?.id],
+  );
 
   const claim = useCallback(async () => {
     if (!drop) return;
@@ -105,8 +124,7 @@ export function MarketDropPopup() {
   }, [dismiss, drop, router]);
 
   if (!drop) return null;
-
-  const spread = marketSpread(drop);
+  const spread = drop.netProfit ?? marketSpread(drop);
 
   return (
     <AnimatePresence>
@@ -142,7 +160,7 @@ export function MarketDropPopup() {
               />
               <div className="absolute inset-0 bg-gradient-to-t from-[#0c0c0c]/50 to-transparent" />
               <span className="absolute top-3 left-3 bg-[#e85d04] px-2 py-0.5 text-[10px] font-bold tracking-[0.12em] text-white uppercase">
-                Drop
+                {drop.real ? "Winner" : "Live drop"}
               </span>
             </div>
             <div className="relative flex flex-col p-5 sm:p-6">
@@ -155,7 +173,7 @@ export function MarketDropPopup() {
                 <X className="size-4" />
               </button>
               <p className="text-[10px] font-semibold tracking-[0.2em] text-[#8a93a0] uppercase">
-                Higlou Market
+                Higlou Market · scanning
               </p>
               <h2 className="mt-2 pr-8 font-[family-name:var(--font-instrument-serif)] text-[26px] leading-tight text-[#0c0c0c]">
                 {drop.title}
@@ -174,8 +192,7 @@ export function MarketDropPopup() {
                 Est. keep{" "}
                 <span className="font-semibold tabular-nums text-[#0c0c0c]">
                   {money(spread)}
-                </span>{" "}
-                after cost
+                </span>
               </p>
               <div className="mt-5 flex flex-col gap-2">
                 <button
@@ -191,7 +208,7 @@ export function MarketDropPopup() {
                   onClick={() => dismiss(drop.id)}
                   className="flex h-10 items-center justify-center text-[12px] font-semibold tracking-wide text-[#0c0c0c] underline-offset-4 hover:underline"
                 >
-                  See all drops
+                  See full live floor
                 </Link>
               </div>
             </div>

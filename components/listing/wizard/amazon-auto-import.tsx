@@ -1130,11 +1130,18 @@ export function AmazonAutoImportPanel({
             : "This path buys inventory on Amazon, then you inspect and publish on eBay. eBay figures are active listings, not sold. Session spread only counts verified sold comps."}{" "}
           {mode === "amazon_to_ebay" ? (
             <>
-              Connect{" "}
+              eBay asking prices use Browse (app credentials or{" "}
               <a href="/settings#ebay-store" className="underline underline-offset-2">
-                eBay
-              </a>{" "}
-              for live asking prices.
+                Connect eBay
+              </a>
+              ). Amazon live cost/fees need{" "}
+              <a
+                href="/settings#amazon-store"
+                className="underline underline-offset-2"
+              >
+                Connect Amazon
+              </a>
+              .
             </>
           ) : mode === "amazon" ? (
             <>
@@ -1163,10 +1170,14 @@ export function AmazonAutoImportPanel({
               .
             </>
           )}{" "}
-          Add <span className="font-medium">KEEPA_API_KEY</span> on the server for
-          live BSR and sales history. Keepa is not connected until that key is set.
+          Add <span className="font-medium">KEEPA_API_KEY</span> on Vercel for
+          live BSR, buy-box history, and priced winners. Without Keepa the board
+          stays empty even after analyzing many ASINs.
           {sources && !sources.keepa
-            ? " Keepa is not connected. Live scan rotates product types across categories."
+            ? " Keepa is not connected."
+            : ""}
+          {sources && !sources.ebayLive
+            ? " No eBay asks priced yet this round."
             : ""}
         </p>
       )}

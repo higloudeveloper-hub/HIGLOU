@@ -4,7 +4,10 @@ import {
   getAmazonConnectionPublic,
   getValidAmazonAccessToken,
 } from "@/lib/amazon/sp-oauth";
-import { getValidAccessToken } from "@/lib/ebay/oauth";
+import {
+  getEbayApplicationAccessToken,
+  getValidAccessToken,
+} from "@/lib/ebay/oauth";
 
 export async function loadWinnerMarketTokens(
   supabase: SupabaseClient,
@@ -35,7 +38,11 @@ export async function loadWinnerMarketTokens(
   try {
     out.ebayToken = await getValidAccessToken(supabase, userId);
   } catch {
-    /* eBay live prices are optional */
+    /* Fall back to application token for Browse asking prices */
+  }
+  if (!out.ebayToken) {
+    const app = await getEbayApplicationAccessToken().catch(() => null);
+    if (app) out.ebayToken = app;
   }
   return out;
 }

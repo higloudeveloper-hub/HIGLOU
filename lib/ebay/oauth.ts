@@ -124,6 +124,41 @@ export async function refreshAccessToken(refreshToken: string) {
   );
 }
 
+/** Browse / public Buy APIs — no seller login required. */
+const EBAY_APPLICATION_SCOPES = [
+  "https://api.ebay.com/oauth/api_scope",
+] as const;
+
+let cachedAppToken: { token: string; expiresAt: number } | null = null;
+
+/**
+ * Application access token for eBay Browse (active asking prices).
+ * Uses client credentials — does not require Connect eBay.
+ */
+export async function getEbayApplicationAccessToken(): Promise<string | null> {
+  const cfg = getEbayConfig();
+  if (!cfg.clientId || !cfg.clientSecret) return null;
+  if (cachedAppToken && cachedAppToken.expiresAt > Date.now() + 60_000) {
+    return cachedAppToken.token;
+  }
+  try {
+    const tokens = await postToken(
+      new URLSearchParams({
+        grant_type: "client_credentials",
+        scope: EBAY_APPLICATION_SCOPES.join(" "),
+      }),
+    );
+    const ttlMs = Math.max(60, Number(tokens.expires_in || 7200) - 60) * 1000;
+    cachedAppToken = {
+      token: tokens.access_token,
+      expiresAt: Date.now() + ttlMs,
+    };
+    return tokens.access_token;
+  } catch {
+    return null;
+  }
+}
+
 export async function fetchEbayUserIdentity(accessToken: string): Promise<{
   userId: string;
   username: string;

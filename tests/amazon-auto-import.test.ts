@@ -430,6 +430,8 @@ describe("Amazon auto-import stays an eBay draft flow", () => {
     expect(panel).toMatch(/Product name, ASIN, or Amazon link/);
     expect(panel).toMatch(/Find opportunities/);
     expect(panel).toMatch(/Keepa is not connected/);
+    expect(panel).toMatch(/KEEPA_API_KEY/);
+    expect(panel).toMatch(/Browse \(app credentials/);
     expect(panel).toMatch(/seed: nextRound - 1/);
     expect(modes).toMatch(/Import \$\{count\} ready for eBay/);
     expect(modes).toMatch(/Import \$\{count\} for Amazon/);
@@ -458,6 +460,12 @@ describe("Amazon auto-import stays an eBay draft flow", () => {
     expect(workspace).not.toMatch(/importAmazonWinners/);
     expect(workspace).not.toMatch(/onAmazonAutoImport/);
     expect(search).toMatch(/loadWinnerMarketTokens/);
+    expect(readRepo("lib/amazon/winner-tokens.ts")).toMatch(
+      /getEbayApplicationAccessToken/,
+    );
+    expect(readRepo("lib/ebay/oauth.ts")).toMatch(
+      /grant_type: "client_credentials"/,
+    );
     expect(search).toMatch(/limit: body\.limit/);
     expect(search).toMatch(/onlySellable/);
     expect(search).toMatch(/excludeAsins/);

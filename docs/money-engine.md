@@ -21,10 +21,20 @@ Apply migration:
 
 | Path | Role |
 |------|------|
-| `/money` | Money Center dashboard |
+| `/money` | Money Center + Autopilot (piloto) |
+| `/winners` | Find Winners — feed the machine |
 | `/go/[id]` | Smart link redirect + click log |
 | Review listing | Product Money Card |
-| `/api/money/*` | Recommendation, score, affiliate, QR, dashboard, watchlist |
+| `/api/money/*` | Recommendation, score, affiliate, QR, dashboard, watchlist, autopilot |
+
+## Autopilot (Money Machine)
+
+1. Open **Find Winners** and run a live scan (fills opportunity ledger).
+2. Open **Money Center** → flip **ENCENDIDO** → **Run cycle**.
+3. Review the ranked money queue (SELL / BOTH / AFFILIATE / WATCH).
+4. Import / publish yourself — Autopilot v1 does **not** buy or publish alone.
+
+Env: `AUTOPILOT_ENABLED=true` (requires `MONEY_ENGINE_ENABLED=true`).
 
 ## Rules
 

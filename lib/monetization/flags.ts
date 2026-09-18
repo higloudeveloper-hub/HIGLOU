@@ -20,6 +20,8 @@ export type MonetizationFlags = {
   affiliateEngine: boolean;
   smartLinks: boolean;
   moneyScore: boolean;
+  /** Phase 5 — rank/queue money actions. Still never blind-publishes. */
+  autopilot: boolean;
 };
 
 export function getMonetizationFlags(): MonetizationFlags {
@@ -29,6 +31,7 @@ export function getMonetizationFlags(): MonetizationFlags {
     affiliateEngine: moneyEngine && envFlag("AFFILIATE_ENGINE_ENABLED", false),
     smartLinks: moneyEngine && envFlag("SMART_LINKS_ENABLED", false),
     moneyScore: moneyEngine && envFlag("MONEY_SCORE_ENABLED", true),
+    autopilot: moneyEngine && envFlag("AUTOPILOT_ENABLED", true),
   };
 }
 

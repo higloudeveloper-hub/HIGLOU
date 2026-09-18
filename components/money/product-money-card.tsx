@@ -4,7 +4,8 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
 import { ExternalLink, Eye, Link2, QrCode, Store } from "lucide-react";
-import type { MonetizationDecision } from "@/lib/monetization/types";
+import type { MonetizationDecision, MonetizationInput } from "@/lib/monetization/types";
+import { takeOpportunityMoneySeed } from "@/lib/monetization/from-opportunity";
 import { cn } from "@/lib/utils";
 
 function formatMoney(value: number | null | undefined) {
@@ -67,13 +68,29 @@ export function ProductMoneyCard({
     let cancelled = false;
     void (async () => {
       try {
+        const seed: MonetizationInput | null = takeOpportunityMoneySeed(asin);
         const res = await fetch("/api/money/recommendation", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             productId: productId || undefined,
-            asin: asin || undefined,
-            ebayPrice: ebayPrice ?? undefined,
+            asin: asin || seed?.asin || undefined,
+            ebayPrice: ebayPrice ?? seed?.ebayPrice ?? undefined,
+            amazonPrice: seed?.amazonPrice ?? undefined,
+            cost: seed?.cost ?? undefined,
+            amazonFees: seed?.amazonFees ?? undefined,
+            ebayFees: seed?.ebayFees ?? undefined,
+            shipping: seed?.shipping ?? undefined,
+            packing: seed?.packing ?? undefined,
+            amazonEligibility: seed?.amazonEligibility ?? undefined,
+            amazonEligibilityMessage: seed?.amazonEligibilityMessage ?? undefined,
+            demandScore: seed?.demandScore ?? undefined,
+            sellerCount: seed?.sellerCount ?? undefined,
+            opportunityScore: seed?.opportunityScore ?? undefined,
+            opportunityVerdict: seed?.opportunityVerdict ?? undefined,
+            soldVerified: seed?.soldVerified ?? undefined,
+            title: seed?.title ?? undefined,
+            brand: seed?.brand ?? undefined,
           }),
         });
         if (res.status === 404) {

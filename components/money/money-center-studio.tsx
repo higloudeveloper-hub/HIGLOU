@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { AppShell } from "@/components/layout/app-shell";
+import { AutopilotPanel } from "@/components/money/autopilot-panel";
 import { cn } from "@/lib/utils";
 
 type DashboardPayload = {
@@ -139,6 +140,8 @@ export function MoneyCenterStudio() {
         {error ? (
           <p className="text-sm text-amber-800">{error}</p>
         ) : null}
+
+        <AutopilotPanel />
 
         <section>
           <h2 className="mb-3 font-display text-2xl tracking-tight">Revenue</h2>

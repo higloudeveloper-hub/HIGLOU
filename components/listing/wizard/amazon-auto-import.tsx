@@ -29,6 +29,8 @@ import {
 import { cn } from "@/lib/utils";
 import { usePrefersReducedMotion } from "@/components/listing/wizard/use-prefers-reduced-motion";
 import { toEbayListingTitle } from "@/lib/ebay/listing-helpers";
+import { WinnerMoneyBadge } from "@/components/money/winner-money-badge";
+import { stashOpportunityMoneySeed } from "@/lib/monetization/from-opportunity";
 
 type WinnerSources = {
   keepa?: boolean;
@@ -332,6 +334,7 @@ function WinnerRow({
   checked,
   fresh,
   locked,
+  moneyEnabled,
   onToggle,
 }: {
   hit: OpportunityProduct;
@@ -339,6 +342,7 @@ function WinnerRow({
   checked: boolean;
   fresh: boolean;
   locked: boolean;
+  moneyEnabled: boolean;
   onToggle: () => void;
 }) {
   const hero = heroFor(hit, mode);
@@ -431,6 +435,9 @@ function WinnerRow({
         {hit.ebayActiveCount ?? "—"}
       </td>
       <td className="whitespace-nowrap px-2 tabular-nums">{hit.score}</td>
+      <td className="px-2 py-2">
+        <WinnerMoneyBadge hit={hit} enabled={moneyEnabled} />
+      </td>
       <td className="px-2 py-2">
         <span className="flex flex-wrap gap-1">
           {chips.map((chip) => (
@@ -530,6 +537,7 @@ export function AmazonAutoImportPanel({
   const [learn, setLearn] = useState<NicheLearnRow[]>([]);
   const [analyzedTotal, setAnalyzedTotal] = useState(0);
   const [hydrated, setHydrated] = useState(false);
+  const [moneyEnabled, setMoneyEnabled] = useState(false);
   const liveHitsRef = useRef<OpportunityProduct[]>([]);
   const liveOnRef = useRef(true);
   const modeRef = useRef(mode);
@@ -563,6 +571,23 @@ export function AmazonAutoImportPanel({
   useEffect(() => {
     liveHitsRef.current = liveHits;
   }, [liveHits]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch("/api/money/status");
+        if (!res.ok) return;
+        const body = (await res.json()) as { enabled?: boolean };
+        if (!cancelled) setMoneyEnabled(Boolean(body.enabled));
+      } catch {
+        /* Money Engine off / unauthenticated */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     liveOnRef.current = liveOn;
@@ -783,6 +808,7 @@ export function AmazonAutoImportPanel({
     setImporting(true);
     setError(null);
     try {
+      for (const hit of selected) stashOpportunityMoneySeed(hit);
       const ok = await onImport(
         selected.map((hit) => hit.asin),
         mode,
@@ -1122,6 +1148,7 @@ export function AmazonAutoImportPanel({
                 <th className="px-2 py-2">BSR</th>
                 <th className="px-2 py-2">eBay n</th>
                 <th className="px-2 py-2">Score</th>
+                {moneyEnabled ? <th className="px-2 py-2">Money</th> : null}
                 <th className="px-2 py-2">Flags</th>
               </tr>
             </thead>
@@ -1135,12 +1162,13 @@ export function AmazonAutoImportPanel({
                     checked={picked.includes(hit.asin)}
                     fresh={freshAsins.includes(hit.asin)}
                     locked={locked}
+                    moneyEnabled={moneyEnabled}
                     onToggle={() => toggleAsin(hit.asin)}
                   />
                 ))
               ) : (
                 <tr className="border-b border-[#e3e6e6] bg-white">
-                  <td className="px-4 py-8" colSpan={12}>
+                  <td className="px-4 py-8" colSpan={moneyEnabled ? 13 : 12}>
                     <p className="text-[15px] font-semibold text-[#0f1111]">
                       {liveOn && view === "live"
                         ? `Analyzing ${scanLabel.toLowerCase()} — candidates need verified sold comps`

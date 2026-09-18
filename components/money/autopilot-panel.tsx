@@ -2,23 +2,23 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { toast } from "sonner";
-import { Loader2, Power } from "lucide-react";
+import { Loader2, Power, Radar } from "lucide-react";
+import { LiveDot } from "@/components/ui/studio";
 import { cn } from "@/lib/utils";
 import type { AutopilotAction, AutopilotCycleResult } from "@/lib/monetization/autopilot";
 
 const PILOT_KEY = "higlou.autopilot.on";
+const EASE = [0.22, 1, 0.36, 1] as const;
 
 function money(n: number | null | undefined) {
   if (n == null || !Number.isFinite(n)) return "—";
   return `$${n.toFixed(2)}`;
 }
 
-/**
- * One-switch Money Machine control.
- * ON = ready to run ranking cycles. Run = execute one safe autopilot pass.
- */
 export function AutopilotPanel() {
+  const reduce = useReducedMotion() ?? false;
   const [on, setOn] = useState(false);
   const [available, setAvailable] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -50,11 +50,7 @@ export function AutopilotPanel() {
     } catch {
       /* ignore */
     }
-    toast.message(
-      next
-        ? "Autopilot armed — press Run cycle to rank money opportunities"
-        : "Autopilot off",
-    );
+    toast.message(next ? "Piloto armado" : "Piloto apagado");
   };
 
   const runCycle = useCallback(async () => {
@@ -74,7 +70,6 @@ export function AutopilotPanel() {
       const body = (await res.json()) as AutopilotCycleResult & {
         error?: string;
         emptyHint?: string | null;
-        ok?: boolean;
       };
       if (!res.ok) {
         toast.error(body.error || "Autopilot cycle failed");
@@ -84,8 +79,8 @@ export function AutopilotPanel() {
       setEmptyHint(body.emptyHint || null);
       toast.success(
         body.queued
-          ? `Autopilot queued ${body.queued} money actions`
-          : "Autopilot ran — no strong actions yet",
+          ? `${body.queued} acciones en cola`
+          : "Ciclo listo — sin acciones fuertes aún",
       );
     } catch {
       toast.error("Autopilot cycle failed");
@@ -97,122 +92,148 @@ export function AutopilotPanel() {
   if (!available) return null;
 
   return (
-    <section className="overflow-hidden rounded-3xl border border-border/80 bg-[#141414] text-white shadow-xs">
-      <div className="flex flex-col gap-6 p-6 sm:flex-row sm:items-center sm:justify-between">
+    <motion.section
+      initial={reduce ? false : { opacity: 0, y: 18 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.55, ease: EASE }}
+      className="relative overflow-hidden rounded-[32px] bg-[#0e0e0e] text-white"
+    >
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_20%_0%,rgba(244,201,40,0.22),transparent_50%)]" />
+      {!reduce ? (
+        <motion.div
+          className="pointer-events-none absolute -right-16 top-0 size-56 rounded-full bg-[#f4c928]/10 blur-3xl"
+          animate={{ opacity: [0.3, 0.55, 0.3], x: [0, -12, 0] }}
+          transition={{ duration: 5, repeat: Infinity, ease: "easeInOut" }}
+        />
+      ) : null}
+
+      <div className="relative flex flex-col gap-8 p-6 sm:p-8 lg:flex-row lg:items-center lg:justify-between">
         <div className="max-w-xl">
-          <p className="text-[11px] font-semibold tracking-[0.18em] text-[#f4c928] uppercase">
+          <p className="flex items-center gap-2 text-[11px] font-semibold tracking-[0.2em] text-[#f4c928] uppercase">
+            <LiveDot />
             Money Machine
           </p>
-          <h2 className="mt-1 font-display text-3xl tracking-tight sm:text-4xl">
-            Piloto automático
+          <h2 className="mt-3 font-display text-[2.75rem] leading-[0.95] tracking-tight sm:text-[3.4rem]">
+            Piloto
+            <span className="italic text-[#f4c928]"> automático</span>
           </h2>
-          <p className="mt-2 text-sm text-white/70">
-            Un interruptor. Higlou busca oportunidades en los mercados que ya
-            tienes (Amazon → eBay y ledger), las ordena por dinero, y te deja la
-            cola lista. No compra ni publica solo — todavía aprende contigo.
+          <p className="mt-4 text-[15px] leading-relaxed text-white/60">
+            Un interruptor. Higlou ordena oportunidades de tus mercados, arma la
+            cola de dinero y aprende. No compra ni publica solo — todavía.
           </p>
+          <div className="mt-5 flex flex-wrap gap-2 text-[11px] text-white/45">
+            <span className="rounded-full border border-white/10 px-2.5 py-1">Find Winners</span>
+            <span className="rounded-full border border-white/10 px-2.5 py-1">Amazon → eBay</span>
+            <span className="rounded-full border border-white/10 px-2.5 py-1">Rank SELL / AFF</span>
+          </div>
         </div>
 
-        <div className="flex flex-col items-stretch gap-3 sm:items-end">
+        <div className="flex w-full max-w-sm flex-col gap-3">
           <button
             type="button"
             onClick={() => toggle(!on)}
             className={cn(
-              "inline-flex h-14 items-center justify-center gap-3 rounded-2xl px-6 text-base font-semibold transition",
-              on
-                ? "bg-[#f4c928] text-[#141414]"
-                : "bg-white/10 text-white hover:bg-white/15",
+              "group relative flex h-16 items-center justify-between overflow-hidden rounded-2xl px-5 text-left transition",
+              on ? "bg-[#f4c928] text-[#141414]" : "bg-white/8 text-white hover:bg-white/12",
             )}
           >
-            <Power className={cn("size-5", on && "text-[#141414]")} />
-            {on ? "ENCENDIDO" : "APAGADO"}
+            {!reduce && on ? (
+              <motion.span
+                className="absolute inset-y-0 w-1/3 bg-white/25"
+                animate={{ left: ["-30%", "110%"] }}
+                transition={{ duration: 1.8, repeat: Infinity, ease: "linear" }}
+              />
+            ) : null}
+            <span className="relative">
+              <span className="block text-[11px] font-semibold tracking-[0.16em] uppercase opacity-70">
+                Estado
+              </span>
+              <span className="block text-lg font-semibold">
+                {on ? "ENCENDIDO" : "APAGADO"}
+              </span>
+            </span>
+            <Power className="relative size-6 opacity-80" />
           </button>
+
           <button
             type="button"
             disabled={!on || busy}
             onClick={() => void runCycle()}
-            className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-white/20 px-4 text-sm font-medium text-white disabled:opacity-40"
+            className="inline-flex h-12 items-center justify-center gap-2 rounded-2xl border border-white/15 text-sm font-semibold disabled:opacity-35"
           >
-            {busy ? <Loader2 className="size-4 animate-spin" /> : null}
+            {busy ? <Loader2 className="size-4 animate-spin" /> : <Radar className="size-4" />}
             Run cycle
           </button>
           <Link
             href="/winners"
-            className="text-center text-[12px] text-[#f4c928] underline-offset-2 hover:underline"
+            className="text-center text-[12px] font-medium text-[#f4c928] underline-offset-4 hover:underline"
           >
-            Abrir Find Winners (alimentar la máquina)
+            Alimentar con Find Winners
           </Link>
         </div>
       </div>
 
-      <div className="border-t border-white/10 px-6 py-4">
-        <div className="grid gap-2 text-[12px] text-white/60 sm:grid-cols-2">
-          <p>✓ Escanea ledger / winners ya encontrados</p>
-          <p>✓ Rank SELL / AFFILIATE / BOTH / WATCH</p>
-          <p>✓ Guarda aprendizaje para el siguiente ciclo</p>
-          <p>✗ No publica ni compra inventario solo</p>
-        </div>
-      </div>
-
-      {emptyHint ? (
-        <div className="border-t border-amber-500/30 bg-amber-500/10 px-6 py-3 text-sm text-amber-100">
-          {emptyHint}
-        </div>
-      ) : null}
+      <AnimatePresence>
+        {emptyHint ? (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            className="relative border-t border-amber-400/20 bg-amber-400/10 px-6 py-3 text-sm text-amber-50"
+          >
+            {emptyHint}
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
 
       {result?.actions?.length ? (
-        <div className="border-t border-white/10">
+        <div className="relative border-t border-white/10">
           <div className="flex items-center justify-between px-6 py-3">
-            <p className="text-[11px] font-semibold tracking-[0.14em] text-white/50 uppercase">
-              Cola de dinero · {result.queued} acciones · {result.scanned}{" "}
-              escaneados
+            <p className="text-[11px] font-semibold tracking-[0.16em] text-white/40 uppercase">
+              Cola · {result.queued} · {result.scanned} escaneados
             </p>
           </div>
-          <ul className="divide-y divide-white/10">
-            {result.actions.map((action: AutopilotAction) => (
-              <li
+          <ul className="divide-y divide-white/8">
+            {result.actions.map((action: AutopilotAction, i) => (
+              <motion.li
                 key={action.asin}
-                className="flex flex-wrap items-center gap-3 px-6 py-3"
+                initial={reduce ? false : { opacity: 0, x: 12 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: 0.04 * i, duration: 0.35, ease: EASE }}
+                className="flex flex-wrap items-center gap-3 px-6 py-3.5"
               >
                 {action.imageUrl ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
                     src={action.imageUrl}
                     alt=""
-                    className="size-12 rounded-lg bg-white object-contain p-1"
+                    className="size-12 rounded-xl bg-white object-contain p-1"
                   />
                 ) : (
-                  <span className="size-12 rounded-lg bg-white/10" />
+                  <span className="size-12 rounded-xl bg-white/8" />
                 )}
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium">{action.title}</p>
-                  <p className="text-[12px] text-white/50">
-                    {action.asin}
-                    {action.brand ? ` · ${action.brand}` : ""} · score{" "}
-                    {action.moneyScore ?? "—"} · keep{" "}
+                  <p className="text-[12px] text-white/45">
+                    {action.asin} · score {action.moneyScore ?? "—"} · keep{" "}
                     {money(action.estimatedProfit)}
                   </p>
-                  <p className="text-[12px] text-[#f4c928]">
-                    {action.primaryAction}
-                  </p>
+                  <p className="text-[12px] text-[#f4c928]">{action.primaryAction}</p>
                 </div>
-                <span className="rounded-md bg-white/10 px-2 py-1 text-[11px] font-semibold tracking-wide">
+                <span className="rounded-lg bg-white/8 px-2 py-1 text-[10px] font-semibold tracking-wide">
                   {action.recommendation}
                 </span>
                 <Link
                   href="/winners"
-                  className="rounded-lg bg-[#f4c928] px-3 py-2 text-[12px] font-semibold text-[#141414]"
+                  className="rounded-xl bg-[#f4c928] px-3 py-2 text-[12px] font-semibold text-[#141414]"
                 >
                   Ir
                 </Link>
-              </li>
+              </motion.li>
             ))}
           </ul>
-          <p className="px-6 py-3 text-[11px] text-white/40">
-            {result.learningNote}
-          </p>
         </div>
       ) : null}
-    </section>
+    </motion.section>
   );
 }

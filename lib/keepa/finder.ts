@@ -23,7 +23,7 @@ export async function keepaFindAsins(opts: {
   rootCategory?: string;
   title?: string;
   perPage?: number;
-  mode?: "amazon" | "amazon_to_ebay" | "supplier";
+  mode?: "amazon" | "amazon_to_ebay" | "supplier" | string;
 }): Promise<string[]> {
   const mode = opts.mode || "amazon_to_ebay";
   const selection: Record<string, unknown> = {

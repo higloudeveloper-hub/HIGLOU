@@ -1,4 +1,21 @@
-export type OpportunityMode = "amazon" | "amazon_to_ebay" | "supplier";
+export type OpportunityMode =
+  | "amazon"
+  | "amazon_to_ebay"
+  | "supplier"
+  | "ebay_to_amazon"
+  | "homedepot_to_ebay"
+  | "homedepot_to_amazon"
+  | "walmart_to_ebay"
+  | "walmart_to_amazon";
+
+export type OpportunitySourceMarket =
+  | "amazon"
+  | "ebay"
+  | "homedepot"
+  | "walmart"
+  | "supplier";
+
+export type OpportunityDestMarket = "amazon" | "ebay" | "both";
 
 export type EligibilityStatus =
   | "SELLABLE"
@@ -45,6 +62,9 @@ export type OpportunityProduct = {
   ebayCount: number | null;
   opportunity: "now" | "watch" | "thin";
   mode: OpportunityMode;
+  sourceMarket: OpportunitySourceMarket;
+  sourceId: string;
+  destMarket: OpportunityDestMarket;
   eligibility: EligibilityStatus;
   eligibilityMessage: string;
   score: number;
@@ -103,6 +123,7 @@ export type OpportunitySources = {
   amazonCatalog: boolean;
   amazonFees: boolean;
   ebayLive: boolean;
+  retailSearch?: boolean;
 };
 
 export const OPPORTUNITY_RULES = {
@@ -132,3 +153,14 @@ export const OPPORTUNITY_RULES = {
   defaultOutboundShip: 7.5,
   defaultPacking: 0.75,
 } as const;
+
+export const ALL_OPPORTUNITY_MODES: OpportunityMode[] = [
+  "amazon_to_ebay",
+  "ebay_to_amazon",
+  "homedepot_to_ebay",
+  "homedepot_to_amazon",
+  "walmart_to_ebay",
+  "walmart_to_amazon",
+  "amazon",
+  "supplier",
+];

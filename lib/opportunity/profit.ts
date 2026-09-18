@@ -68,13 +68,18 @@ export function estimateEbayReferralFee(salePrice: number | null): number | null
   return money(salePrice * 0.1365 + 0.3);
 }
 
+import type { OpportunityMode } from "@/lib/opportunity/types";
+import { destMarketFor } from "@/lib/opportunity/markets";
+
 /** Session cash: verified sold comps only. Active eBay asks never count. */
 export function sessionKeepAmount(opts: {
-  mode: "amazon" | "amazon_to_ebay" | "supplier";
+  mode: OpportunityMode;
   soldVerified?: boolean;
   netProfit?: number | null;
+  hypotheticalKeep?: number | null;
   cost?: number | null;
   amazonPrice?: number | null;
+  buyBoxPrice?: number | null;
   amazonFees?: number | null;
   ebayFees?: number | null;
   ebayActiveMedian?: number | null;
@@ -87,10 +92,12 @@ export function sessionKeepAmount(opts: {
 
 /** Hypothetical keep if an active ask actually sold. Never session cash. */
 export function estimatedKeepAmount(opts: {
-  mode: "amazon" | "amazon_to_ebay" | "supplier";
+  mode: OpportunityMode;
   netProfit?: number | null;
+  hypotheticalKeep?: number | null;
   cost?: number | null;
   amazonPrice?: number | null;
+  buyBoxPrice?: number | null;
   amazonFees?: number | null;
   ebayFees?: number | null;
   ebayActiveMedian?: number | null;
@@ -100,13 +107,17 @@ export function estimatedKeepAmount(opts: {
   if (opts.netProfit != null && Number.isFinite(opts.netProfit)) {
     return money(opts.netProfit);
   }
+  if (opts.hypotheticalKeep != null && Number.isFinite(opts.hypotheticalKeep)) {
+    return money(opts.hypotheticalKeep);
+  }
+  const dest = destMarketFor(opts.mode);
   const cost = opts.cost ?? opts.amazonPrice ?? null;
   const sale =
-    opts.mode === "amazon"
-      ? opts.amazonPrice ?? null
+    dest === "amazon"
+      ? opts.buyBoxPrice ?? opts.amazonPrice ?? opts.salePrice ?? null
       : opts.ebayActiveMedian ?? opts.ebayPrice ?? opts.salePrice ?? null;
   const fee =
-    opts.mode === "amazon"
+    dest === "amazon"
       ? opts.amazonFees ?? null
       : opts.ebayFees ?? estimateEbayReferralFee(sale);
   return estimateNetProfit({

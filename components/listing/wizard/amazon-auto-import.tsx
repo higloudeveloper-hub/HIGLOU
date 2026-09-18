@@ -58,6 +58,10 @@ function pct(n: number | null | undefined) {
   return `${Math.round(n * 100)}%`;
 }
 
+function hitKey(hit: { asin?: string; sourceId?: string }): string {
+  return String(hit.asin || hit.sourceId || "").trim();
+}
+
 function signedMoney(n: number) {
   return `${n >= 0 ? "+" : "−"}$${Math.abs(n).toFixed(2)}`;
 }
@@ -65,6 +69,16 @@ function signedMoney(n: number) {
 function eligibilityCopy(hit: OpportunityProduct, mode: OpportunityMode) {
   if (mode === "amazon_to_ebay") {
     return "Verify sales → Calculate landed cost → Buy inventory → Inspect → Publish";
+  }
+  if (mode === "ebay_to_amazon") {
+    return hit.ebayMatchedByGtin
+      ? "Exact GTIN match to Amazon catalog"
+      : "Needs GTIN / UPC to confirm exact Amazon match";
+  }
+  if (mode.startsWith("homedepot_") || mode.startsWith("walmart_")) {
+    return hit.identityConfidence >= 97
+      ? `Exact identity · ${hit.identityBasis || "UPC"}`
+      : "UPC required for a confirmed winner — weak matches stay candidates";
   }
   if (hit.eligibility === "SELLABLE") return "Your Amazon account can sell this";
   if (hit.eligibility === "APPROVAL_REQUIRED") return "Needs Amazon approval";
@@ -83,6 +97,41 @@ function sessionKeep(hit: OpportunityProduct, mode: OpportunityMode) {
 
 function heroFor(hit: OpportunityProduct, mode: OpportunityMode) {
   const ebay = hit.ebayActiveMedian ?? hit.ebayPrice;
+  const amazon = hit.buyBoxPrice ?? hit.amazonPrice;
+  const cost = hit.cost ?? hit.amazonPrice;
+  const hypo = hit.hypotheticalKeep;
+
+  if (
+    mode === "ebay_to_amazon" ||
+    mode === "homedepot_to_amazon" ||
+    mode === "walmart_to_amazon"
+  ) {
+    return {
+      kicker: "Est. Amazon profit",
+      value:
+        hypo != null
+          ? signedMoney(hypo)
+          : hit.soldVerified && hit.netProfit != null
+            ? signedMoney(hit.netProfit)
+            : "Unverified",
+      amount: hypo ?? hit.netProfit,
+      detail: hit.ebayMatchedByGtin || hit.identityConfidence >= 97
+        ? `Exact · Cost ${money(cost)} → Amazon ${money(amazon)}`
+        : `CANDIDATE — needs exact UPC · Cost ${money(cost)} → Amazon ${money(amazon)}`,
+    };
+  }
+
+  if (mode === "homedepot_to_ebay" || mode === "walmart_to_ebay") {
+    return {
+      kicker: "Est. eBay profit",
+      value: hypo != null ? signedMoney(hypo) : "Unverified",
+      amount: hypo,
+      detail: hit.ebayMatchedByGtin
+        ? `Exact GTIN · Cost ${money(cost)} → eBay ask ${money(ebay)}`
+        : `CANDIDATE — UPC match required · Cost ${money(cost)} → eBay ${money(ebay)}`,
+    };
+  }
+
   if (mode !== "amazon" && !hit.soldVerified) {
     return {
       kicker: "Est. eBay profit",
@@ -385,11 +434,14 @@ function WinnerRow({
       </td>
       <td className="max-w-[320px] py-2 pr-3">
         <p className="line-clamp-2 font-medium leading-snug text-[#007185]">
-          {toEbayListingTitle(hit.title) || hit.asin}
+          {toEbayListingTitle(hit.title) || hit.asin || hit.sourceId}
         </p>
         <p className="mt-0.5 truncate font-mono text-[11px] text-[#565959]">
-          {hit.asin}
+          {hit.asin || hit.sourceId}
           {hit.brand ? ` · ${hit.brand}` : ""}
+          {hit.sourceMarket && hit.sourceMarket !== "amazon"
+            ? ` · ${hit.sourceMarket}`
+            : ""}
           {fresh ? " · Just found" : ""}
         </p>
         {mode !== "amazon" ? (
@@ -507,6 +559,9 @@ export function AmazonAutoImportPanel({
       imageUrl: string;
       amazonPrice: number | null;
       ebayPrice: number | null;
+      sourceId?: string;
+      sourceMarket?: string;
+      upc?: string;
     }>,
   ) => Promise<boolean | void>;
 }) {
@@ -551,7 +606,7 @@ export function AmazonAutoImportPanel({
     isConfirmedOpportunity(hit, mode),
   );
   const selected = useMemo(
-    () => hits.filter((hit) => picked.includes(hit.asin)),
+    () => hits.filter((hit) => picked.includes(hitKey(hit))),
     [hits, picked],
   );
   const supplierCost = Number(cost);
@@ -680,13 +735,13 @@ export function AmazonAutoImportPanel({
             seed: target.seed,
             excludeAsins: refresh
               ? []
-              : liveHitsRef.current.map((hit) => hit.asin).slice(0, 80),
+              : liveHitsRef.current.map((hit) => hitKey(hit)).slice(0, 80),
           });
           if (cancelled || !liveOnRef.current) break;
           if (found.ok) {
-            const seen = new Set(liveHitsRef.current.map((hit) => hit.asin));
-            const fresh = found.products.filter((hit) => !seen.has(hit.asin));
-            setFreshAsins(fresh.map((hit) => hit.asin));
+            const seen = new Set(liveHitsRef.current.map((hit) => hitKey(hit)));
+            const fresh = found.products.filter((hit) => !seen.has(hitKey(hit)));
+            setFreshAsins(fresh.map((hit) => hitKey(hit)));
             if (found.products.length) {
               setLiveHits((prev) => mergeOpportunityHits(prev, found.products));
             }
@@ -810,21 +865,24 @@ export function AmazonAutoImportPanel({
     try {
       for (const hit of selected) stashOpportunityMoneySeed(hit);
       const ok = await onImport(
-        selected.map((hit) => hit.asin),
+        selected.map((hit) => hitKey(hit)),
         mode,
         selected.map((hit) => ({
-          asin: hit.asin,
+          asin: hit.asin || hit.sourceId,
           title: hit.title,
           brand: hit.brand,
           imageUrl: hit.imageUrl,
           amazonPrice: hit.amazonPrice,
           ebayPrice: hit.ebayActiveMedian ?? hit.ebayPrice,
+          sourceId: hit.sourceId,
+          sourceMarket: hit.sourceMarket,
+          upc: hit.upc,
         })),
       );
       if (ok !== false) {
-        const taken = new Set(selected.map((hit) => hit.asin));
-        setLiveHits((prev) => prev.filter((hit) => !taken.has(hit.asin)));
-        setManualHits((prev) => prev.filter((hit) => !taken.has(hit.asin)));
+        const taken = new Set(selected.map((hit) => hitKey(hit)));
+        setLiveHits((prev) => prev.filter((hit) => !taken.has(hitKey(hit))));
+        setManualHits((prev) => prev.filter((hit) => !taken.has(hitKey(hit))));
         setPicked([]);
       }
     } catch (err) {
@@ -861,8 +919,10 @@ export function AmazonAutoImportPanel({
                 disabled={locked}
                 onClick={() => chooseMode(row.id)}
                 className={cn(
-                  "h-8 px-3 text-[13px] font-medium",
-                  on ? "bg-[#f4c928] text-[#141414]" : "text-white/80 hover:bg-white/10",
+                  "h-8 rounded-md px-2.5 text-[12px] font-medium transition",
+                  on
+                    ? "bg-white text-[#191919]"
+                    : "text-white/80 hover:bg-white/10",
                 )}
               >
                 {row.label}
@@ -1128,7 +1188,7 @@ export function AmazonAutoImportPanel({
                       setPicked(
                         picked.length === hits.length
                           ? []
-                          : hits.map((hit) => hit.asin),
+                          : hits.map((hit) => hitKey(hit)),
                       )
                     }
                     className="text-[11px] font-semibold uppercase tracking-wide text-[#232f3e] underline-offset-2 hover:underline disabled:opacity-40"
@@ -1156,14 +1216,14 @@ export function AmazonAutoImportPanel({
               {hits.length ? (
                 hits.map((hit) => (
                   <WinnerRow
-                    key={hit.asin}
+                    key={hitKey(hit)}
                     hit={hit}
                     mode={mode}
-                    checked={picked.includes(hit.asin)}
-                    fresh={freshAsins.includes(hit.asin)}
+                    checked={picked.includes(hitKey(hit))}
+                    fresh={freshAsins.includes(hitKey(hit))}
                     locked={locked}
                     moneyEnabled={moneyEnabled}
-                    onToggle={() => toggleAsin(hit.asin)}
+                    onToggle={() => toggleAsin(hitKey(hit))}
                   />
                 ))
               ) : (

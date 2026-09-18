@@ -122,12 +122,12 @@ export function judgeOpportunity(
   | "policyRisk"
 > {
   const identity = scoreProductIdentity({
-    amazonTitle: hit.title,
-    ebayTitle: hit.ebayTitle,
-    amazonBrand: hit.brand,
-    amazonUpc: hit.upc,
-    amazonMpn: hit.mpn,
-    ebayMatchedByGtin: hit.ebayMatchedByGtin,
+    sourceTitle: hit.title,
+    destTitle: hit.ebayTitle,
+    sourceBrand: hit.brand,
+    sourceUpc: hit.upc,
+    sourceMpn: hit.mpn,
+    matchedByGtin: hit.ebayMatchedByGtin,
   });
   const brandRisk = brandCategoryRisk(hit.brand, hit.title);
   const policyRisk = brandRisk.risky ? "high" : hit.policyRisk || "low";

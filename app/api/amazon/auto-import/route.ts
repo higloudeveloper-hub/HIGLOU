@@ -102,7 +102,7 @@ type ImportedListing = {
 
 function listingFromDraft(
   draft: Awaited<ReturnType<typeof importAmazonCatalogProduct>>,
-  mode: "amazon" | "amazon_to_ebay" | "supplier",
+  mode: import("@/lib/opportunity/types").OpportunityMode,
   ebayPrice: number | undefined,
   hint?: WinnerCardHint,
 ): ImportedListing {
@@ -136,7 +136,7 @@ async function importAsin(
   ebayPrice: number | undefined,
   userId: string,
   pageOrigin: string,
-  mode: "amazon" | "amazon_to_ebay" | "supplier",
+  mode: import("@/lib/opportunity/types").OpportunityMode,
   hint?: WinnerCardHint,
 ): Promise<ImportedListing> {
   const draft = await importAmazonCatalogProduct({

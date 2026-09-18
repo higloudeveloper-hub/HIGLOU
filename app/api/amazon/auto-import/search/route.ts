@@ -20,7 +20,16 @@ const bodySchema = z.object({
   categoryId: z.string().max(40).optional().default(""),
   limit: z.coerce.number().int().min(1).max(8).optional().default(8),
   mode: z
-    .enum(["amazon", "amazon_to_ebay", "supplier"])
+    .enum([
+      "amazon",
+      "amazon_to_ebay",
+      "supplier",
+      "ebay_to_amazon",
+      "homedepot_to_ebay",
+      "homedepot_to_amazon",
+      "walmart_to_ebay",
+      "walmart_to_amazon",
+    ])
     .optional()
     .default("amazon_to_ebay"),
   onlySellable: z.boolean().optional().default(true),

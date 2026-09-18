@@ -283,10 +283,11 @@ export function passesMainOpportunityScreen(
   return true;
 }
 
-/** Priced Amazon + eBay candidate. Active asks are not sold comps. */
+/** Priced candidate for the route. Active asks are not sold comps. */
 export function isConfirmedOpportunity(
   hit: {
     amazonPrice?: number | null;
+    buyBoxPrice?: number | null;
     ebayPrice?: number | null;
     ebayActiveMedian?: number | null;
     netProfit?: number | null;
@@ -300,12 +301,34 @@ export function isConfirmedOpportunity(
     title?: string;
     verdict?: string;
     identityConfidence?: number;
+    asin?: string;
   },
   mode: OpportunityMode = "amazon_to_ebay",
 ): boolean {
   if (hit.verdict === "reject") return false;
   if (hit.identityConfidence != null && hit.identityConfidence < 40) return false;
   if (!passesMainOpportunityScreen(hit, { mode })) return false;
+
+  const cost = hit.cost ?? hit.amazonPrice ?? null;
+  if (cost == null || cost <= 0) return false;
+
+  if (
+    mode === "ebay_to_amazon" ||
+    mode === "homedepot_to_amazon" ||
+    mode === "walmart_to_amazon"
+  ) {
+    const amazon = hit.buyBoxPrice ?? hit.amazonPrice ?? null;
+    return Boolean(hit.asin) && amazon != null && amazon > 0;
+  }
+
+  if (
+    mode === "homedepot_to_ebay" ||
+    mode === "walmart_to_ebay"
+  ) {
+    const ebay = hit.ebayActiveMedian ?? hit.ebayPrice ?? null;
+    return ebay != null && ebay > 0;
+  }
+
   const amazon = hit.amazonPrice ?? hit.cost ?? null;
   if (amazon == null || amazon <= 0) return false;
   if (mode !== "amazon") {

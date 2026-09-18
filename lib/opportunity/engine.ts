@@ -23,6 +23,7 @@ import {
 } from "@/lib/opportunity/niches";
 import { judgeOpportunity } from "@/lib/opportunity/gates";
 import { isStarterRestrictedTitle } from "@/lib/opportunity/identity";
+import { destMarketFor, sourceMarketFor } from "@/lib/opportunity/markets";
 import {
   estimateEbayReferralFee,
   estimateNetProfit,
@@ -35,12 +36,13 @@ import {
   sortByRealMoney,
 } from "@/lib/opportunity/score";
 import type {
-  EligibilityStatus,
   OpportunityMode,
   OpportunityProduct,
   OpportunitySources,
 } from "@/lib/opportunity/types";
 import { OPPORTUNITY_RULES } from "@/lib/opportunity/types";
+import { findEbayToAmazonOpportunities } from "@/lib/opportunity/routes/ebay-to-amazon";
+import { findRetailOpportunities } from "@/lib/opportunity/routes/retail-to-market";
 
 async function mapLimit<T, R>(
   items: T[],
@@ -73,6 +75,9 @@ function emptyProduct(asin: string, mode: OpportunityMode): OpportunityProduct {
     ebayCount: null,
     opportunity: "thin",
     mode,
+    sourceMarket: sourceMarketFor(mode),
+    sourceId: asin,
+    destMarket: destMarketFor(mode),
     eligibility: "UNKNOWN",
     eligibilityMessage: "Eligibility not checked",
     score: 0,
@@ -303,6 +308,19 @@ export async function findOpportunities(opts: {
   analyzed: number;
 }> {
   const mode = opts.mode || "amazon_to_ebay";
+
+  if (
+    mode === "homedepot_to_ebay" ||
+    mode === "homedepot_to_amazon" ||
+    mode === "walmart_to_ebay" ||
+    mode === "walmart_to_amazon"
+  ) {
+    return findRetailOpportunities({ ...opts, mode });
+  }
+  if (mode === "ebay_to_amazon") {
+    return findEbayToAmazonOpportunities(opts);
+  }
+
   const onlySellable = opts.onlySellable !== false;
   const limit = Math.min(Math.max(opts.limit ?? 8, 1), 8);
   const query = String(opts.query || "").trim();

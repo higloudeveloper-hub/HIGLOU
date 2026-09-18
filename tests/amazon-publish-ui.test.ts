@@ -88,9 +88,12 @@ describe("Amazon seller publish stays on Higlou", () => {
     expect(attributes).toMatch(/buildAmazonOfferOnlyAttributes/);
     expect(attributes).toMatch(/amazonImageLocatorAttributes/);
     expect(exportScreen).toMatch(/confirmed Amazon ASIN/);
-    expect(exportScreen).toMatch(/Request approval on Amazon/);
+    expect(exportScreen).toMatch(/Request approval on Amazon|Open Seller Central approval/);
+    expect(exportScreen).toMatch(/I was approved — re-check/);
     expect(exportScreen).toMatch(/Amazon restriction response/);
     expect(exportScreen).toMatch(/Approval required/);
+    expect(publish).toMatch(/Soft-gate/);
+    expect(publish).toMatch(/VALIDATION_PREVIEW/);
   });
 
   it("does not ask Amazon for identifiers when submitting a live offer", () => {

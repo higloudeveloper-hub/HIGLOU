@@ -14,6 +14,7 @@ import {
   amazonSkuFromListing,
 } from "@/lib/amazon/listing-offer";
 import {
+  amazonApprovalUrlForAsin,
   amazonBrandGatingReason,
   amazonIncompleteListingReason,
   amazonListingBlockedReason,
@@ -181,15 +182,47 @@ export async function publishAmazonOffer(opts: {
         restrictions: restrictionsCheck.raw,
       }
     : null;
-  const blocked = amazonRestrictionBlock(
+  let restrictionGate = amazonRestrictionBlock(
     restrictionsCheck?.restrictions || [],
     asin,
     catalog.brand || opts.listing.brand,
     conditionType,
   );
-  if (blocked) {
+
+  /**
+   * Restrictions API often lags after Seller Central approval.
+   * Soft-gate: one quick re-check, then still attempt VALIDATION_PREVIEW.
+   * Hard-block only if the listing API still reports brand gating.
+   */
+  if (restrictionGate?.code === "AMAZON_APPROVAL_REQUIRED") {
+    await new Promise((r) => setTimeout(r, 1800));
+    try {
+      const again = await getAmazonListingsRestrictions({
+        accessToken: opts.accessToken,
+        sellerId: opts.sellingPartnerId,
+        marketplaceId: cfg.marketplaceId,
+        asin,
+        conditionType,
+      });
+      const againBlock = amazonRestrictionBlock(
+        again.restrictions,
+        asin,
+        catalog.brand || opts.listing.brand,
+        conditionType,
+      );
+      if (!againBlock) {
+        restrictionGate = null;
+      } else {
+        restrictionGate = againBlock;
+      }
+    } catch {
+      /* keep first gate; preview decides */
+    }
+  }
+
+  if (restrictionGate && restrictionGate.code !== "AMAZON_APPROVAL_REQUIRED") {
     throw new AmazonPublishBlockedError({
-      ...blocked,
+      ...restrictionGate,
       restrictionsDebug,
     });
   }
@@ -223,9 +256,23 @@ export async function publishAmazonOffer(opts: {
     attributes,
     mode: "VALIDATION_PREVIEW",
   });
-  const previewBlock =
-    amazonBrandGatingReason(preview.issues) ||
-    amazonIncompleteListingReason(preview.issues, preview.status);
+  const brandGate = amazonBrandGatingReason(preview.issues);
+  if (brandGate) {
+    throw new AmazonPublishBlockedError({
+      code: "AMAZON_APPROVAL_REQUIRED",
+      message: brandGate,
+      approvalUrl:
+        restrictionGate?.approvalUrl || amazonApprovalUrlForAsin(asin),
+      asin,
+      brand: catalog.brand || opts.listing.brand || undefined,
+      reasonCode: "APPROVAL_REQUIRED",
+      restrictionsDebug,
+    });
+  }
+  const previewBlock = amazonIncompleteListingReason(
+    preview.issues,
+    preview.status,
+  );
   if (previewBlock) throw new Error(previewBlock);
 
   const result = await putAmazonListingOffer({

@@ -878,13 +878,25 @@ export function ExportScreen({
                   {amazonConnected ? (
                     amazonApprovalUrl ? (
                       <>
+                        <p className="mt-2 text-[12px] leading-snug text-amber-950/80">
+                          Amazon may take a few minutes after Seller Central
+                          shows Approved. Use Re-check — Higlou asks Amazon
+                          again (restrictions API can lag).
+                        </p>
                         <button
                           type="button"
-                          disabled
-                          className="mt-2 inline-flex h-12 w-full cursor-not-allowed items-center justify-center gap-2 rounded-2xl bg-[#141414] text-[15px] font-semibold text-white opacity-40"
+                          disabled={exportDisabled || publishingAmazon || !onPublishToAmazon}
+                          onClick={() => onPublishToAmazon?.()}
+                          className="mt-2 inline-flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-[#141414] text-[15px] font-semibold text-white transition hover:-translate-y-px disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0"
                         >
-                          <AmazonMark invert className="h-4" />
-                          Publish to Amazon
+                          {publishingAmazon ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <AmazonMark invert className="h-4" />
+                          )}
+                          {publishingAmazon
+                            ? "Re-checking with Amazon…"
+                            : "I was approved — re-check & publish"}
                         </button>
                         <a
                           href={amazonApprovalUrl}
@@ -893,7 +905,7 @@ export function ExportScreen({
                           className="mt-2 inline-flex h-12 w-full items-center justify-center gap-2 rounded-2xl border border-border bg-surface text-[15px] font-semibold hover:bg-muted"
                         >
                           <AmazonMark className="h-4" />
-                          Request approval on Amazon
+                          Open Seller Central approval
                         </a>
                       </>
                     ) : (

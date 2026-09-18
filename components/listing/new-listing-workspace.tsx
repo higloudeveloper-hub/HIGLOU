@@ -2503,8 +2503,8 @@ export function NewListingWorkspace({
           setAmazonPublishError(null);
           toast("Amazon: Approval required", {
             description: brand
-              ? `${brand} is restricted on this seller account. Request approval, then publish again. eBay is unaffected.`
-              : "Request approval in Seller Central, then publish again. eBay is unaffected.",
+              ? `${brand} still looks gated on Amazon’s API (can lag after Seller Central shows Approved). Wait 1–2 min, then tap “I was approved — re-check & publish”. eBay is unaffected.`
+              : "Amazon’s API still reports a gate. Wait a minute after Seller Central shows Approved, then re-check. eBay is unaffected.",
           });
           return;
         }

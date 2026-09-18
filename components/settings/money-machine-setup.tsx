@@ -37,9 +37,7 @@ type Payload = {
   missingRequired: string[];
 };
 
-const TOGGLE_MAP: Partial<
-  Record<string, keyof MoneyMachinePrefs: boolean }>
-> = {
+const TOGGLE_MAP: Record<string, keyof MoneyMachinePrefs> = {
   money_engine: "moneyEngine",
   amazon_associates: "affiliateEngine",
   smart_links: "smartLinks",
@@ -234,8 +232,11 @@ export function MoneyMachineSetupForm() {
       <div className="space-y-3">
         {data.services.map((svc) => {
           const open = openId === svc.id;
-          const prefKey = TOGGLE_MAP[svc.id];
-          const toggled = prefKey ? Boolean(prefs[prefKey]) : false;
+          const prefKey = TOGGLE_MAP[svc.id] as keyof MoneyMachinePrefs | undefined;
+          const toggled =
+            prefKey && typeof prefs[prefKey] === "boolean"
+              ? Boolean(prefs[prefKey])
+              : false;
 
           return (
             <div

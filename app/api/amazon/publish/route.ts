@@ -18,6 +18,7 @@ export const maxDuration = 60;
 
 const bodySchema = z.object({
   productId: z.string().uuid().optional(),
+  forceAfterApproval: z.boolean().optional().default(false),
   listing: z.object({
     sku: z.string().min(1),
     title: z.string().min(1),
@@ -96,6 +97,7 @@ export async function POST(request: Request) {
       accessToken: creds.token,
       sellingPartnerId: creds.sellingPartnerId,
       listing: parsed.listing,
+      forceAfterApproval: parsed.forceAfterApproval === true,
     });
 
     if (parsed.productId) {

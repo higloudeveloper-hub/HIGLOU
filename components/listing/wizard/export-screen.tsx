@@ -602,7 +602,7 @@ export function ExportScreen({
   onDismissEbayPublish?: () => void;
   amazonConnected?: boolean;
   amazonConfigured?: boolean;
-  onPublishToAmazon?: () => void;
+  onPublishToAmazon?: (opts?: { forceAfterApproval?: boolean }) => void;
   onAmazonCatalogMatch?: (asin: string) => void;
   publishingAmazon?: boolean;
   amazonPublishError?: string | null;
@@ -879,14 +879,17 @@ export function ExportScreen({
                     amazonApprovalUrl ? (
                       <>
                         <p className="mt-2 text-[12px] leading-snug text-amber-950/80">
-                          Amazon may take a few minutes after Seller Central
-                          shows Approved. Use Re-check — Higlou asks Amazon
-                          again (restrictions API can lag).
+                          If Seller Central already shows{" "}
+                          <span className="font-semibold">Approved</span> for
+                          this brand (e.g. Purina), tap below. Higlou will skip
+                          the laggy gate check and submit the live offer.
                         </p>
                         <button
                           type="button"
                           disabled={exportDisabled || publishingAmazon || !onPublishToAmazon}
-                          onClick={() => onPublishToAmazon?.()}
+                          onClick={() =>
+                            onPublishToAmazon?.({ forceAfterApproval: true })
+                          }
                           className="mt-2 inline-flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-[#141414] text-[15px] font-semibold text-white transition hover:-translate-y-px disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0"
                         >
                           {publishingAmazon ? (
@@ -895,8 +898,16 @@ export function ExportScreen({
                             <AmazonMark invert className="h-4" />
                           )}
                           {publishingAmazon
-                            ? "Re-checking with Amazon…"
-                            : "I was approved — re-check & publish"}
+                            ? "Publishing with Seller Central approval…"
+                            : "Approved in Seller Central — publish now"}
+                        </button>
+                        <button
+                          type="button"
+                          disabled={exportDisabled || publishingAmazon || !onPublishToAmazon}
+                          onClick={() => onPublishToAmazon?.()}
+                          className="mt-2 inline-flex h-10 w-full items-center justify-center gap-2 rounded-2xl border border-border bg-surface text-[13px] font-semibold hover:bg-muted disabled:opacity-50"
+                        >
+                          Soft re-check only (no force)
                         </button>
                         <a
                           href={amazonApprovalUrl}

@@ -103,6 +103,8 @@ export async function publishAmazonOffer(opts: {
   accessToken: string;
   sellingPartnerId: string;
   listing: AmazonPublishInput;
+  /** Seller confirmed Seller Central approval — skip laggy gate checks. */
+  forceAfterApproval?: boolean;
 }): Promise<AmazonPublishResult> {
   const cfg = getAmazonSpConfig();
   const sku = amazonSkuFromListing(opts.listing.sku);
@@ -257,7 +259,7 @@ export async function publishAmazonOffer(opts: {
     mode: "VALIDATION_PREVIEW",
   });
   const brandGate = amazonBrandGatingReason(preview.issues);
-  if (brandGate) {
+  if (brandGate && !opts.forceAfterApproval) {
     throw new AmazonPublishBlockedError({
       code: "AMAZON_APPROVAL_REQUIRED",
       message: brandGate,
@@ -273,13 +275,43 @@ export async function publishAmazonOffer(opts: {
     preview.issues,
     preview.status,
   );
-  if (previewBlock) throw new Error(previewBlock);
+  // When forcing after Seller Central approval, ignore qualification noise on preview.
+  if (
+    previewBlock &&
+    !(
+      opts.forceAfterApproval &&
+      /approval|brand|qualification|suppressed/i.test(previewBlock)
+    )
+  ) {
+    throw new Error(previewBlock);
+  }
 
-  const result = await putAmazonListingOffer({
-    ...putBase,
-    attributes,
-  });
-
+  let result;
+  try {
+    result = await putAmazonListingOffer({
+      ...putBase,
+      attributes,
+    });
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error || "");
+    if (
+      opts.forceAfterApproval &&
+      /approval|brand|qualification|suppressed/i.test(msg)
+    ) {
+      throw new AmazonPublishBlockedError({
+        code: "AMAZON_APPROVAL_REQUIRED",
+        message:
+          "Amazon still rejects this brand on the live put. Confirm Purina (or this brand) is Approved for this exact seller account in Seller Central → Selling applications, then try again.",
+        approvalUrl:
+          restrictionGate?.approvalUrl || amazonApprovalUrlForAsin(asin),
+        asin,
+        brand: catalog.brand || opts.listing.brand || undefined,
+        reasonCode: "APPROVAL_REQUIRED",
+        restrictionsDebug,
+      });
+    }
+    throw error;
+  }
   await publishAmazonListingImages({
     accessToken: opts.accessToken,
     sellerId: opts.sellingPartnerId,

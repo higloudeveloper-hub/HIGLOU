@@ -2402,7 +2402,8 @@ export function NewListingWorkspace({
     }
   };
 
-  const publishToAmazon = async () => {
+  const publishToAmazon = async (opts?: { forceAfterApproval?: boolean }) => {
+    const forceAfterApproval = opts?.forceAfterApproval === true;
     const fresh = withFreshDescription(listing, storeBranding);
     if (fresh.price == null || Number(fresh.price) <= 0) {
       const message = "Set a price before publishing to Amazon.";
@@ -2424,6 +2425,7 @@ export function NewListingWorkspace({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           productId,
+          forceAfterApproval,
           listing: {
             sku: fresh.sku,
             title: fresh.title,
@@ -2503,8 +2505,8 @@ export function NewListingWorkspace({
           setAmazonPublishError(null);
           toast("Amazon: Approval required", {
             description: brand
-              ? `${brand} still looks gated on Amazon’s API (can lag after Seller Central shows Approved). Wait 1–2 min, then tap “I was approved — re-check & publish”. eBay is unaffected.`
-              : "Amazon’s API still reports a gate. Wait a minute after Seller Central shows Approved, then re-check. eBay is unaffected.",
+              ? `${brand} still gated on Amazon’s laggy API. If Seller Central already shows Approved, tap “Approved in Seller Central — publish now”. eBay is unaffected.`
+              : "Amazon’s API still reports a gate. If Seller Central shows Approved, force-publish from the Amazon panel. eBay is unaffected.",
           });
           return;
         }
@@ -2804,7 +2806,7 @@ export function NewListingWorkspace({
           }}
           amazonConnected={amazonConnection.connected}
           amazonConfigured={amazonConnection.configured}
-          onPublishToAmazon={() => void publishToAmazon()}
+          onPublishToAmazon={(opts) => void publishToAmazon(opts)}
           onAmazonCatalogMatch={(asin) => {
             if (listing.amazonAsin?.toUpperCase() === asin) return;
             update("amazonAsin", asin);

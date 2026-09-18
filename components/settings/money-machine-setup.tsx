@@ -80,35 +80,27 @@ function statusMeta(status: ServiceRow["status"]) {
   return { label: "Falta", tone: "bad" as const };
 }
 
-function ReadyRing({ pct, reduce }: { pct: number; reduce: boolean }) {
-  const r = 42;
-  const c = 2 * Math.PI * r;
-  const offset = c - (pct / 100) * c;
+function ReadyBar({ pct, reduce }: { pct: number; reduce: boolean }) {
   return (
-    <div className="relative size-[7.5rem]">
-      <svg viewBox="0 0 100 100" className="size-full -rotate-90">
-        <circle cx="50" cy="50" r={r} fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="8" />
-        <motion.circle
-          cx="50"
-          cy="50"
-          r={r}
-          fill="none"
-          stroke="#f4c928"
-          strokeWidth="8"
-          strokeLinecap="round"
-          strokeDasharray={c}
-          initial={reduce ? false : { strokeDashoffset: c }}
-          animate={{ strokeDashoffset: offset }}
-          transition={{ duration: 1.1, ease: EASE }}
-        />
-      </svg>
-      <div className="absolute inset-0 grid place-items-center text-center">
+    <div className="rounded-2xl border border-[#e5e5e5] bg-white p-4">
+      <div className="flex items-end justify-between gap-3">
         <div>
-          <p className="font-display text-3xl tabular-nums text-[#f4c928]">{pct}%</p>
-          <p className="text-[10px] font-semibold tracking-[0.16em] text-white/45 uppercase">
-            Listo
+          <p className="text-[10px] font-semibold tracking-[0.14em] text-[#9b9b9b] uppercase">
+            Checklist
+          </p>
+          <p className="mt-1 text-2xl font-semibold tabular-nums tracking-tight text-[#191919]">
+            {pct}%
           </p>
         </div>
+        <p className="text-[12px] text-[#707070]">listo para operar</p>
+      </div>
+      <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-[#efefef]">
+        <motion.div
+          className="h-full rounded-full bg-[#191919]"
+          initial={reduce ? false : { width: 0 }}
+          animate={{ width: `${pct}%` }}
+          transition={{ duration: 0.8, ease: EASE }}
+        />
       </div>
     </div>
   );
@@ -130,17 +122,17 @@ function HowToReel({
     setStep(0);
     const id = window.setInterval(() => {
       setStep((s) => (s + 1) % steps.length);
-    }, 2400);
+    }, 2600);
     return () => window.clearInterval(id);
   }, [active, reduce, steps.length]);
 
   if (!steps.length) return null;
 
   return (
-    <div className="relative mt-4 overflow-hidden rounded-[22px] border border-black/5 bg-gradient-to-br from-[#111] via-[#1a1a1a] to-[#0c0c0c] p-4 text-white">
-      <div className="mb-3 flex items-center justify-between gap-3">
-        <p className="flex items-center gap-1.5 text-[10px] font-semibold tracking-[0.18em] text-[#f4c928] uppercase">
-          <LiveDot />
+    <div className="relative mt-3 overflow-hidden rounded-xl border border-[#e5e5e5] bg-[#f7f7f7] p-4">
+      <div className="mb-2.5 flex items-center justify-between gap-3">
+        <p className="flex items-center gap-1.5 text-[10px] font-semibold tracking-[0.14em] text-[#9b9b9b] uppercase">
+          <LiveDot tone="muted" />
           Cómo configurarlo
         </p>
         <div className="flex gap-1">
@@ -148,8 +140,8 @@ function HowToReel({
             <span
               key={i}
               className={cn(
-                "h-1 w-5 rounded-full transition-colors",
-                i === step ? "bg-[#f4c928]" : "bg-white/15",
+                "h-1 w-4 rounded-full transition-colors",
+                i === step ? "bg-[#191919]" : "bg-[#d8d8d8]",
               )}
             />
           ))}
@@ -158,30 +150,23 @@ function HowToReel({
       <AnimatePresence mode="wait">
         <motion.div
           key={step}
-          initial={reduce ? false : { opacity: 0, y: 12, filter: "blur(4px)" }}
-          animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
-          exit={reduce ? undefined : { opacity: 0, y: -8, filter: "blur(4px)" }}
-          transition={{ duration: 0.4, ease: EASE }}
-          className="min-h-[88px]"
+          initial={reduce ? false : { opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={reduce ? undefined : { opacity: 0, y: -6 }}
+          transition={{ duration: 0.3, ease: EASE }}
+          className="min-h-[76px]"
         >
-          <p className="text-[11px] text-white/40">
+          <p className="text-[11px] text-[#9b9b9b]">
             Paso {step + 1} / {steps.length}
           </p>
-          <p className="mt-1 font-display text-[1.65rem] leading-tight tracking-tight">
+          <p className="mt-1 text-[15px] font-semibold tracking-tight text-[#191919]">
             {steps[step]?.title}
           </p>
-          <p className="mt-2 max-w-md text-[13.5px] leading-relaxed text-white/65">
+          <p className="mt-1.5 max-w-md text-[13px] leading-relaxed text-[#707070]">
             {steps[step]?.detail}
           </p>
         </motion.div>
       </AnimatePresence>
-      {!reduce ? (
-        <motion.div
-          className="pointer-events-none absolute -right-10 top-1/2 size-40 -translate-y-1/2 rounded-full bg-[#f4c928]/15 blur-2xl"
-          animate={{ opacity: [0.25, 0.5, 0.25], scale: [1, 1.08, 1] }}
-          transition={{ duration: 3.2, repeat: Infinity, ease: "easeInOut" }}
-        />
-      ) : null}
     </div>
   );
 }
@@ -263,70 +248,67 @@ export function MoneyMachineSetupForm() {
 
   if (loading || !data || !prefs) {
     return (
-      <div className="flex min-h-[220px] items-center justify-center rounded-[28px] border border-[#e8e8e8] bg-white">
+      <div className="flex min-h-[180px] items-center justify-center rounded-2xl border border-[#e5e5e5] bg-white">
         <Loader2 className="size-5 animate-spin text-[#9b9b9b]" />
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       <motion.section
-        initial={reduce ? false : { opacity: 0, y: 16 }}
+        initial={reduce ? false : { opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.55, ease: EASE }}
-        className="relative overflow-hidden rounded-[32px] bg-[#101010] px-5 py-6 text-white sm:px-8 sm:py-8"
+        transition={{ duration: 0.4, ease: EASE }}
+        className="rounded-2xl border border-[#e5e5e5] bg-white p-5"
       >
-        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,rgba(244,201,40,0.18),transparent_55%)]" />
-        <div className="pointer-events-none absolute inset-0 opacity-[0.07] [background-image:linear-gradient(rgba(255,255,255,0.5)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.5)_1px,transparent_1px)] [background-size:28px_28px]" />
-
-        <div className="relative flex flex-col gap-8 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
           <div className="max-w-xl">
-            <p className="flex items-center gap-2 text-[11px] font-semibold tracking-[0.2em] text-[#f4c928] uppercase">
+            <p className="flex items-center gap-2 text-[11px] font-semibold tracking-[0.16em] text-[#9b9b9b] uppercase">
               <ShieldCheck className="size-3.5" />
               Money Machine · Setup
             </p>
-            <h2 className="mt-3 font-display text-[2.6rem] leading-[0.95] tracking-tight sm:text-[3.25rem]">
+            <h2 className="mt-1.5 text-[17px] font-semibold tracking-tight text-[#191919]">
               Panel de APIs
-              <span className="block italic text-[#f4c928]">premium</span>
             </h2>
-            <p className="mt-4 text-[15px] leading-relaxed text-white/65">
-              Organiza cada conexión como un instrumento. Interruptores aquí,
-              secretos fuertes en Vercel, Associate Tag pegado abajo. La máquina
-              solo corre cuando el checklist está limpio.
+            <p className="mt-2 text-[13px] leading-relaxed text-[#707070]">
+              Interruptores aquí, secretos fuertes en Vercel, Associate Tag
+              abajo. La máquina solo corre cuando el checklist está limpio.
             </p>
             {data.missingRequired.length ? (
-              <p className="mt-4 inline-flex rounded-full border border-amber-400/30 bg-amber-400/10 px-3 py-1.5 text-[12px] text-amber-100">
+              <p className="mt-3 inline-flex rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-[12px] text-amber-950">
                 Faltan: {data.missingRequired.join(" · ")}
               </p>
             ) : (
-              <p className="mt-4 inline-flex rounded-full border border-emerald-400/25 bg-emerald-400/10 px-3 py-1.5 text-[12px] text-emerald-100">
+              <p className="mt-3 inline-flex rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-[12px] text-emerald-900">
                 Núcleo listo — alimenta Find Winners y enciende Autopilot
               </p>
             )}
           </div>
-          <ReadyRing pct={data.readyPct} reduce={reduce} />
+          <div className="w-full sm:max-w-[220px]">
+            <ReadyBar pct={data.readyPct} reduce={reduce} />
+          </div>
         </div>
       </motion.section>
 
       {groups.map((group, gi) => (
         <motion.section
           key={group.id}
-          initial={reduce ? false : { opacity: 0, y: 18 }}
+          initial={reduce ? false : { opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.45, delay: 0.08 * (gi + 1), ease: EASE }}
-          className="space-y-3"
+          transition={{ duration: 0.4, delay: 0.05 * (gi + 1), ease: EASE }}
+          className="space-y-2.5"
         >
-          <div className="flex items-end justify-between px-1">
-            <h3 className="font-display text-2xl tracking-tight text-[#191919]">
+          <div className="flex items-end justify-between px-0.5">
+            <h3 className="text-[14px] font-semibold tracking-tight text-[#191919]">
               {group.label}
             </h3>
-            <p className="text-[11px] font-semibold tracking-[0.14em] text-[#9b9b9b] uppercase">
+            <p className="text-[11px] font-semibold tracking-[0.12em] text-[#9b9b9b] uppercase">
               {group.items.length} módulos
             </p>
           </div>
 
-          <div className="space-y-2.5">
+          <div className="space-y-2">
             {group.items.map((svc, si) => {
               const open = openId === svc.id;
               const prefKey = TOGGLE_MAP[svc.id] as keyof MoneyMachinePrefs | undefined;
@@ -341,42 +323,40 @@ export function MoneyMachineSetupForm() {
                 <motion.div
                   key={svc.id}
                   layout
-                  initial={reduce ? false : { opacity: 0, y: 10 }}
+                  initial={reduce ? false : { opacity: 0, y: 8 }}
                   animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.03 * si, duration: 0.35, ease: EASE }}
+                  transition={{ delay: 0.02 * si, duration: 0.3, ease: EASE }}
                   className={cn(
-                    "overflow-hidden rounded-[26px] border bg-white transition-shadow",
-                    open
-                      ? "border-[#f4c928]/50 shadow-[0_18px_50px_-28px_rgba(0,0,0,0.35)]"
-                      : "border-[#ececec] hover:border-[#ddd]",
+                    "overflow-hidden rounded-2xl border bg-white transition",
+                    open ? "border-[#cfcfcf]" : "border-[#e5e5e5]",
                   )}
                 >
                   <button
                     type="button"
                     onClick={() => setOpenId(open ? null : svc.id)}
-                    className="flex w-full items-center gap-3.5 px-4 py-4 text-left sm:px-5"
+                    className="flex w-full items-center gap-3 px-4 py-3.5 text-left"
                   >
-                    <span className="grid size-11 shrink-0 place-items-center rounded-2xl bg-[#111] text-[#f4c928]">
-                      <Icon className="size-4.5" />
+                    <span className="grid size-10 shrink-0 place-items-center rounded-xl border border-[#e5e5e5] bg-[#f7f7f7] text-[#191919]">
+                      <Icon className="size-4" />
                     </span>
                     <span className="min-w-0 flex-1">
                       <span className="flex flex-wrap items-center gap-2">
-                        <span className="text-[15px] font-semibold text-[#191919]">
+                        <span className="text-[14px] font-semibold text-[#191919]">
                           {svc.title}
                         </span>
                         <span
                           className={cn(
                             "rounded-full px-2 py-0.5 text-[10px] font-semibold tracking-wide uppercase",
-                            meta.tone === "ok" && "bg-emerald-500/12 text-emerald-800",
-                            meta.tone === "opt" && "bg-sky-500/10 text-sky-900",
-                            meta.tone === "warn" && "bg-amber-500/12 text-amber-900",
-                            meta.tone === "bad" && "bg-rose-500/10 text-rose-800",
+                            meta.tone === "ok" && "bg-emerald-50 text-emerald-800",
+                            meta.tone === "opt" && "bg-sky-50 text-sky-900",
+                            meta.tone === "warn" && "bg-amber-50 text-amber-900",
+                            meta.tone === "bad" && "bg-rose-50 text-rose-800",
                           )}
                         >
                           {meta.label}
                         </span>
                       </span>
-                      <span className="mt-0.5 block truncate text-[13px] text-[#707070]">
+                      <span className="mt-0.5 block truncate text-[12.5px] text-[#707070]">
                         {svc.subtitle}
                         {svc.detail ? ` · ${svc.detail}` : ""}
                       </span>
@@ -395,16 +375,16 @@ export function MoneyMachineSetupForm() {
                         initial={{ height: 0, opacity: 0 }}
                         animate={{ height: "auto", opacity: 1 }}
                         exit={{ height: 0, opacity: 0 }}
-                        transition={{ duration: 0.32, ease: EASE }}
+                        transition={{ duration: 0.28, ease: EASE }}
                         className="overflow-hidden"
                       >
-                        <div className="space-y-4 border-t border-[#f0f0f0] px-4 pb-5 pt-4 sm:px-5">
-                          <p className="text-[12.5px] text-[#8a8a8a]">
+                        <div className="space-y-3 border-t border-[#f0f0f0] px-4 pb-4 pt-3">
+                          <p className="text-[12px] text-[#8a8a8a]">
                             Para: <span className="text-[#444]">{svc.requiredFor}</span>
                           </p>
 
                           {svc.toggleable && prefKey ? (
-                            <div className="flex items-center justify-between gap-3 rounded-2xl bg-[#f6f6f6] px-3.5 py-3.5">
+                            <div className="flex items-center justify-between gap-3 rounded-xl border border-[#e5e5e5] bg-[#f7f7f7] px-3.5 py-3">
                               <div>
                                 <p className="text-[13px] font-semibold text-[#191919]">
                                   Usar en la máquina
@@ -424,8 +404,8 @@ export function MoneyMachineSetupForm() {
                           ) : null}
 
                           {svc.configField === "associate_tag" ? (
-                            <div className="space-y-2 rounded-[20px] border border-[#eee] bg-[#fcfcfc] p-3.5">
-                              <Label className="text-[11px] font-semibold tracking-[0.12em] text-[#9b9b9b] uppercase">
+                            <div className="space-y-2 rounded-xl border border-[#e5e5e5] bg-white p-3.5">
+                              <Label className="text-[10px] font-semibold tracking-[0.12em] text-[#9b9b9b] uppercase">
                                 Amazon Associate Tracking ID
                               </Label>
                               <div className="flex flex-col gap-2 sm:flex-row">
@@ -435,7 +415,7 @@ export function MoneyMachineSetupForm() {
                                   onChange={(e) =>
                                     setPrefs({ ...prefs, associateTag: e.target.value })
                                   }
-                                  className="h-11 rounded-xl border-[#e5e5e5] bg-white"
+                                  className="h-10 rounded-xl border-[#e5e5e5] bg-white"
                                 />
                                 <Button
                                   type="button"
@@ -443,7 +423,7 @@ export function MoneyMachineSetupForm() {
                                   onClick={() =>
                                     void save({ associateTag: prefs.associateTag })
                                   }
-                                  className="h-11 shrink-0 rounded-xl bg-[#f4c928] px-5 font-semibold text-[#141414] hover:bg-[#f4c928]/90"
+                                  className="h-10 shrink-0 rounded-full bg-[#191919] px-5 font-semibold text-white hover:bg-[#191919]/90"
                                 >
                                   Guardar tag
                                 </Button>
@@ -456,7 +436,7 @@ export function MoneyMachineSetupForm() {
                           {svc.docsUrl ? (
                             <Link
                               href={svc.docsUrl}
-                              className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-[#191919] underline-offset-4 hover:underline"
+                              className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-[#3665F3] underline-offset-4 hover:underline"
                             >
                               Abrir guía
                               <ExternalLink className="size-3.5" />

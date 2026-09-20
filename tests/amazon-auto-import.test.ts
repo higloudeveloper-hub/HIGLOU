@@ -451,7 +451,7 @@ describe("Amazon auto-import stays an eBay draft flow", () => {
     expect(panel).toMatch(/settings#amazon-store/);
     expect(panel).toMatch(/settings#ebay-store/);
     expect(panel).toMatch(/conservative eBay low ask|not Terapeak sold comps/i);
-    expect(panel).toMatch(/min-h-\[min\(52vh,480px\)\]/);
+    expect(panel).toMatch(/min-h-\[360px\]|h-\[min\(58vh,560px\)\]/);
     expect(categories).toMatch(/Home & Kitchen/);
     expect(categories).toMatch(/Tools & Home/);
     const amazonImport = readRepo("app/api/amazon/import/route.ts");

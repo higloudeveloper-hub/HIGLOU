@@ -19,6 +19,7 @@ import type {
   OpportunityProduct,
 } from "@/lib/opportunity/types";
 import { isConfirmedOpportunity } from "@/lib/opportunity/score";
+import { isActionableAskSpread } from "@/lib/opportunity/spread";
 import {
   loadLocalLedger,
   pullRemoteLedger,
@@ -631,9 +632,11 @@ export function AmazonAutoImportPanel({
 
   const activeMode = OPPORTUNITY_MODES.find((row) => row.id === mode);
   const locked = busy || importing;
-  const hits = (view === "live" ? liveHits : manualHits).filter((hit) =>
-    isConfirmedOpportunity(hit, mode),
-  );
+  const hits = (view === "live" ? liveHits : manualHits).filter((hit) => {
+    if (!isConfirmedOpportunity(hit, mode)) return false;
+    if (mode === "amazon" || hit.soldVerified) return true;
+    return isActionableAskSpread(hit);
+  });
   const selected = useMemo(
     () => hits.filter((hit) => picked.includes(hitKey(hit))),
     [hits, picked],
@@ -952,7 +955,7 @@ export function AmazonAutoImportPanel({
   const stats = sessionStats(hits, mode);
 
   return (
-    <div className="flex h-full min-h-0 flex-1 flex-col bg-[#eaeded] font-sans text-[#0f1111]">
+    <div className="flex min-h-0 flex-1 flex-col bg-[#eaeded] font-sans text-[#0f1111] md:h-full">
       <div className="shrink-0 bg-[#232f3e] text-white">
         <div className="flex flex-wrap items-center gap-3 px-4 py-2.5">
           <div className="min-w-[140px]">
@@ -1234,8 +1237,8 @@ export function AmazonAutoImportPanel({
         <p className="mt-2 text-[13px] text-destructive">{error}</p>
       ) : null}
 
-      <div className="mx-3 mb-0 mt-0 flex min-h-[min(52vh,480px)] flex-1 flex-col overflow-hidden border border-[#d5d9d9] bg-white md:min-h-[280px]">
-        <div className="min-h-0 min-w-0 flex-1 overflow-auto">
+      <div className="relative z-0 mx-3 mb-3 mt-2 flex h-[min(58vh,560px)] min-h-[360px] flex-col overflow-hidden border border-[#d5d9d9] bg-white shadow-sm md:h-auto md:min-h-0 md:flex-1">
+        <div className="min-h-0 flex-1 overflow-x-auto overflow-y-auto">
           <table className="w-full min-w-[980px] border-collapse text-left">
             <thead className="sticky top-0 z-[1] bg-[#f3f3f3] text-[11px] font-semibold tracking-wide text-[#565959] uppercase">
               <tr className="border-b border-[#d5d9d9]">
@@ -1287,22 +1290,19 @@ export function AmazonAutoImportPanel({
                 ))
               ) : (
                 <tr className="border-b border-[#e3e6e6] bg-white">
-                  <td className="px-4 py-8" colSpan={moneyEnabled ? 13 : 12}>
-                    <p className="text-[15px] font-semibold text-[#0f1111]">
-                      {liveOn && view === "live"
-                        ? `Analyzing ${scanLabel.toLowerCase()} — candidates need verified sold comps`
-                        : "No saved opportunities yet"}
+                  <td className="px-4 py-10" colSpan={moneyEnabled ? 13 : 12}>
+                    <p className="text-[16px] font-semibold text-[#0f1111]">
+                      {searching
+                        ? "Scoring Amazon cost vs eBay low ask…"
+                        : liveOn && view === "live"
+                          ? `Scanning ${scanLabel.toLowerCase()}…`
+                          : "No ask spreads cleared fees yet"}
                     </p>
-                    <p className="mt-1 max-w-xl text-[13px] text-[#565959]">
-                      {scanLog[0]
-                        ? `${scanLog[0].query}: ${scanLog[0].analyzed || 0} scored, ${scanLog[0].found} priced on Amazon and eBay. Active asks are not sold.`
-                        : "Higlou ranks Amazon→eBay ask spreads using a conservative low BIN after fees/ship. Sold-comp winners need Marketplace Insights; until then the board shows ask-based keep, not fake sold cash."}
+                    <p className="mt-1.5 max-w-xl text-[13px] leading-relaxed text-[#565959]">
+                      {searching
+                        ? "Rows appear here when keep after fees is positive on a conservative eBay BIN."
+                        : "Try another category or a tighter product name. We hide money-losing asks on purpose."}
                     </p>
-                    {liveOn && view === "live" && !reduce ? (
-                      <p className="mt-3 text-[12px] text-[#8a8a8a]">
-                        Scoring {scanLabel.toLowerCase()}…
-                      </p>
-                    ) : null}
                   </td>
                 </tr>
               )}

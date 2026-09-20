@@ -631,13 +631,11 @@ export async function findOpportunities(opts: {
   });
 
   const confirmed = priced.filter((hit) => isConfirmedOpportunity(hit, mode));
-  // Prefer spreads that clear fees on a conservative ask; fall back if none.
-  const actionable =
+  // Never fall back to money-losing asks — empty board beats fake "opportunities".
+  const passing =
     mode === "amazon"
       ? confirmed
       : confirmed.filter((hit) => isActionableAskSpread(hit));
-  const passing =
-    actionable.length >= Math.min(2, limit) ? actionable : confirmed;
   const ranked = diversifyOpportunityHits(
     sortByRealMoney(passing),
     Math.max(limit, 8),

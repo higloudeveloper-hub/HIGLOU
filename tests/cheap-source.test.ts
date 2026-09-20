@@ -59,12 +59,16 @@ describe("cheap source wiring", () => {
       join(process.cwd(), "components/winners/find-winners-board.tsx"),
       "utf8",
     );
+    const detail = readFileSync(
+      join(process.cwd(), "components/winners/winner-detail-panel.tsx"),
+      "utf8",
+    );
     const api = readFileSync(
       join(process.cwd(), "app/api/winners/cheap-source/route.ts"),
       "utf8",
     );
-    expect(board).toMatch(/CheapSourcePanel/);
-    expect(board).toMatch(/Localizar más barato|CheapSourcePanel/);
+    expect(board).toMatch(/WinnerDetailPanel|CheapSourcePanel/);
+    expect(detail).toMatch(/CheapSourcePanel/);
     expect(api).toMatch(/findCheaperSources/);
     expect(api).toMatch(/identifyProductFromImage|findCheaperSources/);
   });

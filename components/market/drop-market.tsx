@@ -139,6 +139,12 @@ export function DropMarketStudio() {
     () => drops.filter((d) => d.lane === "retail"),
     [drops],
   );
+  // Deals for you always + only lanes that have stock (no blank middle column)
+  const visibleLanes =
+    1 +
+    (arb.length > 0 ? 1 : 0) +
+    (amazon.length > 0 ? 1 : 0) +
+    (retail.length > 0 ? 1 : 0);
   const filtered = useMemo(() => {
     if (filter === "all") return drops;
     return drops.filter((d) => d.lane === filter);
@@ -314,7 +320,7 @@ export function DropMarketStudio() {
         </div>
       </header>
 
-      <div className="mx-auto max-w-[1500px] space-y-4 px-3 py-4 sm:px-5 sm:py-5">
+      <div className="mx-auto max-w-[1500px] space-y-4 overflow-x-hidden px-3 py-4 sm:px-5 sm:py-5">
         {/* Filter chips */}
         <div className="flex flex-wrap gap-2">
           {(
@@ -366,8 +372,17 @@ export function DropMarketStudio() {
           </div>
         ) : (
           <>
-            {/* Amazon-style category cards row */}
-            <div className="flex gap-4 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            {/* Lane cards — responsive grid, only non-empty lanes */}
+            <div
+              className={cn(
+                "grid gap-4",
+                visibleLanes === 1
+                  ? "grid-cols-1"
+                  : visibleLanes === 2
+                    ? "grid-cols-1 sm:grid-cols-2"
+                    : "grid-cols-1 sm:grid-cols-2 xl:grid-cols-3",
+              )}
+            >
               <CategoryQuadCard
                 title="Deals for you"
                 subtitle="Higlou-verified winners"
@@ -378,26 +393,30 @@ export function DropMarketStudio() {
                 onClaim={(item) => void claim(item)}
                 onOpenAll={() => setFilter("all")}
               />
-              <CategoryQuadCard
-                title="Arbitrage keep"
-                subtitle="Amazon → eBay after fees"
-                items={arb}
-                busyId={busy}
-                selectedId={drop?.id ?? null}
-                onSelect={selectItem}
-                onClaim={(item) => void claim(item)}
-                onOpenAll={() => setFilter("arbitrage")}
-              />
-              <CategoryQuadCard
-                title="Sell on Amazon"
-                subtitle="Keepa demand lane"
-                items={amazon}
-                busyId={busy}
-                selectedId={drop?.id ?? null}
-                onSelect={selectItem}
-                onClaim={(item) => void claim(item)}
-                onOpenAll={() => setFilter("amazon")}
-              />
+              {arb.length > 0 ? (
+                <CategoryQuadCard
+                  title="Arbitrage keep"
+                  subtitle="Amazon → eBay after fees"
+                  items={arb}
+                  busyId={busy}
+                  selectedId={drop?.id ?? null}
+                  onSelect={selectItem}
+                  onClaim={(item) => void claim(item)}
+                  onOpenAll={() => setFilter("arbitrage")}
+                />
+              ) : null}
+              {amazon.length > 0 ? (
+                <CategoryQuadCard
+                  title="Sell on Amazon"
+                  subtitle="Keepa demand lane"
+                  items={amazon}
+                  busyId={busy}
+                  selectedId={drop?.id ?? null}
+                  onSelect={selectItem}
+                  onClaim={(item) => void claim(item)}
+                  onOpenAll={() => setFilter("amazon")}
+                />
+              ) : null}
               {retail.length > 0 ? (
                 <CategoryQuadCard
                   title="Retail routes"

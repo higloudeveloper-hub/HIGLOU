@@ -35,7 +35,7 @@ export function CategoryQuadCard({
   return (
     <section
       className={cn(
-        "flex w-[300px] shrink-0 flex-col rounded-lg border border-[#d5d9d9] bg-white p-4 shadow-[0_1px_2px_rgba(15,17,17,0.06)] sm:w-[320px]",
+        "flex w-full min-w-0 flex-col rounded-lg border border-[#d5d9d9] bg-white p-4 shadow-[0_1px_2px_rgba(15,17,17,0.06)]",
         className,
       )}
     >
@@ -55,7 +55,7 @@ export function CategoryQuadCard({
         <ChevronRight className="mt-1 size-5 shrink-0 text-[#0f1111]" />
       </button>
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-2 gap-3 overflow-visible">
         {quad.map((item) => (
           <DealProductTile
             key={item.id}

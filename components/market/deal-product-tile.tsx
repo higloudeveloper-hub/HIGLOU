@@ -73,7 +73,7 @@ export function DealProductTile({
       className={cn(
         "group flex flex-col text-left",
         variant === "carousel" ? "w-[168px] shrink-0 sm:w-[180px]" : "min-w-0",
-        selected && "ring-2 ring-[#2162a1] ring-offset-2",
+        selected && "ring-2 ring-[#2162a1] ring-offset-1",
       )}
     >
       <button

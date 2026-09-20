@@ -66,6 +66,8 @@ export async function POST(request: Request) {
   const analysis = await analyzeCrossPlatform({
     title: card.title,
     brand: card.brand,
+    model: card.mpn || undefined,
+    mpn: card.mpn || undefined,
     upc: card.upc,
     asin: card.asin,
     sourceMarket: card.sourceMarket,

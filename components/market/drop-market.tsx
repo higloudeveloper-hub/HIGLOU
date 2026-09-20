@@ -3,12 +3,16 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { toast } from "sonner";
-import { ChevronRight, Search } from "lucide-react";
-import { CategoryQuadCard } from "@/components/market/category-quad-card";
-import { DealCarouselRow } from "@/components/market/deal-carousel-row";
-import { AmazonPrice } from "@/components/market/amazon-price";
-import { PlatformOpenLinks } from "@/components/opportunity/platform-open-links";
+import {
+  Loader2,
+  Search,
+  ShieldCheck,
+  Sparkles,
+} from "lucide-react";
+import { MarketProductTile } from "@/components/market/market-product-tile";
+import { MarketDetailPanel } from "@/components/market/market-detail-panel";
 import {
   mergeMarketFeed,
   type MarketDropPublic,
@@ -18,6 +22,7 @@ import { marketSpread } from "@/lib/market/catalog";
 import { cn } from "@/lib/utils";
 
 type LaneFilter = "all" | "arbitrage" | "amazon" | "retail";
+type SortKey = "keep" | "demand" | "hot";
 
 function localVerifiedDrops(): MarketDropPublic[] {
   try {
@@ -47,30 +52,34 @@ function signed(n: number) {
 
 export function DropMarketStudio() {
   const router = useRouter();
+  const reduce = useReducedMotion();
   const [drops, setDrops] = useState<MarketDropPublic[]>([]);
   const [note, setNote] = useState(
-    "Market is empty until Find Winners verifies a winner.",
+    "Market se llena con winners verificados de Find Winners.",
   );
   const [tagReady, setTagReady] = useState(false);
   const [ledgerCount, setLedgerCount] = useState(0);
   const [activeId, setActiveId] = useState<string | null>(null);
+  const [panelOpen, setPanelOpen] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [filter, setFilter] = useState<LaneFilter>("all");
+  const [sortKey, setSortKey] = useState<SortKey>("keep");
+  const [query, setQuery] = useState("");
+  const [profitOnly, setProfitOnly] = useState(false);
 
   useEffect(() => {
     let alive = true;
     const emptyNote =
-      "Market is empty until Find Winners verifies arbitrage keep or Keepa Amazon demand.";
+      "Market vacío hasta que Find Winners verifique arbitraje o demanda Amazon.";
 
     const local = localVerifiedDrops();
     if (local.length) {
       setDrops(local);
       setLedgerCount(local.length);
       setNote(
-        `${local.length} Higlou-verified winner${local.length === 1 ? "" : "s"} from Find Winners`,
+        `${local.length} winner${local.length === 1 ? "" : "s"} verificados desde Find Winners`,
       );
-      setActiveId(local[0]?.id ?? null);
     } else {
       setDrops([]);
       setLedgerCount(0);
@@ -100,7 +109,6 @@ export function DropMarketStudio() {
           setDrops(remote);
           setLedgerCount(Number(body.ledgerCount) || remote.length);
           setNote(body.note || "");
-          setActiveId(remote[0]?.id ?? null);
         } else if (!local.length) {
           setDrops([]);
           setLedgerCount(0);
@@ -139,21 +147,52 @@ export function DropMarketStudio() {
     () => drops.filter((d) => d.lane === "retail"),
     [drops],
   );
-  // Deals for you always. Extra lane cards only when ≥2 lane types have stock
-  // (avoids empty middle column + duplicate Amazon-only twin columns).
-  const laneTypesWithStock =
-    (arb.length > 0 ? 1 : 0) +
-    (amazon.length > 0 ? 1 : 0) +
-    (retail.length > 0 ? 1 : 0);
-  const showLaneCards = laneTypesWithStock >= 2;
-  const visibleLanes = 1 + (showLaneCards ? laneTypesWithStock : 0);
-  const filtered = useMemo(() => {
-    if (filter === "all") return drops;
-    return drops.filter((d) => d.lane === filter);
-  }, [drops, filter]);
 
-  const drop =
-    filtered.find((d) => d.id === activeId) ?? filtered[0] ?? null;
+  const filtered = useMemo(() => {
+    let list =
+      filter === "all" ? drops : drops.filter((d) => d.lane === filter);
+
+    const q = query.trim().toLowerCase();
+    if (q) {
+      list = list.filter(
+        (d) =>
+          d.title.toLowerCase().includes(q) ||
+          d.name.toLowerCase().includes(q) ||
+          String(d.asin || "")
+            .toLowerCase()
+            .includes(q),
+      );
+    }
+
+    if (profitOnly) {
+      list = list.filter((d) => {
+        if (d.lane === "amazon") return (d.demandScore ?? d.score ?? 0) >= 55;
+        return (d.netProfit ?? marketSpread(d)) >= 12;
+      });
+    }
+
+    const sorted = [...list];
+    sorted.sort((a, b) => {
+      if (sortKey === "hot") {
+        const rank = { hot: 3, warm: 2, fresh: 1 } as const;
+        return (rank[b.heat] || 0) - (rank[a.heat] || 0);
+      }
+      if (sortKey === "demand") {
+        return (
+          (b.demandScore ?? b.score ?? 0) - (a.demandScore ?? a.score ?? 0)
+        );
+      }
+      const ka =
+        a.lane === "amazon" ? -1 : (a.netProfit ?? marketSpread(a));
+      const kb =
+        b.lane === "amazon" ? -1 : (b.netProfit ?? marketSpread(b));
+      return kb - ka;
+    });
+    return sorted;
+  }, [drops, filter, query, profitOnly, sortKey]);
+
+  const active =
+    filtered.find((d) => d.id === activeId) ?? null;
 
   const openKeep = useMemo(
     () =>
@@ -222,14 +261,14 @@ export function DropMarketStudio() {
           note?: string;
         };
         if (!res.ok) {
-          toast.error(body.error || "Could not add to your store");
+          toast.error(body.error || "No se pudo agregar a tu tienda");
           return;
         }
-        toast.success("In your store — draft ready");
+        toast.success("En tu tienda — draft listo");
         if (body.note) toast.message(body.note);
         if (body.href) router.push(body.href);
       } catch {
-        toast.error("Claim failed");
+        toast.error("Claim falló");
       } finally {
         setBusy(null);
       }
@@ -239,7 +278,7 @@ export function DropMarketStudio() {
 
   const earnLink = useCallback(async (item: MarketDropPublic) => {
     if (!item.asin) {
-      toast.message("ASIN required — run Find Winners");
+      toast.message("Necesitas ASIN — corre Find Winners");
       return;
     }
     setBusy(`aff-${item.id}`);
@@ -265,370 +304,272 @@ export function DropMarketStudio() {
       };
       if (!res.ok) {
         if (!item.affiliateUrl) {
-          toast.error(body.error || "Affiliate failed — check Settings tag");
+          toast.error(body.error || "Affiliate falló — revisa tag en Settings");
         }
         return;
       }
-      toast.success("Affiliate link ready");
+      toast.success("Link affiliate listo");
       body.warnings?.slice(0, 1).forEach((w) => toast.message(w));
       if (body.smartLink?.path) {
         await navigator.clipboard?.writeText(
           `${window.location.origin}${body.smartLink.path}`,
         );
-        toast.message("Smart link copied");
+        toast.message("Smart link copiado");
       } else if (body.link?.destinationUrl) {
         await navigator.clipboard?.writeText(body.link.destinationUrl);
       }
     } catch {
-      toast.error("Affiliate failed");
+      toast.error("Affiliate falló");
     } finally {
       setBusy(null);
     }
   }, []);
 
-  const selectItem = (item: MarketDropPublic) => setActiveId(item.id);
+  const openItem = (item: MarketDropPublic) => {
+    setActiveId(item.id);
+    setPanelOpen(true);
+  };
 
   return (
-    <div className="min-h-full bg-[#eaeded] text-[#0f1111]">
-      {/* Compact marketplace top — brand first, Amazon density */}
-      <header className="border-b border-[#d5d9d9] bg-[#232f3e] text-white">
-        <div className="mx-auto flex max-w-[1500px] flex-wrap items-center gap-3 px-4 py-3 sm:px-6">
-          <div className="min-w-0 flex-1">
-            <p className="text-[12px] font-semibold tracking-[0.14em] text-[#febd69] uppercase">
-              Higlou Market
-            </p>
-            <h1 className="truncate text-[22px] font-bold leading-tight sm:text-[26px]">
-              Today&apos;s verified deals
-            </h1>
+    <div className="min-h-full bg-[#f7f5f1] text-[#141414]">
+      <header className="relative overflow-hidden border-b border-[#ebe7e0] bg-white">
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0"
+          style={{
+            background:
+              "radial-gradient(ellipse 70% 80% at 0% 0%, rgba(244,201,40,0.12), transparent 55%), radial-gradient(ellipse 50% 60% at 100% 0%, rgba(33,98,161,0.07), transparent 50%)",
+          }}
+        />
+        <div className="relative mx-auto max-w-6xl px-4 pt-6 pb-5 md:px-8">
+          <div className="flex flex-wrap items-end justify-between gap-4">
+            <div className="min-w-0">
+              <motion.p
+                initial={reduce ? false : { opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="inline-flex items-center gap-1.5 text-[11px] font-semibold tracking-[0.18em] text-[#6b6560] uppercase"
+              >
+                <ShieldCheck className="size-3.5 text-[#1f7a4d]" />
+                Higlou · Floor verificado
+              </motion.p>
+              <motion.h1
+                initial={reduce ? false : { opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.05 }}
+                className="mt-1.5 font-display text-[36px] leading-[0.95] tracking-tight md:text-[44px]"
+              >
+                Market
+              </motion.h1>
+              <motion.p
+                initial={reduce ? false : { opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ delay: 0.1 }}
+                className="mt-2 max-w-lg text-[14px] leading-relaxed text-[#6b6560]"
+              >
+                Deals listos para ganar: compara precios, busca más barato,
+                ponlos en tu tienda o cobra affiliate.
+              </motion.p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="rounded-full bg-[#f4f2ed] px-3 py-2 text-[12px] text-[#6b6560]">
+                <strong className="text-[#141414]">{drops.length}</strong> en
+                floor
+                {openKeep > 0 ? (
+                  <>
+                    {" "}
+                    · keep{" "}
+                    <strong className="text-[#1f7a4d]">{signed(openKeep)}</strong>
+                  </>
+                ) : null}
+                {refreshing ? " · sync…" : ""}
+              </div>
+              <Link
+                href="/winners"
+                className="inline-flex h-11 items-center gap-2 rounded-full bg-[#141414] px-5 text-[13px] font-semibold text-white shadow-[0_8px_24px_rgba(20,20,20,0.18)] hover:bg-[#2a2a2a]"
+              >
+                <Sparkles className="size-4 text-[#f4c928]" />
+                Find winners
+              </Link>
+            </div>
           </div>
-          <div className="flex flex-wrap items-center gap-2 text-[12px] text-white/75">
-            <span className="tabular-nums">
-              {drops.length} on floor
-              {openKeep > 0 ? ` · keep ${signed(openKeep)}` : ""}
-              {refreshing ? " · syncing…" : ""}
-            </span>
-            <span className="hidden sm:inline">·</span>
-            <span className="hidden sm:inline">
-              {tagReady ? "Affiliate ready" : "Set affiliate tag in Settings"}
-            </span>
+
+          <div className="mt-6 inline-flex rounded-full border border-[#ebe7e0] bg-[#f4f2ed] p-1">
+            {(
+              [
+                ["all", "Todos", drops.length],
+                ["arbitrage", "Arbitraje", arb.length],
+                ["amazon", "Amazon", amazon.length],
+                ["retail", "Retail", retail.length],
+              ] as const
+            ).map(([id, label, count]) => {
+              const on = filter === id;
+              return (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => setFilter(id)}
+                  className={cn(
+                    "relative rounded-full px-3.5 py-2 text-[13px] font-semibold transition",
+                    on ? "text-[#141414]" : "text-[#6b6560] hover:text-[#141414]",
+                  )}
+                >
+                  {on ? (
+                    <motion.span
+                      layoutId="market-filter-pill"
+                      className="absolute inset-0 rounded-full bg-white shadow-sm"
+                      transition={{ type: "spring", stiffness: 420, damping: 34 }}
+                    />
+                  ) : null}
+                  <span className="relative z-10">
+                    {label}
+                    <span className="ml-1 opacity-50">{count}</span>
+                  </span>
+                </button>
+              );
+            })}
           </div>
-          <Link
-            href="/winners"
-            className="inline-flex h-9 items-center gap-1.5 rounded-md bg-[#febd69] px-3 text-[13px] font-semibold text-[#111]"
-          >
-            <Search className="size-3.5" />
-            Find winners
-          </Link>
+          <p className="mt-2 text-[12px] text-[#8a847c]">
+            {tagReady
+              ? "Affiliate listo · links de dinero activos"
+              : "Tip: configura affiliate tag en Settings para ganar por click"}
+            {note ? ` · ${note}` : ""}
+            {ledgerCount > 0 ? ` · ledger ${ledgerCount}` : ""}
+          </p>
         </div>
       </header>
 
-      <div className="mx-auto max-w-[1500px] space-y-4 overflow-x-hidden px-3 py-4 sm:px-5 sm:py-5">
-        {/* Filter chips */}
-        <div className="flex flex-wrap gap-2">
-          {(
-            [
-              ["all", "Deals for you", drops.length],
-              ["arbitrage", "Arbitrage keep", arb.length],
-              ["amazon", "Sell on Amazon", amazon.length],
-              ["retail", "Retail routes", retail.length],
-            ] as const
-          ).map(([id, label, count]) => (
+      <div className="sticky top-0 z-20 border-b border-[#ebe7e0] bg-white/90 backdrop-blur-md">
+        <div className="mx-auto flex max-w-6xl flex-col gap-2 px-4 py-3 md:flex-row md:items-center md:px-8">
+          <div className="relative min-w-0 flex-1">
+            <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-[#a8a29a]" />
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Buscar en el floor · título, marca, ASIN"
+              className="h-11 w-full rounded-xl border border-[#ebe7e0] bg-[#faf9f6] pr-3 pl-10 text-[14px] outline-none transition focus:border-[#141414] focus:bg-white"
+            />
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex rounded-full bg-[#f4f2ed] p-0.5">
+              {(
+                [
+                  ["keep", "Keep"],
+                  ["demand", "Demanda"],
+                  ["hot", "Hot"],
+                ] as const
+              ).map(([key, label]) => (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => setSortKey(key)}
+                  className={cn(
+                    "rounded-full px-3 py-1 text-[11px] font-semibold transition",
+                    sortKey === key
+                      ? "bg-white text-[#141414] shadow-sm"
+                      : "text-[#6b6560]",
+                  )}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
             <button
-              key={id}
               type="button"
-              onClick={() => setFilter(id)}
+              onClick={() => setProfitOnly((v) => !v)}
               className={cn(
-                "h-8 rounded-full px-3 text-[12px] font-semibold",
-                filter === id
-                  ? "bg-[#0f1111] text-white"
-                  : "bg-white text-[#0f1111] ring-1 ring-[#d5d9d9] hover:bg-[#f7f8f8]",
+                "rounded-full px-3 py-1 text-[11px] font-semibold ring-1 transition",
+                profitOnly
+                  ? "bg-[#e8f5ee] text-[#1f7a4d] ring-[#b8dfc8]"
+                  : "bg-white text-[#6b6560] ring-[#ebe7e0]",
               )}
             >
-              {label}
-              <span className="ml-1.5 opacity-60">{count}</span>
+              Solo money ≥ $12
             </button>
-          ))}
-          {note ? (
-            <span className="ml-auto hidden self-center text-[12px] text-[#565959] lg:inline">
-              {note}
-            </span>
-          ) : null}
+          </div>
         </div>
+      </div>
 
+      <div className="mx-auto max-w-6xl px-4 py-6 pb-16 md:px-8">
         {drops.length === 0 ? (
-          <div className="rounded-lg border border-[#d5d9d9] bg-white px-6 py-16 text-center shadow-sm">
-            <p className="text-[22px] font-bold text-[#0f1111]">
-              Floor is empty
+          <motion.div
+            initial={reduce ? false : { opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mx-auto flex min-h-[320px] max-w-md flex-col items-center justify-center rounded-3xl border border-dashed border-[#ddd7cd] bg-white/70 px-6 py-14 text-center"
+          >
+            {refreshing ? (
+              <Loader2 className="size-6 animate-spin text-[#8a847c]" />
+            ) : (
+              <>
+                <p className="text-[11px] font-semibold tracking-[0.16em] text-[#8a847c] uppercase">
+                  Floor
+                </p>
+                <p className="mt-2 font-display text-[28px] leading-none">
+                  Aún no hay deals
+                </p>
+                <p className="mt-3 text-[14px] leading-relaxed text-[#6b6560]">
+                  Escanea winners primero. Cada oportunidad verificada llega
+                  aquí lista para tienda, comparar y ganar.
+                </p>
+                <Link
+                  href="/winners"
+                  className="mt-6 inline-flex h-11 items-center gap-2 rounded-full bg-[#141414] px-5 text-[13px] font-semibold text-white"
+                >
+                  <Sparkles className="size-4 text-[#f4c928]" />
+                  Abrir Find Winners
+                </Link>
+              </>
+            )}
+          </motion.div>
+        ) : filtered.length === 0 ? (
+          <div className="rounded-3xl border border-dashed border-[#ddd7cd] bg-white/70 px-6 py-14 text-center">
+            <p className="font-display text-[24px]">Sin matches</p>
+            <p className="mt-2 text-[14px] text-[#6b6560]">
+              Prueba otro filtro o limpia la búsqueda.
             </p>
-            <p className="mx-auto mt-2 max-w-md text-[14px] text-[#565959]">
-              Find real opportunities first. Verified keep and Keepa demand
-              stock this marketplace automatically.
-            </p>
-            <Link
-              href="/winners"
-              className="mt-6 inline-flex h-10 items-center gap-2 rounded-full bg-[#ffd814] px-5 text-[13px] font-semibold text-[#0f1111]"
+            <button
+              type="button"
+              onClick={() => {
+                setQuery("");
+                setFilter("all");
+                setProfitOnly(false);
+              }}
+              className="mt-4 text-[13px] font-semibold text-[#2162a1] hover:underline"
             >
-              <Search className="size-4" />
-              Open Find Winners
-            </Link>
+              Reset filtros
+            </button>
           </div>
         ) : (
-          <>
-            {/* Lane cards — responsive grid, only non-empty lanes */}
-            <div
-              className={cn(
-                "grid gap-4",
-                visibleLanes === 1
-                  ? "grid-cols-1"
-                  : visibleLanes === 2
-                    ? "grid-cols-1 sm:grid-cols-2"
-                    : "grid-cols-1 sm:grid-cols-2 xl:grid-cols-3",
-              )}
-            >
-              <CategoryQuadCard
-                title="Deals for you"
-                subtitle="Higlou-verified winners"
-                items={drops}
-                busyId={busy}
-                selectedId={drop?.id ?? null}
-                onSelect={selectItem}
-                onClaim={(item) => void claim(item)}
-                onOpenAll={() => setFilter("all")}
-              />
-              {showLaneCards && arb.length > 0 ? (
-                <CategoryQuadCard
-                  title="Arbitrage keep"
-                  subtitle="Amazon → eBay after fees"
-                  items={arb}
-                  busyId={busy}
-                  selectedId={drop?.id ?? null}
-                  onSelect={selectItem}
-                  onClaim={(item) => void claim(item)}
-                  onOpenAll={() => setFilter("arbitrage")}
-                />
-              ) : null}
-              {showLaneCards && amazon.length > 0 ? (
-                <CategoryQuadCard
-                  title="Sell on Amazon"
-                  subtitle="Keepa demand lane"
-                  items={amazon}
-                  busyId={busy}
-                  selectedId={drop?.id ?? null}
-                  onSelect={selectItem}
-                  onClaim={(item) => void claim(item)}
-                  onOpenAll={() => setFilter("amazon")}
-                />
-              ) : null}
-              {showLaneCards && retail.length > 0 ? (
-                <CategoryQuadCard
-                  title="Retail routes"
-                  subtitle="Walmart & Home Depot"
-                  items={retail}
-                  busyId={busy}
-                  selectedId={drop?.id ?? null}
-                  onSelect={selectItem}
-                  onClaim={(item) => void claim(item)}
-                  onOpenAll={() => setFilter("retail")}
-                />
-              ) : null}
-            </div>
-
-            {/* Horizontal deal carousels */}
-            {filter === "all" || filter === "arbitrage" ? (
-              <DealCarouselRow
-                title={"Keep deals you can't miss"}
-                items={arb.length ? arb : drops.filter((d) => d.lane !== "amazon")}
-                busyId={busy}
-                selectedId={drop?.id ?? null}
-                onSelect={selectItem}
-                onClaim={(item) => void claim(item)}
-                onOpenAll={() => setFilter("arbitrage")}
-              />
-            ) : null}
-
-            {filter === "all" || filter === "amazon" ? (
-              <DealCarouselRow
-                title="Sell on Amazon · Keepa picks"
-                items={amazon}
-                busyId={busy}
-                selectedId={drop?.id ?? null}
-                onSelect={selectItem}
-                onClaim={(item) => void claim(item)}
-                onOpenAll={() => setFilter("amazon")}
-              />
-            ) : null}
-
-            {filter === "retail" && retail.length ? (
-              <DealCarouselRow
-                title="Retail routes"
-                items={retail}
-                busyId={busy}
-                selectedId={drop?.id ?? null}
-                onSelect={selectItem}
-                onClaim={(item) => void claim(item)}
-              />
-            ) : null}
-
-            {/* Selected product detail — Amazon product strip */}
-            {drop ? (
-              <section className="grid gap-4 rounded-lg border border-[#d5d9d9] bg-white p-4 shadow-sm md:grid-cols-[200px_1fr_auto] md:items-center md:p-5">
-                <div className="relative mx-auto aspect-square w-full max-w-[200px] overflow-hidden rounded-md bg-[#f7f8f8]">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={drop.photo}
-                    alt=""
-                    className="size-full object-contain p-4"
+          <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            <AnimatePresence mode="popLayout">
+              {filtered.map((item, index) => (
+                <li key={item.id}>
+                  <MarketProductTile
+                    item={item}
+                    index={index}
+                    selected={panelOpen && active?.id === item.id}
+                    busy={busy === item.id}
+                    onOpen={() => openItem(item)}
+                    onClaim={() => void claim(item)}
                   />
-                </div>
-                <div className="min-w-0">
-                  <p className="text-[12px] font-semibold tracking-wide text-[#565959] uppercase">
-                    {drop.name} · verified
-                  </p>
-                  <h2 className="mt-1 text-[20px] leading-snug font-bold text-[#0f1111] md:text-[22px]">
-                    {drop.title}
-                  </h2>
-                  <div className="mt-3 flex flex-wrap items-baseline gap-2">
-                    <AmazonPrice amount={drop.sell} size="lg" />
-                    {drop.comps > drop.sell ? (
-                      <span className="text-[14px] text-[#565959] line-through">
-                        ${drop.comps.toFixed(2)}
-                      </span>
-                    ) : null}
-                    {drop.lane !== "amazon" &&
-                    (drop.netProfit ?? marketSpread(drop)) > 0 ? (
-                      <span className="text-[14px] font-semibold text-[#067d62]">
-                        You keep{" "}
-                        {signed(drop.netProfit ?? marketSpread(drop))}
-                      </span>
-                    ) : null}
-                  </div>
-                  <p className="mt-2 text-[13px] text-[#565959]">
-                    {drop.platformUrls?.amazon ? (
-                      <a
-                        href={drop.platformUrls.amazon}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-[#2162a1] hover:underline"
-                      >
-                        Amz{" "}
-                        {drop.amazonPrice != null
-                          ? `$${drop.amazonPrice.toFixed(2)}`
-                          : "—"}
-                      </a>
-                    ) : (
-                      <>
-                        Amz{" "}
-                        {drop.amazonPrice != null
-                          ? `$${drop.amazonPrice.toFixed(2)}`
-                          : "—"}
-                      </>
-                    )}
-                    {" · "}
-                    {drop.platformUrls?.ebay ? (
-                      <a
-                        href={drop.platformUrls.ebay}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-[#2162a1] hover:underline"
-                      >
-                        eBay{" "}
-                        {drop.ebayPrice != null
-                          ? `$${drop.ebayPrice.toFixed(2)}`
-                          : "—"}
-                      </a>
-                    ) : (
-                      <>
-                        eBay{" "}
-                        {drop.ebayPrice != null
-                          ? `$${drop.ebayPrice.toFixed(2)}`
-                          : "—"}
-                      </>
-                    )}
-                    {" · "}
-                    {drop.platformUrls?.walmart ? (
-                      <a
-                        href={drop.platformUrls.walmart}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-[#2162a1] hover:underline"
-                      >
-                        Walmart{" "}
-                        {drop.walmartPrice != null
-                          ? `$${drop.walmartPrice.toFixed(2)}`
-                          : "—"}
-                      </a>
-                    ) : (
-                      <>
-                        Walmart{" "}
-                        {drop.walmartPrice != null
-                          ? `$${drop.walmartPrice.toFixed(2)}`
-                          : "—"}
-                      </>
-                    )}
-                    {" · "}
-                    {drop.platformUrls?.homedepot ? (
-                      <a
-                        href={drop.platformUrls.homedepot}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-[#2162a1] hover:underline"
-                      >
-                        HD{" "}
-                        {drop.homedepotPrice != null
-                          ? `$${drop.homedepotPrice.toFixed(2)}`
-                          : "—"}
-                      </a>
-                    ) : (
-                      <>
-                        HD{" "}
-                        {drop.homedepotPrice != null
-                          ? `$${drop.homedepotPrice.toFixed(2)}`
-                          : "—"}
-                      </>
-                    )}
-                  </p>
-                  <PlatformOpenLinks
-                    className="mt-3"
-                    urls={drop.platformUrls}
-                  />
-                  {drop.asin ? (
-                    <p className="mt-1 text-[12px] text-[#565959]">
-                      ASIN {drop.asin}
-                    </p>
-                  ) : null}
-                </div>
-                <div className="flex w-full flex-col gap-2 md:w-[200px]">
-                  <button
-                    type="button"
-                    disabled={busy === drop.id}
-                    onClick={() => void claim(drop)}
-                    className="inline-flex h-10 items-center justify-center rounded-full bg-[#ffd814] text-[14px] font-semibold text-[#0f1111] hover:bg-[#f7ca00] disabled:opacity-50"
-                  >
-                    {busy === drop.id ? "Adding…" : "Add to store"}
-                  </button>
-                  {drop.asin ? (
-                    <button
-                      type="button"
-                      disabled={busy === `aff-${drop.id}`}
-                      onClick={() => void earnLink(drop)}
-                      className="inline-flex h-10 items-center justify-center rounded-full border border-[#d5d9d9] bg-white text-[13px] font-semibold hover:bg-[#f7f8f8] disabled:opacity-50"
-                    >
-                      Earn affiliate
-                    </button>
-                  ) : null}
-                  <Link
-                    href="/winners"
-                    className="inline-flex h-9 items-center justify-center gap-1 text-[13px] font-semibold text-[#2162a1] hover:underline"
-                  >
-                    Find more winners
-                    <ChevronRight className="size-4" />
-                  </Link>
-                </div>
-              </section>
-            ) : null}
-          </>
+                </li>
+              ))}
+            </AnimatePresence>
+          </ul>
         )}
       </div>
+
+      <MarketDetailPanel
+        item={panelOpen ? active : null}
+        busy={busy === active?.id}
+        affBusy={busy === `aff-${active?.id}`}
+        onClose={() => setPanelOpen(false)}
+        onClaim={() => {
+          if (active) void claim(active);
+        }}
+        onEarn={() => {
+          if (active) void earnLink(active);
+        }}
+      />
     </div>
   );
 }

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { requireOwner } from "@/lib/auth/owner";
+import { requireUser } from "@/lib/auth/require-user";
 import { isSupabaseConfigured } from "@/lib/supabase/admin";
 import { publishDonBaratonPromoCarousel } from "@/lib/don-baraton/facebook-promo";
 import { getDonBaratonConfig } from "@/lib/don-baraton/config";
@@ -31,11 +31,12 @@ const bodySchema = z
     }
   });
 
+/** Unlocked for every signed-in Higlou account (was owner-only). */
 export async function POST(request: Request) {
   if (!isSupabaseConfigured()) {
     return NextResponse.json({ error: "Authentication required" }, { status: 503 });
   }
-  const auth = await requireOwner();
+  const auth = await requireUser();
   if (!auth.ok) return auth.response;
 
   const config = getDonBaratonConfig();

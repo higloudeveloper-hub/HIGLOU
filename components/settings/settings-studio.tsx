@@ -9,6 +9,7 @@ import { EbayTemplateForm } from "@/components/settings/ebay-template-form";
 import { EbayPoliciesForm } from "@/components/settings/ebay-policies-form";
 import { EbayConnectForm } from "@/components/settings/ebay-connect-form";
 import { AmazonConnectForm } from "@/components/settings/amazon-connect-form";
+import { FacebookConnectForm } from "@/components/settings/facebook-connect-form";
 import { EbayStoreOrganizeForm } from "@/components/settings/ebay-store-organize-form";
 import { EbaySetupStory } from "@/components/settings/ebay-setup-story";
 import { AiSettingsForm } from "@/components/settings/ai-settings-form";
@@ -21,7 +22,7 @@ import { cn } from "@/lib/utils";
 type Tab = "ebay" | "brand" | "tools" | "money";
 
 const TABS: { id: Tab; label: string; hint: string }[] = [
-  { id: "ebay", label: "Stores", hint: "eBay & Amazon" },
+  { id: "ebay", label: "Stores", hint: "eBay · Amazon · FB" },
   { id: "money", label: "Money", hint: "APIs & piloto" },
   { id: "brand", label: "Look", hint: "Store branding" },
   { id: "tools", label: "Tools", hint: "AI, folders, CSV" },
@@ -30,7 +31,7 @@ const TABS: { id: Tab; label: string; hint: string }[] = [
 function tabFromHash(hash: string): Tab {
   if (hash === "#branding") return "brand";
   if (hash === "#money" || hash === "#money-machine") return "money";
-  if (hash === "#amazon-store") return "ebay";
+  if (hash === "#amazon-store" || hash === "#facebook-store") return "ebay";
   if (
     hash === "#organize-store" ||
     hash === "#ai" ||
@@ -137,6 +138,19 @@ export function SettingsStudio() {
                   </p>
                 </div>
                 <AmazonConnectForm />
+              </section>
+
+              <section id="facebook-store" className="scroll-mt-24 space-y-3">
+                <div>
+                  <h2 className="text-lg font-semibold tracking-tight">
+                    Facebook
+                  </h2>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Conectá tu Page para compartir affiliate links y potenciar
+                    publicidad. Disponible para todas las cuentas.
+                  </p>
+                </div>
+                <FacebookConnectForm />
               </section>
 
               <section id="policies" className="scroll-mt-24 space-y-4">

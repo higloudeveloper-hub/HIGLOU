@@ -14,9 +14,11 @@ import {
   QrCode,
   Scale,
   ShieldCheck,
+  Share2,
   Sparkles,
   Store,
 } from "lucide-react";
+import { FacebookFMark } from "@/components/brand/store-marks";
 import type { MonetizationDecision, MonetizationInput } from "@/lib/monetization/types";
 import { takeOpportunityMoneySeed } from "@/lib/monetization/from-opportunity";
 import {
@@ -347,6 +349,75 @@ export function ProductMoneyCard({
     }
   }, [productId, asin]);
 
+  const shareFacebook = useCallback(async () => {
+    if (!asin) {
+      toast.message("ASIN required");
+      return;
+    }
+    setBusy("facebook");
+    try {
+      // Ensure we have a fresh affiliate + smart link first
+      const created = await fetch("/api/money/affiliate/links", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          asin,
+          productId: productId || undefined,
+          campaignName: "Facebook share",
+          source: "facebook",
+          createSmartLink: true,
+          platform: "facebook",
+        }),
+      });
+      const createdBody = (await created.json()) as {
+        error?: string;
+        link?: { destinationUrl?: string };
+        smartLink?: { path?: string };
+      };
+      if (!created.ok) {
+        toast.error(createdBody.error || "Crea el affiliate primero");
+        return;
+      }
+      const path = createdBody.smartLink?.path;
+      const url = path
+        ? `${window.location.origin}${path}`
+        : createdBody.link?.destinationUrl;
+      if (!url) {
+        toast.error("No hay URL para compartir");
+        return;
+      }
+      const res = await fetch("/api/facebook/share", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          url,
+          asin,
+          message: `Oferta verificada · ${title || asin}`,
+        }),
+      });
+      const body = (await res.json()) as {
+        error?: string;
+        mode?: string;
+        shareUrl?: string;
+        postUrl?: string;
+      };
+      if (!res.ok) {
+        toast.error(body.error || "Facebook share failed");
+        return;
+      }
+      if (body.mode === "page_post") {
+        toast.success("Publicado en tu Facebook Page");
+        if (body.postUrl) window.open(body.postUrl, "_blank", "noopener,noreferrer");
+      } else if (body.shareUrl) {
+        window.open(body.shareUrl, "_blank", "noopener,noreferrer");
+        toast.message("Abriendo Facebook — conectá tu Page en Settings para post directo");
+      }
+      if (path) setSmartPath(path);
+    } finally {
+      setBusy(null);
+    }
+  }, [asin, productId, title]);
+
   const urls = useMemo(() => {
     const amazon = seedUrls?.amazon || amazonProductUrl(asin) || null;
     return {
@@ -627,6 +698,19 @@ export function ProductMoneyCard({
                     </button>
                     <button
                       type="button"
+                      disabled={!flags.affiliateEngine || busy === "facebook"}
+                      onClick={() => void shareFacebook()}
+                      className="inline-flex h-12 items-center gap-2 rounded-2xl bg-[#1877F2] px-4 text-[13px] font-semibold text-white hover:bg-[#166fe5] disabled:opacity-40"
+                    >
+                      {busy === "facebook" ? (
+                        <Loader2 className="size-4 animate-spin" />
+                      ) : (
+                        <FacebookFMark className="size-3.5" />
+                      )}
+                      Facebook ads
+                    </button>
+                    <button
+                      type="button"
                       disabled={busy === "watch"}
                       onClick={() => void watchProduct()}
                       className="inline-flex h-12 items-center gap-2 rounded-2xl border border-[#ddd7cd] bg-white px-4 text-[13px] font-semibold text-[#141414] hover:border-[#141414] disabled:opacity-40"
@@ -634,6 +718,13 @@ export function ProductMoneyCard({
                       <Eye className="size-4" />
                       Watch
                     </button>
+                    <Link
+                      href="/affiliate"
+                      className="inline-flex h-12 items-center gap-2 rounded-2xl border border-[#ddd7cd] bg-white px-4 text-[13px] font-semibold text-[#141414] hover:border-[#141414]"
+                    >
+                      <Share2 className="size-4" />
+                      Ver affiliate
+                    </Link>
                   </div>
                   {smartPath ? (
                     <p className="rounded-2xl border border-dashed border-[#ddd7cd] bg-white px-3.5 py-2.5 text-[12px] text-[#6b6560]">

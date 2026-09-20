@@ -10,6 +10,7 @@ import {
   LogOut,
   Search,
   Settings,
+  Share2,
   Store,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -54,6 +55,13 @@ const WORKSPACE_NAV_TOP: NavItem[] = [
 
 const WORKSPACE_NAV_BOTTOM: NavItem[] = [
   {
+    href: "/affiliate",
+    label: "Affiliate",
+    hint: "Links · stats · FB",
+    icon: Share2,
+    match: (path) => path === "/affiliate" || path.startsWith("/affiliate/"),
+  },
+  {
     href: "/stats",
     label: "Stats",
     hint: "Live store",
@@ -82,7 +90,7 @@ const FACEBOOK_NAV: NavItem[] = [
   {
     href: "/facebook",
     label: "Promo Facebook",
-    hint: "Carrusel Don Baratón",
+    hint: "Carrusel · todas las cuentas",
     mark: "facebook",
     match: (path) => path === "/facebook" || path.startsWith("/facebook/"),
   },
@@ -197,7 +205,7 @@ export function AppSidebar({
 
         <div>
           <p className="px-3 pb-1.5 text-[10px] font-semibold tracking-[0.16em] text-muted-foreground uppercase">
-            Don Baratón
+            Facebook
           </p>
           <div className="space-y-1">
             <NavLinks items={FACEBOOK_NAV} pathname={pathname} onNavigate={onNavigate} />

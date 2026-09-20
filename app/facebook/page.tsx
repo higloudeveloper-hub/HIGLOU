@@ -8,9 +8,9 @@ export default function FacebookPromoPage() {
   return (
     <AppShell hideHeader flush>
       <StudioFrame
-        kicker="Pestaña Don Baratón"
+        kicker="Facebook"
         title="Promo Facebook"
-        hint="Carrusel Alibaba o vitrina con productos reales"
+        hint="Carrusel / vitrina · disponible para todas las cuentas"
         scroll={false}
       >
         <PromoCarouselStudio />

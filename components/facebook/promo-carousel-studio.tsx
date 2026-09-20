@@ -106,7 +106,7 @@ export function PromoCarouselStudio() {
   const [searching, setSearching] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [postUrl, setPostUrl] = useState<string | null>(null);
-  const [ownerError, setOwnerError] = useState<string | null>(null);
+  const [gateError, setGateError] = useState<string | null>(null);
   const [tab, setTab] = useState<"productos" | "publicar">("productos");
   const [format, setFormat] = useState<PromoFormat>("carousel");
   const [coverProductId, setCoverProductId] = useState<string | null>(null);
@@ -165,7 +165,17 @@ export function PromoCarouselStudio() {
       products?: DonBaratonPromoProduct[];
     } | null;
     if (res.status === 403) {
-      setOwnerError("Facebook promo is only available on the Higlou owner account.");
+      setGateError(
+        body?.error ||
+          "Inicia sesión para usar Promo Facebook. Conectá tu Page en Settings → Stores.",
+      );
+      return [];
+    }
+    if (res.status === 503) {
+      setGateError(
+        body?.error ||
+          "Facebook promo aún no está configurado en este entorno.",
+      );
       return [];
     }
     if (!res.ok || body?.ok === false) {
@@ -432,9 +442,17 @@ export function PromoCarouselStudio() {
     }
   };
 
-  if (ownerError) {
+  if (gateError) {
     return (
-      <div className="p-6 text-sm text-[#707070]">{ownerError}</div>
+      <div className="space-y-3 p-6 text-sm text-[#707070]">
+        <p>{gateError}</p>
+        <a
+          href="/settings#facebook-store"
+          className="inline-flex font-semibold text-[#1877F2] hover:underline"
+        >
+          Settings → Facebook
+        </a>
+      </div>
     );
   }
 

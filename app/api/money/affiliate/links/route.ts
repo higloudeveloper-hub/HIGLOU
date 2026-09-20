@@ -109,5 +109,31 @@ export async function GET() {
       note: "Affiliate tables may be missing — apply 20260916_monetization.sql",
     });
   }
-  return NextResponse.json({ links: data || [] });
+
+  const links = data || [];
+  const ids = links.map((l) => l.id).filter(Boolean);
+  const smartByAff = new Map<string, string>();
+  if (ids.length) {
+    const { data: smartRows } = await auth.supabase
+      .from("smart_links")
+      .select("affiliate_link_id, slug")
+      .eq("user_id", auth.user.id)
+      .in("affiliate_link_id", ids);
+    for (const row of smartRows || []) {
+      const affId = String(
+        (row as { affiliate_link_id?: string }).affiliate_link_id || "",
+      );
+      const slug = String((row as { slug?: string }).slug || "").trim();
+      if (affId && slug && !smartByAff.has(affId)) {
+        smartByAff.set(affId, `/go/${slug}`);
+      }
+    }
+  }
+
+  return NextResponse.json({
+    links: links.map((link) => ({
+      ...link,
+      smartPath: smartByAff.get(link.id) || null,
+    })),
+  });
 }

@@ -46,7 +46,7 @@ export function AppShell({
       <div
         className={cn(
           "flex min-w-0 flex-1 flex-col",
-          flush && "md:h-screen md:overflow-hidden",
+          flush && "md:h-dvh md:overflow-hidden",
         )}
       >
         <div className="sticky top-0 z-30 flex items-center gap-3 border-b border-border/70 bg-background/90 px-4 py-3 backdrop-blur-md md:hidden">

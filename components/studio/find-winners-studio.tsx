@@ -197,5 +197,9 @@ export function FindWinnersStudio() {
     }
   };
 
-  return <AmazonAutoImportPanel busy={busy} onImport={importWinners} />;
+  return (
+    <div className="flex h-full min-h-[70dvh] flex-1 flex-col md:min-h-0">
+      <AmazonAutoImportPanel busy={busy} onImport={importWinners} />
+    </div>
+  );
 }

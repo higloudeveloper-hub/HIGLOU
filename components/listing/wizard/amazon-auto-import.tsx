@@ -337,9 +337,18 @@ function metricsFor(hit: OpportunityProduct, mode: OpportunityMode) {
   ] as const;
 }
 
+function boardKeep(hit: OpportunityProduct, mode: OpportunityMode) {
+  const verified = sessionKeep(hit, mode);
+  if (verified != null) return verified;
+  if (hit.hypotheticalKeep != null && Number.isFinite(hit.hypotheticalKeep)) {
+    return hit.hypotheticalKeep;
+  }
+  return keepFor(hit, mode);
+}
+
 function sessionStats(hits: OpportunityProduct[], mode: OpportunityMode) {
   const keeps = hits
-    .map((hit) => sessionKeep(hit, mode))
+    .map((hit) => boardKeep(hit, mode))
     .filter((n): n is number => n != null && Number.isFinite(n));
   const payday = keeps.filter((n) => n >= 10).length;
   const thin = hits.filter(
@@ -361,7 +370,9 @@ function KeepSpark({
   hits: OpportunityProduct[];
   mode: OpportunityMode;
 }) {
-  const values = hits.map((hit) => sessionKeep(hit, mode) ?? 0).slice(0, 28);
+  const values = hits
+    .map((hit) => Math.max(0, boardKeep(hit, mode) ?? 0))
+    .slice(0, 28);
   const max = Math.max(8, ...values, 1);
   if (!values.length) {
     return (
@@ -381,8 +392,12 @@ function KeepSpark({
       {values.map((value, i) => (
         <span
           key={`${i}-${value}`}
-          className="flex-1 bg-[#f4c928]"
-          style={{ height: `${Math.max(8, Math.round((value / max) * 100))}%` }}
+          className={cn(
+            "flex-1",
+            value > 0 ? "bg-[#f4c928]" : "bg-[#e3e6e6]",
+          )}
+          title={signedMoney(value)}
+          style={{ height: `${Math.max(10, Math.round((value / max) * 100))}%` }}
         />
       ))}
     </div>
@@ -1160,24 +1175,24 @@ export function AmazonAutoImportPanel({
           Only show products I can sell on Amazon
         </label>
       ) : (
-        <p className="border-b border-[#d5d9d9] bg-[#f3f3f3] px-3 py-1.5 text-[11px] text-[#565959]">
+        <p className="shrink-0 border-b border-[#d5d9d9] bg-[#f3f3f3] px-3 py-1.5 text-[11px] text-[#565959]">
           {mode === "amazon"
             ? "Restricted brands for your Amazon account are hidden automatically."
-            : "This path buys inventory on Amazon, then you inspect and publish on eBay. Numbers use a conservative eBay low ask (not Terapeak sold comps). Import only what still looks good after fees."}{" "}
+            : "Buy on Amazon → list on eBay. Keep uses a conservative eBay low ask after fees (not Terapeak sold comps)."}{" "}
           {mode === "amazon_to_ebay" ? (
             <>
-              eBay asking prices use Browse (app credentials or{" "}
+              Need{" "}
               <a href="/settings#ebay-store" className="underline underline-offset-2">
-                Connect eBay
-              </a>
-              ). Amazon live cost/fees need{" "}
+                eBay
+              </a>{" "}
+              +{" "}
               <a
                 href="/settings#amazon-store"
                 className="underline underline-offset-2"
               >
-                Connect Amazon
+                Amazon
               </a>
-              .
+              . Keepa only on Manual Find.
             </>
           ) : mode === "amazon" ? (
             <>
@@ -1188,7 +1203,7 @@ export function AmazonAutoImportPanel({
               >
                 Amazon
               </a>{" "}
-              so Higlou can check authorization and fees.
+              for authorization and fees.
             </>
           ) : (
             <>
@@ -1205,16 +1220,12 @@ export function AmazonAutoImportPanel({
               </a>
               .
             </>
-          )}{" "}
-          Add <span className="font-medium">KEEPA_API_KEY</span> on Vercel for
-          BSR drops and buy-box on <span className="font-medium">manual Find</span>{" "}
-          only. Live scan stays Amazon/eBay-free so Keepa tokens are not burned
-          on idle loops.
+          )}
           {sources && !sources.keepa
-            ? " This round skipped Keepa (live path or budget)."
+            ? " Keepa skipped this round."
             : ""}
           {sources && !sources.ebayLive
-            ? " No eBay asks priced yet this round."
+            ? " No eBay asks priced yet."
             : ""}
         </p>
       )}
@@ -1223,8 +1234,8 @@ export function AmazonAutoImportPanel({
         <p className="mt-2 text-[13px] text-destructive">{error}</p>
       ) : null}
 
-      <div className="mx-3 mb-0 mt-0 flex min-h-0 flex-1 overflow-hidden border border-[#d5d9d9] bg-white">
-        <div className="min-w-0 flex-1 overflow-auto">
+      <div className="mx-3 mb-0 mt-0 flex min-h-[min(52vh,480px)] flex-1 flex-col overflow-hidden border border-[#d5d9d9] bg-white md:min-h-[280px]">
+        <div className="min-h-0 min-w-0 flex-1 overflow-auto">
           <table className="w-full min-w-[980px] border-collapse text-left">
             <thead className="sticky top-0 z-[1] bg-[#f3f3f3] text-[11px] font-semibold tracking-wide text-[#565959] uppercase">
               <tr className="border-b border-[#d5d9d9]">

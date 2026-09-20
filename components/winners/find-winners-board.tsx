@@ -247,7 +247,7 @@ export function FindWinnersBoard({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          limit,
+          limit: Math.min(12, Math.max(1, limit)),
           mode,
           seed: nextRound - 1,
           excludeAsins: winners.map((hit) => hitKey(hit)).slice(0, 40),
@@ -255,7 +255,12 @@ export function FindWinnersBoard({
       });
       const body = (await response.json().catch(() => null)) as SearchBody | null;
       if (!response.ok || !body) {
-        setError(body?.error || "No se pudo escanear.");
+        const raw = body?.error || "";
+        setError(
+          /Send JSON|sign in/i.test(raw)
+            ? "Inicia sesión o espera un momento e intenta de nuevo."
+            : raw || "No se pudo escanear.",
+        );
         return;
       }
       applyFound(body.products || [], body.sources || null);
@@ -278,6 +283,11 @@ export function FindWinnersBoard({
 
   const find = useCallback(async () => {
     if (searching || generalScanning || busy) return;
+    // Empty search → general opportunity scan (same as "Ver oportunidades")
+    if (!retail && !query.trim()) {
+      void scanGeneral();
+      return;
+    }
     if (retail && categoryId === "all" && query.trim().length < 2) {
       setError("Para Walmart / Home Depot escribe un producto o elige categoría.");
       return;
@@ -293,7 +303,7 @@ export function FindWinnersBoard({
         body: JSON.stringify({
           query: query.trim(),
           categoryId: categoryId || "all",
-          limit,
+          limit: Math.min(12, Math.max(1, limit)),
           mode,
           onlySellable: false,
           seed: nextRound - 1,
@@ -304,7 +314,12 @@ export function FindWinnersBoard({
       });
       const body = (await response.json().catch(() => null)) as SearchBody | null;
       if (!response.ok || !body) {
-        setError(body?.error || "Búsqueda falló.");
+        const raw = body?.error || "";
+        setError(
+          /Send JSON|sign in/i.test(raw)
+            ? "Inicia sesión o vuelve a escanear en un momento."
+            : raw || "Búsqueda falló.",
+        );
         return;
       }
       applyFound(body.products || [], body.sources || null);
@@ -323,6 +338,7 @@ export function FindWinnersBoard({
     query,
     retail,
     round,
+    scanGeneral,
     searching,
     winners,
   ]);

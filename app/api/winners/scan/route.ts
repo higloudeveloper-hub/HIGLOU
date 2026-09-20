@@ -20,10 +20,10 @@ export const maxDuration = 60;
 
 /**
  * General opportunity scan — no category, no query.
- * Keepa Product Finder rotates roots + eBay asks; returns up to 5 real winners.
+ * Keepa Product Finder rotates roots + eBay asks; returns up to 12 real winners.
  */
 const bodySchema = z.object({
-  limit: z.coerce.number().int().min(1).max(5).optional().default(5),
+  limit: z.coerce.number().int().min(1).max(12).optional().default(5),
   mode: z
     .enum([
       "amazon",
@@ -78,7 +78,7 @@ export async function POST(request: Request) {
     body = bodySchema.parse(await request.json().catch(() => ({})));
   } catch {
     return NextResponse.json(
-      { error: "Send JSON { limit: 1-5 }." },
+      { error: "No se pudo iniciar el escaneo. Intenta de nuevo." },
       { status: 400 },
     );
   }

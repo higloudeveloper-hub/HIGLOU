@@ -23,7 +23,7 @@ const bodySchema = z.object({
   query: z.string().max(200).optional().default(""),
   category: z.string().max(120).optional().default(""),
   categoryId: z.string().max(40).optional().default(""),
-  limit: z.coerce.number().int().min(1).max(5).optional().default(5),
+  limit: z.coerce.number().int().min(1).max(12).optional().default(5),
   mode: z
     .enum([
       "amazon",
@@ -77,7 +77,7 @@ export async function POST(request: Request) {
     body = bodySchema.parse(await request.json());
   } catch {
     return NextResponse.json(
-      { error: "Send JSON { query }." },
+      { error: "Revisa búsqueda y límite (1–12), luego intenta de nuevo." },
       { status: 400 },
     );
   }

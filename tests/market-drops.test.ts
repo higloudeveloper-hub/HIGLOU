@@ -169,10 +169,10 @@ describe("higlou market + find winners wiring", () => {
       /Higlou · Floor verificado|Market/,
     );
     expect(readRepo("components/market/drop-market.tsx")).toMatch(
-      /MarketProductTile|MarketDetailPanel|MarketEarnGuide|MarketLivePulse|1 click/,
+      /MarketProductTile|MarketDetailPanel|MarketEarnGuide/,
     );
     expect(readRepo("components/market/market-live-pulse.tsx")).toMatch(
-      /Opportunity machine/,
+      /Live|Escaneando Keepa/,
     );
     expect(readRepo("lib/market/route-intent.ts")).toMatch(
       /Vender en Amazon|marketTilePricing/,
@@ -181,7 +181,7 @@ describe("higlou market + find winners wiring", () => {
       /Buy Box Amazon|Tendencia|Vender en Amazon/,
     );
     expect(readRepo("components/market/market-earn-guide.tsx")).toMatch(
-      /3 formas de hacer dinero/,
+      /Ganar|Associate tag|Settings/,
     );
     expect(readRepo("lib/market/home-winners.ts")).toMatch(
       /marketDropsToReadyListings/,
@@ -211,7 +211,7 @@ describe("higlou market + find winners wiring", () => {
     expect(readRepo("app/market/page.tsx")).not.toMatch(/flush/);
     expect(readRepo("app/winners/page.tsx")).not.toMatch(/flush/);
     expect(readRepo("components/winners/find-winners-board.tsx")).toMatch(
-      /Ver oportunidades|Find Winners/,
+      /Ver oportunidades|Find winners/,
     );
     expect(readRepo("components/market/drop-market.tsx")).not.toMatch(
       /Opening the floor/,
@@ -238,6 +238,9 @@ describe("higlou market + find winners wiring", () => {
       /attachOpportunityBoards/,
     );
     expect(readRepo("app/api/winners/scan/route.ts")).toMatch(
+      /no_results|refundCredits/,
+    );
+    expect(readRepo("app/api/winners/scan/route.ts")).toMatch(
       /z\.coerce\.number\(\)\.int\(\)\.min\(1\)\.max\(12\)/,
     );
     expect(readRepo("lib/keepa/finder.ts")).toMatch(/KEEPA_SCAN_ROOTS/);
@@ -245,13 +248,13 @@ describe("higlou market + find winners wiring", () => {
       /isKeepaBuyVelocityWinner/,
     );
     expect(readRepo("components/winners/find-winners-board.tsx")).toMatch(
-      /Walmart/,
-    );
-    expect(readRepo("components/winners/find-winners-board.tsx")).toMatch(
-      /Home Depot/,
+      /Amazon → eBay|solo cobramos si hay winners/,
     );
     expect(readRepo("lib/opportunity/winner-routes.ts")).toMatch(
       /walmart_to_amazon/,
+    );
+    expect(readRepo("lib/opportunity/winner-routes.ts")).toMatch(
+      /ui: false/,
     );
     expect(readRepo("lib/opportunity/cross-platform.ts")).toMatch(
       /analyzeCrossPlatform/,

@@ -13,7 +13,6 @@ import {
 import { MarketProductTile } from "@/components/market/market-product-tile";
 import { MarketDetailPanel } from "@/components/market/market-detail-panel";
 import { MarketEarnGuide } from "@/components/market/market-earn-guide";
-import { MarketLivePulse } from "@/components/market/market-live-pulse";
 import {
   mergeMarketFeed,
   type MarketDropPublic,

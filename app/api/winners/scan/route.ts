@@ -20,10 +20,10 @@ export const maxDuration = 60;
 
 /**
  * General opportunity scan — no category, no query.
- * Keepa Product Finder rotates roots + eBay asks; returns up to 12 real winners.
+ * Credits only stick when we return real winners; empty/error → refund.
  */
 const bodySchema = z.object({
-  limit: z.coerce.number().int().min(1).max(12).optional().default(5),
+  limit: z.coerce.number().int().min(1).max(12).optional().default(8),
   mode: z
     .enum([
       "amazon",
@@ -56,25 +56,6 @@ export async function POST(request: Request) {
   const auth = await requireUser();
   if (!auth.ok) return auth.response;
 
-  const { spendCredits } = await import("@/lib/credits/wallet");
-  const spent = await spendCredits({
-    userId: auth.user.id,
-    action: "winners_scan",
-    reason: "Find Winners scan",
-  });
-  if (!spent.ok) {
-    return NextResponse.json(
-      {
-        error: spent.error,
-        code: spent.code || "credits",
-        balance: spent.balance,
-        needed: spent.needed,
-        rechargeHref: "/credits",
-      },
-      { status: spent.code === "insufficient" ? 402 : 503 },
-    );
-  }
-
   const rate = checkRateLimit({
     key: `winners-scan:${clientKeyFromRequest(request, auth.user.id)}`,
     limit: 8,
@@ -102,7 +83,37 @@ export async function POST(request: Request) {
     );
   }
 
+  const { spendCredits, refundCredits } = await import("@/lib/credits/wallet");
+  const spent = await spendCredits({
+    userId: auth.user.id,
+    action: "winners_scan",
+    reason: "Find Winners scan",
+    meta: { mode: body.mode },
+  });
+  if (!spent.ok) {
+    return NextResponse.json(
+      {
+        error: spent.error,
+        code: spent.code || "credits",
+        balance: spent.balance,
+        needed: spent.needed,
+        rechargeHref: "/credits",
+      },
+      { status: spent.code === "insufficient" ? 402 : 503 },
+    );
+  }
+
   const mode = body.mode as OpportunityMode;
+  const refundScan = async (why: string) => {
+    if (spent.spent <= 0) return;
+    await refundCredits({
+      userId: auth.user.id,
+      action: "winners_scan",
+      amount: spent.spent,
+      reason: why,
+      meta: { mode },
+    });
+  };
 
   try {
     const tokens = await loadWinnerMarketTokens(auth.supabase, auth.user.id);
@@ -144,6 +155,27 @@ export async function POST(request: Request) {
       (found.products || []).filter((hit) => isPlatformWinner(hit, mode)),
     ).slice(0, body.limit);
 
+    if (!winners.length) {
+      await refundScan("Empty scan refund");
+      return NextResponse.json({
+        ok: true,
+        products: [],
+        code: "no_results",
+        charged: false,
+        message:
+          mode === "amazon_to_ebay"
+            ? "Sin arbitraje esta ronda. No cobramos. Probá otra vez o buscá un producto/ASIN."
+            : "Sin demanda Keepa esta ronda. No cobramos. Probá otra vez o buscá un ASIN.",
+        sources: found.sources,
+        filteredOut: found.filteredOut,
+        queries: found.queries,
+        analyzed: found.analyzed,
+        scope: "general",
+        limit: body.limit,
+        balance: spent.wallet.balance + spent.spent,
+      });
+    }
+
     const withBoards = await attachOpportunityBoards(winners, {
       amazonToken: tokens.amazonToken,
       marketplaceId: tokens.marketplaceId,
@@ -151,9 +183,26 @@ export async function POST(request: Request) {
       deep: true,
     });
 
+    if (!withBoards.length) {
+      await refundScan("Empty board refund");
+      return NextResponse.json({
+        ok: true,
+        products: [],
+        code: "no_results",
+        charged: false,
+        message: "Sin winners listos. No cobramos esta ronda.",
+        sources: found.sources,
+        analyzed: found.analyzed,
+        scope: "general",
+        limit: body.limit,
+      });
+    }
+
     return NextResponse.json({
       ok: true,
       products: withBoards,
+      charged: true,
+      spent: spent.spent,
       sources: {
         ...found.sources,
         retailSearch: withBoards.some((h) =>
@@ -171,8 +220,19 @@ export async function POST(request: Request) {
       limit: body.limit,
     });
   } catch (error) {
+    await refundScan("Failed scan refund");
     const message =
       error instanceof Error ? error.message : "Opportunity scan failed";
-    return NextResponse.json({ error: message }, { status: 422 });
+    const keepaHint = /keepa/i.test(message)
+      ? " Conectá Keepa en Settings o buscá un producto concreto."
+      : "";
+    return NextResponse.json(
+      {
+        error: `${message}${keepaHint}`,
+        code: "scan_failed",
+        charged: false,
+      },
+      { status: 422 },
+    );
   }
 }

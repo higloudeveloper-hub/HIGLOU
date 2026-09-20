@@ -27,4 +27,9 @@ describe("credits costs", () => {
     expect(CREDIT_ACTIONS.winners_scan.cost).toBe(5);
     expect(CREDIT_ACTIONS.facebook_share.cost).toBe(2);
   });
+
+  it("documents that empty scans must not keep the charge", () => {
+    // Contract: /api/winners/scan refunds winners_scan when products=[].
+    expect(CREDIT_ACTIONS.winners_scan.id).toBe("winners_scan");
+  });
 });

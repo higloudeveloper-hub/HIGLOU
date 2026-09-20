@@ -4,7 +4,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import {
-  ArrowRight,
   Loader2,
   Search,
   Sparkles,
@@ -53,6 +52,9 @@ type BoardHit = OpportunityProduct & {
 type SearchBody = {
   ok?: boolean;
   error?: string;
+  message?: string;
+  code?: string;
+  charged?: boolean;
   products?: BoardHit[];
   analyzed?: number;
   sources?: {
@@ -244,6 +246,10 @@ export function FindWinnersBoard({
         }),
       });
       const body = (await response.json().catch(() => null)) as SearchBody | null;
+      if (response.status === 402) {
+        setError(body?.error || "Sin créditos. Recargá para escanear.");
+        return;
+      }
       if (!response.ok || !body) {
         const raw = body?.error || "";
         setError(
@@ -251,6 +257,14 @@ export function FindWinnersBoard({
             ? "Inicia sesión o espera un momento e intenta de nuevo."
             : raw || "No se pudo escanear.",
         );
+        return;
+      }
+      if (body.code === "no_results" || !(body.products || []).length) {
+        setError(
+          body.message ||
+            "Sin winners esta ronda · no cobramos. Probá otra vez o buscá un ASIN.",
+        );
+        setJustFound(0);
         return;
       }
       applyFound(body.products || []);
@@ -414,13 +428,20 @@ export function FindWinnersBoard({
   const locked = busy || importing;
   const scanning = searching || generalScanning;
   const play = playForMode(mode);
-  const playRoutes = routesForPlay(play);
 
   const setPlay = (nextPlay: (typeof WINNER_PLAYS)[number]["id"]) => {
     if (nextPlay === play) return;
     const def = WINNER_PLAYS.find((p) => p.id === nextPlay)!;
     setMode(def.defaultMode);
   };
+
+  // Keep mode on the real UI route for this play (drop hidden retail modes).
+  useEffect(() => {
+    const allowed = routesForPlay(play).map((r) => r.id);
+    if (!allowed.includes(mode) && allowed[0]) {
+      setMode(allowed[0]);
+    }
+  }, [play, mode]);
 
   const openHit = winners.find((h) => hitKey(h) === openId) || null;
 
@@ -469,8 +490,8 @@ export function FindWinnersBoard({
           </p>
           <p className="hidden min-w-0 flex-1 truncate text-[13px] text-white/85 sm:block">
             {play === "arbitrage"
-              ? "Compra barato · vende · keep neto"
-              : "Demanda Keepa · listá en Amazon"}
+              ? "Amazon → eBay · solo cobramos si hay winners"
+              : "Demanda Keepa · solo cobramos si hay winners"}
           </p>
           {!retail ? (
             <button
@@ -522,29 +543,11 @@ export function FindWinnersBoard({
               );
             })}
           </div>
-
-          {playRoutes.length > 1 ? (
-            <div className="mt-3 flex gap-1.5 overflow-x-auto pb-0.5">
-              {playRoutes.map((row) => (
-                <button
-                  key={row.id}
-                  type="button"
-                  onClick={() => setMode(row.id)}
-                  title={row.hint}
-                  className={cn(
-                    "inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full px-3 text-[12px] font-semibold whitespace-nowrap transition",
-                    mode === row.id
-                      ? "bg-[#191919] text-white"
-                      : "bg-white text-[#707070] ring-1 ring-[#e5e5e5] hover:text-[#191919]",
-                  )}
-                >
-                  {row.buy}
-                  <ArrowRight className="size-3 opacity-50" />
-                  {row.sell}
-                </button>
-              ))}
-            </div>
-          ) : null}
+          <p className="mt-2 text-[12px] text-[#707070]">
+            {play === "arbitrage"
+              ? "Ruta real: Amazon → eBay. Solo cobramos si hay winners."
+              : "Ruta real: demanda Keepa para listar en Amazon."}
+          </p>
         </div>
       </header>
 

@@ -306,6 +306,65 @@ export async function spendCredits(opts: {
   return { ok: true, wallet: toPublic(data as WalletRow), spent: cost };
 }
 
+/** Refund a prior spend (empty scan, failed action). Soft-noops if wallet missing. */
+export async function refundCredits(opts: {
+  userId: string;
+  action: CreditActionId;
+  amount?: number;
+  reason?: string;
+  meta?: Record<string, unknown>;
+}): Promise<{ ok: true; wallet: CreditWalletPublic; refunded: number } | { ok: false; error: string }> {
+  const admin = adminOrNull();
+  if (!admin) return { ok: false, error: "Supabase required" };
+
+  const amount = Math.max(
+    0,
+    Math.floor(opts.amount ?? CREDIT_ACTIONS[opts.action].cost),
+  );
+  if (amount <= 0) {
+    const wallet = await getCreditWallet(opts.userId);
+    return { ok: true, wallet, refunded: 0 };
+  }
+
+  const ensured = await ensureWalletRow(opts.userId);
+  if (!ensured.ok) {
+    if (ensured.error.includes("20260920_credits")) {
+      return { ok: true, wallet: emptyWallet(ensured.error), refunded: 0 };
+    }
+    return { ok: false, error: ensured.error };
+  }
+
+  const nextBalance = ensured.row.balance + amount;
+  const nextSpent = Math.max(0, ensured.row.lifetime_spent - amount);
+  const { data, error } = await admin
+    .from("credit_wallets")
+    .update({
+      balance: nextBalance,
+      lifetime_spent: nextSpent,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("user_id", opts.userId)
+    .select(
+      "user_id, balance, lifetime_granted, lifetime_spent, onboarded_at, welcome_bonus_at",
+    )
+    .maybeSingle();
+
+  if (error || !data) {
+    return { ok: false, error: error?.message || "Refund failed" };
+  }
+
+  await appendLedger({
+    userId: opts.userId,
+    delta: amount,
+    balanceAfter: nextBalance,
+    action: `${opts.action}_refund`,
+    reason: opts.reason || `Refund ${CREDIT_ACTIONS[opts.action].label}`,
+    meta: { ...opts.meta, refundOf: opts.action },
+  });
+
+  return { ok: true, wallet: toPublic(data as WalletRow), refunded: amount };
+}
+
 export async function rechargeCreditsMock(opts: {
   userId: string;
   packId: CreditPackId | string;

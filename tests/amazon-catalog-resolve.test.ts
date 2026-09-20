@@ -105,7 +105,9 @@ describe("Amazon exact catalog resolve", () => {
     ).toBe("B08MESHSHLD");
   });
 
-  it("title-matches the mesh shield when Amazon never stored a model code", () => {
+  it("refuses title-only matches when Amazon never stored a model code", () => {
+    // Title similarity alone is too risky for Seller Central — require barcode
+    // or exact model/MPN identity so we never attach the wrong ASIN.
     expect(
       pickResolvedAmazonCatalog(
         [
@@ -124,6 +126,6 @@ describe("Amazon exact catalog resolve", () => {
           title: "Milwaukee Metal Mesh Face Shield with Hard Hat",
         },
       )?.asin,
-    ).toBe("B08MESHSHLD");
+    ).toBeUndefined();
   });
 });

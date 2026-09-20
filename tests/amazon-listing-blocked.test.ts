@@ -1,4 +1,5 @@
 import {
+  amazonAccountRiskReason,
   amazonBrandGatingReason,
   amazonIncompleteListingReason,
   amazonListingBlockedReason,
@@ -40,6 +41,33 @@ describe("Amazon listing suppression", () => {
         [{ message: "Price is high", severity: "WARNING" }],
         "VALID",
       ),
+    ).toBe("");
+  });
+
+  it("blocks account-risk issues that create Seller Central incidencias", () => {
+    expect(
+      amazonAccountRiskReason([
+        {
+          message: "You are not authorized to modify the detail page images.",
+          severity: "WARNING",
+        },
+      ]),
+    ).toMatch(/account risk|not authorized|detail page/i);
+    expect(
+      amazonAccountRiskReason([
+        {
+          message: "Possible intellectual property complaint.",
+          severity: "WARNING",
+        },
+      ]),
+    ).toMatch(/account risk|intellectual property/i);
+    expect(
+      amazonAccountRiskReason([
+        {
+          message: "Price is high compared to competitors.",
+          severity: "WARNING",
+        },
+      ]),
     ).toBe("");
   });
 

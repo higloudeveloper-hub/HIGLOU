@@ -112,6 +112,52 @@ export function amazonErrorIssues(issues: AmazonSpIssue[] | undefined): AmazonSp
   });
 }
 
+/**
+ * Issues that hurt Seller Central health / trigger “incidencias” even when
+ * Amazon accepts the SKU. Never treat these as a clean publish.
+ */
+export function amazonAccountRiskIssues(
+  issues: AmazonSpIssue[] | undefined,
+): AmazonSpIssue[] {
+  return (Array.isArray(issues) ? issues : []).filter((issue) => {
+    const severity = String(issue.severity || "");
+    const categories = (issue.categories || []).join(" ");
+    const message = String(issue.message || "");
+    const actions = (issue.enforcements?.actions || [])
+      .map((action) => String(action.action || ""))
+      .join(" ");
+    if (/LISTING_SUPPRESSED|CATALOG_ITEM_LOCKED/i.test(actions)) return true;
+    if (/QUALIFICATION_REQUIRED|DUPLICATE_LISTING|PRODUCT_IDENTITY/i.test(categories)) {
+      return true;
+    }
+    if (
+      /approval to list|brand gating|cannot change the brand|may not change the brand|image.*not accepted|not authorized to modify|detail page|ASIN ownership|intellectual property|counterfeit|inauthentic/i.test(
+        message,
+      )
+    ) {
+      return true;
+    }
+    // ERROR severity always counts as account risk for offer attach.
+    if (/error|invalid/i.test(severity)) return true;
+    return false;
+  });
+}
+
+export function amazonAccountRiskReason(
+  issues: AmazonSpIssue[] | undefined,
+): string {
+  const risky = amazonAccountRiskIssues(issues);
+  if (!risky.length) return "";
+  const brand = amazonBrandGatingReason(risky);
+  if (brand) return brand;
+  const brandLock = amazonBrandLockMessage(risky);
+  if (brandLock) return brandLock;
+  const text = amazonIssuesText({ issues: risky });
+  return text
+    ? `Amazon flagged this offer (account risk): ${text}`
+    : "Amazon flagged this offer with listing issues that can hurt your seller account.";
+}
+
 export function amazonBrandGatingReason(issues: AmazonSpIssue[] | undefined): string {
   const list = Array.isArray(issues) ? issues : [];
   const blocked = list.find((issue) => {
@@ -400,7 +446,8 @@ export function amazonIncompleteListingReason(
   if (/^INVALID$/i.test(String(status || ""))) {
     return "Amazon rejected this listing as incomplete.";
   }
-  return "";
+  // Suppression / qualification without a clean ERROR category.
+  return amazonAccountRiskReason(issues);
 }
 
 export type AmazonCatalogHit = {

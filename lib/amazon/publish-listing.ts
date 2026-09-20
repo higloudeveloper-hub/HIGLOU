@@ -1,9 +1,6 @@
 import { sanitizeEbayUpc } from "@/lib/ebay/inventory-api";
 import { resolveAmazonCatalogMatch } from "@/lib/amazon/catalog-resolve";
 import {
-  amazonImageLocatorAttributes,
-  amazonImageLocatorPatches,
-  amazonListingGalleryUrls,
   amazonListingHasPrice,
   buildAmazonOfferOnlyAttributes,
   type AmazonListingDraft,
@@ -14,6 +11,7 @@ import {
   amazonSkuFromListing,
 } from "@/lib/amazon/listing-offer";
 import {
+  amazonAccountRiskReason,
   amazonApprovalUrlForAsin,
   amazonBrandGatingReason,
   amazonIncompleteListingReason,
@@ -23,7 +21,6 @@ import {
   getAmazonListingItem,
   getAmazonListingsRestrictions,
   getAmazonProductTypeSchema,
-  patchAmazonListingAttributes,
   putAmazonListingOffer,
   AmazonPublishBlockedError,
   type AmazonRestrictionsCheck,
@@ -48,57 +45,11 @@ export type AmazonPublishResult = {
 const NO_EXACT_MATCH =
   "This product does not have a confirmed exact match on Amazon. Review it before creating a new ASIN. Higlou will not pick a similar listing from photos or title.";
 
-async function publishAmazonListingImages(opts: {
-  accessToken: string;
-  sellerId: string;
-  sku: string;
-  marketplaceId: string;
-  productType: string;
-  listing: AmazonListingDraft;
-}): Promise<void> {
-  const urls = amazonListingGalleryUrls(opts.listing);
-  if (urls.length < 2) return;
-  const productType = opts.productType || "PRODUCT";
-  const locators = amazonImageLocatorAttributes(urls, opts.marketplaceId);
-  const patches = amazonImageLocatorPatches(urls, opts.marketplaceId);
-  try {
-    await patchAmazonListingAttributes({
-      accessToken: opts.accessToken,
-      sellerId: opts.sellerId,
-      sku: opts.sku,
-      marketplaceId: opts.marketplaceId,
-      productType,
-      patches,
-    });
-    return;
-  } catch {
-    /* Offer-only SKUs and catalog ASINs may reject PATCH. Try a listing merge. */
-  }
-  try {
-    const live = await getAmazonListingItem({
-      accessToken: opts.accessToken,
-      sellerId: opts.sellerId,
-      sku: opts.sku,
-      marketplaceId: opts.marketplaceId,
-    });
-    if (!Object.keys(live.attributes || {}).length) return;
-    await putAmazonListingOffer({
-      accessToken: opts.accessToken,
-      sellerId: opts.sellerId,
-      sku: opts.sku,
-      marketplaceId: opts.marketplaceId,
-      productType,
-      requirements: "LISTING",
-      attributes: {
-        ...live.attributes,
-        ...locators,
-      },
-    });
-  } catch {
-    /* Existing catalog ASINs often reject seller photos. Offer can still be live. */
-  }
-}
-
+/**
+ * Existing-ASIN publish is offer-only. Never PATCH images / brand / title onto
+ * Amazon catalog pages — that creates Seller Central “incidencias” and can
+ * hurt account health. Catalog photos already live on the ASIN.
+ */
 export async function publishAmazonOffer(opts: {
   accessToken: string;
   sellingPartnerId: string;
@@ -112,6 +63,15 @@ export async function publishAmazonOffer(opts: {
 
   if (!Number.isFinite(opts.listing.price) || opts.listing.price <= 0) {
     throw new Error("Set a price before publishing to Amazon.");
+  }
+  if (opts.listing.price < 1) {
+    throw new Error(
+      "Amazon price is too low (under $1). Fix the price before publishing so Seller Central does not flag the offer.",
+    );
+  }
+  const qty = Math.floor(Number(opts.listing.quantity) || 0);
+  if (qty < 1) {
+    throw new Error("Set quantity to at least 1 before publishing to Amazon.");
   }
 
   const resolved = await resolveAmazonCatalogMatch({
@@ -158,6 +118,9 @@ export async function publishAmazonOffer(opts: {
     );
   }
   const catalogTitle = catalog.title || resolved.title || opts.listing.title;
+  const productType =
+    String(catalog.productType || resolved.productType || "PRODUCT").trim() ||
+    "PRODUCT";
   const conditionType = amazonConditionType(
     opts.listing.condition,
     opts.listing.conditionId,
@@ -193,8 +156,9 @@ export async function publishAmazonOffer(opts: {
 
   /**
    * Restrictions API often lags after Seller Central approval.
-   * Soft-gate: one quick re-check, then still attempt VALIDATION_PREVIEW.
-   * Hard-block only if the listing API still reports brand gating.
+   * Soft-gate: one quick re-check. Hard-block APPROVAL_REQUIRED unless the
+   * seller explicitly confirmed approval — publishing gated brands creates
+   * suppressed offers / incidencias in Seller Central.
    */
   if (restrictionGate?.code === "AMAZON_APPROVAL_REQUIRED") {
     await new Promise((r) => setTimeout(r, 1800));
@@ -218,24 +182,39 @@ export async function publishAmazonOffer(opts: {
         restrictionGate = againBlock;
       }
     } catch {
-      /* keep first gate; preview decides */
+      /* keep first gate */
     }
   }
 
-  if (restrictionGate && restrictionGate.code !== "AMAZON_APPROVAL_REQUIRED") {
-    throw new AmazonPublishBlockedError({
-      ...restrictionGate,
-      restrictionsDebug,
-    });
+  if (restrictionGate) {
+    if (
+      restrictionGate.code === "AMAZON_APPROVAL_REQUIRED" &&
+      opts.forceAfterApproval
+    ) {
+      /* Seller confirmed Approved in Seller Central — continue to preview. */
+    } else {
+      throw new AmazonPublishBlockedError({
+        ...restrictionGate,
+        restrictionsDebug,
+      });
+    }
   }
 
   const schema = await getAmazonProductTypeSchema({
     accessToken: opts.accessToken,
     marketplaceId: cfg.marketplaceId,
     sellerId: opts.sellingPartnerId,
-    productType: "PRODUCT",
+    productType,
     requirements: "LISTING_OFFER_ONLY",
-  });
+  }).catch(() =>
+    getAmazonProductTypeSchema({
+      accessToken: opts.accessToken,
+      marketplaceId: cfg.marketplaceId,
+      sellerId: opts.sellingPartnerId,
+      productType: "PRODUCT",
+      requirements: "LISTING_OFFER_ONLY",
+    }),
+  );
 
   const attributes = buildAmazonOfferOnlyAttributes({
     marketplaceId: cfg.marketplaceId,
@@ -249,7 +228,7 @@ export async function publishAmazonOffer(opts: {
     sellerId: opts.sellingPartnerId,
     sku,
     marketplaceId: cfg.marketplaceId,
-    productType: "PRODUCT",
+    productType,
     requirements: "LISTING_OFFER_ONLY" as const,
   };
 
@@ -271,19 +250,18 @@ export async function publishAmazonOffer(opts: {
       restrictionsDebug,
     });
   }
-  const previewBlock = amazonIncompleteListingReason(
-    preview.issues,
-    preview.status,
-  );
+  const previewRisk =
+    amazonAccountRiskReason(preview.issues) ||
+    amazonIncompleteListingReason(preview.issues, preview.status);
   // When forcing after Seller Central approval, ignore qualification noise on preview.
   if (
-    previewBlock &&
+    previewRisk &&
     !(
       opts.forceAfterApproval &&
-      /approval|brand|qualification|suppressed/i.test(previewBlock)
+      /approval|brand|qualification|suppressed/i.test(previewRisk)
     )
   ) {
-    throw new Error(previewBlock);
+    throw new Error(previewRisk);
   }
 
   let result;
@@ -301,7 +279,7 @@ export async function publishAmazonOffer(opts: {
       throw new AmazonPublishBlockedError({
         code: "AMAZON_APPROVAL_REQUIRED",
         message:
-          "Amazon still rejects this brand on the live put. Confirm Purina (or this brand) is Approved for this exact seller account in Seller Central → Selling applications, then try again.",
+          "Amazon still rejects this brand on the live put. Confirm this brand is Approved for this exact seller account in Seller Central → Selling applications, then try again. Do not keep publishing — suppressed offers create incidencias.",
         approvalUrl:
           restrictionGate?.approvalUrl || amazonApprovalUrlForAsin(asin),
         asin,
@@ -312,14 +290,9 @@ export async function publishAmazonOffer(opts: {
     }
     throw error;
   }
-  await publishAmazonListingImages({
-    accessToken: opts.accessToken,
-    sellerId: opts.sellingPartnerId,
-    sku: result.sku || sku,
-    marketplaceId: cfg.marketplaceId,
-    productType: catalog.productType || resolved.productType || "PRODUCT",
-    listing: opts.listing,
-  });
+
+  // Intentionally do NOT patch images / catalog fields onto existing ASINs.
+  // That is the main source of post-publish “incidencias” in Seller Central.
 
   try {
     const live = await getAmazonListingItem({
@@ -331,7 +304,8 @@ export async function publishAmazonOffer(opts: {
     if (live.asin) asin = live.asin;
     const blocked =
       amazonBrandGatingReason(live.issues) ||
-      amazonListingBlockedReason(live.issues);
+      amazonListingBlockedReason(live.issues) ||
+      amazonAccountRiskReason(live.issues);
     if (blocked) throw new Error(blocked);
     const incomplete = amazonIncompleteListingReason(live.issues, live.status);
     if (incomplete) throw new Error(incomplete);

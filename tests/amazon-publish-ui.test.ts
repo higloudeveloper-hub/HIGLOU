@@ -79,22 +79,23 @@ describe("Amazon seller publish stays on Higlou", () => {
     const attributes = readRepo("lib/amazon/listing-attributes.ts");
     const exportScreen = readRepo("components/listing/wizard/export-screen.tsx");
     expect(publish).toMatch(/requirements: "LISTING_OFFER_ONLY"/);
-    expect(publish).toMatch(/productType: "PRODUCT"/);
     expect(publish).toMatch(/buildAmazonOfferOnlyAttributes/);
-    expect(publish).toMatch(/patchAmazonListingAttributes/);
-    expect(publish).toMatch(/amazonImageLocatorPatches/);
+    expect(publish).toMatch(/do NOT patch images/);
+    expect(publish).not.toMatch(/patchAmazonListingAttributes/);
+    expect(publish).not.toMatch(/amazonImageLocatorPatches/);
     expect(publish).not.toMatch(/lockAmazonBrandAttributes/);
     expect(attributes).toMatch(/merchant_shipping_group/);
     expect(attributes).toMatch(/buildAmazonOfferOnlyAttributes/);
-    expect(attributes).toMatch(/amazonImageLocatorAttributes/);
+    expect(attributes).toMatch(/Never send brand\/title\/images/);
     expect(exportScreen).toMatch(/confirmed Amazon ASIN/);
     expect(exportScreen).toMatch(/Approved in Seller Central — publish now/);
     expect(exportScreen).toMatch(/forceAfterApproval/);
     expect(exportScreen).toMatch(/Amazon restriction response/);
     expect(exportScreen).toMatch(/Approval required/);
+    expect(exportScreen).toMatch(/incidencias/);
     expect(publish).toMatch(/forceAfterApproval/);
-    expect(publish).toMatch(/Soft-gate/);
     expect(publish).toMatch(/VALIDATION_PREVIEW/);
+    expect(publish).toMatch(/amazonAccountRiskReason/);
   });
 
   it("does not ask Amazon for identifiers when submitting a live offer", () => {

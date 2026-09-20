@@ -3,7 +3,6 @@ import {
   extractModelCode,
   pickExactAmazonCatalog,
   pickSoleBarcodeCatalogHit,
-  pickTitleAmazonCatalog,
   type AmazonCatalogHit,
   type AmazonMatchHints,
 } from "@/lib/amazon/catalog-match";
@@ -161,11 +160,9 @@ export function pickResolvedAmazonCatalog(
   const barcodeMatch =
     pickExactAmazonCatalog(barcodeHits, hints) ||
     pickSoleBarcodeCatalogHit(barcodeHits, hints);
-  return (
-    barcodeMatch ||
-    pickExactAmazonCatalog(hits, hints) ||
-    pickTitleAmazonCatalog(hits, hints)
-  );
+  // Never fall back to title-only similarity — wrong ASIN attach creates
+  // Seller Central incidencias and authenticity risk.
+  return barcodeMatch || pickExactAmazonCatalog(hits, hints);
 }
 
 function winnerHitsToCatalog(

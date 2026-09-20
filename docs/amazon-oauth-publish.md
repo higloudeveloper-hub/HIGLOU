@@ -4,6 +4,15 @@ Higlou lists an **offer** on a product Amazon already sells. It matches by **UPC
 
 Private SP-API apps (Higlou Store) do not expose Login/Redirect URIs. Connect by pasting the self-authorize **refresh token** in Settings.
 
+## Account-safe publish rules
+
+Higlou only attaches a sellable offer (price, quantity, condition, shipping) to a confirmed existing ASIN.
+
+- Never patches brand, title, bullets, or **images** onto Amazon’s catalog page — that creates Seller Central *incidencias* and can hurt account health.
+- Blocks gated brands unless you confirm **Approved in Seller Central**.
+- Runs `VALIDATION_PREVIEW` first and refuses account-risk issues (suppression, brand lock, IP/authenticity).
+- Requires an exact catalog match — never invents a new ASIN from a similar title.
+
 ## One-time setup (Higlou admin)
 
 1. Create the SP-API app in the Solution Provider Portal (Production, Sellers). The Amazon app name can stay whatever Amazon approved.
@@ -27,7 +36,7 @@ Token encryption reuses `EBAY_TOKEN_ENCRYPTION_KEY` unless `AMAZON_TOKEN_ENCRYPT
 1. Amazon Developer Console → your app → **Ver** authorizations → copy **Ficha de actualización**
 2. Higlou Settings → Stores → paste token → **Save Amazon token**
 3. On Export: **Publish to Amazon**
-4. Higlou searches Amazon by barcode variants, brand, and model, opens the candidate ASINs, compares model/brand/kit/finish, copies the matching catalog facts, asks Amazon what is still missing, fills those fields, and goes live only if Amazon returns VALID.
+4. Higlou searches Amazon by barcode variants, brand, and model, opens the candidate ASINs, compares model/brand/kit/finish, and goes live only if Amazon returns a clean offer attach (VALID, no suppression).
 
 ## Key files
 

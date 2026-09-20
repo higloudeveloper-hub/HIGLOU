@@ -948,8 +948,9 @@ export function ExportScreen({
                   {amazonPublishResult?.asin ? (
                     <p className="mt-1.5 text-[12px] text-muted-foreground">
                       Offer linked to ASIN {amazonPublishResult.asin}. Higlou
-                      sent only price, quantity, condition, and shipping — not
-                      brand or catalog data.
+                      sent only price, quantity, condition, and shipping — never
+                      brand, title, or photos on an existing Amazon catalog page
+                      (that is what creates Seller Central incidencias).
                       {amazonPublishResult.sellerCentralUrl ? (
                         <>
                           {" · "}

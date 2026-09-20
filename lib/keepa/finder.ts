@@ -2,25 +2,31 @@ import { keepaBudgetOk, keepaMaxProductsPerScan } from "@/lib/keepa/budget";
 import { setCachedKeepaProduct, takeCachedKeepaProducts } from "@/lib/keepa/cache";
 import { keepaGet, keepaQuery } from "@/lib/keepa/client";
 import { parseKeepaProduct, type KeepaSnapshot } from "@/lib/keepa/parse";
-import { OPPORTUNITY_RULES } from "@/lib/opportunity/types";
+import { OPPORTUNITY_CATEGORIES } from "@/lib/opportunity/categories";
 
 /** Keepa Product Finder requires perPage ≥ 50 (~11 tokens / page). */
 export const KEEPA_FINDER_MIN_PER_PAGE = 50;
 
-/** Demand floor for Product Finder — velocity before anyone else. */
-export const KEEPA_MIN_BSR_DROPS_90 = 10;
+/** Demand floor used in strict category scans. */
+export const KEEPA_MIN_BSR_DROPS_90 = 15;
+
+/** Root categories we rotate for general opportunity scans (proven US browse nodes). */
+export const KEEPA_SCAN_ROOTS: Array<{ id: string; label: string }> = [
+  { id: "1055398", label: "Home & Kitchen" },
+  { id: "1064954", label: "Office Products" },
+  { id: "2619533011", label: "Pet Supplies" },
+  { id: "228013", label: "Tools & Home Improvement" },
+  { id: "165793011", label: "Toys & Games" },
+  { id: "3760901", label: "Health & Household" },
+  { id: "2617941011", label: "Arts & Crafts" },
+  { id: "16310091", label: "Industrial & Scientific" },
+];
 
 function asinsFromKeepa(json: Record<string, unknown>): string[] {
   const list = json.asinList;
   if (Array.isArray(list)) {
     return list
       .map((row) => String(row || "").toUpperCase())
-      .filter((asin) => /^[A-Z0-9]{10}$/.test(asin));
-  }
-  const products = json.products;
-  if (Array.isArray(products)) {
-    return products
-      .map((row) => String((row as { asin?: string }).asin || "").toUpperCase())
       .filter((asin) => /^[A-Z0-9]{10}$/.test(asin));
   }
   return [];
@@ -36,8 +42,9 @@ function rootCategoryIds(raw?: string): number[] | undefined {
 export type KeepaFinderTone = "strict" | "open" | "wide";
 
 /**
- * Shared selection for Product Finder.
- * Opportunity-first: sort by BSR drops. Category is optional.
+ * Product Finder selection — rooted in how sellers actually use Keepa:
+ * always set rootCategory, prefer avg90 BSR + Buy Box / NEW, BSR drops for velocity.
+ * Prices are cents. Never stack too many narrow filters.
  */
 export function buildKeepaFinderSelection(opts: {
   rootCategory?: string;
@@ -45,61 +52,72 @@ export function buildKeepaFinderSelection(opts: {
   perPage?: number;
   mode?: "amazon" | "amazon_to_ebay" | "supplier" | string;
   page?: number;
-  /** strict = category-tight; open = global hot; wide = last-resort relax */
   tone?: KeepaFinderTone;
 }): Record<string, unknown> {
   const mode = opts.mode || "amazon_to_ebay";
-  const tone = opts.tone || (opts.rootCategory ? "strict" : "open");
+  const tone = opts.tone || "open";
   const perPage = Math.max(
     KEEPA_FINDER_MIN_PER_PAGE,
     Math.min(opts.perPage ?? KEEPA_FINDER_MIN_PER_PAGE, 50),
   );
+  const buyOnAmazon = mode === "amazon_to_ebay";
 
-  const dropsGte =
-    tone === "wide" ? 6 : tone === "open" ? KEEPA_MIN_BSR_DROPS_90 : 12;
-  const priceMin =
-    tone === "wide"
-      ? 10
-      : OPPORTUNITY_RULES.minPrice;
-  const priceMax =
-    tone === "wide"
-      ? 150
-      : OPPORTUNITY_RULES.maxPrice;
-  const bsrMin = tone === "wide" ? 200 : OPPORTUNITY_RULES.minBsr;
-  const bsrMax = tone === "wide" ? 250_000 : OPPORTUNITY_RULES.maxBsr;
-
+  // Core discovery — fewer hard filters = results. Tighten in enrich pass.
   const selection: Record<string, unknown> = {
     page: opts.page ?? 0,
     perPage,
-    current_NEW_gte: Math.round(priceMin * 100),
-    current_NEW_lte: Math.round(priceMax * 100),
-    current_SALES_gte: bsrMin,
-    current_SALES_lte: bsrMax,
-    salesRankDrops90_gte: dropsGte,
+    productType: [0],
+    singleVariation: true,
     sort: [
       ["salesRankDrops90", "desc"],
-      ["current_SALES", "asc"],
+      ["avg90_SALES", "asc"],
     ],
-    productType: [0, 1],
   };
 
-  if (tone !== "wide") {
-    selection.packageWeight_lte = Math.round(
-      OPPORTUNITY_RULES.maxPackageLb * 453.592,
-    );
+  if (tone === "strict") {
+    selection.avg90_SALES_gte = 1_000;
+    selection.avg90_SALES_lte = 80_000;
+    selection.avg90_NEW_gte = 1_500;
+    selection.avg90_NEW_lte = 8_000;
+    selection.salesRankDrops90_gte = KEEPA_MIN_BSR_DROPS_90;
+    selection.current_COUNT_NEW_gte = 2;
+    selection.current_COUNT_NEW_lte = 15;
+    selection.current_RATING_gte = 38;
+  } else if (tone === "open") {
+    // Classic seller Product Finder band: mid BSR, live NEW price, real drops.
+    selection.avg90_SALES_gte = 500;
+    selection.avg90_SALES_lte = 150_000;
+    selection.current_NEW_gte = 1_200;
+    selection.current_NEW_lte = 10_000;
+    selection.salesRankDrops90_gte = 10;
+    selection.current_COUNT_NEW_gte = 1;
+    selection.current_COUNT_NEW_lte = 25;
+  } else {
+    // wide — last resort, still needs a root
+    selection.current_SALES_gte = 1;
+    selection.current_SALES_lte = 250_000;
+    selection.current_NEW_gte = 1_000;
+    selection.current_NEW_lte = 12_000;
+    selection.salesRankDrops90_gte = 5;
   }
 
+  // Sell-on-Amazon OA: Amazon absent (classic filter from Keepa tutorials).
   if (mode === "amazon" || mode === "supplier") {
-    selection.current_COUNT_NEW_gte = OPPORTUNITY_RULES.minSellers;
-    selection.current_COUNT_NEW_lte =
-      tone === "wide" ? 20 : OPPORTUNITY_RULES.maxSellers;
     selection.availabilityAmazon = [-1];
+    if (tone !== "wide") {
+      selection.current_COUNT_NEW_gte = 2;
+      selection.current_COUNT_NEW_lte = tone === "strict" ? 12 : 15;
+    }
+  }
+
+  // Buy-on-Amazon arbitrage: Amazon preferably in stock so we can source it.
+  if (buyOnAmazon && tone !== "wide") {
+    selection.availabilityAmazon = [0];
   }
 
   const roots = rootCategoryIds(opts.rootCategory);
   if (roots) selection.rootCategory = roots;
 
-  // Only exact product titles — short keywords make finder miss.
   if (opts.title?.trim() && opts.title.trim().split(/\s+/).length >= 3) {
     selection.title = [opts.title.trim()];
   }
@@ -116,15 +134,28 @@ export async function keepaFindAsins(opts: {
   tone?: KeepaFinderTone;
 }): Promise<string[]> {
   if (!keepaBudgetOk(12)) return [];
+  // Keepa without rootCategory returns a random catalog slice — always require a root.
+  if (!opts.rootCategory?.trim()) return [];
   const selection = buildKeepaFinderSelection(opts);
   const json = await keepaQuery(selection);
-  return [...new Set(asinsFromKeepa(json))].slice(0, 40);
+  return [...new Set(asinsFromKeepa(json))].slice(0, 50);
+}
+
+function rootsForScan(preferred?: string): string[] {
+  if (preferred?.trim()) return [preferred.trim()];
+  const fromCategories = OPPORTUNITY_CATEGORIES.filter((c) => c.keepaRoot).map(
+    (c) => c.keepaRoot,
+  );
+  const merged = [
+    ...fromCategories,
+    ...KEEPA_SCAN_ROOTS.map((r) => r.id),
+  ];
+  return [...new Set(merged.filter(Boolean))];
 }
 
 /**
- * Opportunity-first Keepa scan — no category required.
- * Tries open global → wider filters → optional category root.
- * ~11–33 tokens worst case (stops early when ASINs found).
+ * Real opportunity scan: rotate Keepa root categories until we have ASINs.
+ * Never queries without a rootCategory (Keepa's documented requirement for useful results).
  */
 export async function keepaFindHotWinners(opts: {
   mode?: "amazon" | "amazon_to_ebay" | "supplier" | string;
@@ -132,53 +163,42 @@ export async function keepaFindHotWinners(opts: {
   title?: string;
   seed?: number;
   preferGlobal?: boolean;
-}): Promise<{ asins: string[]; scope: "global" | "category" | "wide" }> {
+  maxRoots?: number;
+}): Promise<{ asins: string[]; scope: "global" | "category" | "wide"; rootUsed: string }> {
   const mode = opts.mode || "amazon_to_ebay";
-  const page = Math.abs(opts.seed ?? 0) % 5;
-  const preferGlobal = opts.preferGlobal !== false;
+  const page = Math.abs(opts.seed ?? 0) % 3;
+  const roots = rootsForScan(opts.rootCategory);
+  const start = Math.abs(opts.seed ?? 0) % Math.max(roots.length, 1);
+  const ordered = [
+    ...roots.slice(start),
+    ...roots.slice(0, start),
+  ].slice(0, opts.maxRoots ?? (opts.preferGlobal === false ? 2 : 5));
 
-  const attempts: Array<{
-    scope: "global" | "category" | "wide";
-    tone: KeepaFinderTone;
-    rootCategory?: string;
-    page: number;
-  }> = [];
+  const tones: KeepaFinderTone[] = ["open", "strict", "wide"];
 
-  if (preferGlobal || !opts.rootCategory) {
-    attempts.push({ scope: "global", tone: "open", page });
-    attempts.push({
-      scope: "global",
-      tone: "open",
-      page: (page + 1) % 5,
-    });
-  }
-  if (opts.rootCategory) {
-    attempts.push({
-      scope: "category",
-      tone: "strict",
-      rootCategory: opts.rootCategory,
-      page: 0,
-    });
-  }
-  attempts.push({ scope: "wide", tone: "wide", page: 0 });
-
-  for (const attempt of attempts) {
-    try {
-      const asins = await keepaFindAsins({
-        mode,
-        rootCategory: attempt.rootCategory,
-        title: opts.title,
-        page: attempt.page,
-        tone: attempt.tone,
-      });
-      if (asins.length) {
-        return { asins, scope: attempt.scope };
+  for (const root of ordered) {
+    for (const tone of tones) {
+      try {
+        const asins = await keepaFindAsins({
+          mode,
+          rootCategory: root,
+          title: opts.title,
+          page,
+          tone,
+        });
+        if (asins.length) {
+          return {
+            asins,
+            scope: opts.rootCategory ? "category" : "global",
+            rootUsed: root,
+          };
+        }
+      } catch {
+        /* try next */
       }
-    } catch {
-      /* try next tone */
     }
   }
-  return { asins: [], scope: preferGlobal ? "global" : "category" };
+  return { asins: [], scope: "global", rootUsed: ordered[0] || "" };
 }
 
 /** Keyword search: ~10 tokens. Use only when finder returned nothing. */
@@ -191,7 +211,6 @@ export async function keepaSearchAsins(term: string): Promise<string[]> {
 
 /**
  * Hydrate ASINs with stats (no csv history). 1 token / ASIN.
- * Uses in-memory cache so live/manual rescans do not re-bill.
  */
 export async function keepaProducts(asins: string[]): Promise<KeepaSnapshot[]> {
   const clean = [...new Set(asins.map((asin) => asin.toUpperCase()))].filter(
@@ -212,7 +231,7 @@ export async function keepaProducts(asins: string[]): Promise<KeepaSnapshot[]> {
   });
   const products = Array.isArray(json.products) ? json.products : [];
   const fresh = products
-    .map((row) => parseKeepaProduct(row))
+    .map((row) => parseKeepaProduct(row as Record<string, unknown>))
     .filter((row): row is KeepaSnapshot => Boolean(row));
   for (const snap of fresh) setCachedKeepaProduct(snap);
   const byAsin = new Map<string, KeepaSnapshot>();

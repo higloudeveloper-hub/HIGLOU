@@ -11,6 +11,7 @@ import {
   amazonProductScore,
   AMAZON_PRODUCT_WINNER_MIN,
   isAmazonProductWinner,
+  isKeepaBuyVelocityWinner,
 } from "@/lib/opportunity/amazon-product-winner";
 import { isKeepaConfigured } from "@/lib/keepa/config";
 import {
@@ -676,25 +677,44 @@ export async function findOpportunities(opts: {
   });
 
   const confirmed = priced.filter((hit) => isConfirmedOpportunity(hit, mode));
+  // Keepa demand can stand alone without an eBay ask (confirmed requires eBay for
+  // amazon_to_ebay). Pull those from the priced pool so the board is never empty
+  // when Product Finder already found real velocity.
+  const keepaDemand = priced.filter(
+    (hit) =>
+      isAmazonProductWinner(hit) ||
+      (mode === "amazon_to_ebay" && isKeepaBuyVelocityWinner(hit)),
+  );
+
   // Never fall back to money-losing asks — empty board beats fake "opportunities".
   // Amazon lane: Keepa product winners only (BSR velocity + competition + proof).
-  // Arbitrage: ask keep first; if eBay is quiet, still surface Keepa-hot Amazon products
-  // so the board is never "basura vacía" when Keepa found real demand.
+  // Arbitrage: ask keep first; if eBay is quiet, still surface Keepa-hot Amazon products.
   let passing =
     mode === "amazon"
       ? confirmed.filter((hit) => isAmazonProductWinner(hit))
       : confirmed.filter((hit) => isActionableAskSpread(hit));
-  if (
-    mode === "amazon_to_ebay" &&
-    !passing.length &&
-    confirmed.some((hit) => isAmazonProductWinner(hit))
-  ) {
-    passing = confirmed.filter((hit) => isAmazonProductWinner(hit));
+  if (mode === "amazon_to_ebay") {
+    const seen = new Set(passing.map((hit) => hit.asin));
+    for (const hit of keepaDemand) {
+      if (!seen.has(hit.asin)) {
+        passing.push(hit);
+        seen.add(hit.asin);
+      }
+    }
+  } else if (mode === "amazon" && !passing.length) {
+    passing = keepaDemand.filter((hit) => isAmazonProductWinner(hit));
   }
-  const ranked = diversifyOpportunityHits(
+
+  const demandOnly =
     mode === "amazon" ||
-      (mode === "amazon_to_ebay" &&
-        passing.every((hit) => isAmazonProductWinner(hit) && !isActionableAskSpread(hit)))
+    (mode === "amazon_to_ebay" &&
+      passing.every(
+        (hit) =>
+          (isAmazonProductWinner(hit) || isKeepaBuyVelocityWinner(hit)) &&
+          !isActionableAskSpread(hit),
+      ));
+  const ranked = diversifyOpportunityHits(
+    demandOnly
       ? [...passing].sort(
           (a, b) =>
             amazonProductScore(b) - amazonProductScore(a) || b.score - a.score,

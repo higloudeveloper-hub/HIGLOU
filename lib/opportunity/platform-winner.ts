@@ -1,6 +1,7 @@
 import {
   amazonProductScore,
   isAmazonProductWinner,
+  isKeepaBuyVelocityWinner,
   sortAmazonProductWinners,
 } from "@/lib/opportunity/amazon-product-winner";
 import { isRetailToMarketplaceMode } from "@/lib/opportunity/markets";
@@ -48,7 +49,12 @@ export function isPlatformWinner(
   }
 
   if (!/^[A-Z0-9]{10}$/.test(asin)) return false;
-  return isArbitrageWinner(hit) || isAmazonProductWinner(hit);
+  if (isArbitrageWinner(hit)) return true;
+  if (isAmazonSellLane(lane) || lane === "amazon" || lane === "supplier") {
+    return isAmazonProductWinner(hit);
+  }
+  // Amazon→eBay: Keepa velocity counts even when eBay asks are quiet.
+  return isAmazonProductWinner(hit) || isKeepaBuyVelocityWinner(hit);
 }
 
 function isRetailRouteWinner(hit: OpportunityProduct): boolean {
@@ -91,7 +97,7 @@ export function sortPlatformWinners(hits: OpportunityProduct[]): OpportunityProd
   );
   const demandHits = hits.filter(
     (hit) =>
-      isAmazonProductWinner(hit) &&
+      (isAmazonProductWinner(hit) || isKeepaBuyVelocityWinner(hit)) &&
       !isArbitrageWinner(hit) &&
       !isRetailRouteWinner(hit),
   );

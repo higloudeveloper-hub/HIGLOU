@@ -62,13 +62,27 @@ export type KeepaSnapshot = {
   reviewCount: number | null;
 };
 
-function firstImage(imagesCSV: unknown): string {
-  const id = String(imagesCSV || "")
+function firstImage(row: Record<string, unknown>): string {
+  // Modern Keepa product payloads use `images: [{ l, m, ... }]`
+  const images = row.images;
+  if (Array.isArray(images) && images.length) {
+    for (const img of images) {
+      if (!img || typeof img !== "object") continue;
+      const id = String(
+        (img as { l?: string; m?: string }).l ||
+          (img as { l?: string; m?: string }).m ||
+          "",
+      ).trim();
+      if (id) return `https://m.media-amazon.com/images/I/${id}`;
+    }
+  }
+  // Legacy CSV: "abc.jpg,def.jpg"
+  const csv = String(row.imagesCSV || "")
     .split(",")
     .map((part) => part.trim())
     .find(Boolean);
-  if (!id) return "";
-  return `https://m.media-amazon.com/images/I/${id}`;
+  if (csv) return `https://m.media-amazon.com/images/I/${csv}`;
+  return "";
 }
 
 function firstUpc(row: Record<string, unknown>): string {
@@ -95,6 +109,7 @@ export function parseKeepaProduct(row: Record<string, unknown>): KeepaSnapshot |
   if (!/^[A-Z0-9]{10}$/.test(asin)) return null;
   const csv = (row.csv as unknown[] | undefined) || [];
   const stats = row.stats as Record<string, unknown> | undefined;
+  // Prefer live NEW / Buy Box — Keepa often has buy-box -1 when Amazon holds it.
   const buyBox =
     keepaCents(statsSlot(stats, "current", KEEPA_INDEX.BUY_BOX_SHIPPING)) ??
     keepaCents(keepaLastValue(csv[KEEPA_INDEX.BUY_BOX_SHIPPING]));
@@ -104,8 +119,14 @@ export function parseKeepaProduct(row: Record<string, unknown>): KeepaSnapshot |
   const newPrice =
     keepaCents(statsSlot(stats, "current", KEEPA_INDEX.NEW)) ??
     keepaCents(keepaLastValue(csv[KEEPA_INDEX.NEW]));
-  const min90 = keepaCents(statsSlot(stats, "min90", KEEPA_INDEX.NEW) ?? statsSlot(stats, "min", KEEPA_INDEX.NEW));
-  const max90 = keepaCents(statsSlot(stats, "max90", KEEPA_INDEX.NEW) ?? statsSlot(stats, "max", KEEPA_INDEX.NEW));
+  const min90 = keepaCents(
+    statsSlot(stats, "min90", KEEPA_INDEX.NEW) ??
+      statsSlot(stats, "min", KEEPA_INDEX.NEW),
+  );
+  const max90 = keepaCents(
+    statsSlot(stats, "max90", KEEPA_INDEX.NEW) ??
+      statsSlot(stats, "max", KEEPA_INDEX.NEW),
+  );
   const avg90 = keepaCents(statsSlot(stats, "avg90", KEEPA_INDEX.NEW));
   const base = avg90 || newPrice || buyBox;
   const variation =
@@ -121,6 +142,7 @@ export function parseKeepaProduct(row: Record<string, unknown>): KeepaSnapshot |
     statsSlot(stats, "current", KEEPA_INDEX.SALES) ??
     keepaLastValue(csv[KEEPA_INDEX.SALES]);
   const avgSalesRank90 = statsSlot(stats, "avg90", KEEPA_INDEX.SALES);
+  // salesRankDrops90 lives on stats when requesting /product?stats=90
   const drops = Number(row.salesRankDrops90 ?? stats?.salesRankDrops90 ?? 0);
   const sellerCount =
     statsSlot(stats, "current", KEEPA_INDEX.COUNT_NEW) ??
@@ -135,11 +157,12 @@ export function parseKeepaProduct(row: Record<string, unknown>): KeepaSnapshot |
     asin,
     title: String(row.title || "").trim(),
     brand: String(row.brand || "").trim(),
-    imageUrl: firstImage(row.imagesCSV),
+    imageUrl: firstImage(row),
     upc: firstUpc(row),
     mpn: firstMpn(row),
-    amazonRetail: amazonNow != null,
-    buyBoxPrice: buyBox || newPrice,
+    // Amazon is "retail present" only when Amazon has a live offer (>0 cents).
+    amazonRetail: amazonNow != null && amazonNow > 0,
+    buyBoxPrice: buyBox || newPrice || amazonNow,
     newPrice,
     sellerCount,
     salesRank,

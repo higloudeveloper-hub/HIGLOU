@@ -4,6 +4,7 @@ import {
   amazonWinnerBlurb,
   amazonWinnerHeat,
   isAmazonProductWinner,
+  isKeepaBuyVelocityWinner,
 } from "@/lib/opportunity/amazon-product-winner";
 import {
   isPlatformWinner,
@@ -123,8 +124,11 @@ export function opportunityToMarketDrop(
     };
   }
 
-  // Prefer arbitrage drop when ask keep is real; else Keepa Amazon demand.
-  if (!hasAskKeep && isAmazonProductWinner(hit)) {
+  // Prefer arbitrage drop when ask keep is real; else Keepa Amazon demand / buy velocity.
+  if (
+    !hasAskKeep &&
+    (isAmazonProductWinner(hit) || isKeepaBuyVelocityWinner(hit))
+  ) {
     if (!/^[A-Z0-9]{10}$/.test(asin)) return null;
     const buyBox =
       (hit.buyBoxPrice != null && hit.buyBoxPrice > 0 ? hit.buyBoxPrice : null) ??

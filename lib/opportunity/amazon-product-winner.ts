@@ -2,10 +2,13 @@ import { OPPORTUNITY_RULES } from "@/lib/opportunity/types";
 import type { OpportunityProduct } from "@/lib/opportunity/types";
 
 /** Minimum Keepa demand score to stock Find Winners / Market as an Amazon product. */
-export const AMAZON_PRODUCT_WINNER_MIN = 62;
+export const AMAZON_PRODUCT_WINNER_MIN = 55;
 
-/** Soft floor — Product Finder uses 10; hydrated rows can clear a bit lower. */
-export const AMAZON_MIN_BSR_DROPS = 6;
+/** Soft floor — Product Finder uses ≥10; hydrated rows can clear a bit lower. */
+export const AMAZON_MIN_BSR_DROPS = 5;
+
+/** If `keepa` flag missing but drops look Keepa-sourced, still accept. */
+const KEEPA_SIGNAL_WITHOUT_FLAG = 12;
 
 type KeepaSignals = {
   salesRank?: number | null;
@@ -36,6 +39,7 @@ function clamp(n: number, min = 0, max = 100) {
 /**
  * Keepa-driven score for “great product to sell on Amazon”.
  * Velocity + rank + competition + social proof + price stability — not eBay arbitrage.
+ * Tuned from how sellers actually use Product Finder: salesRankDrops90 + BSR band + Amazon absent.
  */
 export function amazonProductScore(hit: KeepaSignals): number {
   const rank = hit.avgSalesRank90 ?? hit.salesRank;
@@ -51,6 +55,7 @@ export function amazonProductScore(hit: KeepaSignals): number {
   else if (drops >= 25) velocity = 26;
   else if (drops >= 15) velocity = 22;
   else if (drops >= 8) velocity = 14;
+  else if (drops >= 5) velocity = 10;
   else if (drops >= 3) velocity = 6;
 
   let rankPts = 0;
@@ -59,6 +64,7 @@ export function amazonProductScore(hit: KeepaSignals): number {
     else if (rank <= 60_000) rankPts = 16;
     else if (rank <= 100_000) rankPts = 11;
     else if (rank <= OPPORTUNITY_RULES.maxBsr) rankPts = 6;
+    else if (rank <= 250_000) rankPts = 3;
   }
 
   let competition = 0;
@@ -86,7 +92,6 @@ export function amazonProductScore(hit: KeepaSignals): number {
   else if (lb <= 1) ship = 5;
   else if (lb <= OPPORTUNITY_RULES.maxPackageLb) ship = 4;
 
-  // Mild boost when currently discounted vs 90d avg — restock window.
   let discountBoost = 0;
   if ((hit.discount90 ?? 0) >= 0.15) discountBoost = 3;
   else if ((hit.discount90 ?? 0) >= 0.08) discountBoost = 1;
@@ -94,30 +99,31 @@ export function amazonProductScore(hit: KeepaSignals): number {
   return clamp(velocity + rankPts + competition + proof + stability + ship + discountBoost);
 }
 
+function hasUsablePrice(hit: KeepaSignals): boolean {
+  const amazon = hit.buyBoxPrice ?? hit.amazonPrice ?? hit.newPrice ?? null;
+  return amazon != null && amazon >= 10 && amazon <= 150;
+}
+
+function hasDemandBand(hit: KeepaSignals): boolean {
+  const rank = hit.avgSalesRank90 ?? hit.salesRank;
+  if (rank == null || rank < 200 || rank > 250_000) return false;
+  const drops = hit.bsrDrops90 ?? 0;
+  return drops >= AMAZON_MIN_BSR_DROPS;
+}
+
+/**
+ * Sell-on-Amazon OA winner: Amazon preferably absent, real Keepa velocity.
+ * Image preferred but not required when Keepa hydrated title + price + drops.
+ */
 export function isAmazonProductWinner(hit: KeepaSignals): boolean {
-  if (hit.verdict === "reject") return false;
+  // Arbitrage judge can mark thin asks as reject — Keepa demand still counts.
+  if (hit.verdict === "reject" && !hit.keepa) return false;
   if (hit.policyRisk === "high" || hit.returnRisk === "high") return false;
   if (hit.amazonRetail) return false;
+  if (!hasUsablePrice(hit)) return false;
+  if (!hasDemandBand(hit)) return false;
 
-  const amazon =
-    hit.buyBoxPrice ?? hit.amazonPrice ?? hit.newPrice ?? null;
-  if (amazon == null || amazon < 10 || amazon > 150) return false;
-
-  const rank = hit.avgSalesRank90 ?? hit.salesRank;
-  if (rank == null || rank < 200 || rank > 250_000) {
-    return false;
-  }
-
-  const drops = hit.bsrDrops90 ?? 0;
-  if (drops < AMAZON_MIN_BSR_DROPS) return false;
-
-  if (
-    hit.sellerCount != null &&
-    hit.sellerCount > 20
-  ) {
-    return false;
-  }
-
+  if (hit.sellerCount != null && hit.sellerCount > 20) return false;
   if (
     hit.packageLb != null &&
     hit.packageLb > OPPORTUNITY_RULES.maxPackageLb + 2
@@ -125,18 +131,40 @@ export function isAmazonProductWinner(hit: KeepaSignals): boolean {
     return false;
   }
 
-  if (!String(hit.title || "").trim() || !String(hit.imageUrl || "").trim()) {
+  if (!String(hit.title || "").trim()) return false;
+  // Prefer image, but Keepa rows with strong drops are still real.
+  if (!String(hit.imageUrl || "").trim() && (hit.bsrDrops90 ?? 0) < 12) {
     return false;
   }
 
-  // Prefer Keepa-hydrated rows; allow high score if BSR drops present (Keepa signal).
-  if (!hit.keepa && drops < KEEPA_SIGNAL_WITHOUT_FLAG) return false;
+  if (!hit.keepa && (hit.bsrDrops90 ?? 0) < KEEPA_SIGNAL_WITHOUT_FLAG) {
+    return false;
+  }
 
   return amazonProductScore(hit) >= AMAZON_PRODUCT_WINNER_MIN;
 }
 
-/** If `keepa` flag missing but drops look Keepa-sourced, still accept. */
-const KEEPA_SIGNAL_WITHOUT_FLAG = 15;
+/**
+ * Buy-on-Amazon Keepa velocity hit for Amazon→eBay when asks are thin.
+ * Amazon retail presence is OK — that is the buy source.
+ */
+export function isKeepaBuyVelocityWinner(hit: KeepaSignals): boolean {
+  if (hit.verdict === "reject" && !hit.keepa) return false;
+  if (hit.policyRisk === "high" || hit.returnRisk === "high") return false;
+  if (!hasUsablePrice(hit)) return false;
+  if (!hasDemandBand(hit)) return false;
+  if (!String(hit.title || "").trim()) return false;
+  if (
+    hit.packageLb != null &&
+    hit.packageLb > OPPORTUNITY_RULES.maxPackageLb + 2
+  ) {
+    return false;
+  }
+  const drops = hit.bsrDrops90 ?? 0;
+  if (!hit.keepa && drops < KEEPA_SIGNAL_WITHOUT_FLAG) return false;
+  // Score as if Amazon were absent so retail buy-box doesn't zero competition pts.
+  return amazonProductScore({ ...hit, amazonRetail: false }) >= 50 || drops >= 20;
+}
 
 export function amazonWinnerHeat(
   score: number,

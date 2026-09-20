@@ -8,16 +8,20 @@ import {
 } from "@/lib/api/rate-limit";
 import { findAmazonWinners } from "@/lib/amazon/find-winners";
 import { loadWinnerMarketTokens } from "@/lib/amazon/winner-tokens";
-import { opportunitySearchText } from "@/lib/opportunity/categories";
-import { onlySellableForMode } from "@/lib/opportunity/mode-copy";
+import {
+  isPlatformWinner,
+  sortPlatformWinners,
+} from "@/lib/opportunity/platform-winner";
+import type { OpportunityMode } from "@/lib/opportunity/types";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
+/**
+ * General opportunity scan — no category, no query.
+ * Keepa Product Finder rotates roots + eBay asks; returns up to 5 real winners.
+ */
 const bodySchema = z.object({
-  query: z.string().max(200).optional().default(""),
-  category: z.string().max(120).optional().default(""),
-  categoryId: z.string().max(40).optional().default(""),
   limit: z.coerce.number().int().min(1).max(5).optional().default(5),
   mode: z
     .enum([
@@ -32,19 +36,18 @@ const bodySchema = z.object({
     ])
     .optional()
     .default("amazon_to_ebay"),
-  onlySellable: z.boolean().optional().default(true),
-  cost: z.number().positive().max(100000).optional(),
   seed: z.coerce.number().int().optional().default(0),
-  excludeAsins: z.array(z.string().min(10).max(12)).max(80).optional().default([]),
-  /** off = free Amazon path (live loop). full = Keepa finder. enrich = hydrate only. */
-  keepaMode: z.enum(["off", "enrich", "full"]).optional(),
-  keepaPurpose: z.enum(["live", "manual", "enrich"]).optional().default("manual"),
+  excludeAsins: z
+    .array(z.string().min(10).max(12))
+    .max(80)
+    .optional()
+    .default([]),
 });
 
 export async function POST(request: Request) {
   if (!isSupabaseConfigured()) {
     return NextResponse.json(
-      { error: "Sign in to search Amazon." },
+      { error: "Sign in to scan opportunities." },
       { status: 503 },
     );
   }
@@ -53,42 +56,33 @@ export async function POST(request: Request) {
   if (!auth.ok) return auth.response;
 
   const rate = checkRateLimit({
-    key: `amazon-auto-search:${clientKeyFromRequest(request, auth.user.id)}`,
-    limit: 6,
+    key: `winners-scan:${clientKeyFromRequest(request, auth.user.id)}`,
+    limit: 8,
     windowMs: 60_000,
   });
   if (!rate.allowed) {
     return NextResponse.json(
-      { error: "Too many Amazon searches. Wait a minute and try again." },
+      { error: "Too many scans. Wait a minute and try again." },
       {
         status: 429,
-        headers: { "Retry-After": String(Math.ceil(rate.retryAfterMs / 1000) || 1) },
+        headers: {
+          "Retry-After": String(Math.ceil(rate.retryAfterMs / 1000) || 1),
+        },
       },
     );
   }
 
   let body: z.infer<typeof bodySchema>;
   try {
-    body = bodySchema.parse(await request.json());
+    body = bodySchema.parse(await request.json().catch(() => ({})));
   } catch {
     return NextResponse.json(
-      { error: "Send JSON { query }." },
+      { error: "Send JSON { limit: 1-5 }." },
       { status: 400 },
     );
   }
 
-  const fromId = opportunitySearchText(body.categoryId || "all", body.query);
-  const query = body.query.trim() || fromId.query;
-  const category = body.category.trim() || fromId.category;
-  const categoryId = body.categoryId.trim() || "all";
-  const globalScan = categoryId === "all";
-  // Global Keepa scan needs no typed query — opportunity-first.
-  if (!globalScan && !query && !category && !fromId.keepaRoot) {
-    return NextResponse.json(
-      { error: "Pick All Amazon or type a product to scan." },
-      { status: 400 },
-    );
-  }
+  const mode = body.mode as OpportunityMode;
 
   try {
     const tokens = await loadWinnerMarketTokens(auth.supabase, auth.user.id);
@@ -106,37 +100,43 @@ export async function POST(request: Request) {
           .filter((id) => /^[A-Z0-9]{10}$/.test(id)),
       ]),
     ];
+
     const found = await findAmazonWinners({
-      query,
-      category,
-      categoryId,
-      keepaRoot: fromId.keepaRoot,
+      query: "",
+      category: "",
+      categoryId: "all",
+      keepaRoot: "",
       limit: body.limit,
       pageOrigin: new URL(request.url).origin,
       amazonToken: tokens.amazonToken,
       marketplaceId: tokens.marketplaceId,
       sellingPartnerId: tokens.sellingPartnerId,
       ebayToken: tokens.ebayToken,
-      mode: body.mode,
-      onlySellable: onlySellableForMode(body.mode, body.onlySellable),
-      supplierCost: body.cost,
+      mode,
+      onlySellable: false,
       seed: body.seed,
       excludeAsins,
-      keepaMode: body.keepaMode,
-      keepaPurpose: body.keepaPurpose,
+      keepaMode: "full",
+      keepaPurpose: "manual",
     });
+
+    const winners = sortPlatformWinners(
+      (found.products || []).filter((hit) => isPlatformWinner(hit, mode)),
+    ).slice(0, body.limit);
+
     return NextResponse.json({
       ok: true,
-      products: found.products,
+      products: winners,
       sources: found.sources,
       filteredOut: found.filteredOut,
       queries: found.queries,
       analyzed: found.analyzed,
-      scope: globalScan ? "global" : "category",
+      scope: "general",
+      limit: body.limit,
     });
   } catch (error) {
     const message =
-      error instanceof Error ? error.message : "Amazon search failed";
+      error instanceof Error ? error.message : "Opportunity scan failed";
     return NextResponse.json({ error: message }, { status: 422 });
   }
 }

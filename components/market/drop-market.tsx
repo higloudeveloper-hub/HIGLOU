@@ -399,7 +399,11 @@ export function DropMarketStudio() {
                 </div>
                 <p className="mt-4 text-[11px] font-semibold tracking-wide text-[#6b6560] uppercase">
                   {drop.name} ·{" "}
-                  {drop.lane === "amazon" ? "Keepa Amazon" : "arbitrage"}{" "}
+                  {drop.lane === "amazon"
+                    ? "Keepa Amazon"
+                    : drop.lane === "retail"
+                      ? "retail route"
+                      : "arbitrage"}{" "}
                   · verified
                 </p>
                 <h2 className="mt-1 font-display text-2xl leading-tight">

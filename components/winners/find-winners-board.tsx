@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { Loader2, Search, Store, ArrowRight } from "lucide-react";
+import { Loader2, Search, Store, ArrowRight, Sparkles } from "lucide-react";
 import { AMAZON_WINNER_CATEGORIES, AMAZON_WINNER_LIMITS } from "@/lib/amazon/winner-categories";
 import { amazonProductScore } from "@/lib/opportunity/amazon-product-winner";
 import {
@@ -84,6 +84,7 @@ export function FindWinnersBoard({
   const [query, setQuery] = useState("");
   const [limit, setLimit] = useState(5);
   const [searching, setSearching] = useState(false);
+  const [generalScanning, setGeneralScanning] = useState(false);
   const [importing, setImporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [hits, setHits] = useState<OpportunityProduct[]>([]);
@@ -136,8 +137,74 @@ export function FindWinnersBoard({
     return sum + Math.max(0, platformKeep(hit) ?? 0);
   }, 0);
 
+  const applyFound = useCallback(
+    (found: OpportunityProduct[], bodySources: SearchBody["sources"] | null) => {
+      setSources(bodySources);
+      const next = sortPlatformWinners(
+        found.filter((hit) => isPlatformWinner(hit, mode)),
+      );
+      if (!next.length) {
+        setError(
+          "No real money opportunities this round. Scan again or try another route.",
+        );
+        return;
+      }
+      setHits((prev) => {
+        const map = new Map(prev.map((hit) => [hitKey(hit), hit]));
+        for (const hit of next) map.set(hitKey(hit), hit);
+        return sortPlatformWinners(
+          [...map.values()].filter((hit) => isPlatformWinner(hit, mode)),
+        );
+      });
+      setPicked(next.map((hit) => hitKey(hit)));
+      setError(null);
+    },
+    [mode],
+  );
+
+  /** General button: any real opportunities, quantity 1–5, Keepa + eBay. */
+  const scanGeneral = useCallback(async () => {
+    if (searching || generalScanning || busy || retail) return;
+    setGeneralScanning(true);
+    setError(null);
+    const nextRound = round + 1;
+    setRound(nextRound);
+    try {
+      const response = await fetch("/api/winners/scan", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          limit,
+          mode,
+          seed: nextRound - 1,
+          excludeAsins: winners.map((hit) => hitKey(hit)).slice(0, 40),
+        }),
+      });
+      const body = (await response.json().catch(() => null)) as SearchBody | null;
+      if (!response.ok || !body) {
+        setError(body?.error || "General scan failed.");
+        return;
+      }
+      applyFound(body.products || [], body.sources || null);
+    } catch {
+      setError("Network error. Try again.");
+    } finally {
+      setGeneralScanning(false);
+    }
+  }, [
+    applyFound,
+    busy,
+    generalScanning,
+    limit,
+    mode,
+    retail,
+    round,
+    searching,
+    winners,
+  ]);
+
   const find = useCallback(async () => {
-    if (searching || busy) return;
+    if (searching || generalScanning || busy) return;
     if (retail && categoryId === "all" && query.trim().length < 2) {
       setError("For Walmart / Home Depot, type a product or pick a category filter.");
       return;
@@ -167,30 +234,25 @@ export function FindWinnersBoard({
         setError(body?.error || "Search failed.");
         return;
       }
-      setSources(body.sources || null);
-      const found = sortPlatformWinners(
-        (body.products || []).filter((hit) => isPlatformWinner(hit, mode)),
-      );
-      if (!found.length) {
-        setError(
-          "No real money opportunities this round. Scan again or try another route.",
-        );
-        return;
-      }
-      setHits((prev) => {
-        const map = new Map(prev.map((hit) => [hitKey(hit), hit]));
-        for (const hit of found) map.set(hitKey(hit), hit);
-        return sortPlatformWinners(
-          [...map.values()].filter((hit) => isPlatformWinner(hit, mode)),
-        );
-      });
-      setPicked(found.map((hit) => hitKey(hit)));
+      applyFound(body.products || [], body.sources || null);
     } catch {
       setError("Network error. Try again.");
     } finally {
       setSearching(false);
     }
-  }, [busy, categoryId, limit, mode, query, retail, round, searching, winners]);
+  }, [
+    applyFound,
+    busy,
+    categoryId,
+    generalScanning,
+    limit,
+    mode,
+    query,
+    retail,
+    round,
+    searching,
+    winners,
+  ]);
 
   const importSelected = async () => {
     if (!selected.length || importing || busy) return;
@@ -227,6 +289,7 @@ export function FindWinnersBoard({
   };
 
   const locked = busy || importing;
+  const scanning = searching || generalScanning;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-[#f6f4ef] text-[#141414]">
@@ -280,6 +343,49 @@ export function FindWinnersBoard({
             {route.label} · {route.hint}
           </p>
         </div>
+
+        {!retail ? (
+          <div className="mt-5 flex flex-wrap items-end gap-3 border-t border-white/10 pt-5">
+            <label className="w-28">
+              <span className="mb-1 block text-[11px] font-semibold tracking-wide text-white/50 uppercase">
+                How many
+              </span>
+              <select
+                value={limit}
+                onChange={(e) => setLimit(Number(e.target.value))}
+                disabled={locked || scanning}
+                className="h-12 w-full border border-white/20 bg-white/10 px-3 text-[14px] text-white outline-none focus:border-[#f4c928]"
+              >
+                {AMAZON_WINNER_LIMITS.map((n) => (
+                  <option key={n} value={n} className="text-[#141414]">
+                    {n}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <button
+              type="button"
+              disabled={locked || scanning}
+              onClick={() => void scanGeneral()}
+              className="inline-flex h-12 flex-1 items-center justify-center gap-2 bg-[#f4c928] px-6 text-[14px] font-semibold text-[#141414] disabled:opacity-40 sm:flex-none sm:min-w-[240px]"
+            >
+              {generalScanning ? (
+                <>
+                  <Loader2 className="size-4 animate-spin" />
+                  Finding {limit} real…
+                </>
+              ) : (
+                <>
+                  <Sparkles className="size-4" />
+                  Find {limit} real opportunities
+                </>
+              )}
+            </button>
+            <p className="w-full text-[12px] text-white/50 sm:w-auto sm:max-w-xs">
+              Keepa Product Finder + eBay asks. No category needed.
+            </p>
+          </div>
+        ) : null}
       </header>
 
       <div className="shrink-0 border-b border-[#e4e0d8] bg-white px-5 py-4 md:px-8">
@@ -302,7 +408,7 @@ export function FindWinnersBoard({
                   ? "cable organizer, drill bit, ASIN, UPC…"
                   : "cable organizer, ASIN, or Amazon link"
               }
-              disabled={locked || searching}
+              disabled={locked || scanning}
               className="h-12 w-full border border-[#d5d0c8] bg-[#fbfaf7] px-3 text-[15px] outline-none focus:border-[#141414]"
             />
           </label>
@@ -313,7 +419,7 @@ export function FindWinnersBoard({
             <select
               value={categoryId}
               onChange={(e) => setCategoryId(e.target.value)}
-              disabled={locked || searching}
+              disabled={locked || scanning}
               className="h-12 w-full border border-[#d5d0c8] bg-[#fbfaf7] px-3 text-[14px] outline-none focus:border-[#141414]"
             >
               {AMAZON_WINNER_CATEGORIES.map((row) => (
@@ -330,7 +436,7 @@ export function FindWinnersBoard({
             <select
               value={limit}
               onChange={(e) => setLimit(Number(e.target.value))}
-              disabled={locked || searching}
+              disabled={locked || scanning}
               className="h-12 w-full border border-[#d5d0c8] bg-[#fbfaf7] px-3 text-[14px] outline-none focus:border-[#141414]"
             >
               {AMAZON_WINNER_LIMITS.map((n) => (
@@ -342,7 +448,7 @@ export function FindWinnersBoard({
           </label>
           <button
             type="submit"
-            disabled={locked || searching}
+            disabled={locked || scanning}
             className="inline-flex h-12 items-center justify-center gap-2 bg-[#141414] px-6 text-[14px] font-semibold text-white disabled:opacity-40"
           >
             {searching ? (
@@ -387,10 +493,26 @@ export function FindWinnersBoard({
               No verified winners yet
             </p>
             <p className="mt-2 text-[14px] leading-relaxed text-[#6b6560]">
-              Pick a buy→sell route and scan. We only keep real keep after fees
-              (or Keepa demand). Import runs a full price check on every
-              platform before Market.
+              Tap <strong>Find real opportunities</strong> (limit 1–5) or pick a
+              route and scan. We only keep real keep after fees (or Keepa
+              demand). Import runs a full price check on every platform before
+              Market.
             </p>
+            {!retail ? (
+              <button
+                type="button"
+                disabled={locked || scanning}
+                onClick={() => void scanGeneral()}
+                className="mt-5 inline-flex h-11 items-center gap-2 bg-[#141414] px-5 text-[13px] font-semibold text-white disabled:opacity-40"
+              >
+                {generalScanning ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  <Sparkles className="size-4" />
+                )}
+                Find {limit} real opportunities
+              </button>
+            ) : null}
           </div>
         ) : (
           <ul className="mx-auto grid max-w-5xl gap-3">

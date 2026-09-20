@@ -83,7 +83,7 @@ describe("platform winners", () => {
 
   it("accepts Keepa Amazon product winners without eBay keep", () => {
     const hit = amazonKeepaWinner();
-    expect(amazonProductScore(hit)).toBeGreaterThanOrEqual(68);
+    expect(amazonProductScore(hit)).toBeGreaterThanOrEqual(55);
     expect(isAmazonProductWinner(hit)).toBe(true);
     expect(isPlatformWinner(hit, "amazon")).toBe(true);
     expect(
@@ -92,6 +92,16 @@ describe("platform winners", () => {
     expect(
       isAmazonProductWinner(amazonKeepaWinner({ bsrDrops90: 2 })),
     ).toBe(false);
+  });
+
+  it("accepts Keepa buy-velocity hits for Amazon→eBay even with Amazon retail", () => {
+    const hit = amazonKeepaWinner({
+      mode: "amazon_to_ebay",
+      amazonRetail: true,
+      bsrDrops90: 40,
+      sellerCount: 8,
+    });
+    expect(isPlatformWinner(hit, "amazon_to_ebay")).toBe(true);
   });
 
   it("stocks market with both arbitrage and Amazon Keepa winners", () => {
@@ -138,7 +148,17 @@ describe("higlou market + find winners wiring", () => {
       /FindWinnersBoard/,
     );
     expect(readRepo("components/winners/find-winners-board.tsx")).toMatch(
-      /Scan winners/,
+      /Find \$\{limit\} real opportunities|Find real opportunities/,
+    );
+    expect(readRepo("components/winners/find-winners-board.tsx")).toMatch(
+      /\/api\/winners\/scan/,
+    );
+    expect(readRepo("app/api/winners/scan/route.ts")).toMatch(
+      /limit.*max\(5\)|max\(5\).*limit|z\.coerce\.number\(\)\.int\(\)\.min\(1\)\.max\(5\)/,
+    );
+    expect(readRepo("lib/keepa/finder.ts")).toMatch(/KEEPA_SCAN_ROOTS/);
+    expect(readRepo("lib/opportunity/amazon-product-winner.ts")).toMatch(
+      /isKeepaBuyVelocityWinner/,
     );
     expect(readRepo("components/winners/find-winners-board.tsx")).toMatch(
       /Walmart/,

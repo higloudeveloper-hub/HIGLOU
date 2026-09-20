@@ -35,6 +35,7 @@ import type { OpportunityMode, OpportunityProduct } from "@/lib/opportunity/type
 import { WINNER_ROUTES, winnerRouteById } from "@/lib/opportunity/winner-routes";
 import { stashOpportunityMoneySeed } from "@/lib/monetization/from-opportunity";
 import { PlatformOpenLinks } from "@/components/opportunity/platform-open-links";
+import { CheapSourcePanel } from "@/components/winners/cheap-source-panel";
 import { buildPlatformUrls } from "@/lib/opportunity/platform-links";
 import { cn } from "@/lib/utils";
 import { ExternalLink } from "lucide-react";
@@ -707,6 +708,26 @@ export function FindWinnersBoard({
                           className="mt-2"
                           size="sm"
                           urls={hit.platformUrls || buildPlatformUrls(hit)}
+                        />
+                        <CheapSourcePanel
+                          className="mt-3"
+                          title={hit.title || id}
+                          brand={hit.brand}
+                          mpn={hit.mpn}
+                          upc={hit.upc}
+                          imageUrl={hit.imageUrl || undefined}
+                          buyPrice={
+                            board.activeBuy ??
+                            hit.cost ??
+                            hit.amazonPrice ??
+                            hit.buyBoxPrice
+                          }
+                          sellPrice={
+                            board.activeSell ??
+                            hit.ebayActiveLow ??
+                            hit.ebayPrice ??
+                            hit.salePrice
+                          }
                         />
                       </div>
 

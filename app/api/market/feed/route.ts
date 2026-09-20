@@ -16,7 +16,7 @@ async function loadLedgerHits(userId: string): Promise<OpportunityProduct[]> {
       .from("opportunity_ledger")
       .select("asin, payload, net_profit, mode")
       .eq("user_id", userId)
-      .order("updated_at", { ascending: false })
+      .order("last_seen_at", { ascending: false })
       .limit(120);
     if (error || !data?.length) return [];
     const out: OpportunityProduct[] = [];
@@ -46,13 +46,28 @@ async function loadLedgerHits(userId: string): Promise<OpportunityProduct[]> {
   }
 }
 
+function withTimeout<T>(promise: Promise<T>, ms: number, fallback: T): Promise<T> {
+  return new Promise((resolve) => {
+    const t = setTimeout(() => resolve(fallback), ms);
+    promise
+      .then((value) => {
+        clearTimeout(t);
+        resolve(value);
+      })
+      .catch(() => {
+        clearTimeout(t);
+        resolve(fallback);
+      });
+  });
+}
+
 export async function GET() {
   const auth = await requireUser();
   if (!auth.ok) return auth.response;
 
   const [tag, ledgerHits] = await Promise.all([
-    resolveUserAssociateTag(auth.supabase, auth.user.id),
-    loadLedgerHits(auth.user.id),
+    withTimeout(resolveUserAssociateTag(auth.supabase, auth.user.id), 4000, null),
+    withTimeout(loadLedgerHits(auth.user.id), 5000, [] as OpportunityProduct[]),
   ]);
 
   const merged = mergeMarketFeed({

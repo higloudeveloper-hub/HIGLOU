@@ -43,15 +43,22 @@ function signed(n: number) {
 export function DropMarketStudio() {
   const router = useRouter();
   const [drops, setDrops] = useState<MarketDropPublic[]>([]);
-  const [note, setNote] = useState("Loading verified winners…");
+  const [note, setNote] = useState(
+    "Market is empty until Find Winners verifies a winner.",
+  );
   const [tagReady, setTagReady] = useState(false);
   const [ledgerCount, setLedgerCount] = useState(0);
   const [active, setActive] = useState(0);
   const [busy, setBusy] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  // Never block the empty CTA on a hanging feed — hydrate local first, refresh soft.
+  const [bootstrapped, setBootstrapped] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
-    let cancelled = false;
+    let alive = true;
+    const emptyNote =
+      "Market is empty until Find Winners verifies arbitrage keep or Keepa Amazon demand.";
+
     const local = localVerifiedDrops();
     if (local.length) {
       setDrops(local);
@@ -59,36 +66,32 @@ export function DropMarketStudio() {
       setNote(
         `${local.length} Higlou-verified winner${local.length === 1 ? "" : "s"} from Find Winners`,
       );
-      setLoading(false);
     } else {
-      setNote("Market is empty until Find Winners verifies a real ask spread.");
+      setDrops([]);
+      setLedgerCount(0);
+      setNote(emptyNote);
     }
+    setBootstrapped(true);
+    setRefreshing(true);
 
     const controller = new AbortController();
-    const safety = window.setTimeout(() => {
-      if (cancelled) return;
-      controller.abort();
-      setLoading(false);
-      if (!local.length) {
-        setNote(
-          "Market is empty until Find Winners verifies a real ask spread.",
-        );
-      }
-    }, 8000);
+    const hardStop = window.setTimeout(() => controller.abort(), 5000);
 
     void (async () => {
       try {
-        const res = await fetch("/api/market/feed", { signal: controller.signal });
-        if (!res.ok) throw new Error("feed");
+        const res = await fetch("/api/market/feed", {
+          signal: controller.signal,
+          cache: "no-store",
+        });
+        if (!res.ok) throw new Error(`feed ${res.status}`);
         const body = (await res.json()) as {
           drops?: MarketDropPublic[];
           note?: string;
           affiliateTagConfigured?: boolean;
           ledgerCount?: number;
         };
-        if (cancelled) return;
+        if (!alive) return;
         const remote = body.drops || [];
-        // Prefer remote when it has stock; otherwise keep local verified winners.
         if (remote.length) {
           setDrops(remote);
           setLedgerCount(Number(body.ledgerCount) || remote.length);
@@ -96,32 +99,31 @@ export function DropMarketStudio() {
         } else if (!local.length) {
           setDrops([]);
           setLedgerCount(0);
-          setNote(
-            body.note ||
-              "Market is empty until Find Winners verifies a real ask spread.",
-          );
+          setNote(body.note || emptyNote);
         }
         setTagReady(Boolean(body.affiliateTagConfigured));
         setActive(0);
       } catch {
-        if (!cancelled && !local.length) {
+        if (!alive) return;
+        if (!local.length) {
           setDrops([]);
           setLedgerCount(0);
-          setNote(
-            "Market is empty until Find Winners verifies a real ask spread.",
-          );
+          setNote(emptyNote);
         }
       } finally {
-        window.clearTimeout(safety);
-        if (!cancelled) setLoading(false);
+        window.clearTimeout(hardStop);
+        if (alive) setRefreshing(false);
       }
     })();
+
     return () => {
-      cancelled = true;
-      window.clearTimeout(safety);
+      alive = false;
+      window.clearTimeout(hardStop);
       controller.abort();
     };
   }, []);
+
+  const loading = !bootstrapped;
 
   const drop = drops[active] ?? null;
   const openKeep = useMemo(
@@ -262,7 +264,15 @@ export function DropMarketStudio() {
             <strong className="text-[#141414]">{ledgerCount}</strong>
           </span>
           <span>{tagReady ? "Affiliate tag ready" : "Set tag in Settings"}</span>
-          {!loading && note ? <span className="text-[#8a847c]">{note}</span> : null}
+          {refreshing ? (
+            <span className="inline-flex items-center gap-1.5 text-[#8a847c]">
+              <Loader2 className="size-3 animate-spin" />
+              Syncing…
+            </span>
+          ) : null}
+          {!loading && !refreshing && note ? (
+            <span className="text-[#8a847c]">{note}</span>
+          ) : null}
         </div>
       </div>
 

@@ -3,6 +3,7 @@ import {
   isAmazonProductWinner,
   sortAmazonProductWinners,
 } from "@/lib/opportunity/amazon-product-winner";
+import { isRetailToMarketplaceMode } from "@/lib/opportunity/markets";
 import { isActionableAskSpread } from "@/lib/opportunity/spread";
 import { OPPORTUNITY_RULES } from "@/lib/opportunity/types";
 import type { OpportunityMode, OpportunityProduct } from "@/lib/opportunity/types";
@@ -18,8 +19,7 @@ export function isAmazonSellLane(mode: OpportunityMode): boolean {
 
 /**
  * Platform-verified winner — Higlou's bar for Market + Find Winners.
- * Either real Amazon→eBay ask keep, or Keepa demand for selling on Amazon.
- * Clients care about opportunities first — not which category box we opened.
+ * Real money only: ask keep, Keepa Amazon demand, or retail→marketplace keep.
  */
 export function platformKeep(hit: OpportunityProduct): number | null {
   if (hit.soldVerified && hit.netProfit != null && Number.isFinite(hit.netProfit)) {
@@ -33,15 +33,36 @@ export function platformKeep(hit: OpportunityProduct): number | null {
 
 export function isPlatformWinner(
   hit: OpportunityProduct,
-  _mode: OpportunityMode = hit.mode || "amazon_to_ebay",
+  mode: OpportunityMode = hit.mode || "amazon_to_ebay",
 ): boolean {
   if (hit.verdict === "reject") return false;
   if (isStarterBlocked(hit)) return false;
 
   const asin = String(hit.asin || "").toUpperCase();
-  if (!/^[A-Z0-9]{10}$/.test(asin)) return false;
+  const sourceId = String(hit.sourceId || "").trim();
+  const lane = hit.mode || mode;
 
+  if (isRetailToMarketplaceMode(lane) || lane === "ebay_to_amazon") {
+    if (!sourceId && !/^[A-Z0-9]{10}$/.test(asin)) return false;
+    return isRetailRouteWinner(hit);
+  }
+
+  if (!/^[A-Z0-9]{10}$/.test(asin)) return false;
   return isArbitrageWinner(hit) || isAmazonProductWinner(hit);
+}
+
+function isRetailRouteWinner(hit: OpportunityProduct): boolean {
+  const keep = platformKeep(hit);
+  if (keep == null || keep < OPPORTUNITY_RULES.minWinnerProfit) return false;
+  if (hit.cost == null || hit.cost <= 0) return false;
+  if ((hit.identityConfidence ?? 0) < 60 && !hit.ebayMatchedByGtin && !hit.asin) {
+    return false;
+  }
+  const dest = hit.destMarket;
+  if (dest === "amazon") {
+    return (hit.amazonPrice ?? hit.buyBoxPrice) != null;
+  }
+  return (hit.ebayActiveLow ?? hit.ebayActiveMedian ?? hit.ebayPrice) != null;
 }
 
 function isArbitrageWinner(hit: OpportunityProduct): boolean {
@@ -65,9 +86,14 @@ function isStarterBlocked(hit: OpportunityProduct): boolean {
 }
 
 export function sortPlatformWinners(hits: OpportunityProduct[]): OpportunityProduct[] {
-  const keepHits = hits.filter((hit) => isArbitrageWinner(hit));
+  const keepHits = hits.filter(
+    (hit) => isArbitrageWinner(hit) || isRetailRouteWinner(hit),
+  );
   const demandHits = hits.filter(
-    (hit) => isAmazonProductWinner(hit) && !isArbitrageWinner(hit),
+    (hit) =>
+      isAmazonProductWinner(hit) &&
+      !isArbitrageWinner(hit) &&
+      !isRetailRouteWinner(hit),
   );
 
   const byKeep = [...keepHits].sort((a, b) => {
@@ -85,7 +111,7 @@ export function platformWinnerMetric(hit: OpportunityProduct): {
   value: number;
   label: string;
 } {
-  if (isArbitrageWinner(hit)) {
+  if (isArbitrageWinner(hit) || isRetailRouteWinner(hit)) {
     const keep = platformKeep(hit) ?? 0;
     return { kind: "keep", value: keep, label: "You keep" };
   }
@@ -93,4 +119,4 @@ export function platformWinnerMetric(hit: OpportunityProduct): {
   return { kind: "demand", value: demand, label: `Demand ${demand}` };
 }
 
-export { isArbitrageWinner };
+export { isArbitrageWinner, isRetailRouteWinner };

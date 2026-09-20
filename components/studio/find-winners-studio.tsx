@@ -16,6 +16,7 @@ type WinnerCard = {
   sourceId?: string;
   sourceMarket?: string;
   upc?: string;
+  cost?: number | null;
 };
 
 export function FindWinnersStudio() {
@@ -28,61 +29,54 @@ export function FindWinnersStudio() {
     cards?: WinnerCard[],
   ): Promise<boolean> => {
     if (busy) return false;
+    const selected =
+      cards?.filter((card) =>
+        ids.includes((card.asin || card.sourceId || "").toUpperCase()),
+      ) || [];
+    if (!selected.length) {
+      toast.error("Pick at least one winner.");
+      return false;
+    }
 
     setBusy(true);
     try {
-      const next = [
-        ...new Set(
-          ids
-            .map((value) => value.trim().toUpperCase())
-            .filter((value) => /^[A-Z0-9]{10}$/.test(value)),
-        ),
-      ].slice(0, 5);
-      if (!next.length) {
-        toast.error("No Amazon ASIN to import.");
-        return false;
-      }
-
-      const importMode: OpportunityMode =
-        mode === "amazon" || mode === "supplier" || mode === "amazon_to_ebay"
-          ? mode
-          : "amazon_to_ebay";
-
-      const response = await fetch("/api/amazon/auto-import", {
+      const response = await fetch("/api/winners/import", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ asins: next, mode: importMode, cards: cards || [] }),
+        body: JSON.stringify({ mode, cards: selected }),
       });
       const body = (await response.json().catch(() => null)) as {
         ok?: boolean;
         error?: string;
         id?: string;
-        extras?: Array<{ id: string; asin: string; title: string }>;
-        skipped?: Array<{ asin: string; reason: string }>;
-        mode?: OpportunityMode;
+        href?: string;
+        marketReady?: boolean;
+        note?: string;
+        analysis?: {
+          bestRoute?: string;
+          bestKeep?: number | null;
+          quotes?: Array<{ platform: string; price: number | null }>;
+        };
       } | null;
+
       if (!response.ok || !body?.ok || !body.id) {
-        const timedOut = [502, 503, 504].includes(response.status);
-        toast.error(
-          body?.error ||
-            body?.skipped?.[0]?.reason ||
-            (timedOut
-              ? "Amazon took too long. Tap Import again."
-              : `Could not import (${response.status}). Try again.`),
-        );
+        toast.error(body?.error || "Import failed");
         return false;
       }
 
-      const extraCount = body.extras?.length || 0;
-      const channel = body.mode || importMode;
+      const prices = (body.analysis?.quotes || [])
+        .filter((q) => q.price != null)
+        .map((q) => `${q.platform} $${q.price}`)
+        .join(" · ");
       toast.success(
-        extraCount
-          ? `Imported ${1 + extraCount} winners — drafts ready for eBay.`
-          : channel === "amazon"
-            ? "Amazon draft saved. Publish from Export."
-            : "Winner saved for eBay. Finish listing and publish.",
+        body.marketReady
+          ? `Real opportunity imported${prices ? ` — ${prices}` : ""}`
+          : body.note || "Imported with cross-platform prices",
       );
-      router.push(`/listings/${body.id}`);
+      if (body.analysis?.bestKeep != null) {
+        toast.message(`Best keep ~$${body.analysis.bestKeep.toFixed(2)}`);
+      }
+      router.push(body.href || `/listings/${body.id}`);
       return true;
     } catch (error) {
       toast.error(

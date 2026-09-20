@@ -59,9 +59,12 @@ export async function findRetailOpportunities(opts: {
     : { query: opts.query, category: opts.category || "", keepaRoot: "" };
   const keywords =
     String(opts.query || "").trim() ||
-    String(opts.category || fromId.category || "").trim();
+    String(opts.category || fromId.category || "").trim() ||
+    (String(opts.categoryId || "") === "all"
+      ? "storage organizer tool kit"
+      : "");
   if (!keywords) {
-    throw new Error("Pick a category or type the product you want Higlou to find.");
+    throw new Error("Type a product or pick a category to scan Walmart / Home Depot.");
   }
   const queries = pickCategoryQueries({
     categoryId: opts.categoryId,
@@ -182,7 +185,7 @@ export async function findRetailOpportunities(opts: {
       imageUrl,
       upc,
       cost: price,
-      amazonPrice: destAmazon ? null : null,
+      amazonPrice: null,
     };
 
     // Exactness: without UPC we cannot confirm winners — still return as weak candidate only if priced
@@ -190,44 +193,61 @@ export async function findRetailOpportunities(opts: {
       return finishRouteProduct(hit);
     }
 
-    if (destAmazon) {
-      if (opts.amazonToken && opts.marketplaceId) {
-        const resolved = await resolveAsinFromUpc({
-          upc,
-          amazonToken: opts.amazonToken,
-          marketplaceId: opts.marketplaceId,
-        });
-        if (resolved) {
-          hit = {
-            ...hit,
-            asin: resolved.asin,
-            title: hit.title || resolved.title,
-          };
-          sources.amazonCatalog = true;
-          hit = await enrichAmazonSide(hit, opts);
-          if (hit.amazonFees != null) sources.amazonFees = true;
-        }
+    // Always resolve Amazon ASIN when possible — needed for cross-platform truth.
+    if (opts.amazonToken && opts.marketplaceId) {
+      const resolved = await resolveAsinFromUpc({
+        upc,
+        amazonToken: opts.amazonToken,
+        marketplaceId: opts.marketplaceId,
+      });
+      if (resolved) {
+        hit = {
+          ...hit,
+          asin: resolved.asin,
+          title: hit.title || resolved.title,
+        };
+        sources.amazonCatalog = true;
+        hit = await enrichAmazonSide(hit, opts);
+        if (hit.amazonFees != null) sources.amazonFees = true;
       }
-    } else if (opts.ebayToken) {
+    }
+
+    // Always check eBay asks when possible — full money picture.
+    if (opts.ebayToken) {
       hit = await enrichEbaySide(hit, opts.ebayToken);
       if (hit.ebayActiveCount) sources.ebayLive = true;
+    }
+
+    // Dest-specific sale for keep math
+    if (destAmazon) {
+      hit = {
+        ...hit,
+        salePrice: hit.buyBoxPrice ?? hit.amazonPrice,
+      };
+    } else {
+      hit = {
+        ...hit,
+        salePrice: hit.ebayActiveLow ?? hit.ebayActiveMedian ?? hit.ebayPrice,
+      };
     }
 
     return finishRouteProduct(hit);
   });
 
-  // Board: show exact GTIN matches first; drop rejects without price
+  // Board: real keep only — cost vs destination after fees.
   const passing = enriched.filter((hit) => {
     if (hit.verdict === "reject") return false;
     if (hit.cost == null || hit.cost <= 0) return false;
+    const keep = hit.hypotheticalKeep;
+    if (keep == null || keep < 6) return false;
     if (destAmazon) {
       return Boolean(hit.asin) && (hit.amazonPrice ?? hit.buyBoxPrice) != null;
     }
-    return (hit.ebayActiveMedian ?? hit.ebayPrice) != null;
+    return (hit.ebayActiveLow ?? hit.ebayActiveMedian ?? hit.ebayPrice) != null;
   });
 
   const ranked = diversifyOpportunityHits(
-    sortByRealMoney(passing.length ? passing : enriched.filter((h) => h.cost)),
+    sortByRealMoney(passing.length ? passing : []),
     Math.max(limit, 8),
   );
 

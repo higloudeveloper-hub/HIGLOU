@@ -20,7 +20,7 @@ export type MarketDropPublic = MarketDrop & {
   netProfit: number | null;
   score: number | null;
   note: string;
-  lane: "arbitrage" | "amazon";
+  lane: "arbitrage" | "amazon" | "retail";
   demandScore: number | null;
   bsrDrops90: number | null;
   salesRank: number | null;
@@ -57,15 +57,75 @@ export function opportunityToMarketDrop(
   const asin = String(hit.asin || "")
     .trim()
     .toUpperCase();
-  if (!/^[A-Z0-9]{10}$/.test(asin)) return null;
+  const sourceKey = String(hit.sourceId || "")
+    .trim()
+    .toUpperCase();
+  const dropId = /^[A-Z0-9]{10}$/.test(asin)
+    ? `win-${asin}`
+    : sourceKey
+      ? `win-r-${sourceKey.slice(0, 20)}`
+      : null;
+  if (!dropId) return null;
 
+  const keep = platformKeep(hit);
   const hasAskKeep =
-    platformKeep(hit) != null &&
+    keep != null &&
+    keep >= 12 &&
     (hit.ebayActiveLow ?? hit.ebayActiveMedian ?? hit.ebayPrice) != null &&
-    (platformKeep(hit) ?? 0) >= 12;
+    (hit.cost ?? hit.amazonPrice) != null;
+
+  // Retail route winners (Walmart / Home Depot → Amazon or eBay)
+  if (
+    (hit.sourceMarket === "walmart" || hit.sourceMarket === "homedepot") &&
+    keep != null &&
+    keep >= 12 &&
+    hit.cost != null
+  ) {
+    const sell =
+      hit.salePrice ??
+      hit.ebayActiveLow ??
+      hit.ebayActiveMedian ??
+      hit.ebayPrice ??
+      hit.buyBoxPrice ??
+      hit.amazonPrice;
+    if (sell == null || sell <= 0) return null;
+    const { photo, title, brand, affiliateUrl } = baseFields(
+      hit,
+      asin || sourceKey,
+      associateTag,
+    );
+    return {
+      id: dropId,
+      name: brand || hit.sourceMarket,
+      title,
+      blurb: `${hit.sourceMarket} → ${hit.destMarket} · keep after fees`,
+      photo:
+        photo ||
+        `https://m.media-amazon.com/images/I/01RmK+J4pJL._AC_SL1500_.jpg`,
+      photos: photo ? [photo] : [],
+      buy: Math.round(hit.cost * 100) / 100,
+      sell: Math.round(sell * 100) / 100,
+      comps: Math.round(sell * 1.06 * 100) / 100,
+      supplier: `${hit.sourceMarket} → ${hit.destMarket}`,
+      ships: "Cross-platform verified · Higlou Find Winners",
+      heat: heatFromProfit(keep),
+      asin: /^[A-Z0-9]{10}$/.test(asin) ? asin : undefined,
+      source: "ledger",
+      real: true,
+      affiliateUrl: /^[A-Z0-9]{10}$/.test(asin) ? affiliateUrl : null,
+      netProfit: Math.round(keep * 100) / 100,
+      score: hit.score ?? null,
+      note: "Platform verified · retail cost vs marketplace ask",
+      lane: "retail",
+      demandScore: null,
+      bsrDrops90: hit.bsrDrops90 ?? null,
+      salesRank: hit.avgSalesRank90 ?? hit.salesRank ?? null,
+    };
+  }
 
   // Prefer arbitrage drop when ask keep is real; else Keepa Amazon demand.
   if (!hasAskKeep && isAmazonProductWinner(hit)) {
+    if (!/^[A-Z0-9]{10}$/.test(asin)) return null;
     const buyBox =
       (hit.buyBoxPrice != null && hit.buyBoxPrice > 0 ? hit.buyBoxPrice : null) ??
       (hit.amazonPrice != null && hit.amazonPrice > 0 ? hit.amazonPrice : null);
@@ -77,7 +137,7 @@ export function opportunityToMarketDrop(
       associateTag,
     );
     return {
-      id: `win-${asin}`,
+      id: dropId,
       name: brand || "Amazon winner",
       title,
       blurb: amazonWinnerBlurb(hit),
@@ -119,8 +179,7 @@ export function opportunityToMarketDrop(
     (hit.ebayPrice != null && hit.ebayPrice > 0 ? hit.ebayPrice : null);
 
   if (buy == null || sell == null || sell <= 0 || buy <= 0) return null;
-
-  const keep = platformKeep(hit);
+  if (!/^[A-Z0-9]{10}$/.test(asin)) return null;
   if (keep == null || keep < 12) return null;
 
   const comps =
@@ -135,7 +194,7 @@ export function opportunityToMarketDrop(
   );
 
   return {
-    id: `win-${asin}`,
+    id: dropId,
     name: brand || "Winner",
     title,
     blurb: brand

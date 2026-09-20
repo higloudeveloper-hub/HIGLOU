@@ -12,6 +12,7 @@ import {
   pullRemoteLedger,
   saveLocalLedger,
 } from "@/lib/opportunity/ledger";
+import { isRetailToMarketplaceMode } from "@/lib/opportunity/markets";
 import {
   isPlatformWinner,
   platformKeep,
@@ -19,6 +20,7 @@ import {
   sortPlatformWinners,
 } from "@/lib/opportunity/platform-winner";
 import type { OpportunityMode, OpportunityProduct } from "@/lib/opportunity/types";
+import { WINNER_ROUTES, winnerRouteById } from "@/lib/opportunity/winner-routes";
 import { stashOpportunityMoneySeed } from "@/lib/monetization/from-opportunity";
 import { cn } from "@/lib/utils";
 
@@ -27,10 +29,13 @@ type SearchBody = {
   error?: string;
   products?: OpportunityProduct[];
   analyzed?: number;
-  sources?: { keepa?: boolean; ebayLive?: boolean; amazonCatalog?: boolean };
+  sources?: {
+    keepa?: boolean;
+    ebayLive?: boolean;
+    amazonCatalog?: boolean;
+    retailSearch?: boolean;
+  };
 };
-
-type WinnerLane = "arbitrage" | "amazon";
 
 function money(n: number | null | undefined) {
   if (n == null || !Number.isFinite(n)) return "—";
@@ -47,10 +52,6 @@ function signed(n: number) {
 
 function hitKey(hit: OpportunityProduct) {
   return String(hit.asin || hit.sourceId || "").toUpperCase();
-}
-
-function modeForLane(lane: WinnerLane): OpportunityMode {
-  return lane === "amazon" ? "amazon" : "amazon_to_ebay";
 }
 
 export function FindWinnersBoard({
@@ -71,12 +72,14 @@ export function FindWinnersBoard({
       sourceId?: string;
       sourceMarket?: string;
       upc?: string;
+      cost?: number | null;
     }>,
   ) => Promise<boolean | void>;
 }) {
-  const [lane, setLane] = useState<WinnerLane>("arbitrage");
-  const mode = modeForLane(lane);
-  const amazonLane = lane === "amazon";
+  const [mode, setMode] = useState<OpportunityMode>("amazon_to_ebay");
+  const route = winnerRouteById(mode);
+  const retail = isRetailToMarketplaceMode(mode);
+  const demandLane = mode === "amazon";
   const [categoryId, setCategoryId] = useState("all");
   const [query, setQuery] = useState("");
   const [limit, setLimit] = useState(5);
@@ -129,12 +132,16 @@ export function FindWinnersBoard({
   );
   const selected = winners.filter((hit) => picked.includes(hitKey(hit)));
   const totalKeep = winners.reduce((sum, hit) => {
-    if (amazonLane) return sum + amazonProductScore(hit);
+    if (demandLane) return sum + amazonProductScore(hit);
     return sum + Math.max(0, platformKeep(hit) ?? 0);
   }, 0);
 
   const find = useCallback(async () => {
     if (searching || busy) return;
+    if (retail && categoryId === "all" && query.trim().length < 2) {
+      setError("For Walmart / Home Depot, type a product or pick a category filter.");
+      return;
+    }
     setSearching(true);
     setError(null);
     const nextRound = round + 1;
@@ -151,7 +158,7 @@ export function FindWinnersBoard({
           onlySellable: false,
           seed: nextRound - 1,
           excludeAsins: winners.map((hit) => hitKey(hit)).slice(0, 40),
-          keepaMode: "full",
+          keepaMode: retail ? "off" : "full",
           keepaPurpose: "manual",
         }),
       });
@@ -166,9 +173,7 @@ export function FindWinnersBoard({
       );
       if (!found.length) {
         setError(
-          amazonLane
-            ? "Keepa found no Amazon demand winners this round — tap Scan again for the next hot page."
-            : "No winners this round. Scan again — we pull the next Keepa hot page across Amazon.",
+          "No real money opportunities this round. Scan again or try another route.",
         );
         return;
       }
@@ -185,7 +190,7 @@ export function FindWinnersBoard({
     } finally {
       setSearching(false);
     }
-  }, [amazonLane, busy, categoryId, limit, mode, query, round, searching, winners]);
+  }, [busy, categoryId, limit, mode, query, retail, round, searching, winners]);
 
   const importSelected = async () => {
     if (!selected.length || importing || busy) return;
@@ -201,11 +206,12 @@ export function FindWinnersBoard({
           title: hit.title,
           brand: hit.brand,
           imageUrl: hit.imageUrl,
-          amazonPrice: hit.amazonPrice,
+          amazonPrice: hit.amazonPrice ?? hit.buyBoxPrice,
           ebayPrice: hit.ebayActiveLow ?? hit.ebayActiveMedian ?? hit.ebayPrice,
           sourceId: hit.sourceId,
           sourceMarket: hit.sourceMarket,
           upc: hit.upc,
+          cost: hit.cost,
         })),
       );
       if (ok !== false) {
@@ -234,9 +240,8 @@ export function FindWinnersBoard({
               Find Winners
             </h1>
             <p className="mt-2 max-w-xl text-[14px] text-white/65">
-              {amazonLane
-                ? "Scan all of Amazon with Keepa — BSR velocity first. Category is optional."
-                : "Scan hot Keepa movers across Amazon, then check eBay ask keep. Opportunities before categories."}
+              Real money routes: Amazon, eBay, Walmart, Home Depot. Only verified
+              keep / Keepa demand stocks Market.
             </p>
           </div>
           <Link
@@ -248,31 +253,32 @@ export function FindWinnersBoard({
             <ArrowRight className="size-4" />
           </Link>
         </div>
-        <div className="mt-5 flex flex-wrap gap-2">
-          <button
-            type="button"
-            onClick={() => setLane("arbitrage")}
-            className={cn(
-              "h-9 px-4 text-[13px] font-semibold",
-              lane === "arbitrage"
-                ? "bg-[#f4c928] text-[#141414]"
-                : "bg-white/10 text-white/80 hover:bg-white/15",
-            )}
-          >
-            Arbitrage · Amazon → eBay
-          </button>
-          <button
-            type="button"
-            onClick={() => setLane("amazon")}
-            className={cn(
-              "h-9 px-4 text-[13px] font-semibold",
-              lane === "amazon"
-                ? "bg-[#f4c928] text-[#141414]"
-                : "bg-white/10 text-white/80 hover:bg-white/15",
-            )}
-          >
-            Sell on Amazon · Keepa
-          </button>
+
+        <div className="mt-5 space-y-3">
+          <p className="text-[11px] font-semibold tracking-[0.16em] text-white/50 uppercase">
+            Buy → Sell route
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {WINNER_ROUTES.map((row) => (
+              <button
+                key={row.id}
+                type="button"
+                onClick={() => setMode(row.id)}
+                className={cn(
+                  "h-9 px-3 text-[12px] font-semibold",
+                  mode === row.id
+                    ? "bg-[#f4c928] text-[#141414]"
+                    : "bg-white/10 text-white/80 hover:bg-white/15",
+                )}
+                title={row.hint}
+              >
+                {row.buy} → {row.sell}
+              </button>
+            ))}
+          </div>
+          <p className="text-[12px] text-white/55">
+            {route.label} · {route.hint}
+          </p>
         </div>
       </header>
 
@@ -286,12 +292,16 @@ export function FindWinnersBoard({
         >
           <label className="min-w-0 flex-1">
             <span className="mb-1 block text-[11px] font-semibold tracking-wide text-[#6b6560] uppercase">
-              Product (optional)
+              Product {retail ? "(required for retail)" : "(optional)"}
             </span>
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="cable organizer, ASIN, or Amazon link"
+              placeholder={
+                retail
+                  ? "cable organizer, drill bit, ASIN, UPC…"
+                  : "cable organizer, ASIN, or Amazon link"
+              }
               disabled={locked || searching}
               className="h-12 w-full border border-[#d5d0c8] bg-[#fbfaf7] px-3 text-[15px] outline-none focus:border-[#141414]"
             />
@@ -338,7 +348,7 @@ export function FindWinnersBoard({
             {searching ? (
               <>
                 <Loader2 className="size-4 animate-spin" />
-                Scanning Keepa…
+                Scanning…
               </>
             ) : (
               <>
@@ -351,17 +361,20 @@ export function FindWinnersBoard({
         <div className="mt-3 flex flex-wrap gap-4 text-[12px] text-[#6b6560]">
           <span>
             <strong className="text-[#141414]">{winners.length}</strong> verified
-            on board
           </span>
           <span>
-            {amazonLane ? "Demand sum " : "Pipeline keep "}
+            {demandLane ? "Demand sum " : "Pipeline keep "}
             <strong className="text-[#141414]">
-              {amazonLane ? Math.round(totalKeep) : signed(totalKeep)}
+              {demandLane ? Math.round(totalKeep) : signed(totalKeep)}
             </strong>
           </span>
-          {sources?.keepa ? <span className="text-[#1f7a4d]">Keepa on</span> : null}
-          {sources?.ebayLive && !amazonLane ? (
-            <span className="text-[#1f7a4d]">eBay asks on</span>
+          {sources?.keepa ? <span className="text-[#1f7a4d]">Keepa</span> : null}
+          {sources?.ebayLive ? <span className="text-[#1f7a4d]">eBay</span> : null}
+          {sources?.retailSearch ? (
+            <span className="text-[#1f7a4d]">Retail</span>
+          ) : null}
+          {sources?.amazonCatalog ? (
+            <span className="text-[#1f7a4d]">Amazon</span>
           ) : null}
           {error ? <span className="text-[#b42318]">{error}</span> : null}
         </div>
@@ -374,22 +387,26 @@ export function FindWinnersBoard({
               No verified winners yet
             </p>
             <p className="mt-2 text-[14px] leading-relaxed text-[#6b6560]">
-              {amazonLane
-                ? "Hit Scan winners — Keepa pulls the hottest BSR movers across Amazon. No category required."
-                : "Hit Scan winners — Keepa finds hot products first, then we check eBay ask keep. Real opportunities before anyone else."}
+              Pick a buy→sell route and scan. We only keep real keep after fees
+              (or Keepa demand). Import runs a full price check on every
+              platform before Market.
             </p>
           </div>
         ) : (
           <ul className="mx-auto grid max-w-5xl gap-3">
             {winners.map((hit) => {
               const id = hitKey(hit);
-                  const metric = platformWinnerMetric(hit);
-                  const checked = picked.includes(id);
-                  const ebay = hit.ebayActiveLow ?? hit.ebayActiveMedian ?? hit.ebayPrice;
-                  const price = hit.buyBoxPrice ?? hit.amazonPrice;
-                  const rank = hit.avgSalesRank90 ?? hit.salesRank;
-                  const isDemand = metric.kind === "demand";
-                  return (
+              const metric = platformWinnerMetric(hit);
+              const checked = picked.includes(id);
+              const isDemand = metric.kind === "demand";
+              const buy = hit.cost ?? hit.amazonPrice;
+              const sell =
+                hit.salePrice ??
+                hit.ebayActiveLow ??
+                hit.ebayActiveMedian ??
+                hit.ebayPrice ??
+                hit.buyBoxPrice;
+              return (
                 <li
                   key={id}
                   className={cn(
@@ -427,35 +444,37 @@ export function FindWinnersBoard({
                   </div>
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-[11px] font-semibold tracking-wide text-[#6b6560] uppercase">
-                      {hit.brand || "Amazon"}
-                      {isDemand ? " · Keepa demand" : " · Arbitrage"}
+                      {hit.brand || route.buy} · {route.buy} → {route.sell}
                     </p>
-                    <p className="mt-0.5 line-clamp-2 text-[15px] font-semibold leading-snug text-[#141414]">
+                    <p className="mt-0.5 line-clamp-2 text-[15px] font-semibold leading-snug">
                       {hit.title || id}
                     </p>
-                    {isDemand ? (
-                      <p className="mt-1 text-[13px] text-[#6b6560]">
-                        {money(price)}
-                        {rank != null ? ` · BSR ${rank.toLocaleString("en-US")}` : ""}
-                        {hit.bsrDrops90 != null
-                          ? ` · ${hit.bsrDrops90} drops/90d`
-                          : ""}
-                        {hit.sellerCount != null
-                          ? ` · ${hit.sellerCount} sellers`
-                          : ""}
-                        {hit.rating != null
-                          ? ` · ${hit.rating.toFixed(1)}★`
-                          : ""}
-                      </p>
-                    ) : (
-                      <p className="mt-1 text-[13px] text-[#6b6560]">
-                        Buy {money(hit.amazonPrice)} → eBay low {money(ebay)}
-                        {hit.ebayActiveCount != null
-                          ? ` · ${hit.ebayActiveCount} asks`
-                          : ""}
-                      </p>
-                    )}
-                    <p className="mt-1 text-[11px] text-[#8a847c]">{id}</p>
+                    <p className="mt-1 text-[13px] text-[#6b6560]">
+                      {isDemand
+                        ? `${money(hit.buyBoxPrice ?? hit.amazonPrice)}${
+                            hit.bsrDrops90 != null
+                              ? ` · ${hit.bsrDrops90} drops/90d`
+                              : ""
+                          }`
+                        : `Buy ${money(buy)} → Sell ${money(sell)}`}
+                    </p>
+                    <p className="mt-1 flex flex-wrap gap-2 text-[11px] text-[#8a847c]">
+                      <span>{id}</span>
+                      {hit.amazonPrice != null ? (
+                        <span>Amz {money(hit.amazonPrice)}</span>
+                      ) : null}
+                      {hit.ebayActiveLow != null || hit.ebayPrice != null ? (
+                        <span>
+                          eBay{" "}
+                          {money(hit.ebayActiveLow ?? hit.ebayPrice)}
+                        </span>
+                      ) : null}
+                      {hit.cost != null && hit.sourceMarket !== "amazon" ? (
+                        <span>
+                          {hit.sourceMarket} {money(hit.cost)}
+                        </span>
+                      ) : null}
+                    </p>
                   </div>
                   <div className="shrink-0 text-right">
                     <p className="text-[11px] font-semibold tracking-wide text-[#6b6560] uppercase">
@@ -472,7 +491,7 @@ export function FindWinnersBoard({
                       {isDemand ? metric.value : signed(metric.value)}
                     </p>
                     <p className="mt-1 text-[11px] text-[#8a847c]">
-                      Score {hit.score}/100 · Market ready
+                      Market ready
                     </p>
                   </div>
                 </li>
@@ -486,12 +505,8 @@ export function FindWinnersBoard({
         <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-3">
           <p className="text-[13px] text-[#6b6560]">
             {selected.length
-              ? amazonLane
-                ? `${selected.length} selected · import Amazon draft, stocks Market`
-                : `${selected.length} selected · import for eBay, stocks Market`
-              : amazonLane
-                ? "Select Keepa winners to import for Amazon"
-                : "Select winners to import for eBay"}
+              ? `${selected.length} selected · import runs cross-platform price check first`
+              : "Select winners to import"}
           </p>
           <button
             type="button"
@@ -500,12 +515,10 @@ export function FindWinnersBoard({
             className="h-11 bg-[#f4c928] px-6 text-[14px] font-semibold text-[#141414] disabled:opacity-40"
           >
             {importing
-              ? "Importing…"
+              ? "Analyzing platforms…"
               : selected.length
-                ? amazonLane
-                  ? `Import ${selected.length} for Amazon`
-                  : `Import ${selected.length} for eBay`
-                : "Pick winners to import"}
+                ? `Import ${selected.length}`
+                : "Pick winners"}
           </button>
         </div>
       </div>

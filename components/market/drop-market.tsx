@@ -336,7 +336,11 @@ export function DropMarketStudio() {
                         <div className="min-w-0 flex-1">
                           <p className="truncate text-[11px] font-semibold tracking-wide text-[#6b6560] uppercase">
                             {item.name}
-                            {isAmz ? " · Sell on Amazon" : " · Arbitrage"}
+                            {item.lane === "amazon"
+                              ? " · Sell on Amazon"
+                              : item.lane === "retail"
+                                ? " · Retail route"
+                                : " · Arbitrage"}
                           </p>
                           <p className="mt-0.5 line-clamp-2 text-[15px] font-semibold leading-snug">
                             {item.title}

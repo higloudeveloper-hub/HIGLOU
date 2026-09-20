@@ -141,7 +141,19 @@ describe("higlou market + find winners wiring", () => {
       /Scan winners/,
     );
     expect(readRepo("components/winners/find-winners-board.tsx")).toMatch(
-      /Sell on Amazon · Keepa/,
+      /Walmart/,
+    );
+    expect(readRepo("components/winners/find-winners-board.tsx")).toMatch(
+      /Home Depot/,
+    );
+    expect(readRepo("lib/opportunity/winner-routes.ts")).toMatch(
+      /walmart_to_amazon/,
+    );
+    expect(readRepo("lib/opportunity/cross-platform.ts")).toMatch(
+      /analyzeCrossPlatform/,
+    );
+    expect(readRepo("app/api/winners/import/route.ts")).toMatch(
+      /analyzeCrossPlatform/,
     );
     expect(readRepo("lib/keepa/finder.ts")).toMatch(/keepaFindHotWinners/);
     expect(readRepo("lib/opportunity/categories.ts")).toMatch(

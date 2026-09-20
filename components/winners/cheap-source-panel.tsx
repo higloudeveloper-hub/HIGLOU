@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { ExternalLink, Factory, Loader2, ScanSearch } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -45,14 +45,22 @@ function platformLabel(p: string) {
     case "aliexpress":
       return "AliExpress";
     case "brand":
-      return "Marca / distribuidor";
+      return "Marca";
     case "google_lens":
-      return "Google Lens";
+      return "Lens";
     case "web_match":
-      return "Vision match";
+      return "Vision";
     default:
       return p;
   }
+}
+
+function isSearchTool(offer: CheapOffer) {
+  return (
+    offer.matchedBy === "link" ||
+    offer.matchedBy === "vision" ||
+    /^Buscar en |Contactar |Google Lens/i.test(offer.title)
+  );
 }
 
 export function CheapSourcePanel({
@@ -77,6 +85,14 @@ export function CheapSourcePanel({
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<CheapResult | null>(null);
 
+  const { exactOffers, toolOffers } = useMemo(() => {
+    const offers = result?.offers || [];
+    return {
+      exactOffers: offers.filter((o) => !isSearchTool(o)),
+      toolOffers: offers.filter((o) => isSearchTool(o)),
+    };
+  }, [result]);
+
   const run = async () => {
     setBusy(true);
     try {
@@ -100,10 +116,13 @@ export function CheapSourcePanel({
         throw new Error(body?.error || "No se pudo buscar suministro barato");
       }
       setResult(body);
-      if (body?.bestSave != null && body.bestSave > 0) {
-        toast.success(`Hasta ${money(body.bestSave)} más barato vs tu compra`);
+      const exact = (body?.offers || []).filter((o) => !isSearchTool(o));
+      if (exact.length) {
+        toast.success(
+          `${exact.length} coincidencia${exact.length === 1 ? "" : "s"} del mismo SKU`,
+        );
       } else {
-        toast.message("Links de fábrica listos — verifica precio y MOQ");
+        toast.message("Sin SKU exacto scrapeado — usa Buscar marca+modelo");
       }
     } catch (error) {
       toast.error(
@@ -115,128 +134,175 @@ export function CheapSourcePanel({
   };
 
   return (
-    <div
+    <section
       className={cn(
-        "border border-[#e4e0d8] bg-[#fbfaf7] px-3 py-3",
+        "border border-[#d5d0c8] bg-white",
         className,
       )}
     >
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div>
-          <p className="text-[11px] font-semibold tracking-wide text-[#6b6560] uppercase">
-            Suministro barato · la verdadera máquina
+      <header className="flex flex-wrap items-center justify-between gap-2 border-b border-[#efeae2] bg-[#f7f4ef] px-3 py-2.5">
+        <div className="min-w-0">
+          <p className="text-[11px] font-semibold tracking-[0.12em] text-[#6b6560] uppercase">
+            B · Más barato · mismo SKU
           </p>
-          <p className="mt-0.5 text-[12px] text-[#8a847c]">
-            Alibaba · AliExpress · marca directa · Vision / Lens
+          <p className="mt-0.5 truncate text-[12px] text-[#8a847c]">
+            Solo marca + modelo. Rechaza similares y otras marcas.
           </p>
         </div>
         <button
           type="button"
           disabled={busy}
           onClick={() => void run()}
-          className="inline-flex h-9 items-center gap-1.5 bg-[#141414] px-3 text-[12px] font-semibold text-white hover:bg-[#2a2a2a] disabled:opacity-50"
+          className="inline-flex h-9 shrink-0 items-center gap-1.5 bg-[#141414] px-3 text-[12px] font-semibold text-white hover:bg-[#2a2a2a] disabled:opacity-50"
         >
           {busy ? (
             <Loader2 className="size-3.5 animate-spin" />
           ) : (
             <Factory className="size-3.5" />
           )}
-          {busy ? "Buscando…" : "Localizar más barato"}
+          {busy ? "Buscando…" : "Buscar suministro"}
         </button>
-      </div>
+      </header>
 
-      {result ? (
-        <div className="mt-3 space-y-3">
-          <p className="text-[12px] text-[#6b6560]">
-            Query: <span className="font-medium text-[#141414]">{result.query}</span>
-            {result.buyPrice != null ? (
-              <>
-                {" "}
-                · compra actual {money(result.buyPrice)}
-              </>
-            ) : null}
-            {result.bestSave != null ? (
-              <span className="ml-1 font-semibold text-[#1f7a4d]">
-                · ahorro hasta {money(result.bestSave)}
-              </span>
-            ) : null}
-          </p>
-
-          {result.identity?.modelHints?.length ? (
-            <p className="text-[11px] text-[#8a847c]">
-              Vision model: {result.identity.modelHints.slice(0, 3).join(" · ")}
-            </p>
-          ) : null}
-
-          <div className="flex flex-wrap gap-1.5">
-            {result.searchLinks.map((link) => (
-              <a
-                key={link.url}
-                href={link.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex h-7 items-center gap-1 border border-[#d5d9d9] bg-white px-2 text-[11px] font-semibold text-[#2162a1] hover:underline"
+      {!result ? (
+        <p className="flex items-start gap-2 px-3 py-3 text-[12px] leading-relaxed text-[#8a847c]">
+          <ScanSearch className="mt-0.5 size-3.5 shrink-0" />
+          Busca el mismo ítem en Alibaba / AliExpress / marca. Sin match
+          exacto no se muestran productos — solo links de búsqueda marca+modelo.
+        </p>
+      ) : (
+        <div className="divide-y divide-[#efeae2]">
+          <div className="grid gap-3 px-3 py-3 sm:grid-cols-3">
+            <div className="min-w-0">
+              <p className="text-[10px] font-semibold tracking-wide text-[#8a847c] uppercase">
+                Query exacta
+              </p>
+              <p className="mt-0.5 truncate text-[13px] font-medium text-[#141414]">
+                {result.query}
+              </p>
+            </div>
+            <div>
+              <p className="text-[10px] font-semibold tracking-wide text-[#8a847c] uppercase">
+                Compra actual
+              </p>
+              <p className="mt-0.5 text-[13px] font-medium tabular-nums">
+                {money(result.buyPrice)}
+              </p>
+            </div>
+            <div>
+              <p className="text-[10px] font-semibold tracking-wide text-[#8a847c] uppercase">
+                Ahorro máx.
+              </p>
+              <p
+                className={cn(
+                  "mt-0.5 text-[13px] font-semibold tabular-nums",
+                  result.bestSave != null
+                    ? "text-[#1f7a4d]"
+                    : "text-[#8a847c]",
+                )}
               >
-                {link.label}
-                <ExternalLink className="size-2.5 opacity-70" />
-              </a>
-            ))}
+                {result.bestSave != null ? `−${money(result.bestSave)}` : "—"}
+              </p>
+            </div>
           </div>
 
-          <ul className="space-y-2">
-            {result.offers.slice(0, 8).map((offer) => (
-              <li key={`${offer.platform}-${offer.url}`}>
+          <div className="px-3 py-3">
+            <div className="mb-2 flex items-baseline justify-between gap-2">
+              <p className="text-[11px] font-semibold tracking-[0.12em] text-[#6b6560] uppercase">
+                Coincidencias exactas
+              </p>
+              <span className="text-[11px] tabular-nums text-[#8a847c]">
+                {exactOffers.length}
+              </span>
+            </div>
+            {exactOffers.length === 0 ? (
+              <p className="border border-dashed border-[#e4e0d8] bg-[#fbfaf7] px-3 py-4 text-center text-[12px] text-[#8a847c]">
+                Ningún scrape pasó el filtro mismo SKU. Usa los links de abajo
+                con la query exacta.
+              </p>
+            ) : (
+              <ul className="space-y-2">
+                {exactOffers.map((offer) => (
+                  <li key={`exact-${offer.platform}-${offer.url}`}>
+                    <a
+                      href={offer.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-start justify-between gap-3 border border-[#e4e0d8] bg-[#fbfaf7] px-2.5 py-2.5 hover:border-[#141414]"
+                    >
+                      <div className="min-w-0">
+                        <p className="text-[10px] font-semibold tracking-wide text-[#1f7a4d] uppercase">
+                          {platformLabel(offer.platform)} · mismo SKU
+                        </p>
+                        <p className="mt-0.5 line-clamp-2 text-[13px] font-medium text-[#141414]">
+                          {offer.title}
+                        </p>
+                      </div>
+                      <div className="shrink-0 text-right">
+                        <p className="text-[13px] font-semibold tabular-nums">
+                          {offer.price != null
+                            ? money(offer.price)
+                            : "Ver precio"}
+                        </p>
+                        {offer.landedEstimate != null ? (
+                          <p className="text-[10px] text-[#8a847c]">
+                            ~{money(offer.landedEstimate)} landed
+                          </p>
+                        ) : null}
+                        {offer.saveVsBuy != null && offer.saveVsBuy > 0 ? (
+                          <p className="text-[11px] font-semibold text-[#1f7a4d]">
+                            −{money(offer.saveVsBuy)}
+                          </p>
+                        ) : null}
+                      </div>
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+
+          <div className="px-3 py-3">
+            <p className="mb-1 text-[11px] font-semibold tracking-[0.12em] text-[#6b6560] uppercase">
+              Buscar tú mismo
+            </p>
+            <p className="mb-2 text-[11px] text-[#8a847c]">
+              Abre búsqueda con marca + modelo — no es un listing de producto.
+            </p>
+            <div className="flex flex-wrap gap-1.5">
+              {(result.searchLinks.length
+                ? result.searchLinks
+                : toolOffers.map((o) => ({
+                    platform: o.platform,
+                    label: platformLabel(o.platform),
+                    url: o.url,
+                  }))
+              ).map((link) => (
                 <a
-                  href={offer.url}
+                  key={link.url}
+                  href={link.url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex items-start justify-between gap-3 border border-[#e4e0d8] bg-white px-2.5 py-2 hover:border-[#141414]"
+                  className="inline-flex h-8 items-center gap-1 border border-[#d5d9d9] bg-white px-2.5 text-[12px] font-semibold text-[#2162a1] hover:bg-[#f7f8f8]"
                 >
-                  <div className="min-w-0">
-                    <p className="text-[10px] font-semibold tracking-wide text-[#8a847c] uppercase">
-                      {platformLabel(offer.platform)}
-                      {offer.matchedBy === "web_match" ||
-                      offer.matchedBy === "vision"
-                        ? " · Vision"
-                        : ""}
-                    </p>
-                    <p className="mt-0.5 line-clamp-2 text-[13px] font-medium text-[#141414]">
-                      {offer.title}
-                    </p>
-                  </div>
-                  <div className="shrink-0 text-right">
-                    <p className="text-[13px] font-semibold tabular-nums">
-                      {offer.price != null ? money(offer.price) : "Ver precio"}
-                    </p>
-                    {offer.landedEstimate != null ? (
-                      <p className="text-[10px] text-[#8a847c]">
-                        ~{money(offer.landedEstimate)} landed
-                      </p>
-                    ) : null}
-                    {offer.saveVsBuy != null && offer.saveVsBuy > 0 ? (
-                      <p className="text-[11px] font-semibold text-[#1f7a4d]">
-                        −{money(offer.saveVsBuy)}
-                      </p>
-                    ) : null}
-                  </div>
+                  {link.label}
+                  <ExternalLink className="size-3 opacity-70" />
                 </a>
-              </li>
-            ))}
-          </ul>
-
-          {result.warnings?.length ? (
-            <p className="text-[11px] text-[#8a847c]">
-              {result.warnings.slice(0, 2).join(" · ")}
-            </p>
-          ) : null}
+              ))}
+            </div>
+            {result.identity?.modelHints?.length ? (
+              <p className="mt-2 text-[11px] text-[#8a847c]">
+                Modelo: {result.identity.modelHints.slice(0, 3).join(" · ")}
+              </p>
+            ) : null}
+            {result.warnings?.length ? (
+              <p className="mt-1.5 text-[11px] text-[#8a847c]">
+                {result.warnings.slice(0, 2).join(" · ")}
+              </p>
+            ) : null}
+          </div>
         </div>
-      ) : (
-        <p className="mt-2 flex items-start gap-1.5 text-[12px] text-[#8a847c]">
-          <ScanSearch className="mt-0.5 size-3.5 shrink-0" />
-          Vision lee la foto; luego busca el mismo producto en fábrica y marca
-          directa para bajar el costo de compra.
-        </p>
       )}
-    </div>
+    </section>
   );
 }

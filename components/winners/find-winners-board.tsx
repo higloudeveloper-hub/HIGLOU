@@ -629,12 +629,18 @@ export function FindWinnersBoard({
                         </p>
                       </div>
 
-                      {/* Platform prices */}
-                      <div>
-                        <p className="mb-1.5 text-[11px] font-semibold tracking-wide text-[#6b6560] uppercase">
-                          Prices found
-                        </p>
-                        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                      {/* A · Marketplace prices */}
+                      <div className="border border-[#e4e0d8] bg-white">
+                        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#efeae2] bg-[#f7f4ef] px-3 py-2">
+                          <p className="text-[11px] font-semibold tracking-[0.12em] text-[#6b6560] uppercase">
+                            A · Precios marketplaces
+                          </p>
+                          <PlatformOpenLinks
+                            size="sm"
+                            urls={hit.platformUrls || buildPlatformUrls(hit)}
+                          />
+                        </div>
+                        <div className="grid grid-cols-2 gap-px bg-[#e4e0d8] sm:grid-cols-4">
                           {board.platforms.map((p) => {
                             const href =
                               p.url ||
@@ -673,14 +679,8 @@ export function FindWinnersBoard({
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 className={cn(
-                                  "border px-2.5 py-2 transition hover:ring-1 hover:ring-[#141414]",
-                                  p.price != null
-                                    ? p.role === "buy"
-                                      ? "border-[#141414] bg-[#fbfaf7]"
-                                      : p.role === "sell"
-                                        ? "border-[#1f7a4d]/40 bg-[#f3faf6]"
-                                        : "border-[#e4e0d8] bg-white"
-                                    : "border-[#e4e0d8]/80 bg-[#faf9f6]",
+                                  "bg-white px-2.5 py-2.5 transition hover:bg-[#fbfaf7]",
+                                  p.price == null && "opacity-60",
                                 )}
                               >
                                 {inner}
@@ -689,14 +689,8 @@ export function FindWinnersBoard({
                               <div
                                 key={p.platform}
                                 className={cn(
-                                  "border px-2.5 py-2",
-                                  p.price != null
-                                    ? p.role === "buy"
-                                      ? "border-[#141414] bg-[#fbfaf7]"
-                                      : p.role === "sell"
-                                        ? "border-[#1f7a4d]/40 bg-[#f3faf6]"
-                                        : "border-[#e4e0d8] bg-white"
-                                    : "border-[#e4e0d8]/80 bg-[#faf9f6] opacity-60",
+                                  "bg-white px-2.5 py-2.5",
+                                  p.price == null && "opacity-60",
                                 )}
                               >
                                 {inner}
@@ -704,47 +698,45 @@ export function FindWinnersBoard({
                             );
                           })}
                         </div>
-                        <PlatformOpenLinks
-                          className="mt-2"
-                          size="sm"
-                          urls={hit.platformUrls || buildPlatformUrls(hit)}
-                        />
-                        <CheapSourcePanel
-                          className="mt-3"
-                          title={hit.title || id}
-                          brand={hit.brand}
-                          mpn={hit.mpn}
-                          upc={hit.upc}
-                          imageUrl={hit.imageUrl || undefined}
-                          buyPrice={
-                            board.activeBuy ??
-                            hit.cost ??
-                            hit.amazonPrice ??
-                            hit.buyBoxPrice
-                          }
-                          sellPrice={
-                            board.activeSell ??
-                            hit.ebayActiveLow ??
-                            hit.ebayPrice ??
-                            hit.salePrice
-                          }
-                        />
                       </div>
 
-                      {/* Profit for this route + alternatives */}
-                      <div className="flex flex-col gap-3 border-t border-[#e4e0d8] pt-3 sm:flex-row sm:items-end sm:justify-between">
-                        <div>
-                          <p className="text-[11px] font-semibold tracking-wide text-[#6b6560] uppercase">
-                            Your profit · {route.label}
+                      <CheapSourcePanel
+                        title={hit.title || id}
+                        brand={hit.brand}
+                        mpn={hit.mpn}
+                        upc={hit.upc}
+                        imageUrl={hit.imageUrl || undefined}
+                        buyPrice={
+                          board.activeBuy ??
+                          hit.cost ??
+                          hit.amazonPrice ??
+                          hit.buyBoxPrice
+                        }
+                        sellPrice={
+                          board.activeSell ??
+                          hit.ebayActiveLow ??
+                          hit.ebayPrice ??
+                          hit.salePrice
+                        }
+                      />
+
+                      {/* C · Profit + actions */}
+                      <div className="border border-[#e4e0d8] bg-white">
+                        <div className="border-b border-[#efeae2] bg-[#f7f4ef] px-3 py-2">
+                          <p className="text-[11px] font-semibold tracking-[0.12em] text-[#6b6560] uppercase">
+                            C · Tu profit · {route.label}
                           </p>
+                        </div>
+                        <div className="flex flex-col gap-3 px-3 py-3 sm:flex-row sm:items-end sm:justify-between">
+                        <div>
                           {showDemand && (keep == null || keep < 12) ? (
-                            <p className="mt-1 font-display text-3xl leading-none text-[#141414]">
+                            <p className="font-display text-3xl leading-none text-[#141414]">
                               Demand {board.demandScore ?? amazonProductScore(hit)}
                             </p>
                           ) : (
                             <p
                               className={cn(
-                                "mt-1 font-display text-3xl leading-none",
+                                "font-display text-3xl leading-none",
                                 (keep ?? 0) >= 12
                                   ? "text-[#1f7a4d]"
                                   : "text-[#b42318]",
@@ -806,6 +798,7 @@ export function FindWinnersBoard({
                               "Import this"
                             )}
                           </button>
+                        </div>
                         </div>
                       </div>
                     </div>

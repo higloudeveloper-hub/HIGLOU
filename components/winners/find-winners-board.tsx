@@ -32,13 +32,13 @@ import {
   sortPlatformWinners,
 } from "@/lib/opportunity/platform-winner";
 import type { OpportunityMode, OpportunityProduct } from "@/lib/opportunity/types";
-import { WINNER_ROUTES, winnerRouteById } from "@/lib/opportunity/winner-routes";
+import { WINNER_PLAYS, playForMode, routesForPlay, winnerRouteById } from "@/lib/opportunity/winner-routes";
 import { stashOpportunityMoneySeed } from "@/lib/monetization/from-opportunity";
 import { PlatformOpenLinks } from "@/components/opportunity/platform-open-links";
 import { CheapSourcePanel } from "@/components/winners/cheap-source-panel";
 import { buildPlatformUrls } from "@/lib/opportunity/platform-links";
 import { cn } from "@/lib/utils";
-import { ExternalLink } from "lucide-react";
+import { ArrowRight, ExternalLink } from "lucide-react";
 
 type BoardHit = OpportunityProduct & {
   priceBoard?: OpportunityPriceBoard;
@@ -371,54 +371,56 @@ export function FindWinnersBoard({
 
   const locked = busy || importing;
   const scanning = searching || generalScanning;
+  const play = playForMode(mode);
+  const playRoutes = routesForPlay(play);
+  const activePlay = WINNER_PLAYS.find((p) => p.id === play)!;
+
+  const setPlay = (nextPlay: (typeof WINNER_PLAYS)[number]["id"]) => {
+    if (nextPlay === play) return;
+    const def = WINNER_PLAYS.find((p) => p.id === nextPlay)!;
+    setMode(def.defaultMode);
+  };
 
   return (
-    <div className="bg-[#f6f4ef] text-[#141414]">
-      {/* Compact chrome — page scrolls as one unit */}
-      <header className="border-b border-[#e4e0d8] bg-[#141414] px-4 py-4 text-white md:px-6">
-        <div className="flex flex-wrap items-center justify-between gap-3">
+    <div className="bg-[#f3f1ec] text-[#141414]">
+      {/* Hero chrome */}
+      <header className="relative overflow-hidden border-b border-[#e4e0d8] bg-[#0e0e0e] px-4 py-5 text-white md:px-8">
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0 opacity-[0.14]"
+          style={{
+            background:
+              "radial-gradient(ellipse 80% 60% at 10% -10%, #f4c928 0%, transparent 55%), radial-gradient(ellipse 50% 40% at 90% 0%, #2a5a3a 0%, transparent 50%)",
+          }}
+        />
+        <div className="relative mx-auto flex max-w-5xl flex-wrap items-end justify-between gap-4">
           <div className="min-w-0">
-            <p className="font-display text-[11px] tracking-[0.18em] text-[#f4c928] uppercase">
-              Higlou
+            <p className="font-display text-[11px] tracking-[0.22em] text-[#f4c928] uppercase">
+              Higlou · Money finder
             </p>
-            <h1 className="font-display text-2xl leading-none md:text-[28px]">
+            <h1 className="mt-1 font-display text-[32px] leading-none tracking-tight md:text-[40px]">
               Find Winners
             </h1>
-            <p className="mt-1.5 max-w-md text-[13px] text-white/60">
-              Principal search finds real keep across Amazon, eBay, Walmart &amp;
-              Home Depot — losers stay out.
+            <p className="mt-2 max-w-lg text-[14px] leading-snug text-white/55">
+              Elige la jugada. Escanea. Ves oportunidades reales — arbitraje o
+              listar directo en Amazon.
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             {!retail ? (
-              <>
-                <select
-                  value={limit}
-                  onChange={(e) => setLimit(Number(e.target.value))}
-                  disabled={locked || scanning}
-                  aria-label="How many"
-                  className="h-11 border border-white/20 bg-white/10 px-2 text-[13px] text-white outline-none"
-                >
-                  {AMAZON_WINNER_LIMITS.map((n) => (
-                    <option key={n} value={n} className="text-[#141414]">
-                      {n}
-                    </option>
-                  ))}
-                </select>
-                <button
-                  type="button"
-                  disabled={locked || scanning}
-                  onClick={() => void scanGeneral()}
-                  className="inline-flex h-11 items-center gap-2 bg-[#f4c928] px-5 text-[14px] font-semibold text-[#141414] disabled:opacity-40"
-                >
-                  {generalScanning ? (
-                    <Loader2 className="size-4 animate-spin" />
-                  ) : (
-                    <Sparkles className="size-4" />
-                  )}
-                  Find {limit} real opportunities
-                </button>
-              </>
+              <button
+                type="button"
+                disabled={locked || scanning}
+                onClick={() => void scanGeneral()}
+                className="inline-flex h-11 items-center gap-2 bg-[#f4c928] px-5 text-[14px] font-semibold text-[#141414] disabled:opacity-40"
+              >
+                {generalScanning ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  <Sparkles className="size-4" />
+                )}
+                Ver {limit} oportunidades
+              </button>
             ) : null}
             <Link
               href="/market"
@@ -430,29 +432,85 @@ export function FindWinnersBoard({
           </div>
         </div>
 
-        <div className="mt-3 flex gap-1.5 overflow-x-auto pb-0.5">
-          {WINNER_ROUTES.map((row) => (
-            <button
-              key={row.id}
-              type="button"
-              onClick={() => setMode(row.id)}
-              className={cn(
-                "h-8 shrink-0 px-2.5 text-[11px] font-semibold whitespace-nowrap",
-                mode === row.id
-                  ? "bg-[#f4c928] text-[#141414]"
-                  : "bg-white/10 text-white/80 hover:bg-white/15",
-              )}
-              title={row.hint}
-            >
-              {row.buy} → {row.sell}
-            </button>
-          ))}
+        {/* Two plays — not seven equal tabs */}
+        <div className="relative mx-auto mt-5 grid max-w-5xl gap-2 sm:grid-cols-2">
+          {WINNER_PLAYS.map((p) => {
+            const on = p.id === play;
+            return (
+              <button
+                key={p.id}
+                type="button"
+                onClick={() => setPlay(p.id)}
+                className={cn(
+                  "group relative overflow-hidden border px-4 py-3.5 text-left transition",
+                  on
+                    ? "border-[#f4c928] bg-[#f4c928]/12"
+                    : "border-white/15 bg-white/[0.04] hover:border-white/30 hover:bg-white/[0.07]",
+                )}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <p
+                    className={cn(
+                      "text-[11px] font-semibold tracking-[0.16em] uppercase",
+                      on ? "text-[#f4c928]" : "text-white/45",
+                    )}
+                  >
+                    {p.id === "arbitrage" ? "Jugada 1" : "Jugada 2"}
+                  </p>
+                  {on ? (
+                    <span className="bg-[#f4c928] px-1.5 py-0.5 text-[10px] font-bold tracking-wide text-[#141414] uppercase">
+                      Activa
+                    </span>
+                  ) : null}
+                </div>
+                <p className="mt-1 font-display text-[22px] leading-none tracking-tight">
+                  {p.title}
+                </p>
+                <p className="mt-1.5 text-[12px] leading-snug text-white/55">
+                  {p.subtitle}
+                </p>
+              </button>
+            );
+          })}
         </div>
+
+        {/* Route within play — secondary, not competing */}
+        {playRoutes.length > 1 ? (
+          <div className="relative mx-auto mt-3 max-w-5xl">
+            <p className="mb-1.5 text-[10px] font-semibold tracking-[0.14em] text-white/40 uppercase">
+              Ruta · {activePlay.title}
+            </p>
+            <div className="flex gap-1.5 overflow-x-auto pb-0.5">
+              {playRoutes.map((row) => (
+                <button
+                  key={row.id}
+                  type="button"
+                  onClick={() => setMode(row.id)}
+                  title={row.hint}
+                  className={cn(
+                    "inline-flex h-8 shrink-0 items-center gap-1.5 px-2.5 text-[11px] font-semibold whitespace-nowrap",
+                    mode === row.id
+                      ? "bg-white text-[#141414]"
+                      : "bg-white/10 text-white/70 hover:bg-white/15",
+                  )}
+                >
+                  {row.buy}
+                  <ArrowRight className="size-3 opacity-50" />
+                  {row.sell}
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <p className="relative mx-auto mt-3 max-w-5xl text-[12px] text-white/45">
+            {route.hint}
+          </p>
+        )}
       </header>
 
-      <div className="sticky top-0 z-10 border-b border-[#e4e0d8] bg-white px-4 py-2.5 md:px-6">
+      <div className="sticky top-0 z-10 border-b border-[#e4e0d8] bg-white/95 px-4 py-2.5 backdrop-blur-md md:px-8">
         <form
-          className="flex flex-col gap-2 sm:flex-row sm:items-center"
+          className="mx-auto flex max-w-5xl flex-col gap-2 sm:flex-row sm:items-center"
           onSubmit={(e) => {
             e.preventDefault();
             void find();
@@ -463,8 +521,8 @@ export function FindWinnersBoard({
             onChange={(e) => setQuery(e.target.value)}
             placeholder={
               retail
-                ? "Product, ASIN, UPC…"
-                : "Product, ASIN, or Amazon link (optional)"
+                ? "Producto, ASIN, UPC…"
+                : "Producto, ASIN o link Amazon (opcional)"
             }
             disabled={locked || scanning}
             className="h-10 min-w-0 flex-1 border border-[#d5d0c8] bg-[#fbfaf7] px-3 text-[14px] outline-none focus:border-[#141414]"
@@ -485,6 +543,7 @@ export function FindWinnersBoard({
             value={limit}
             onChange={(e) => setLimit(Number(e.target.value))}
             disabled={locked || scanning}
+            aria-label="Cuántas"
             className="h-10 w-full border border-[#d5d0c8] bg-[#fbfaf7] px-2 text-[13px] outline-none sm:w-20"
           >
             {AMAZON_WINNER_LIMITS.map((n) => (
@@ -503,20 +562,24 @@ export function FindWinnersBoard({
             ) : (
               <Search className="size-3.5" />
             )}
-            Scan
+            Escanear
           </button>
         </form>
-        <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[12px] text-[#6b6560]">
+        <div className="mx-auto mt-2 flex max-w-5xl flex-wrap gap-x-3 gap-y-1 text-[12px] text-[#6b6560]">
+          <span className="font-semibold text-[#141414]">
+            {play === "arbitrage" ? "Arbitraje" : "Amazon directo"}
+          </span>
           <span>
-            <strong className="text-[#141414]">{winners.length}</strong> verified
+            <strong className="text-[#141414]">{winners.length}</strong>{" "}
+            verificadas
           </span>
           {justFound > 0 ? (
             <span className="font-semibold text-[#1f7a4d]">
-              {justFound} new — scroll to decide
+              {justFound} nuevas — decide abajo
             </span>
           ) : null}
           <span>
-            {demandLane ? "Demand " : "Keep "}
+            {demandLane ? "Demanda total " : "Keep total "}
             <strong className="text-[#141414]">
               {demandLane ? Math.round(totalKeep) : signed(totalKeep)}
             </strong>
@@ -530,82 +593,144 @@ export function FindWinnersBoard({
         </div>
       </div>
 
-      <div ref={resultsRef} className="px-4 py-4 pb-24 md:px-6">
+      <div ref={resultsRef} className="px-4 py-5 pb-24 md:px-8">
         {winners.length === 0 ? (
-          <div className="mx-auto flex min-h-[220px] max-w-lg flex-col items-center justify-center py-10 text-center">
-            <p className="font-display text-2xl text-[#141414]">
-              No verified winners yet
+          <div className="mx-auto flex min-h-[260px] max-w-lg flex-col items-center justify-center py-12 text-center">
+            <p className="text-[11px] font-semibold tracking-[0.16em] text-[#8a847c] uppercase">
+              {activePlay.title}
             </p>
-            <p className="mt-2 text-[14px] leading-relaxed text-[#6b6560]">
-              Tap <strong>Find {limit} real opportunities</strong>. Each result
-              shows Amazon / eBay / Walmart / Home Depot prices and your profit
-              so you can decide right here.
+            <p className="mt-2 font-display text-[28px] leading-none text-[#141414]">
+              Sin oportunidades aún
+            </p>
+            <p className="mt-3 text-[14px] leading-relaxed text-[#6b6560]">
+              {play === "arbitrage"
+                ? "Escanea para ver spreads reales: compras en un market, vendes en otro, keep neto después de fees."
+                : "Escanea demanda Keepa para listar directo en Amazon — BSR, velocity y score."}
             </p>
             {!retail ? (
               <button
                 type="button"
                 disabled={locked || scanning}
                 onClick={() => void scanGeneral()}
-                className="mt-5 inline-flex h-11 items-center gap-2 bg-[#141414] px-5 text-[13px] font-semibold text-white disabled:opacity-40"
+                className="mt-6 inline-flex h-11 items-center gap-2 bg-[#141414] px-5 text-[13px] font-semibold text-white disabled:opacity-40"
               >
                 {generalScanning ? (
                   <Loader2 className="size-4 animate-spin" />
                 ) : (
                   <Sparkles className="size-4" />
                 )}
-                Find {limit} real opportunities
+                Ver {limit} oportunidades
               </button>
             ) : null}
           </div>
         ) : (
-          <ul className="mx-auto grid max-w-5xl gap-4">
+          <ul className="mx-auto grid max-w-5xl gap-5">
             {winners.map((hit, index) => {
               const id = hitKey(hit);
               const board = boardFor(hit);
-              // Prefer live board keep — never flash a stored money-losing hypo.
               const keep = board.activeKeep ?? platformKeep(hit) ?? null;
+              const demand =
+                board.demandScore ?? amazonProductScore(hit);
               const showDemand =
-                (demandLane || keep == null) &&
-                (board.demandScore != null && board.demandScore >= 50);
+                demandLane ||
+                ((keep == null || keep < 12) && demand >= 50);
               const checked = picked.includes(id);
               const isNew = justFound > 0 && index < justFound;
               const profitRoutes = board.routes.filter((r) => r.keep >= 12);
+              const isArb = play === "arbitrage";
+              const signalGood = isArb
+                ? (keep ?? 0) >= 12
+                : demand >= 55;
 
               return (
                 <li
                   key={id}
                   className={cn(
-                    "border bg-white p-4 transition",
-                    checked ? "border-[#141414]" : "border-[#e4e0d8]",
-                    isNew && "ring-2 ring-[#f4c928]/40",
+                    "overflow-hidden border bg-white transition",
+                    checked ? "border-[#141414]" : "border-[#e0dbd3]",
+                    isNew && "ring-2 ring-[#f4c928]/50",
                   )}
                 >
-                  <div className="flex flex-col gap-4 sm:flex-row">
-                    <button
-                      type="button"
-                      disabled={locked}
-                      onClick={() =>
-                        setPicked((prev) =>
-                          prev.includes(id)
-                            ? prev.filter((x) => x !== id)
-                            : [...prev, id],
-                        )
-                      }
-                      className="mt-1 size-5 shrink-0 self-start border border-[#141414] bg-white"
-                      aria-label="Select"
-                    >
-                      {checked ? (
-                        <span className="block size-full bg-[#f4c928]" />
-                      ) : null}
-                    </button>
+                  {/* Decision strip — play type + hero number */}
+                  <div
+                    className={cn(
+                      "flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3",
+                      isArb
+                        ? "border-[#d8e8dc] bg-[#f3faf5]"
+                        : "border-[#ebe4c8] bg-[#fbf7e8]",
+                    )}
+                  >
+                    <div className="flex min-w-0 items-center gap-3">
+                      <button
+                        type="button"
+                        disabled={locked}
+                        onClick={() =>
+                          setPicked((prev) =>
+                            prev.includes(id)
+                              ? prev.filter((x) => x !== id)
+                              : [...prev, id],
+                          )
+                        }
+                        className="size-5 shrink-0 border border-[#141414] bg-white"
+                        aria-label="Select"
+                      >
+                        {checked ? (
+                          <span className="block size-full bg-[#f4c928]" />
+                        ) : null}
+                      </button>
+                      <div className="min-w-0">
+                        <p
+                          className={cn(
+                            "text-[10px] font-bold tracking-[0.16em] uppercase",
+                            isArb ? "text-[#1f7a4d]" : "text-[#8a6a10]",
+                          )}
+                        >
+                          {isNew ? "Nueva · " : ""}
+                          {isArb ? "Arbitraje" : "Amazon directo"}
+                        </p>
+                        <p className="mt-0.5 flex items-center gap-1.5 text-[13px] font-semibold text-[#141414]">
+                          {route.buy}
+                          <ArrowRight className="size-3.5 text-[#8a847c]" />
+                          {route.sell}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      {showDemand && (keep == null || keep < 12) ? (
+                        <>
+                          <p className="font-display text-[32px] leading-none tabular-nums text-[#141414]">
+                            {Math.round(demand)}
+                          </p>
+                          <p className="mt-0.5 text-[10px] font-semibold tracking-wide text-[#8a847c] uppercase">
+                            Demand score
+                          </p>
+                        </>
+                      ) : (
+                        <>
+                          <p
+                            className={cn(
+                              "font-display text-[32px] leading-none tabular-nums",
+                              signalGood ? "text-[#1f7a4d]" : "text-[#b42318]",
+                            )}
+                          >
+                            {keep != null ? signed(keep) : "—"}
+                          </p>
+                          <p className="mt-0.5 text-[10px] font-semibold tracking-wide text-[#8a847c] uppercase">
+                            Keep neto
+                          </p>
+                        </>
+                      )}
+                    </div>
+                  </div>
 
-                    <div className="relative size-24 shrink-0 overflow-hidden bg-[#f0ebe3] sm:size-28">
+                  <div className="flex flex-col gap-4 p-4 sm:flex-row">
+                    <div className="relative mx-auto size-28 shrink-0 overflow-hidden bg-[#f0ebe3] sm:mx-0 sm:size-32">
                       {hit.imageUrl ? (
                         <Image
                           src={hit.imageUrl}
                           alt=""
                           fill
-                          className="object-contain p-1"
+                          className="object-contain p-1.5"
                           unoptimized
                         />
                       ) : null}
@@ -613,27 +738,28 @@ export function FindWinnersBoard({
 
                     <div className="min-w-0 flex-1 space-y-3">
                       <div>
-                        <p className="truncate text-[11px] font-semibold tracking-wide text-[#6b6560] uppercase">
-                          {isNew ? "New · " : ""}
-                          {hit.brand || route.buy} · {route.buy} → {route.sell}
-                        </p>
-                        <p className="mt-0.5 line-clamp-2 text-[16px] font-semibold leading-snug">
+                        <p className="line-clamp-2 text-[17px] font-semibold leading-snug">
                           {hit.title || id}
                         </p>
                         <p className="mt-1 text-[12px] text-[#8a847c]">
-                          {id}
-                          {hit.bsrDrops90 != null
-                            ? ` · ${hit.bsrDrops90} BSR drops / 90d`
-                            : ""}
-                          {hit.keepa ? " · Keepa" : ""}
+                          {[
+                            hit.brand || null,
+                            id,
+                            hit.bsrDrops90 != null
+                              ? `${hit.bsrDrops90} BSR drops / 90d`
+                              : null,
+                            hit.keepa ? "Keepa" : null,
+                          ]
+                            .filter(Boolean)
+                            .join(" · ")}
                         </p>
                       </div>
 
-                      {/* A · Marketplace prices */}
-                      <div className="border border-[#e4e0d8] bg-white">
+                      {/* A · Prices — buy / sell highlighted */}
+                      <div className="border border-[#e4e0d8]">
                         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#efeae2] bg-[#f7f4ef] px-3 py-2">
                           <p className="text-[11px] font-semibold tracking-[0.12em] text-[#6b6560] uppercase">
-                            A · Precios marketplaces
+                            A · Precios
                           </p>
                           <PlatformOpenLinks
                             size="sm"
@@ -646,15 +772,17 @@ export function FindWinnersBoard({
                               p.url ||
                               buildPlatformUrls(hit)[p.platform] ||
                               null;
+                            const role =
+                              p.role === "buy"
+                                ? "Compra"
+                                : p.role === "sell"
+                                  ? "Venta"
+                                  : null;
                             const inner = (
                               <>
                                 <p className="text-[10px] font-semibold tracking-wide text-[#6b6560] uppercase">
                                   {p.label}
-                                  {p.role === "buy"
-                                    ? " · buy"
-                                    : p.role === "sell"
-                                      ? " · sell"
-                                      : ""}
+                                  {role ? ` · ${role}` : ""}
                                 </p>
                                 <p className="mt-0.5 font-display text-lg leading-none">
                                   {money(p.price)}
@@ -666,11 +794,19 @@ export function FindWinnersBoard({
                                 ) : null}
                                 {href ? (
                                   <p className="mt-1.5 inline-flex items-center gap-1 text-[10px] font-semibold text-[#2162a1]">
-                                    Open
+                                    Abrir
                                     <ExternalLink className="size-2.5" />
                                   </p>
                                 ) : null}
                               </>
+                            );
+                            const cellClass = cn(
+                              "px-2.5 py-2.5 transition",
+                              p.role === "buy" || p.role === "sell"
+                                ? "bg-[#fffcf5]"
+                                : "bg-white",
+                              p.price == null && "opacity-55",
+                              href && "hover:bg-[#fbfaf7]",
                             );
                             return href ? (
                               <a
@@ -678,25 +814,41 @@ export function FindWinnersBoard({
                                 href={href}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className={cn(
-                                  "bg-white px-2.5 py-2.5 transition hover:bg-[#fbfaf7]",
-                                  p.price == null && "opacity-60",
-                                )}
+                                className={cellClass}
                               >
                                 {inner}
                               </a>
                             ) : (
-                              <div
-                                key={p.platform}
-                                className={cn(
-                                  "bg-white px-2.5 py-2.5",
-                                  p.price == null && "opacity-60",
-                                )}
-                              >
+                              <div key={p.platform} className={cellClass}>
                                 {inner}
                               </div>
                             );
                           })}
+                        </div>
+                        <div className="border-t border-[#efeae2] px-3 py-2 text-[12px] text-[#6b6560]">
+                          Compra {money(board.activeBuy)}
+                          <span className="mx-1.5 text-[#c5bfb5]">→</span>
+                          Venta {money(board.activeSell)}
+                          {board.activeKeep != null
+                            ? ` · net ${signed(board.activeKeep)}`
+                            : ""}
+                          {profitRoutes.length > 1 ? (
+                            <span className="mt-1.5 flex flex-wrap gap-1">
+                              {profitRoutes.slice(0, 3).map((r) => (
+                                <span
+                                  key={r.mode}
+                                  className={cn(
+                                    "border px-1.5 py-0.5 text-[10px]",
+                                    r.active
+                                      ? "border-[#141414] bg-[#f4c928]/25 font-semibold"
+                                      : "border-[#e4e0d8]",
+                                  )}
+                                >
+                                  {r.label} {signed(r.keep)}
+                                </span>
+                              ))}
+                            </span>
+                          ) : null}
                         </div>
                       </div>
 
@@ -720,65 +872,19 @@ export function FindWinnersBoard({
                         }
                       />
 
-                      {/* C · Profit + actions */}
-                      <div className="border border-[#e4e0d8] bg-white">
-                        <div className="border-b border-[#efeae2] bg-[#f7f4ef] px-3 py-2">
-                          <p className="text-[11px] font-semibold tracking-[0.12em] text-[#6b6560] uppercase">
-                            C · Tu profit · {route.label}
-                          </p>
-                        </div>
-                        <div className="flex flex-col gap-3 px-3 py-3 sm:flex-row sm:items-end sm:justify-between">
-                        <div>
-                          {showDemand && (keep == null || keep < 12) ? (
-                            <p className="font-display text-3xl leading-none text-[#141414]">
-                              Demand {board.demandScore ?? amazonProductScore(hit)}
-                            </p>
-                          ) : (
-                            <p
-                              className={cn(
-                                "font-display text-3xl leading-none",
-                                (keep ?? 0) >= 12
-                                  ? "text-[#1f7a4d]"
-                                  : "text-[#b42318]",
-                              )}
-                            >
-                              {keep != null ? signed(keep) : "—"}
-                            </p>
-                          )}
-                          <p className="mt-1 text-[13px] text-[#6b6560]">
-                            Buy {money(board.activeBuy)} → Sell{" "}
-                            {money(board.activeSell)}
-                            {board.activeKeep != null
-                              ? ` · net after fees/ship ${signed(board.activeKeep)}`
-                              : hit.ebayFees != null || hit.amazonFees != null
-                                ? ` · fees ~${money(hit.ebayFees ?? hit.amazonFees)}`
-                                : ""}
-                          </p>
-                          {profitRoutes.length > 1 ? (
-                            <div className="mt-2 flex flex-wrap gap-1.5">
-                              {profitRoutes.slice(0, 3).map((r) => (
-                                <span
-                                  key={r.mode}
-                                  className={cn(
-                                    "border px-2 py-0.5 text-[11px]",
-                                    r.active
-                                      ? "border-[#141414] bg-[#f4c928]/30 font-semibold"
-                                      : "border-[#e4e0d8] text-[#6b6560]",
-                                  )}
-                                >
-                                  {r.label} {signed(r.keep)}
-                                </span>
-                              ))}
-                            </div>
-                          ) : null}
-                        </div>
-
+                      {/* C · Actions */}
+                      <div className="flex flex-wrap items-center justify-between gap-2 border border-[#e4e0d8] bg-[#fbfaf7] px-3 py-2.5">
+                        <p className="text-[12px] text-[#6b6560]">
+                          {isArb
+                            ? "Importa para arbitraje con precios de plataforma."
+                            : "Importa para listar / vender en Amazon."}
+                        </p>
                         <div className="flex flex-wrap gap-2">
                           <button
                             type="button"
                             disabled={locked}
                             onClick={() => removeHit(id)}
-                            className="inline-flex h-10 items-center gap-1.5 border border-[#d5d0c8] px-3 text-[13px] font-semibold text-[#6b6560] hover:border-[#141414] hover:text-[#141414] disabled:opacity-40"
+                            className="inline-flex h-10 items-center gap-1.5 border border-[#d5d0c8] bg-white px-3 text-[13px] font-semibold text-[#6b6560] hover:border-[#141414] hover:text-[#141414] disabled:opacity-40"
                           >
                             <Trash2 className="size-3.5" />
                             Skip
@@ -792,13 +898,12 @@ export function FindWinnersBoard({
                             {importingId === id ? (
                               <>
                                 <Loader2 className="size-3.5 animate-spin" />
-                                Importing…
+                                Importando…
                               </>
                             ) : (
-                              "Import this"
+                              "Importar"
                             )}
                           </button>
-                        </div>
                         </div>
                       </div>
                     </div>
@@ -810,12 +915,12 @@ export function FindWinnersBoard({
         )}
       </div>
 
-      <div className="sticky bottom-0 z-10 border-t border-[#e4e0d8] bg-white/95 px-4 py-2.5 backdrop-blur-md md:px-6">
+      <div className="sticky bottom-0 z-10 border-t border-[#e4e0d8] bg-white/95 px-4 py-2.5 backdrop-blur-md md:px-8">
         <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-3">
           <p className="text-[13px] text-[#6b6560]">
             {selected.length
-              ? `${selected.length} selected · import runs full platform check`
-              : "Import one card or select several"}
+              ? `${selected.length} seleccionadas · check de plataformas al importar`
+              : "Importa una card o selecciona varias"}
           </p>
           <button
             type="button"
@@ -824,10 +929,10 @@ export function FindWinnersBoard({
             className="h-10 bg-[#f4c928] px-5 text-[13px] font-semibold text-[#141414] disabled:opacity-40"
           >
             {importing && !importingId
-              ? "Analyzing platforms…"
+              ? "Analizando plataformas…"
               : selected.length
-                ? `Import ${selected.length}`
-                : "Pick winners"}
+                ? `Importar ${selected.length}`
+                : "Elige winners"}
           </button>
         </div>
       </div>

@@ -1,6 +1,9 @@
-import { keepaGet, keepaPost } from "@/lib/keepa/client";
+import { keepaGet, keepaQuery } from "@/lib/keepa/client";
 import { parseKeepaProduct, type KeepaSnapshot } from "@/lib/keepa/parse";
 import { OPPORTUNITY_RULES } from "@/lib/opportunity/types";
+
+/** Keepa Product Finder requires perPage ≥ 50. */
+export const KEEPA_FINDER_MIN_PER_PAGE = 50;
 
 function asinsFromKeepa(json: Record<string, unknown>): string[] {
   const list = json.asinList;
@@ -18,6 +21,49 @@ function asinsFromKeepa(json: Record<string, unknown>): string[] {
   return [];
 }
 
+function rootCategoryIds(raw?: string): number[] | undefined {
+  if (!raw?.trim()) return undefined;
+  const id = Number(raw.trim());
+  if (!Number.isFinite(id) || id <= 0) return undefined;
+  return [id];
+}
+
+/** Shared selection for Product Finder — tested without burning tokens. */
+export function buildKeepaFinderSelection(opts: {
+  rootCategory?: string;
+  title?: string;
+  perPage?: number;
+  mode?: "amazon" | "amazon_to_ebay" | "supplier" | string;
+  page?: number;
+}): Record<string, unknown> {
+  const mode = opts.mode || "amazon_to_ebay";
+  const perPage = Math.max(
+    KEEPA_FINDER_MIN_PER_PAGE,
+    Math.min(opts.perPage ?? KEEPA_FINDER_MIN_PER_PAGE, 100),
+  );
+  const selection: Record<string, unknown> = {
+    page: opts.page ?? 0,
+    perPage,
+    current_NEW_gte: Math.round(OPPORTUNITY_RULES.minPrice * 100),
+    current_NEW_lte: Math.round(OPPORTUNITY_RULES.maxPrice * 100),
+    current_SALES_gte: OPPORTUNITY_RULES.minBsr,
+    current_SALES_lte: OPPORTUNITY_RULES.maxBsr,
+    deltaPercent90_NEW_lte: -Math.round(OPPORTUNITY_RULES.minDiscount90 * 100),
+    packageWeight_lte: Math.round(OPPORTUNITY_RULES.maxPackageLb * 453.592),
+    sort: [["current_SALES", "asc"]],
+    productType: [0, 1],
+  };
+  if (mode === "amazon" || mode === "supplier") {
+    selection.current_COUNT_NEW_gte = OPPORTUNITY_RULES.minSellers;
+    selection.current_COUNT_NEW_lte = OPPORTUNITY_RULES.maxSellers;
+    selection.availabilityAmazon = [-1];
+  }
+  const roots = rootCategoryIds(opts.rootCategory);
+  if (roots) selection.rootCategory = roots;
+  if (opts.title?.trim()) selection.title = [opts.title.trim()];
+  return selection;
+}
+
 /** Product Finder: price, BSR, 90-day discount, weight. */
 export async function keepaFindAsins(opts: {
   rootCategory?: string;
@@ -25,29 +71,8 @@ export async function keepaFindAsins(opts: {
   perPage?: number;
   mode?: "amazon" | "amazon_to_ebay" | "supplier" | string;
 }): Promise<string[]> {
-  const mode = opts.mode || "amazon_to_ebay";
-  const selection: Record<string, unknown> = {
-    current_NEW_gte: Math.round(OPPORTUNITY_RULES.minPrice * 100),
-    current_NEW_lte: Math.round(OPPORTUNITY_RULES.maxPrice * 100),
-    current_SALES_gte: OPPORTUNITY_RULES.minBsr,
-    current_SALES_lte: OPPORTUNITY_RULES.maxBsr,
-    deltaPercent90_NEW_lte: -Math.round(OPPORTUNITY_RULES.minDiscount90 * 100),
-    packageWeight_lte: Math.round(OPPORTUNITY_RULES.maxPackageLb * 453.592),
-    perPage: Math.min(opts.perPage ?? 20, 50),
-    sort: [["current_SALES", "asc"]],
-  };
-  if (mode === "amazon" || mode === "supplier") {
-    selection.current_COUNT_NEW_gte = OPPORTUNITY_RULES.minSellers;
-    selection.current_COUNT_NEW_lte = OPPORTUNITY_RULES.maxSellers;
-    selection.availabilityAmazon = [-1];
-  }
-  if (opts.rootCategory) selection.rootCategory = [opts.rootCategory];
-  if (opts.title) selection.title = [opts.title];
-  const json = await keepaPost(
-    "query",
-    { selection: JSON.stringify(selection) },
-    selection,
-  );
+  const selection = buildKeepaFinderSelection(opts);
+  const json = await keepaQuery(selection);
   return [...new Set(asinsFromKeepa(json))].slice(0, 40);
 }
 

@@ -119,12 +119,30 @@ async function detectStatuses(userId: string, prefs: MoneyMachinePrefs) {
         ? "Service Account configured"
         : "Optional — improves OCR",
     },
-    keepa: {
-      status: isKeepaConfigured() ? "ready" : "missing",
-      detail: isKeepaConfigured()
-        ? "Keepa key present"
-        : "Add KEEPA_API_KEY for stronger winners",
-    },
+    keepa: await (async () => {
+      if (!isKeepaConfigured()) {
+        return {
+          status: "missing" as MachineServiceStatus,
+          detail: "Add KEEPA_API_KEY for stronger winners",
+        };
+      }
+      try {
+        const { keepaTokenStatus } = await import("@/lib/keepa/client");
+        const tok = await keepaTokenStatus();
+        return {
+          status: "ready" as MachineServiceStatus,
+          detail: `Keepa live · ${tok.tokensLeft} tokens left`,
+        };
+      } catch (error) {
+        return {
+          status: "warn" as MachineServiceStatus,
+          detail:
+            error instanceof Error
+              ? error.message
+              : "Keepa key present but API failed",
+        };
+      }
+    })(),
     amazon_associates: {
       status: tagReady ? "ready" : "missing",
       detail: tagReady

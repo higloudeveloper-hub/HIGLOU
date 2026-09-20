@@ -1,11 +1,12 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireUser } from "@/lib/auth/require-user";
-import { getMarketDrop, marketSpread, type MarketDrop } from "@/lib/market/catalog";
+import { marketSpread, type MarketDrop } from "@/lib/market/catalog";
 import {
   asinFromWinnerDropId,
   opportunityToMarketDrop,
 } from "@/lib/market/from-opportunity";
+import { isPlatformWinner } from "@/lib/opportunity/platform-winner";
 import { logMonetizationEvent } from "@/lib/monetization/observability";
 import {
   productBodySchema,
@@ -25,9 +26,7 @@ async function resolveDrop(
   userId: string,
   dropId: string,
 ): Promise<MarketDrop | null> {
-  const curated = getMarketDrop(dropId);
-  if (curated) return curated;
-
+  // Curated / invented catalog drops are no longer claimable.
   const asin = asinFromWinnerDropId(dropId);
   if (!asin || !isSupabaseConfigured()) return null;
 
@@ -35,7 +34,7 @@ async function resolveDrop(
     const admin = createAdminClient();
     const { data } = await admin
       .from("opportunity_ledger")
-      .select("payload, net_profit, amazon_price, ebay_price, title, brand, image_url")
+      .select("payload, net_profit, amazon_price, ebay_price, title, brand, image_url, mode")
       .eq("user_id", userId)
       .eq("asin", asin)
       .order("net_profit", { ascending: false })
@@ -45,6 +44,10 @@ async function resolveDrop(
     const payload = {
       ...(data.payload as OpportunityProduct),
       asin,
+      mode:
+        (data.payload as OpportunityProduct)?.mode ||
+        (data.mode as OpportunityProduct["mode"]) ||
+        "amazon_to_ebay",
       title: (data.payload as OpportunityProduct)?.title || data.title || "",
       brand: (data.payload as OpportunityProduct)?.brand || data.brand || "",
       imageUrl:
@@ -59,6 +62,7 @@ async function resolveDrop(
         (data.payload as OpportunityProduct)?.netProfit ??
         (data.net_profit != null ? Number(data.net_profit) : null),
     } as OpportunityProduct;
+    if (!isPlatformWinner(payload, payload.mode || "amazon_to_ebay")) return null;
     const mapped = opportunityToMarketDrop(payload);
     return mapped;
   } catch {
@@ -81,7 +85,7 @@ export async function POST(request: Request) {
   const drop = await resolveDrop(auth.user.id, dropId);
   if (!drop) {
     return NextResponse.json(
-      { error: "Drop not found — run Find Winners or pick a curated drop" },
+      { error: "Winner not found — run Find Winners to verify a real ask spread" },
       { status: 404 },
     );
   }
@@ -191,7 +195,7 @@ export async function POST(request: Request) {
       dropId: drop.id,
       asin: drop.asin || null,
       spread: marketSpread(drop),
-      note: "Draft created — verify cost and comps before publish",
+      note: "Verified winner draft — confirm cost and comps before publish",
     },
     { status: 201 },
   );

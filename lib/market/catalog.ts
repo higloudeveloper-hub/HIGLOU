@@ -41,8 +41,8 @@ function drop(seed: Seed): MarketDrop {
 }
 
 /**
- * Dense curated floor — always on so Market feels stocked and alive.
- * Spreads are estimates; never sold comps.
+ * Legacy seed catalog — kept for pulse helpers / tests only.
+ * Live Market no longer stocks these; floor = Find Winners verified ledger.
  */
 const SEEDS: readonly Seed[] = [
   {

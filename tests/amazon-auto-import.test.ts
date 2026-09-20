@@ -389,10 +389,10 @@ describe("Amazon auto-import stays an eBay draft flow", () => {
     expect(sidebar).toMatch(/Find winners/);
     expect(sidebar).toMatch(/href: "\/winners"/);
     expect(winnersPage).toMatch(/FindWinnersStudio/);
-    expect(winnersStudio).toMatch(/AmazonAutoImportPanel/);
+    expect(winnersStudio).toMatch(/FindWinnersBoard/);
     expect(winnersStudio).toMatch(/asins: next/);
     expect(winnersStudio).toMatch(/mode: importMode/);
-    expect(winnersStudio).toMatch(/homedepot_to_ebay|walmart_to_ebay/);
+    expect(winnersStudio).not.toMatch(/AmazonAutoImportPanel/);
     expect(importRoute).toMatch(/listingFromDraft/);
     expect(importRoute).toMatch(/fast: false/);
     const completeImport = readRepo("lib/amazon/complete-import.ts");

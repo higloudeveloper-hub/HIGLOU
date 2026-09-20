@@ -1,10 +1,11 @@
 import { buildAmazonAssociatesUrl } from "@/lib/monetization/channels/affiliate";
-import type { OpportunityProduct } from "@/lib/opportunity/types";
 import {
-  MARKET_DROPS,
-  marketSpread,
-  type MarketDrop,
-} from "@/lib/market/catalog";
+  isPlatformWinner,
+  platformKeep,
+  sortPlatformWinners,
+} from "@/lib/opportunity/platform-winner";
+import type { OpportunityProduct } from "@/lib/opportunity/types";
+import { marketSpread, type MarketDrop } from "@/lib/market/catalog";
 
 export type MarketDropPublic = MarketDrop & {
   source: "ledger" | "curated";
@@ -17,15 +18,17 @@ export type MarketDropPublic = MarketDrop & {
 
 function heatFromProfit(net: number | null): MarketDrop["heat"] {
   if (net != null && net >= 25) return "hot";
-  if (net != null && net >= 10) return "warm";
+  if (net != null && net >= 12) return "warm";
   return "fresh";
 }
 
-/** Map a Find Winners hit into a market drop (honest estimates only). */
+/** Map a platform-verified Find Winners hit into a market drop. */
 export function opportunityToMarketDrop(
   hit: OpportunityProduct,
   associateTag?: string | null,
 ): MarketDropPublic | null {
+  if (!isPlatformWinner(hit, hit.mode || "amazon_to_ebay")) return null;
+
   const asin = String(hit.asin || "")
     .trim()
     .toUpperCase();
@@ -36,18 +39,23 @@ export function opportunityToMarketDrop(
     (hit.amazonPrice != null && hit.amazonPrice > 0 ? hit.amazonPrice : null) ??
     (hit.buyBoxPrice != null && hit.buyBoxPrice > 0 ? hit.buyBoxPrice : null);
   const sell =
+    (hit.ebayActiveLow != null && hit.ebayActiveLow > 0
+      ? hit.ebayActiveLow
+      : null) ??
     (hit.ebayActiveMedian != null && hit.ebayActiveMedian > 0
       ? hit.ebayActiveMedian
       : null) ??
-    (hit.ebayPrice != null && hit.ebayPrice > 0 ? hit.ebayPrice : null) ??
-    (hit.salePrice != null && hit.salePrice > 0 ? hit.salePrice : null);
+    (hit.ebayPrice != null && hit.ebayPrice > 0 ? hit.ebayPrice : null);
 
   if (buy == null || sell == null || sell <= 0 || buy <= 0) return null;
 
+  const keep = platformKeep(hit);
+  if (keep == null || keep < 12) return null;
+
   const comps =
-    hit.ebayActiveLow != null && hit.ebayActiveLow > sell
-      ? hit.ebayActiveLow
-      : Math.round(sell * 1.12);
+    hit.ebayActiveMedian != null && hit.ebayActiveMedian > sell
+      ? hit.ebayActiveMedian
+      : Math.round(sell * 1.08);
 
   const photo = String(hit.imageUrl || "").trim();
   const title = String(hit.title || "").trim() || `ASIN ${asin}`;
@@ -57,38 +65,34 @@ export function opportunityToMarketDrop(
     ? buildAmazonAssociatesUrl({ asin, associateTag: tag })
     : null;
 
-  const net =
-    hit.netProfit != null && Number.isFinite(hit.netProfit)
-      ? hit.netProfit
-      : sell - buy;
-
   return {
     id: `win-${asin}`,
     name: brand || "Winner",
     title,
     blurb: brand
-      ? `${brand} · from your Find Winners ledger. Est. ask vs Amazon cost.`
-      : "From your Find Winners ledger. Est. ask vs Amazon cost.",
+      ? `${brand} · Higlou verified ask keep after fees`
+      : "Higlou verified · Amazon cost vs eBay low ask after fees",
     photo:
       photo ||
-      `https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=1200&q=80`,
+      `https://m.media-amazon.com/images/I/01RmK+J4pJL._AC_SL1500_.jpg`,
     photos: photo ? [photo] : [],
     buy: Math.round(buy * 100) / 100,
     sell: Math.round(sell * 100) / 100,
     comps: Math.round(comps * 100) / 100,
-    supplier: "Amazon → eBay lane",
-    ships: "Buy on Amazon · list on eBay",
-    heat: heatFromProfit(net),
+    supplier: "Amazon → eBay",
+    ships: "Verified by Higlou Find Winners",
+    heat: heatFromProfit(keep),
     asin,
     source: "ledger",
     real: true,
     affiliateUrl,
-    netProfit: Math.round(net * 100) / 100,
+    netProfit: Math.round(keep * 100) / 100,
     score: hit.score ?? null,
-    note: "Est. spread from live asks / Amazon cost — not sold comps",
+    note: "Platform verified · conservative eBay low ask after fees",
   };
 }
 
+/** @deprecated Curated fakes are no longer stocked on Market. */
 export function curatedToPublic(
   drop: MarketDrop,
   associateTag?: string | null,
@@ -105,10 +109,14 @@ export function curatedToPublic(
     affiliateUrl,
     netProfit: marketSpread(drop),
     score: null,
-    note: "Curated showcase — verify cost before publish",
+    note: "Curated showcase — disabled on live Market",
   };
 }
 
+/**
+ * Market floor = platform winners from Find Winners only.
+ * No invented catalog padding.
+ */
 export function mergeMarketFeed(opts: {
   ledgerHits: OpportunityProduct[];
   associateTag?: string | null;
@@ -118,39 +126,22 @@ export function mergeMarketFeed(opts: {
   ledgerCount: number;
   curatedCount: number;
 } {
-  const limit = Math.min(Math.max(opts.limit ?? 36, 12), 48);
+  const limit = Math.min(Math.max(opts.limit ?? 36, 1), 48);
   const seen = new Set<string>();
   const fromLedger: MarketDropPublic[] = [];
 
-  const ranked = [...opts.ledgerHits].sort((a, b) => {
-    const pa = a.netProfit ?? -Infinity;
-    const pb = b.netProfit ?? -Infinity;
-    if (pb !== pa) return pb - pa;
-    return (b.score ?? 0) - (a.score ?? 0);
-  });
-
-  for (const hit of ranked) {
+  for (const hit of sortPlatformWinners(opts.ledgerHits)) {
     const drop = opportunityToMarketDrop(hit, opts.associateTag);
     if (!drop || seen.has(drop.id)) continue;
     seen.add(drop.id);
     fromLedger.push(drop);
-    if (fromLedger.length >= Math.min(20, limit)) break;
-  }
-
-  /** Always stock the floor with curated drops so Market feels full. */
-  const curated: MarketDropPublic[] = [];
-  for (const row of MARKET_DROPS) {
-    const drop = curatedToPublic(row, opts.associateTag);
-    if (seen.has(drop.id)) continue;
-    seen.add(drop.id);
-    curated.push(drop);
-    if (fromLedger.length + curated.length >= limit) break;
+    if (fromLedger.length >= limit) break;
   }
 
   return {
-    drops: [...fromLedger, ...curated].slice(0, limit),
+    drops: fromLedger,
     ledgerCount: fromLedger.length,
-    curatedCount: curated.length,
+    curatedCount: 0,
   };
 }
 

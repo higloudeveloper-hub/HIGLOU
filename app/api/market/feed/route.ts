@@ -2,8 +2,9 @@ import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/auth/require-user";
 import { mergeMarketFeed } from "@/lib/market/from-opportunity";
 import { resolveUserAssociateTag } from "@/lib/monetization/affiliate/links";
+import { isPlatformWinner } from "@/lib/opportunity/platform-winner";
 import { createAdminClient, isSupabaseConfigured } from "@/lib/supabase/admin";
-import type { OpportunityProduct } from "@/lib/opportunity/types";
+import type { OpportunityMode, OpportunityProduct } from "@/lib/opportunity/types";
 
 export const runtime = "nodejs";
 
@@ -15,8 +16,8 @@ async function loadLedgerHits(userId: string): Promise<OpportunityProduct[]> {
       .from("opportunity_ledger")
       .select("asin, payload, net_profit, mode")
       .eq("user_id", userId)
-      .order("net_profit", { ascending: false })
-      .limit(60);
+      .order("updated_at", { ascending: false })
+      .limit(80);
     if (error || !data?.length) return [];
     const out: OpportunityProduct[] = [];
     const seen = new Set<string>();
@@ -26,13 +27,17 @@ async function loadLedgerHits(userId: string): Promise<OpportunityProduct[]> {
         .toUpperCase();
       if (!/^[A-Z0-9]{10}$/.test(asin) || seen.has(asin)) continue;
       const payload = (row.payload || {}) as OpportunityProduct;
-      out.push({
+      const mode = (row.mode || payload.mode || "amazon_to_ebay") as OpportunityMode;
+      const hit: OpportunityProduct = {
         ...payload,
         asin,
+        mode,
         netProfit:
           payload.netProfit ??
           (row.net_profit != null ? Number(row.net_profit) : null),
-      });
+      };
+      if (!isPlatformWinner(hit, mode)) continue;
+      out.push(hit);
       seen.add(asin);
     }
     return out;
@@ -61,13 +66,13 @@ export async function GET() {
     affiliateTagConfigured: Boolean(tag),
     associateTagHint: tag ? `${tag.slice(0, 3)}…` : null,
     ledgerCount: merged.ledgerCount,
-    curatedCount: merged.curatedCount,
+    curatedCount: 0,
     floorSize: merged.drops.length,
-    analyzing: true,
+    analyzing: false,
     drops: merged.drops,
     note:
       merged.ledgerCount > 0
-        ? `Live floor · ${merged.ledgerCount} ledger ASINs + ${merged.curatedCount} curated drops`
-        : `Live floor · ${merged.curatedCount} curated drops in constant scan — Find Winners adds your ASINs on top`,
+        ? `${merged.ledgerCount} Higlou-verified winner${merged.ledgerCount === 1 ? "" : "s"} from Find Winners`
+        : "Market is empty until Find Winners verifies a real ask spread. No demo products.",
   });
 }

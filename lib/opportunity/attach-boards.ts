@@ -6,6 +6,7 @@ import {
   buildOpportunityPriceBoard,
   type OpportunityPriceBoard,
 } from "@/lib/opportunity/price-board";
+import { withPlatformUrls } from "@/lib/opportunity/platform-links";
 import type { OpportunityProduct } from "@/lib/opportunity/types";
 
 export type OpportunityWithBoard = OpportunityProduct & {
@@ -21,6 +22,7 @@ export type OpportunityWithBoard = OpportunityProduct & {
 /**
  * Attach a price/profit board to each winner. Optionally deep-check other
  * platforms (Walmart / Home Depot) when tokens/time allow — capped at 5.
+ * Always stamps Amazon / eBay / Walmart / HD product links for comparison.
  */
 export async function attachOpportunityBoards(
   hits: OpportunityProduct[],
@@ -65,15 +67,38 @@ export async function attachOpportunityBoards(
         next = { ...hit, hypotheticalKeep: analysis.bestKeep };
       }
 
+      if (analysis?.quotes?.length) {
+        const wm = analysis.quotes.find((q) => q.platform === "walmart");
+        const hd = analysis.quotes.find((q) => q.platform === "homedepot");
+        const eb = analysis.quotes.find((q) => q.platform === "ebay");
+        next = {
+          ...next,
+          walmartItemId: wm?.id || next.walmartItemId || null,
+          homedepotItemId: hd?.id || next.homedepotItemId || null,
+          ebayItemId: eb?.id || next.ebayItemId || null,
+        };
+      }
+
+      next = withPlatformUrls(next, analysis?.quotes);
+
       const overlay = analysis
         ? {
             quotes: analysis.quotes.map((q) => ({
               platform: q.platform,
               price: q.price,
+              url: q.url || next.platformUrls?.[q.platform] || null,
             })),
             routes: analysis.routes,
           }
-        : null;
+        : {
+            quotes: (
+              ["amazon", "ebay", "walmart", "homedepot"] as const
+            ).map((platform) => ({
+              platform,
+              price: null as number | null,
+              url: next.platformUrls?.[platform] ?? null,
+            })),
+          };
 
       return {
         ...next,

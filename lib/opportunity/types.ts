@@ -116,6 +116,16 @@ export type OpportunityProduct = {
   promotedFee: number | null;
   returnRisk: OpportunityRisk;
   policyRisk: OpportunityRisk;
+  /** Live product / search links per marketplace for side-by-side comparison. */
+  platformUrls?: {
+    amazon: string | null;
+    ebay: string | null;
+    walmart: string | null;
+    homedepot: string | null;
+  };
+  ebayItemId?: string | null;
+  walmartItemId?: string | null;
+  homedepotItemId?: string | null;
 };
 
 export type OpportunitySources = {

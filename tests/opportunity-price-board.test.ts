@@ -80,4 +80,30 @@ describe("buildOpportunityPriceBoard", () => {
     );
     expect(board.routes[0]?.mode).toBe("walmart_to_ebay");
   });
+
+  it("attaches openable product urls per platform", () => {
+    const board = buildOpportunityPriceBoard(hit(), {
+      quotes: [
+        {
+          platform: "walmart",
+          price: 15.5,
+          url: "https://www.walmart.com/ip/555",
+        },
+        {
+          platform: "ebay",
+          price: 40,
+          url: "https://www.ebay.com/itm/123456789012",
+        },
+      ],
+    });
+    expect(board.platforms.find((p) => p.platform === "amazon")?.url).toBe(
+      "https://www.amazon.com/dp/B0BOARD001",
+    );
+    expect(board.platforms.find((p) => p.platform === "ebay")?.url).toBe(
+      "https://www.ebay.com/itm/123456789012",
+    );
+    expect(board.platforms.find((p) => p.platform === "walmart")?.url).toBe(
+      "https://www.walmart.com/ip/555",
+    );
+  });
 });

@@ -203,9 +203,9 @@ export async function analyzeCrossPlatform(opts: {
         platform: "ebay",
         price: live.low ?? live.median ?? null,
         fees: estimateEbayReferralFee(live.low ?? live.median ?? null),
-        id: "",
+        id: live.sampleItemId || "",
         title: live.sampleTitle || title,
-        url: "",
+        url: live.sampleItemUrl || "",
         matchedBy: live.matchedByGtin ? "upc" : "title",
       });
     }

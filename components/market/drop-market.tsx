@@ -8,6 +8,7 @@ import { ChevronRight, Search } from "lucide-react";
 import { CategoryQuadCard } from "@/components/market/category-quad-card";
 import { DealCarouselRow } from "@/components/market/deal-carousel-row";
 import { AmazonPrice } from "@/components/market/amazon-price";
+import { PlatformOpenLinks } from "@/components/opportunity/platform-open-links";
 import {
   mergeMarketFeed,
   type MarketDropPublic,
@@ -481,26 +482,94 @@ export function DropMarketStudio() {
                     ) : null}
                   </div>
                   <p className="mt-2 text-[13px] text-[#565959]">
-                    Amz{" "}
-                    {drop.amazonPrice != null
-                      ? `$${drop.amazonPrice.toFixed(2)}`
-                      : "—"}
+                    {drop.platformUrls?.amazon ? (
+                      <a
+                        href={drop.platformUrls.amazon}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-[#2162a1] hover:underline"
+                      >
+                        Amz{" "}
+                        {drop.amazonPrice != null
+                          ? `$${drop.amazonPrice.toFixed(2)}`
+                          : "—"}
+                      </a>
+                    ) : (
+                      <>
+                        Amz{" "}
+                        {drop.amazonPrice != null
+                          ? `$${drop.amazonPrice.toFixed(2)}`
+                          : "—"}
+                      </>
+                    )}
                     {" · "}
-                    eBay{" "}
-                    {drop.ebayPrice != null
-                      ? `$${drop.ebayPrice.toFixed(2)}`
-                      : "—"}
+                    {drop.platformUrls?.ebay ? (
+                      <a
+                        href={drop.platformUrls.ebay}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-[#2162a1] hover:underline"
+                      >
+                        eBay{" "}
+                        {drop.ebayPrice != null
+                          ? `$${drop.ebayPrice.toFixed(2)}`
+                          : "—"}
+                      </a>
+                    ) : (
+                      <>
+                        eBay{" "}
+                        {drop.ebayPrice != null
+                          ? `$${drop.ebayPrice.toFixed(2)}`
+                          : "—"}
+                      </>
+                    )}
                     {" · "}
-                    Walmart{" "}
-                    {drop.walmartPrice != null
-                      ? `$${drop.walmartPrice.toFixed(2)}`
-                      : "—"}
+                    {drop.platformUrls?.walmart ? (
+                      <a
+                        href={drop.platformUrls.walmart}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-[#2162a1] hover:underline"
+                      >
+                        Walmart{" "}
+                        {drop.walmartPrice != null
+                          ? `$${drop.walmartPrice.toFixed(2)}`
+                          : "—"}
+                      </a>
+                    ) : (
+                      <>
+                        Walmart{" "}
+                        {drop.walmartPrice != null
+                          ? `$${drop.walmartPrice.toFixed(2)}`
+                          : "—"}
+                      </>
+                    )}
                     {" · "}
-                    HD{" "}
-                    {drop.homedepotPrice != null
-                      ? `$${drop.homedepotPrice.toFixed(2)}`
-                      : "—"}
+                    {drop.platformUrls?.homedepot ? (
+                      <a
+                        href={drop.platformUrls.homedepot}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-[#2162a1] hover:underline"
+                      >
+                        HD{" "}
+                        {drop.homedepotPrice != null
+                          ? `$${drop.homedepotPrice.toFixed(2)}`
+                          : "—"}
+                      </a>
+                    ) : (
+                      <>
+                        HD{" "}
+                        {drop.homedepotPrice != null
+                          ? `$${drop.homedepotPrice.toFixed(2)}`
+                          : "—"}
+                      </>
+                    )}
                   </p>
+                  <PlatformOpenLinks
+                    className="mt-3"
+                    urls={drop.platformUrls}
+                  />
                   {drop.asin ? (
                     <p className="mt-1 text-[12px] text-[#565959]">
                       ASIN {drop.asin}

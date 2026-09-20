@@ -27,6 +27,7 @@ import {
 } from "@/lib/keepa/finder";
 import type { KeepaSnapshot } from "@/lib/keepa/parse";
 import { searchEbayLivePrices } from "@/lib/ebay/live-prices";
+import { withPlatformUrls } from "@/lib/opportunity/platform-links";
 import { opportunitySearchText } from "@/lib/opportunity/categories";
 import {
   diversifyOpportunityHits,
@@ -235,7 +236,7 @@ function finishProduct(
             : "thin",
     };
     next.reasons = buildOpportunityReasons(next);
-    return next;
+    return withPlatformUrls(next);
   }
   let cost = supplierCost ?? null;
   let salePrice: number | null = null;
@@ -314,7 +315,7 @@ function finishProduct(
     ...(amazonVerdict ? { verdict: amazonVerdict } : {}),
   };
   next.reasons = buildOpportunityReasons(next);
-  return next;
+  return withPlatformUrls(next);
 }
 
 export async function findOpportunities(opts: {
@@ -655,6 +656,8 @@ export async function findOpportunities(opts: {
         kind: "active_listings" as const,
         sampleTitle: "",
         matchedByGtin: false,
+        sampleItemUrl: "",
+        sampleItemId: "",
       }));
       const askSale = askBasedSalePrice({
         low: live.low ?? live.p25,
@@ -670,6 +673,11 @@ export async function findOpportunities(opts: {
         ebayFees: estimateEbayReferralFee(askSale ?? live.median),
         ebayTitle: live.sampleTitle,
         ebayMatchedByGtin: live.matchedByGtin,
+        ebayItemId: live.sampleItemId || next.ebayItemId || null,
+        platformUrls: {
+          ...(next.platformUrls || { amazon: null, ebay: null, walmart: null, homedepot: null }),
+          ebay: live.sampleItemUrl || next.platformUrls?.ebay || null,
+        },
       };
       if (live.count) sources.ebayLive = true;
     }

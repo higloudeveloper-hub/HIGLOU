@@ -7,6 +7,7 @@ import { winnerRouteById } from "@/lib/opportunity/winner-routes";
 import type { OpportunityMode, OpportunityProduct } from "@/lib/opportunity/types";
 import { amazonProductScore } from "@/lib/opportunity/amazon-product-winner";
 import { platformKeep } from "@/lib/opportunity/platform-winner";
+import { buildPlatformUrls } from "@/lib/opportunity/platform-links";
 
 export type PlatformKey = "amazon" | "ebay" | "walmart" | "homedepot";
 
@@ -16,6 +17,8 @@ export type OpportunityPlatformPrice = {
   price: number | null;
   role: "buy" | "sell" | "other";
   note?: string;
+  /** Product or search URL so the seller can open the live listing. */
+  url?: string | null;
 };
 
 export type OpportunityRouteProfit = {
@@ -85,6 +88,7 @@ export function buildOpportunityPriceBoard(
     quotes?: Array<{
       platform: PlatformKey;
       price: number | null;
+      url?: string | null;
     }>;
     routes?: Array<{
       mode: OpportunityMode;
@@ -117,6 +121,11 @@ export function buildOpportunityPriceBoard(
   const byOverlay = new Map(
     (overlay?.quotes || []).map((q) => [q.platform, money(q.price)]),
   );
+  const urlOverlay = new Map(
+    (overlay?.quotes || [])
+      .filter((q) => q.url)
+      .map((q) => [q.platform, String(q.url)]),
+  );
 
   const amazonPrice = byOverlay.get("amazon") ?? amazon;
   const ebayPrice = byOverlay.get("ebay") ?? ebay;
@@ -124,6 +133,7 @@ export function buildOpportunityPriceBoard(
   const hdPrice = byOverlay.get("homedepot") ?? homedepot;
 
   const route = winnerRouteById(mode);
+  const urls = hit.platformUrls || buildPlatformUrls(hit);
   const platforms: OpportunityPlatformPrice[] = [
     {
       platform: "amazon",
@@ -136,6 +146,7 @@ export function buildOpportunityPriceBoard(
             ? "sell"
             : "other",
       note: hit.amazonRetail ? "Amazon retail" : undefined,
+      url: urlOverlay.get("amazon") ?? urls?.amazon ?? null,
     },
     {
       platform: "ebay",
@@ -151,18 +162,21 @@ export function buildOpportunityPriceBoard(
         hit.ebayActiveCount != null && hit.ebayActiveCount > 0
           ? `${hit.ebayActiveCount} asks`
           : undefined,
+      url: urlOverlay.get("ebay") ?? urls?.ebay ?? null,
     },
     {
       platform: "walmart",
       label: "Walmart",
       price: walmartPrice,
       role: route.buy === "Walmart" ? "buy" : "other",
+      url: urlOverlay.get("walmart") ?? urls?.walmart ?? null,
     },
     {
       platform: "homedepot",
       label: "Home Depot",
       price: hdPrice,
       role: route.buy === "Home Depot" ? "buy" : "other",
+      url: urlOverlay.get("homedepot") ?? urls?.homedepot ?? null,
     },
   ];
 

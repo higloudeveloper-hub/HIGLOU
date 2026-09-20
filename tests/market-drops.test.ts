@@ -142,6 +142,11 @@ describe("platform winners", () => {
     expect(opportunityToMarketDrop(amz)?.lane).toBe("amazon");
     expect(opportunityToMarketDrop(amz)?.demandScore).toBeGreaterThan(0);
     expect(opportunityToMarketDrop(junk)).toBeNull();
+    const arbDrop = opportunityToMarketDrop(arb);
+    expect(arbDrop?.platformUrls.amazon).toBe(
+      "https://www.amazon.com/dp/B0GOOD0001",
+    );
+    expect(arbDrop?.platformUrls.ebay).toMatch(/ebay\.com/);
   });
 
   it("sorts by keep", () => {

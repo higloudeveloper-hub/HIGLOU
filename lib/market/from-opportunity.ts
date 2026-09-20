@@ -11,6 +11,7 @@ import {
   platformKeep,
   sortPlatformWinners,
 } from "@/lib/opportunity/platform-winner";
+import { buildPlatformUrls } from "@/lib/opportunity/platform-links";
 import type { OpportunityProduct } from "@/lib/opportunity/types";
 import { marketSpread, type MarketDrop } from "@/lib/market/catalog";
 
@@ -30,6 +31,12 @@ export type MarketDropPublic = MarketDrop & {
   ebayPrice: number | null;
   walmartPrice: number | null;
   homedepotPrice: number | null;
+  platformUrls: {
+    amazon: string | null;
+    ebay: string | null;
+    walmart: string | null;
+    homedepot: string | null;
+  };
 };
 
 function platformQuotes(hit: OpportunityProduct) {
@@ -61,6 +68,7 @@ function platformQuotes(hit: OpportunityProduct) {
     walmartPrice: walmart != null ? Math.round(walmart * 100) / 100 : null,
     homedepotPrice:
       homedepot != null ? Math.round(homedepot * 100) / 100 : null,
+    platformUrls: hit.platformUrls || buildPlatformUrls(hit),
   };
 }
 
@@ -294,6 +302,11 @@ export function curatedToPublic(
     ebayPrice: drop.sell,
     walmartPrice: null,
     homedepotPrice: null,
+    platformUrls: buildPlatformUrls({
+      asin: drop.asin,
+      title: drop.title,
+      brand: drop.name,
+    }),
   };
 }
 

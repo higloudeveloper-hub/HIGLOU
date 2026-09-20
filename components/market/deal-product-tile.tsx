@@ -3,6 +3,7 @@
 import type { MarketDropPublic } from "@/lib/market/from-opportunity";
 import { marketSpread } from "@/lib/market/catalog";
 import { AmazonPrice, dealOffPercent } from "@/components/market/amazon-price";
+import { PlatformOpenLinks } from "@/components/opportunity/platform-open-links";
 import { cn } from "@/lib/utils";
 
 function dealLabel(item: MarketDropPublic): string {
@@ -13,6 +14,36 @@ function dealLabel(item: MarketDropPublic): string {
   if (item.heat === "hot") return "Limited time deal";
   if (item.heat === "warm") return "Deal selling fast";
   return "Verified keep";
+}
+
+function PriceChip({
+  label,
+  price,
+  href,
+}: {
+  label: string;
+  price: number | null | undefined;
+  href?: string | null;
+}) {
+  const body = (
+    <>
+      <span className="font-semibold text-[#0f1111]">{label}</span>{" "}
+      {price != null ? `$${Math.round(price)}` : "—"}
+    </>
+  );
+  if (!href) return <span>{body}</span>;
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      onClick={(e) => e.stopPropagation()}
+      className="text-[#2162a1] hover:underline"
+      title={`Ver en ${label}`}
+    >
+      {body}
+    </a>
+  );
 }
 
 export function DealProductTile({
@@ -35,6 +66,7 @@ export function DealProductTile({
   const showKeep = item.lane !== "amazon" && keep > 0;
   const price = item.lane === "amazon" ? item.sell : item.sell;
   const list = item.comps > item.sell ? item.comps : null;
+  const urls = item.platformUrls;
 
   return (
     <article
@@ -103,16 +135,25 @@ export function DealProductTile({
         )}
 
         <p className="mt-1.5 text-[11px] leading-tight text-[#565959]">
-          <span className="font-semibold text-[#0f1111]">Amz</span>{" "}
-          {item.amazonPrice != null ? `$${Math.round(item.amazonPrice)}` : "—"}
+          <PriceChip
+            label="Amz"
+            price={item.amazonPrice}
+            href={urls?.amazon}
+          />
           {" · "}
-          <span className="font-semibold text-[#0f1111]">eBay</span>{" "}
-          {item.ebayPrice != null ? `$${Math.round(item.ebayPrice)}` : "—"}
+          <PriceChip label="eBay" price={item.ebayPrice} href={urls?.ebay} />
           {" · "}
-          <span className="font-semibold text-[#0f1111]">Wmt</span>{" "}
-          {item.walmartPrice != null ? `$${Math.round(item.walmartPrice)}` : "—"}
+          <PriceChip
+            label="Wmt"
+            price={item.walmartPrice}
+            href={urls?.walmart}
+          />
         </p>
       </button>
+
+      {variant === "quad" ? (
+        <PlatformOpenLinks className="mt-2" size="sm" urls={urls} />
+      ) : null}
 
       <button
         type="button"

@@ -106,52 +106,68 @@ export function MarketTile({
             </p>
           )}
 
-          {/* Prices per platform */}
+          {/* Prices per platform — open live listing when we have a URL */}
           <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
-            <div className="bg-[#f7f4ef] px-1.5 py-1.5">
-              <div className="flex items-center gap-1">
-                <AmazonMark className="h-2.5" />
-                <p className="text-[8px] font-semibold tracking-wide text-[#8a847c] uppercase">
-                  Amazon
-                </p>
-              </div>
-              <p className="mt-0.5 text-[12px] font-semibold tabular-nums">
-                {money(amazon)}
-              </p>
-            </div>
-            <div className="bg-[#f7f4ef] px-1.5 py-1.5">
-              <div className="flex items-center gap-1">
-                <EbayMark className="h-2.5" />
-                <p className="text-[8px] font-semibold tracking-wide text-[#8a847c] uppercase">
-                  eBay
-                </p>
-              </div>
-              <p className="mt-0.5 text-[12px] font-semibold tabular-nums">
-                {money(ebay)}
-              </p>
-            </div>
-            <div className="bg-[#f7f4ef] px-1.5 py-1.5">
-              <div className="flex items-center gap-1">
-                <WalmartMark className="h-2.5" />
-                <p className="text-[8px] font-semibold tracking-wide text-[#8a847c] uppercase">
-                  Walmart
-                </p>
-              </div>
-              <p className="mt-0.5 text-[12px] font-semibold tabular-nums">
-                {money(walmart)}
-              </p>
-            </div>
-            <div className="bg-[#f7f4ef] px-1.5 py-1.5">
-              <div className="flex items-center gap-1">
-                <HomeDepotMark className="h-2.5" />
-                <p className="text-[8px] font-semibold tracking-wide text-[#8a847c] uppercase">
-                  HD
-                </p>
-              </div>
-              <p className="mt-0.5 text-[12px] font-semibold tabular-nums">
-                {money(homedepot)}
-              </p>
-            </div>
+            {(
+              [
+                {
+                  key: "amazon" as const,
+                  mark: <AmazonMark className="h-2.5" />,
+                  label: "Amazon",
+                  price: amazon,
+                },
+                {
+                  key: "ebay" as const,
+                  mark: <EbayMark className="h-2.5" />,
+                  label: "eBay",
+                  price: ebay,
+                },
+                {
+                  key: "walmart" as const,
+                  mark: <WalmartMark className="h-2.5" />,
+                  label: "Walmart",
+                  price: walmart,
+                },
+                {
+                  key: "homedepot" as const,
+                  mark: <HomeDepotMark className="h-2.5" />,
+                  label: "HD",
+                  price: homedepot,
+                },
+              ] as const
+            ).map((cell) => {
+              const href = item.platformUrls?.[cell.key] || null;
+              const inner = (
+                <>
+                  <div className="flex items-center gap-1">
+                    {cell.mark}
+                    <p className="text-[8px] font-semibold tracking-wide text-[#8a847c] uppercase">
+                      {cell.label}
+                    </p>
+                  </div>
+                  <p className="mt-0.5 text-[12px] font-semibold tabular-nums">
+                    {money(cell.price)}
+                  </p>
+                </>
+              );
+              return href ? (
+                <a
+                  key={cell.key}
+                  href={href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={(e) => e.stopPropagation()}
+                  className="bg-[#f7f4ef] px-1.5 py-1.5 hover:ring-1 hover:ring-[#2162a1]"
+                  title={`Ver en ${cell.label}`}
+                >
+                  {inner}
+                </a>
+              ) : (
+                <div key={cell.key} className="bg-[#f7f4ef] px-1.5 py-1.5">
+                  {inner}
+                </div>
+              );
+            })}
           </div>
 
           {item.bsrDrops90 != null ? (

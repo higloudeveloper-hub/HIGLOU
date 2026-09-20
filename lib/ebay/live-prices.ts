@@ -24,6 +24,9 @@ export type EbayActiveListings = {
   kind: "active_listings";
   sampleTitle: string;
   matchedByGtin: boolean;
+  /** First matching active listing page when Browse returns one. */
+  sampleItemUrl: string;
+  sampleItemId: string;
 };
 
 const STOP = new Set([
@@ -89,6 +92,8 @@ async function browseSearch(
     kind: "active_listings",
     sampleTitle: "",
     matchedByGtin: false,
+    sampleItemUrl: "",
+    sampleItemId: "",
   };
   const cfg = getEbayConfig();
   const res = await fetch(
@@ -105,14 +110,34 @@ async function browseSearch(
   );
   if (!res.ok) return empty;
   const json = (await res.json()) as {
-    itemSummaries?: Array<{ title?: string; price?: { value?: string } }>;
+    itemSummaries?: Array<{
+      title?: string;
+      price?: { value?: string };
+      itemId?: string;
+      itemWebUrl?: string;
+      legacyItemId?: string;
+    }>;
   };
   const raw: number[] = [];
   let sampleTitle = "";
+  let sampleItemUrl = "";
+  let sampleItemId = "";
   for (const item of json.itemSummaries ?? []) {
     const n = Number(item.price?.value);
     if (Number.isFinite(n) && n > 1) raw.push(n);
     if (!sampleTitle && item.title) sampleTitle = String(item.title);
+    if (!sampleItemUrl) {
+      const web = String(item.itemWebUrl || "").trim();
+      const legacy = String(item.legacyItemId || "").replace(/\D/g, "");
+      const rawId = String(item.itemId || "").replace(/[^\w|]/g, "");
+      if (web.startsWith("http")) {
+        sampleItemUrl = web;
+        sampleItemId = legacy || rawId;
+      } else if (legacy.length >= 9) {
+        sampleItemUrl = `https://www.ebay.com/itm/${legacy}`;
+        sampleItemId = legacy;
+      }
+    }
   }
   const prices = sanePrices(raw, amazonHint);
   const median = medianOf(prices);
@@ -126,6 +151,8 @@ async function browseSearch(
     kind: "active_listings",
     sampleTitle,
     matchedByGtin: false,
+    sampleItemUrl,
+    sampleItemId,
   };
 }
 
@@ -145,6 +172,8 @@ export async function searchEbayLivePrices(opts: {
     kind: "active_listings",
     sampleTitle: "",
     matchedByGtin: false,
+    sampleItemUrl: "",
+    sampleItemId: "",
   };
   const gtin = String(opts.gtin || "").replace(/\D/g, "");
   if (gtin.length === 12 || gtin.length === 13) {

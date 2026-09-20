@@ -34,7 +34,10 @@ import {
 import type { OpportunityMode, OpportunityProduct } from "@/lib/opportunity/types";
 import { WINNER_ROUTES, winnerRouteById } from "@/lib/opportunity/winner-routes";
 import { stashOpportunityMoneySeed } from "@/lib/monetization/from-opportunity";
+import { PlatformOpenLinks } from "@/components/opportunity/platform-open-links";
+import { buildPlatformUrls } from "@/lib/opportunity/platform-links";
 import { cn } from "@/lib/utils";
+import { ExternalLink } from "lucide-react";
 
 type BoardHit = OpportunityProduct & {
   priceBoard?: OpportunityPriceBoard;
@@ -631,39 +634,80 @@ export function FindWinnersBoard({
                           Prices found
                         </p>
                         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                          {board.platforms.map((p) => (
-                            <div
-                              key={p.platform}
-                              className={cn(
-                                "border px-2.5 py-2",
-                                p.price != null
-                                  ? p.role === "buy"
-                                    ? "border-[#141414] bg-[#fbfaf7]"
+                          {board.platforms.map((p) => {
+                            const href =
+                              p.url ||
+                              buildPlatformUrls(hit)[p.platform] ||
+                              null;
+                            const inner = (
+                              <>
+                                <p className="text-[10px] font-semibold tracking-wide text-[#6b6560] uppercase">
+                                  {p.label}
+                                  {p.role === "buy"
+                                    ? " · buy"
                                     : p.role === "sell"
-                                      ? "border-[#1f7a4d]/40 bg-[#f3faf6]"
-                                      : "border-[#e4e0d8] bg-white"
-                                  : "border-[#e4e0d8]/80 bg-[#faf9f6] opacity-60",
-                              )}
-                            >
-                              <p className="text-[10px] font-semibold tracking-wide text-[#6b6560] uppercase">
-                                {p.label}
-                                {p.role === "buy"
-                                  ? " · buy"
-                                  : p.role === "sell"
-                                    ? " · sell"
-                                    : ""}
-                              </p>
-                              <p className="mt-0.5 font-display text-lg leading-none">
-                                {money(p.price)}
-                              </p>
-                              {p.note ? (
-                                <p className="mt-1 text-[10px] text-[#8a847c]">
-                                  {p.note}
+                                      ? " · sell"
+                                      : ""}
                                 </p>
-                              ) : null}
-                            </div>
-                          ))}
+                                <p className="mt-0.5 font-display text-lg leading-none">
+                                  {money(p.price)}
+                                </p>
+                                {p.note ? (
+                                  <p className="mt-1 text-[10px] text-[#8a847c]">
+                                    {p.note}
+                                  </p>
+                                ) : null}
+                                {href ? (
+                                  <p className="mt-1.5 inline-flex items-center gap-1 text-[10px] font-semibold text-[#2162a1]">
+                                    Open
+                                    <ExternalLink className="size-2.5" />
+                                  </p>
+                                ) : null}
+                              </>
+                            );
+                            return href ? (
+                              <a
+                                key={p.platform}
+                                href={href}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className={cn(
+                                  "border px-2.5 py-2 transition hover:ring-1 hover:ring-[#141414]",
+                                  p.price != null
+                                    ? p.role === "buy"
+                                      ? "border-[#141414] bg-[#fbfaf7]"
+                                      : p.role === "sell"
+                                        ? "border-[#1f7a4d]/40 bg-[#f3faf6]"
+                                        : "border-[#e4e0d8] bg-white"
+                                    : "border-[#e4e0d8]/80 bg-[#faf9f6]",
+                                )}
+                              >
+                                {inner}
+                              </a>
+                            ) : (
+                              <div
+                                key={p.platform}
+                                className={cn(
+                                  "border px-2.5 py-2",
+                                  p.price != null
+                                    ? p.role === "buy"
+                                      ? "border-[#141414] bg-[#fbfaf7]"
+                                      : p.role === "sell"
+                                        ? "border-[#1f7a4d]/40 bg-[#f3faf6]"
+                                        : "border-[#e4e0d8] bg-white"
+                                    : "border-[#e4e0d8]/80 bg-[#faf9f6] opacity-60",
+                                )}
+                              >
+                                {inner}
+                              </div>
+                            );
+                          })}
                         </div>
+                        <PlatformOpenLinks
+                          className="mt-2"
+                          size="sm"
+                          urls={hit.platformUrls || buildPlatformUrls(hit)}
+                        />
                       </div>
 
                       {/* Profit for this route + alternatives */}

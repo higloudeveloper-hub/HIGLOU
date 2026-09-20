@@ -188,6 +188,25 @@ export async function POST(request: Request) {
   const auth = await requireUser();
   if (!auth.ok) return auth.response;
 
+  const { spendCredits } = await import("@/lib/credits/wallet");
+  const spent = await spendCredits({
+    userId: auth.user.id,
+    action: "market_claim",
+    reason: "Add winner to store",
+  });
+  if (!spent.ok) {
+    return NextResponse.json(
+      {
+        error: spent.error,
+        code: spent.code || "credits",
+        balance: spent.balance,
+        needed: spent.needed,
+        rechargeHref: "/credits",
+      },
+      { status: spent.code === "insufficient" ? 402 : 503 },
+    );
+  }
+
   let raw: LooseSnap = {};
   try {
     raw = (await request.json()) as LooseSnap;

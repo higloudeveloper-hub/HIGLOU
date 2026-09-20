@@ -56,6 +56,25 @@ export async function POST(request: Request) {
   const auth = await requireUser();
   if (!auth.ok) return auth.response;
 
+  const { spendCredits } = await import("@/lib/credits/wallet");
+  const spent = await spendCredits({
+    userId: auth.user.id,
+    action: "winners_scan",
+    reason: "Find Winners scan",
+  });
+  if (!spent.ok) {
+    return NextResponse.json(
+      {
+        error: spent.error,
+        code: spent.code || "credits",
+        balance: spent.balance,
+        needed: spent.needed,
+        rechargeHref: "/credits",
+      },
+      { status: spent.code === "insufficient" ? 402 : 503 },
+    );
+  }
+
   const rate = checkRateLimit({
     key: `winners-scan:${clientKeyFromRequest(request, auth.user.id)}`,
     limit: 8,

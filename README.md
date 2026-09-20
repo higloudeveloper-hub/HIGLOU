@@ -128,6 +128,14 @@ SHA256: `E8840560B3359BAB0825F1BEE48DAD3F4C58D6AF9BC2B412630FB928C4793C3A`
 - Photos: HTTPS URLs with `|`
 - Description: Higlou Store HTML
 
+## Credits (public platform)
+
+- Users recharge packs; actions (Find Winners, Market claim, AI, Facebook) spend credits.
+- Welcome bonus: 40 credits on first onboarding (`/onboarding`).
+- Wallet UI: `/credits` (mock recharge now — Stripe Checkout later with same pack IDs).
+- Apply `supabase/migrations/20260920_credits.sql`.
+- Pill in sidebar shows live balance.
+
 ## Affiliate, Facebook & Integraciones
 
 - **Integraciones** (`/connect`): estado de eBay, Amazon Seller, Associates, Facebook y Smart Links — un CTA por canal.

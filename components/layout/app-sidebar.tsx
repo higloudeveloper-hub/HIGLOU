@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   BarChart3,
+  Coins,
   Download,
   Home,
   Images,
@@ -19,6 +20,7 @@ import { signOut } from "@/app/login/sign-out";
 import { HiglouLogo } from "@/components/brand/higlou-logo";
 import { NewListingButton } from "@/components/brand/new-listing-button";
 import { FacebookFMark } from "@/components/brand/store-marks";
+import { CreditsPill } from "@/components/credits/credits-pill";
 import { MoneyNavLink } from "@/components/money/money-nav-link";
 
 type NavItem = {
@@ -101,6 +103,13 @@ const GROW_NAV: NavItem[] = [
     hint: "Publicá ofertas",
     mark: "facebook",
     match: (path) => path === "/facebook" || path.startsWith("/facebook/"),
+  },
+  {
+    href: "/credits",
+    label: "Créditos",
+    hint: "Recargar · packs",
+    icon: Coins,
+    match: (path) => path === "/credits" || path.startsWith("/credits/"),
   },
 ];
 
@@ -189,6 +198,9 @@ export function AppSidebar({
           onClick={onNavigate}
           className={onNewListing ? "bg-[#2a2a2a]" : undefined}
         />
+        <div className="mt-3 px-1">
+          <CreditsPill className="w-full justify-center" />
+        </div>
       </div>
 
       <nav className="flex-1 space-y-4 overflow-y-auto px-3">

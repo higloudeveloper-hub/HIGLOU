@@ -49,9 +49,29 @@ export default function HomeWorkspacePage() {
 
   useEffect(() => {
     let cancelled = false;
-
     void (async () => {
       try {
+        // First-run onboarding for public credit platform
+        try {
+          if (window.localStorage.getItem("higlou-onboarding-v2") !== "1") {
+            const creditsRes = await fetch("/api/credits", { cache: "no-store" });
+            if (creditsRes.ok) {
+              const creditsBody = (await creditsRes.json()) as {
+                wallet?: { onboarded?: boolean; ready?: boolean };
+              };
+              if (
+                creditsBody.wallet?.ready &&
+                !creditsBody.wallet.onboarded
+              ) {
+                window.location.href = "/onboarding";
+                return;
+              }
+            }
+          }
+        } catch {
+          /* continue home */
+        }
+
         const res = await fetch("/api/me");
         if (!res.ok) return;
         const body = (await res.json()) as { owner?: boolean };

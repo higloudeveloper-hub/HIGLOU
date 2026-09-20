@@ -33,6 +33,17 @@ describe("resolveEbayCategory", () => {
     expect(result.confidence).toBeGreaterThan(0.5);
   });
 
+  it("maps McKenzie lumbar / back support to orthopedic leaf", () => {
+    const result = resolveEbayCategory({
+      title:
+        "OPTP The Original McKenzie Lumbar Roll – Standard Density Low Back Support",
+      brand: "OPTP",
+    });
+    expect(result.categoryId).toBe("182118");
+    expect(result.categoryName).toMatch(/Back Braces|Supports/i);
+    expect(result.inferred).toBe(true);
+  });
+
   it("maps bedding sets to comforter sets", () => {
     const result = resolveEbayCategory({
       productType: "Bedding",

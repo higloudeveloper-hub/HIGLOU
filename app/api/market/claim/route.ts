@@ -1,10 +1,13 @@
 import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/auth/require-user";
+import { resolveEbayCategory } from "@/config/ebay-categories";
+import { loadWinnerMarketTokens } from "@/lib/amazon/winner-tokens";
 import { marketSpread, type MarketDrop } from "@/lib/market/catalog";
 import {
   asinFromWinnerDropId,
   opportunityToMarketDrop,
 } from "@/lib/market/from-opportunity";
+import { ebayReadyImportFields } from "@/lib/opportunity/ebay-ready";
 import { isPlatformWinner } from "@/lib/opportunity/platform-winner";
 import { logMonetizationEvent } from "@/lib/monetization/observability";
 import {
@@ -16,6 +19,7 @@ import { createAdminClient, isSupabaseConfigured } from "@/lib/supabase/admin";
 import type { OpportunityProduct } from "@/lib/opportunity/types";
 
 export const runtime = "nodejs";
+export const maxDuration = 60;
 
 const PLACEHOLDER =
   "https://m.media-amazon.com/images/I/01RmK+J4pJL._AC_SL1500_.jpg";
@@ -241,6 +245,34 @@ export async function POST(request: Request) {
     }));
 
   const brand = drop.asin ? drop.name : "Higlou Market";
+  const features = [
+    `${drop.ships}`,
+    `Est. supplier cost $${drop.buy}`,
+    drop.asin ? `ASIN ${drop.asin}` : "Ready draft from Higlou Market",
+  ];
+
+  // Resolve a real eBay leaf category — Market imports were skipping this.
+  const tokens = await loadWinnerMarketTokens(auth.supabase, auth.user.id);
+  const ready = await ebayReadyImportFields({
+    title: drop.title,
+    brand,
+    features,
+    ebayToken: tokens.ebayToken,
+    userId: auth.user.id,
+    supabase: auth.supabase,
+    fast: !tokens.ebayToken,
+  });
+  const catalog = resolveEbayCategory({
+    categoryId: ready.categoryId,
+    categoryName: ready.categoryName,
+    title: drop.title,
+    brand,
+    features,
+    productType: drop.name,
+  });
+  const categoryId = catalog.categoryId || ready.categoryId || "";
+  const categoryName = catalog.categoryName || ready.categoryName || "";
+
   let payload;
   try {
     payload = productBodySchema.parse({
@@ -251,22 +283,29 @@ export async function POST(request: Request) {
         : `MKT-${drop.id.toUpperCase().slice(0, 20)}`,
       amazonAsin: drop.asin || "",
       condition: "New",
-      conditionId: "NEW",
+      conditionId: "1000",
       price: drop.sell,
       quantity: 1,
       listingFormat: "FixedPrice",
-      descriptionSummary: drop.blurb,
-      descriptionHtml: `<p>${drop.blurb}</p><p>Supplier: ${drop.supplier}. ${drop.ships}.</p><p><em>Est. cost $${drop.buy} · suggested list $${drop.sell}. Spread is an estimate — verify before publish.</em></p>${drop.asin ? `<p>ASIN: ${drop.asin}</p>` : ""}`,
+      categoryId,
+      categoryName,
+      descriptionSummary: ready.descriptionSummary || drop.blurb,
+      descriptionHtml:
+        ready.descriptionHtml ||
+        `<p>${drop.blurb}</p><p>Supplier: ${drop.supplier}. ${drop.ships}.</p><p><em>Est. cost $${drop.buy} · suggested list $${drop.sell}. Spread is an estimate — verify before publish.</em></p>${drop.asin ? `<p>ASIN: ${drop.asin}</p>` : ""}`,
       productType: drop.name,
-      status: "Uploaded",
-      itemLocation: "United States",
-      handlingTime: 2,
-      country: "US",
-      features: [
-        `${drop.ships}`,
-        `Est. supplier cost $${drop.buy}`,
-        drop.asin ? `ASIN ${drop.asin}` : "Ready draft from Higlou Market",
-      ],
+      status: categoryId ? "Uploaded" : "Needs Review",
+      itemLocation: ready.itemLocation,
+      postalCode: ready.postalCode,
+      country: ready.country,
+      handlingTime: ready.handlingTime,
+      packageWeightLbs: ready.packageWeightLbs,
+      packageWeightOz: ready.packageWeightOz,
+      packageLengthIn: ready.packageLengthIn,
+      packageWidthIn: ready.packageWidthIn,
+      packageDepthIn: ready.packageDepthIn,
+      packageSource: ready.packageSource,
+      features,
       images,
       itemSpecifics: [
         { key: "Brand", label: "Brand", value: brand },
@@ -283,6 +322,18 @@ export async function POST(request: Request) {
                 key: "C:ASIN",
                 label: "ASIN",
                 value: drop.asin,
+                isCustom: true,
+              },
+            ]
+          : []),
+        ...(categoryId
+          ? [
+              {
+                key: "C:EbayCategory",
+                label: "eBay category",
+                value: categoryName
+                  ? `${categoryName} (${categoryId})`
+                  : categoryId,
                 isCustom: true,
               },
             ]
@@ -333,6 +384,7 @@ export async function POST(request: Request) {
       asin: drop.asin || null,
       productId: inserted.id,
       spread: marketSpread(drop),
+      categoryId: categoryId || null,
     },
   });
 
@@ -343,8 +395,12 @@ export async function POST(request: Request) {
       href: `/listings/${inserted.id}`,
       dropId: drop.id,
       asin: drop.asin || null,
+      categoryId: categoryId || null,
+      categoryName: categoryName || null,
       spread: marketSpread(drop),
-      note: "Verified winner draft — confirm cost and comps before publish",
+      note: categoryId
+        ? "Verified winner draft · eBay category assigned — confirm cost before publish"
+        : "Verified winner draft — pick an eBay leaf category before publish",
     },
     { status: 201 },
   );

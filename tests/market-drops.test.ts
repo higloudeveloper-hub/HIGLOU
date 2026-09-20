@@ -201,6 +201,9 @@ describe("higlou market + find winners wiring", () => {
     expect(readRepo("app/api/market/claim/route.ts")).toMatch(
       /dropFromLoose|extractAsin/,
     );
+    expect(readRepo("app/api/market/claim/route.ts")).toMatch(
+      /ebayReadyImportFields|categoryId/,
+    );
     expect(readRepo("components/layout/app-shell.tsx")).toMatch(
       /h-dvh min-h-0 overflow-hidden/,
     );

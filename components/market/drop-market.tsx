@@ -1,27 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { motion, useReducedMotion } from "motion/react";
-import {
-  ExternalLink,
-  Loader2,
-  Search,
-  Sparkles,
-  ArrowRight,
-  Zap,
-} from "lucide-react";
-import {
-  AmazonMark,
-  EbayMark,
-  HomeDepotMark,
-  WalmartMark,
-} from "@/components/brand/store-marks";
-import { MarketTile } from "@/components/market/market-tile";
-import { PriceDrop } from "@/components/market/price-drop";
+import { ChevronRight, Search } from "lucide-react";
+import { CategoryQuadCard } from "@/components/market/category-quad-card";
+import { DealCarouselRow } from "@/components/market/deal-carousel-row";
+import { AmazonPrice } from "@/components/market/amazon-price";
 import {
   mergeMarketFeed,
   type MarketDropPublic,
@@ -60,16 +46,14 @@ function signed(n: number) {
 
 export function DropMarketStudio() {
   const router = useRouter();
-  const reduce = useReducedMotion() ?? false;
   const [drops, setDrops] = useState<MarketDropPublic[]>([]);
   const [note, setNote] = useState(
     "Market is empty until Find Winners verifies a winner.",
   );
   const [tagReady, setTagReady] = useState(false);
   const [ledgerCount, setLedgerCount] = useState(0);
-  const [active, setActive] = useState(0);
+  const [activeId, setActiveId] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
-  // Never gate the floor on bootstrap — show empty/local immediately, soft-sync feed.
   const [refreshing, setRefreshing] = useState(false);
   const [filter, setFilter] = useState<LaneFilter>("all");
 
@@ -85,6 +69,7 @@ export function DropMarketStudio() {
       setNote(
         `${local.length} Higlou-verified winner${local.length === 1 ? "" : "s"} from Find Winners`,
       );
+      setActiveId(local[0]?.id ?? null);
     } else {
       setDrops([]);
       setLedgerCount(0);
@@ -114,13 +99,13 @@ export function DropMarketStudio() {
           setDrops(remote);
           setLedgerCount(Number(body.ledgerCount) || remote.length);
           setNote(body.note || "");
+          setActiveId(remote[0]?.id ?? null);
         } else if (!local.length) {
           setDrops([]);
           setLedgerCount(0);
           setNote(body.note || emptyNote);
         }
         setTagReady(Boolean(body.affiliateTagConfigured));
-        setActive(0);
       } catch {
         if (!alive) return;
         if (!local.length) {
@@ -141,16 +126,25 @@ export function DropMarketStudio() {
     };
   }, []);
 
+  const arb = useMemo(
+    () => drops.filter((d) => d.lane === "arbitrage"),
+    [drops],
+  );
+  const amazon = useMemo(
+    () => drops.filter((d) => d.lane === "amazon"),
+    [drops],
+  );
+  const retail = useMemo(
+    () => drops.filter((d) => d.lane === "retail"),
+    [drops],
+  );
   const filtered = useMemo(() => {
     if (filter === "all") return drops;
     return drops.filter((d) => d.lane === filter);
   }, [drops, filter]);
 
-  const drop = filtered[active] ?? filtered[0] ?? null;
-
-  useEffect(() => {
-    setActive(0);
-  }, [filter]);
+  const drop =
+    filtered.find((d) => d.id === activeId) ?? filtered[0] ?? null;
 
   const openKeep = useMemo(
     () =>
@@ -160,15 +154,6 @@ export function DropMarketStudio() {
       }, 0),
     [drops],
   );
-  const amazonCount = useMemo(
-    () => drops.filter((d) => d.lane === "amazon").length,
-    [drops],
-  );
-  const featured = drops[0] ?? null;
-  const featuredKeep =
-    featured && featured.lane !== "amazon"
-      ? featured.netProfit ?? marketSpread(featured)
-      : null;
 
   const claim = useCallback(
     async (item: MarketDropPublic) => {
@@ -184,10 +169,16 @@ export function DropMarketStudio() {
               title: item.title,
               brand: item.name,
               imageUrl: item.photo,
-              amazonPrice: item.amazonPrice ?? (item.lane === "amazon" ? item.sell : item.buy),
-              buyBoxPrice: item.amazonPrice ?? (item.lane === "amazon" ? item.sell : item.buy),
-              ebayPrice: item.ebayPrice ?? (item.lane === "amazon" ? null : item.sell),
-              ebayActiveLow: item.ebayPrice ?? (item.lane === "amazon" ? null : item.sell),
+              amazonPrice:
+                item.amazonPrice ??
+                (item.lane === "amazon" ? item.sell : item.buy),
+              buyBoxPrice:
+                item.amazonPrice ??
+                (item.lane === "amazon" ? item.sell : item.buy),
+              ebayPrice:
+                item.ebayPrice ?? (item.lane === "amazon" ? null : item.sell),
+              ebayActiveLow:
+                item.ebayPrice ?? (item.lane === "amazon" ? null : item.sell),
               cost: item.buy,
               buy: item.buy,
               sell: item.sell,
@@ -286,379 +277,266 @@ export function DropMarketStudio() {
     }
   }, []);
 
-  const filters: Array<{ id: LaneFilter; label: string; count: number }> = [
-    { id: "all", label: "All deals", count: drops.length },
-    {
-      id: "arbitrage",
-      label: "Arbitrage",
-      count: drops.filter((d) => d.lane === "arbitrage").length,
-    },
-    {
-      id: "amazon",
-      label: "Sell on Amazon",
-      count: amazonCount,
-    },
-    {
-      id: "retail",
-      label: "Retail routes",
-      count: drops.filter((d) => d.lane === "retail").length,
-    },
-  ];
+  const selectItem = (item: MarketDropPublic) => setActiveId(item.id);
 
   return (
-    <div className="bg-[#f3f0ea] text-[#141414]">
-      {/* Full-bleed marketplace hero */}
-      <section className="relative overflow-hidden bg-[#141414] text-white">
-        <div
-          className="pointer-events-none absolute inset-0 opacity-40"
-          style={{
-            background:
-              "radial-gradient(ellipse 80% 60% at 70% 40%, rgba(244,201,40,0.22), transparent 55%), linear-gradient(115deg, #141414 0%, #1c1a16 45%, #0e0e0e 100%)",
-          }}
-        />
-        {featured?.photo ? (
-          <motion.div
-            aria-hidden
-            className="pointer-events-none absolute inset-y-0 right-0 w-[55%] opacity-25"
-            initial={reduce ? false : { opacity: 0, x: 40 }}
-            animate={{ opacity: 0.22, x: 0 }}
-            transition={{ duration: 0.8 }}
-          >
-            <Image
-              src={featured.photo}
-              alt=""
-              fill
-              className="object-contain object-right p-8"
-              unoptimized
-              priority
-            />
-          </motion.div>
-        ) : null}
-
-        <div className="relative px-5 py-5 md:px-10 md:py-7">
-          <p className="font-display text-[12px] tracking-[0.22em] text-[#f4c928] uppercase">
-            Higlou Market
-          </p>
-          <div className="mt-2 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-            <div className="max-w-xl">
-              <h1 className="font-display text-3xl leading-[0.95] md:text-4xl lg:text-5xl">
-                Today&apos;s verified deals
-              </h1>
-              <p className="mt-2 max-w-md text-[14px] leading-relaxed text-white/65">
-                Live Keepa + eBay asks. Buy vs sell vs keep — add winners to
-                your store.
-              </p>
-              <div className="mt-3 flex flex-wrap items-center gap-3 opacity-90">
-                <AmazonMark className="h-3.5" invert />
-                <EbayMark className="h-3 brightness-0 invert" />
-                <WalmartMark className="h-3" invert />
-                <HomeDepotMark className="h-3.5" invert />
-              </div>
-            </div>
-
-            <div className="flex flex-wrap items-end gap-3">
-              {featured && featuredKeep != null && featuredKeep > 0 ? (
-                <motion.div
-                  initial={reduce ? false : { opacity: 0, y: 12 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="min-w-[180px] border border-white/15 bg-white/5 px-3 py-2.5 backdrop-blur-sm"
-                >
-                  <p className="text-[10px] font-semibold tracking-[0.16em] text-[#f4c928] uppercase">
-                    Featured keep
-                  </p>
-                  <p className="mt-1 font-display text-2xl leading-none text-[#f4c928]">
-                    {signed(featuredKeep)}
-                  </p>
-                  <p className="mt-1 line-clamp-1 text-[11px] text-white/55">
-                    Buy {money(featured.buy)} → Sell {money(featured.sell)}
-                  </p>
-                </motion.div>
-              ) : null}
-              <Link
-                href="/winners"
-                className="inline-flex h-10 items-center gap-2 bg-[#f4c928] px-4 text-[13px] font-semibold text-[#141414]"
-              >
-                <Search className="size-4" />
-                Find more winners
-                <ArrowRight className="size-4" />
-              </Link>
-            </div>
+    <div className="min-h-full bg-[#eaeded] text-[#0f1111]">
+      {/* Compact marketplace top — brand first, Amazon density */}
+      <header className="border-b border-[#d5d9d9] bg-[#232f3e] text-white">
+        <div className="mx-auto flex max-w-[1500px] flex-wrap items-center gap-3 px-4 py-3 sm:px-6">
+          <div className="min-w-0 flex-1">
+            <p className="text-[12px] font-semibold tracking-[0.14em] text-[#febd69] uppercase">
+              Higlou Market
+            </p>
+            <h1 className="truncate text-[22px] font-bold leading-tight sm:text-[26px]">
+              Today&apos;s verified deals
+            </h1>
           </div>
-        </div>
-
-        {/* Promo ticker banner */}
-        <div className="relative border-t border-white/10 bg-[#f4c928] text-[#141414]">
-          <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-2.5 text-[12px] font-semibold md:px-10">
-            <span className="inline-flex items-center gap-2">
-              <Zap className="size-3.5" />
-              Platform-verified only · no fake catalog
-            </span>
+          <div className="flex flex-wrap items-center gap-2 text-[12px] text-white/75">
             <span className="tabular-nums">
-              {drops.length} on floor · pipeline keep {signed(openKeep)} ·{" "}
-              {amazonCount} Amazon lane
+              {drops.length} on floor
+              {openKeep > 0 ? ` · keep ${signed(openKeep)}` : ""}
               {refreshing ? " · syncing…" : ""}
             </span>
-            <span className="text-[#141414]/70">
+            <span className="hidden sm:inline">·</span>
+            <span className="hidden sm:inline">
               {tagReady ? "Affiliate ready" : "Set affiliate tag in Settings"}
             </span>
           </div>
+          <Link
+            href="/winners"
+            className="inline-flex h-9 items-center gap-1.5 rounded-md bg-[#febd69] px-3 text-[13px] font-semibold text-[#111]"
+          >
+            <Search className="size-3.5" />
+            Find winners
+          </Link>
         </div>
-      </section>
+      </header>
 
-      {/* Filters */}
-      <div className="sticky top-0 z-10 border-b border-[#e4e0d8] bg-[#f3f0ea]/95 px-5 py-3 backdrop-blur-md md:px-10">
-        <div className="flex flex-wrap items-center gap-2">
-          {filters.map((row) => (
+      <div className="mx-auto max-w-[1500px] space-y-4 px-3 py-4 sm:px-5 sm:py-5">
+        {/* Filter chips */}
+        <div className="flex flex-wrap gap-2">
+          {(
+            [
+              ["all", "Deals for you", drops.length],
+              ["arbitrage", "Arbitrage keep", arb.length],
+              ["amazon", "Sell on Amazon", amazon.length],
+              ["retail", "Retail routes", retail.length],
+            ] as const
+          ).map(([id, label, count]) => (
             <button
-              key={row.id}
+              key={id}
               type="button"
-              onClick={() => setFilter(row.id)}
+              onClick={() => setFilter(id)}
               className={cn(
-                "h-9 px-3 text-[12px] font-semibold transition",
-                filter === row.id
-                  ? "bg-[#141414] text-white"
-                  : "bg-white text-[#6b6560] ring-1 ring-[#e4e0d8] hover:text-[#141414]",
+                "h-8 rounded-full px-3 text-[12px] font-semibold",
+                filter === id
+                  ? "bg-[#0f1111] text-white"
+                  : "bg-white text-[#0f1111] ring-1 ring-[#d5d9d9] hover:bg-[#f7f8f8]",
               )}
             >
-              {row.label}
-              <span className="ml-1.5 tabular-nums opacity-60">{row.count}</span>
+              {label}
+              <span className="ml-1.5 opacity-60">{count}</span>
             </button>
           ))}
           {note ? (
-            <span className="ml-auto hidden text-[12px] text-[#8a847c] lg:inline">
+            <span className="ml-auto hidden self-center text-[12px] text-[#565959] lg:inline">
               {note}
             </span>
           ) : null}
         </div>
-      </div>
 
-      <div>
         {drops.length === 0 ? (
-          <div className="mx-auto flex min-h-[420px] max-w-lg flex-col items-center justify-center px-6 text-center">
-            <p className="font-display text-3xl text-[#141414]">
+          <div className="rounded-lg border border-[#d5d9d9] bg-white px-6 py-16 text-center shadow-sm">
+            <p className="text-[22px] font-bold text-[#0f1111]">
               Floor is empty
             </p>
-            <p className="mt-3 text-[15px] leading-relaxed text-[#6b6560]">
+            <p className="mx-auto mt-2 max-w-md text-[14px] text-[#565959]">
               Find real opportunities first. Verified keep and Keepa demand
               stock this marketplace automatically.
             </p>
             <Link
               href="/winners"
-              className="mt-7 inline-flex h-12 items-center gap-2 bg-[#141414] px-6 text-[14px] font-semibold text-white"
+              className="mt-6 inline-flex h-10 items-center gap-2 rounded-full bg-[#ffd814] px-5 text-[13px] font-semibold text-[#0f1111]"
             >
               <Search className="size-4" />
               Open Find Winners
             </Link>
           </div>
-        ) : filtered.length === 0 ? (
-          <div className="mx-auto flex min-h-[320px] max-w-md flex-col items-center justify-center px-6 text-center">
-            <p className="font-display text-2xl">Nothing in this lane</p>
-            <p className="mt-2 text-[14px] text-[#6b6560]">
-              Try All deals or scan another route in Find Winners.
-            </p>
-            <button
-              type="button"
-              onClick={() => setFilter("all")}
-              className="mt-5 h-10 bg-[#141414] px-4 text-[13px] font-semibold text-white"
-            >
-              Show all deals
-            </button>
-          </div>
         ) : (
-          <div className="mx-auto grid max-w-7xl gap-6 px-5 py-6 lg:grid-cols-[1fr_340px] lg:px-10 lg:py-8">
-            {/* Product grid — Amazon-style marketplace */}
-            <div>
-              <div className="mb-4 flex items-end justify-between gap-3">
-                <div>
-                  <p className="text-[11px] font-semibold tracking-[0.16em] text-[#6b6560] uppercase">
-                    Live floor
-                  </p>
-                  <p className="mt-1 font-display text-2xl leading-none">
-                    {filtered.length} deal{filtered.length === 1 ? "" : "s"}
-                  </p>
-                </div>
-                <p className="text-[12px] text-[#8a847c]">
-                  Ledger {ledgerCount}
-                </p>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">
-                {filtered.map((item, i) => (
-                  <MarketTile
-                    key={item.id}
-                    item={item}
-                    index={i}
-                    selected={drop?.id === item.id}
-                    busy={busy === item.id || busy === `aff-${item.id}`}
-                    onSelect={() => setActive(i)}
-                    onClaim={() => void claim(item)}
-                    onEarn={
-                      item.asin ? () => void earnLink(item) : undefined
-                    }
-                  />
-                ))}
-              </div>
+          <>
+            {/* Amazon-style category cards row */}
+            <div className="flex gap-4 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              <CategoryQuadCard
+                title="Deals for you"
+                subtitle="Higlou-verified winners"
+                items={drops}
+                busyId={busy}
+                selectedId={drop?.id ?? null}
+                onSelect={selectItem}
+                onClaim={(item) => void claim(item)}
+                onOpenAll={() => setFilter("all")}
+              />
+              <CategoryQuadCard
+                title="Arbitrage keep"
+                subtitle="Amazon → eBay after fees"
+                items={arb}
+                busyId={busy}
+                selectedId={drop?.id ?? null}
+                onSelect={selectItem}
+                onClaim={(item) => void claim(item)}
+                onOpenAll={() => setFilter("arbitrage")}
+              />
+              <CategoryQuadCard
+                title="Sell on Amazon"
+                subtitle="Keepa demand lane"
+                items={amazon}
+                busyId={busy}
+                selectedId={drop?.id ?? null}
+                onSelect={selectItem}
+                onClaim={(item) => void claim(item)}
+                onOpenAll={() => setFilter("amazon")}
+              />
+              {retail.length > 0 ? (
+                <CategoryQuadCard
+                  title="Retail routes"
+                  subtitle="Walmart & Home Depot"
+                  items={retail}
+                  busyId={busy}
+                  selectedId={drop?.id ?? null}
+                  onSelect={selectItem}
+                  onClaim={(item) => void claim(item)}
+                  onOpenAll={() => setFilter("retail")}
+                />
+              ) : null}
             </div>
 
-            {/* Sticky product detail — comparative pricing */}
-            {drop ? (
-              <aside className="lg:sticky lg:top-16 lg:h-fit lg:self-start">
-                <motion.div
-                  key={drop.id}
-                  initial={reduce ? false : { opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="overflow-hidden border border-[#e4e0d8] bg-white"
-                >
-                  <div className="relative aspect-[4/3] bg-[#f3f0ea]">
-                    {drop.photo ? (
-                      <Image
-                        src={drop.photo}
-                        alt={drop.title}
-                        fill
-                        className="object-contain p-6"
-                        unoptimized
-                      />
-                    ) : null}
-                    <span className="absolute top-3 left-3 bg-[#f4c928] px-2 py-1 text-[10px] font-bold tracking-wide text-[#141414] uppercase">
-                      {drop.lane === "amazon"
-                        ? "Keepa Amazon"
-                        : drop.lane === "retail"
-                          ? "Retail"
-                          : "Arbitrage"}
-                    </span>
-                  </div>
-
-                  <div className="space-y-4 p-5">
-                    <div>
-                      <p className="text-[11px] font-semibold tracking-wide text-[#6b6560] uppercase">
-                        {drop.name} · verified
-                      </p>
-                      <h2 className="mt-1 font-display text-[26px] leading-tight">
-                        {drop.title}
-                      </h2>
-                      <p className="mt-2 text-[13px] leading-relaxed text-[#6b6560]">
-                        {drop.blurb}
-                      </p>
-                    </div>
-
-                    {drop.lane === "amazon" ? (
-                      <div className="space-y-2 border-t border-[#efeae2] pt-4">
-                        <p className="text-[11px] font-semibold tracking-wide text-[#6b6560] uppercase">
-                          Amazon price
-                        </p>
-                        <p className="font-display text-4xl leading-none">
-                          {money(drop.sell)}
-                        </p>
-                        <div className="flex flex-wrap gap-3 text-[13px] text-[#6b6560]">
-                          <span>
-                            Demand{" "}
-                            <strong className="text-[#1f7a4d]">
-                              {drop.demandScore ?? drop.score ?? "—"}
-                            </strong>
-                          </span>
-                          {drop.salesRank != null ? (
-                            <span>
-                              BSR{" "}
-                              <strong>
-                                {drop.salesRank.toLocaleString("en-US")}
-                              </strong>
-                            </span>
-                          ) : null}
-                          {drop.bsrDrops90 != null ? (
-                            <span>
-                              <strong>{drop.bsrDrops90}</strong> drops/90d
-                            </span>
-                          ) : null}
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="space-y-3 border-t border-[#efeae2] pt-4">
-                        <p className="text-[11px] font-semibold tracking-wide text-[#6b6560] uppercase">
-                          Comparative prices
-                        </p>
-                        <PriceDrop
-                          from={drop.comps}
-                          to={drop.sell}
-                          size="lg"
-                        />
-                        <div className="grid grid-cols-3 gap-2">
-                          <div className="border border-[#e4e0d8] px-2 py-2.5 text-center">
-                            <p className="text-[10px] font-semibold tracking-wide text-[#8a847c] uppercase">
-                              Buy
-                            </p>
-                            <p className="mt-1 text-[15px] font-semibold tabular-nums">
-                              {money(drop.buy)}
-                            </p>
-                          </div>
-                          <div className="border border-[#e4e0d8] px-2 py-2.5 text-center">
-                            <p className="text-[10px] font-semibold tracking-wide text-[#8a847c] uppercase">
-                              Sell
-                            </p>
-                            <p className="mt-1 text-[15px] font-semibold tabular-nums">
-                              {money(drop.sell)}
-                            </p>
-                          </div>
-                          <div className="bg-[#141414] px-2 py-2.5 text-center text-white">
-                            <p className="text-[10px] font-semibold tracking-wide text-[#f4c928]/80 uppercase">
-                              You keep
-                            </p>
-                            <p className="mt-1 text-[15px] font-semibold tabular-nums text-[#f4c928]">
-                              {signed(
-                                drop.netProfit ?? marketSpread(drop),
-                              )}
-                            </p>
-                          </div>
-                        </div>
-                        <p className="text-[12px] text-[#6b6560]">
-                          Spread{" "}
-                          <strong className="text-[#141414]">
-                            {money(drop.sell - drop.buy)}
-                          </strong>{" "}
-                          before fees · comps from{" "}
-                          <span className="line-through">
-                            {money(drop.comps)}
-                          </span>
-                        </p>
-                      </div>
-                    )}
-
-                    {drop.asin ? (
-                      <p className="text-[11px] text-[#8a847c]">
-                        ASIN {drop.asin}
-                      </p>
-                    ) : null}
-
-                    <div className="flex flex-col gap-2 pt-1">
-                      <button
-                        type="button"
-                        disabled={busy === drop.id}
-                        onClick={() => void claim(drop)}
-                        className="inline-flex h-12 w-full items-center justify-center gap-2 bg-[#f4c928] text-[14px] font-semibold text-[#141414] disabled:opacity-50"
-                      >
-                        {busy === drop.id ? (
-                          <Loader2 className="size-4 animate-spin" />
-                        ) : (
-                          <Sparkles className="size-4" />
-                        )}
-                        Add to my store
-                      </button>
-                      {drop.asin ? (
-                        <button
-                          type="button"
-                          disabled={busy === `aff-${drop.id}`}
-                          onClick={() => void earnLink(drop)}
-                          className="inline-flex h-11 w-full items-center justify-center gap-2 border border-[#141414] bg-white text-[13px] font-semibold disabled:opacity-50"
-                        >
-                          <ExternalLink className="size-4" />
-                          Earn affiliate link
-                        </button>
-                      ) : null}
-                    </div>
-                  </div>
-                </motion.div>
-              </aside>
+            {/* Horizontal deal carousels */}
+            {filter === "all" || filter === "arbitrage" ? (
+              <DealCarouselRow
+                title={"Keep deals you can't miss"}
+                items={arb.length ? arb : drops.filter((d) => d.lane !== "amazon")}
+                busyId={busy}
+                selectedId={drop?.id ?? null}
+                onSelect={selectItem}
+                onClaim={(item) => void claim(item)}
+                onOpenAll={() => setFilter("arbitrage")}
+              />
             ) : null}
-          </div>
+
+            {filter === "all" || filter === "amazon" ? (
+              <DealCarouselRow
+                title="Sell on Amazon · Keepa picks"
+                items={amazon}
+                busyId={busy}
+                selectedId={drop?.id ?? null}
+                onSelect={selectItem}
+                onClaim={(item) => void claim(item)}
+                onOpenAll={() => setFilter("amazon")}
+              />
+            ) : null}
+
+            {filter === "retail" && retail.length ? (
+              <DealCarouselRow
+                title="Retail routes"
+                items={retail}
+                busyId={busy}
+                selectedId={drop?.id ?? null}
+                onSelect={selectItem}
+                onClaim={(item) => void claim(item)}
+              />
+            ) : null}
+
+            {/* Selected product detail — Amazon product strip */}
+            {drop ? (
+              <section className="grid gap-4 rounded-lg border border-[#d5d9d9] bg-white p-4 shadow-sm md:grid-cols-[200px_1fr_auto] md:items-center md:p-5">
+                <div className="relative mx-auto aspect-square w-full max-w-[200px] overflow-hidden rounded-md bg-[#f7f8f8]">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={drop.photo}
+                    alt=""
+                    className="size-full object-contain p-4"
+                  />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-[12px] font-semibold tracking-wide text-[#565959] uppercase">
+                    {drop.name} · verified
+                  </p>
+                  <h2 className="mt-1 text-[20px] leading-snug font-bold text-[#0f1111] md:text-[22px]">
+                    {drop.title}
+                  </h2>
+                  <div className="mt-3 flex flex-wrap items-baseline gap-2">
+                    <AmazonPrice amount={drop.sell} size="lg" />
+                    {drop.comps > drop.sell ? (
+                      <span className="text-[14px] text-[#565959] line-through">
+                        ${drop.comps.toFixed(2)}
+                      </span>
+                    ) : null}
+                    {drop.lane !== "amazon" &&
+                    (drop.netProfit ?? marketSpread(drop)) > 0 ? (
+                      <span className="text-[14px] font-semibold text-[#067d62]">
+                        You keep{" "}
+                        {signed(drop.netProfit ?? marketSpread(drop))}
+                      </span>
+                    ) : null}
+                  </div>
+                  <p className="mt-2 text-[13px] text-[#565959]">
+                    Amz{" "}
+                    {drop.amazonPrice != null
+                      ? `$${drop.amazonPrice.toFixed(2)}`
+                      : "—"}
+                    {" · "}
+                    eBay{" "}
+                    {drop.ebayPrice != null
+                      ? `$${drop.ebayPrice.toFixed(2)}`
+                      : "—"}
+                    {" · "}
+                    Walmart{" "}
+                    {drop.walmartPrice != null
+                      ? `$${drop.walmartPrice.toFixed(2)}`
+                      : "—"}
+                    {" · "}
+                    HD{" "}
+                    {drop.homedepotPrice != null
+                      ? `$${drop.homedepotPrice.toFixed(2)}`
+                      : "—"}
+                  </p>
+                  {drop.asin ? (
+                    <p className="mt-1 text-[12px] text-[#565959]">
+                      ASIN {drop.asin}
+                    </p>
+                  ) : null}
+                </div>
+                <div className="flex w-full flex-col gap-2 md:w-[200px]">
+                  <button
+                    type="button"
+                    disabled={busy === drop.id}
+                    onClick={() => void claim(drop)}
+                    className="inline-flex h-10 items-center justify-center rounded-full bg-[#ffd814] text-[14px] font-semibold text-[#0f1111] hover:bg-[#f7ca00] disabled:opacity-50"
+                  >
+                    {busy === drop.id ? "Adding…" : "Add to store"}
+                  </button>
+                  {drop.asin ? (
+                    <button
+                      type="button"
+                      disabled={busy === `aff-${drop.id}`}
+                      onClick={() => void earnLink(drop)}
+                      className="inline-flex h-10 items-center justify-center rounded-full border border-[#d5d9d9] bg-white text-[13px] font-semibold hover:bg-[#f7f8f8] disabled:opacity-50"
+                    >
+                      Earn affiliate
+                    </button>
+                  ) : null}
+                  <Link
+                    href="/winners"
+                    className="inline-flex h-9 items-center justify-center gap-1 text-[13px] font-semibold text-[#2162a1] hover:underline"
+                  >
+                    Find more winners
+                    <ChevronRight className="size-4" />
+                  </Link>
+                </div>
+              </section>
+            ) : null}
+          </>
         )}
       </div>
     </div>

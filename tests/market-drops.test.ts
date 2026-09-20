@@ -161,19 +161,16 @@ describe("higlou market + find winners wiring", () => {
       /Higlou Market|Today.?s verified deals/,
     );
     expect(readRepo("components/market/drop-market.tsx")).toMatch(
-      /Comparative prices|You keep/,
+      /Deals for you|CategoryQuadCard|DealCarouselRow/,
     );
-    expect(readRepo("components/market/drop-market.tsx")).toMatch(
-      /MarketTile/,
-    );
-    expect(readRepo("components/market/market-tile.tsx")).toMatch(
+    expect(readRepo("components/market/deal-product-tile.tsx")).toMatch(
       /Add to store/,
     );
-    expect(readRepo("components/market/market-tile.tsx")).toMatch(
-      /aspect-\[5\/4\]/,
+    expect(readRepo("components/market/deal-product-tile.tsx")).toMatch(
+      /% off|AmazonPrice/,
     );
-    expect(readRepo("components/market/market-tile.tsx")).toMatch(
-      /Amazon|eBay|Walmart/,
+    expect(readRepo("components/market/amazon-price.tsx")).toMatch(
+      /AmazonPrice/,
     );
     expect(readRepo("app/api/market/claim/route.ts")).toMatch(
       /dropFromLoose|extractAsin/,

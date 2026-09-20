@@ -1,13 +1,24 @@
 "use client";
 
+import { Suspense } from "react";
 import { AppShell } from "@/components/layout/app-shell";
 import { DropMarketStudio } from "@/components/market/drop-market";
+
+function MarketFallback() {
+  return (
+    <div className="flex min-h-[40vh] items-center justify-center bg-[#f7f5f1] text-[13px] text-[#8a847c]">
+      Cargando Market…
+    </div>
+  );
+}
 
 export default function MarketPage() {
   // Page scroll — Home keeps the locked live-panel shell.
   return (
     <AppShell hideHeader contentClassName="!p-0">
-      <DropMarketStudio />
+      <Suspense fallback={<MarketFallback />}>
+        <DropMarketStudio />
+      </Suspense>
     </AppShell>
   );
 }

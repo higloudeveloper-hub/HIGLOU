@@ -84,6 +84,20 @@ function heatFromProfit(net: number | null): MarketDrop["heat"] {
   return "fresh";
 }
 
+/** Every Market Amazon open carries the Associate tag when configured. */
+export function withAffiliateAmazonLink(
+  drop: MarketDropPublic,
+): MarketDropPublic {
+  if (!drop.affiliateUrl) return drop;
+  return {
+    ...drop,
+    platformUrls: {
+      ...drop.platformUrls,
+      amazon: drop.affiliateUrl,
+    },
+  };
+}
+
 function baseFields(
   hit: OpportunityProduct,
   asin: string,
@@ -146,7 +160,7 @@ export function opportunityToMarketDrop(
       asin || sourceKey,
       associateTag,
     );
-    return {
+    return withAffiliateAmazonLink({
       id: dropId,
       name: brand || hit.sourceMarket,
       title,
@@ -173,7 +187,7 @@ export function opportunityToMarketDrop(
       bsrDrops90: hit.bsrDrops90 ?? null,
       salesRank: hit.avgSalesRank90 ?? hit.salesRank ?? null,
       ...platformQuotes(hit),
-    };
+    });
   }
 
   // Prefer arbitrage drop when ask keep is real; else Keepa Amazon demand / buy velocity.
@@ -192,7 +206,7 @@ export function opportunityToMarketDrop(
       asin,
       associateTag,
     );
-    return {
+    return withAffiliateAmazonLink({
       id: dropId,
       name: brand || "Amazon winner",
       title,
@@ -219,7 +233,7 @@ export function opportunityToMarketDrop(
       bsrDrops90: hit.bsrDrops90 ?? null,
       salesRank: hit.avgSalesRank90 ?? hit.salesRank ?? null,
       ...platformQuotes(hit),
-    };
+    });
   }
 
   const buy =
@@ -250,7 +264,7 @@ export function opportunityToMarketDrop(
     associateTag,
   );
 
-  return {
+  return withAffiliateAmazonLink({
     id: dropId,
     name: brand || "Winner",
     title,
@@ -279,7 +293,7 @@ export function opportunityToMarketDrop(
     bsrDrops90: hit.bsrDrops90 ?? null,
     salesRank: hit.avgSalesRank90 ?? hit.salesRank ?? null,
     ...platformQuotes(hit),
-  };
+  });
 }
 
 /** @deprecated Curated fakes are no longer stocked on Market. */
@@ -292,7 +306,7 @@ export function curatedToPublic(
     drop.asin && tag
       ? buildAmazonAssociatesUrl({ asin: drop.asin, associateTag: tag })
       : null;
-  return {
+  return withAffiliateAmazonLink({
     ...drop,
     source: "curated",
     real: false,
@@ -313,7 +327,7 @@ export function curatedToPublic(
       title: drop.title,
       brand: drop.name,
     }),
-  };
+  });
 }
 
 /**
@@ -337,7 +351,7 @@ export function mergeMarketFeed(opts: {
     const drop = opportunityToMarketDrop(hit, opts.associateTag);
     if (!drop || seen.has(drop.id)) continue;
     seen.add(drop.id);
-    fromLedger.push(drop);
+    fromLedger.push(withAffiliateAmazonLink(drop));
     if (fromLedger.length >= limit) break;
   }
 

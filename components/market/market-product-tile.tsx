@@ -1,7 +1,7 @@
 "use client";
 
 import { motion, useReducedMotion } from "motion/react";
-import { ExternalLink, Store } from "lucide-react";
+import { Banknote, ExternalLink, Store } from "lucide-react";
 import type { MarketDropPublic } from "@/lib/market/from-opportunity";
 import { marketSpread } from "@/lib/market/catalog";
 import { cn } from "@/lib/utils";
@@ -31,21 +31,27 @@ export function MarketProductTile({
   index,
   selected,
   busy,
+  affBusy,
   onOpen,
   onClaim,
+  onEarn,
 }: {
   item: MarketDropPublic;
   index: number;
   selected?: boolean;
   busy?: boolean;
+  affBusy?: boolean;
   onOpen: () => void;
   onClaim: () => void;
+  onEarn?: () => void;
 }) {
   const reduce = useReducedMotion();
   const keep = item.netProfit ?? marketSpread(item);
   const showKeep = item.lane !== "amazon" && keep > 0;
   const demand = item.demandScore ?? item.score ?? 0;
   const signalGood = showKeep ? keep >= 12 : demand >= 55;
+  const amazonHref = item.affiliateUrl || item.platformUrls?.amazon || null;
+  const hasAffiliate = Boolean(item.affiliateUrl);
 
   return (
     <motion.article
@@ -74,7 +80,7 @@ export function MarketProductTile({
             className="size-full object-contain p-4 transition duration-500 group-hover:scale-[1.03]"
             loading="lazy"
           />
-          <div className="absolute top-2.5 left-2.5">
+          <div className="absolute top-2.5 left-2.5 flex flex-wrap gap-1">
             <span
               className={cn(
                 "rounded-full px-2 py-0.5 text-[10px] font-semibold tracking-wide uppercase backdrop-blur-sm",
@@ -87,6 +93,11 @@ export function MarketProductTile({
             >
               {laneLabel(item.lane)}
             </span>
+            {hasAffiliate ? (
+              <span className="rounded-full bg-[#141414]/90 px-2 py-0.5 text-[10px] font-semibold tracking-wide text-[#f4c928] uppercase backdrop-blur-sm">
+                Aff
+              </span>
+            ) : null}
           </div>
           <div
             className={cn(
@@ -145,13 +156,14 @@ export function MarketProductTile({
       </button>
 
       <div className="flex items-center gap-1 border-t border-[#f0ebe3] px-2 py-1.5">
-        {item.platformUrls?.amazon ? (
+        {amazonHref ? (
           <a
-            href={item.platformUrls.amazon}
+            href={amazonHref}
             target="_blank"
             rel="noopener noreferrer"
             onClick={(e) => e.stopPropagation()}
             className="inline-flex h-8 items-center gap-1 rounded-lg px-2 text-[11px] font-semibold text-[#2162a1] hover:bg-[#f0f5fa]"
+            title={hasAffiliate ? "Amazon con tu tag affiliate" : "Abrir Amazon"}
           >
             Amazon
             <ExternalLink className="size-3 opacity-60" />
@@ -168,6 +180,21 @@ export function MarketProductTile({
             eBay
             <ExternalLink className="size-3 opacity-60" />
           </a>
+        ) : null}
+        {onEarn && item.asin ? (
+          <button
+            type="button"
+            disabled={affBusy}
+            onClick={(e) => {
+              e.stopPropagation();
+              onEarn();
+            }}
+            className="inline-flex h-8 items-center gap-1 rounded-lg px-2 text-[11px] font-semibold text-[#1f7a4d] hover:bg-[#e8f5ee] disabled:opacity-40"
+            title="Abrir + copiar link affiliate"
+          >
+            <Banknote className="size-3" />
+            {affBusy ? "…" : "Ganar"}
+          </button>
         ) : null}
         <button
           type="button"

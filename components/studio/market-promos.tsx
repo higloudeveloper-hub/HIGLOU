@@ -77,8 +77,12 @@ export function MarketPromos({
           const active = activeIndex >= 0 && i === activeIndex % lots;
           return (
             <Link
-              key={`${i}-${item.title}`}
-              href="/listings/new"
+              key={item.marketId || item.asin || `${i}-${item.title}`}
+              href={
+                item.marketId
+                  ? `/market?drop=${encodeURIComponent(item.marketId)}`
+                  : "/market"
+              }
               data-ready-sku={i}
               className={cn(
                 "group block bg-white ring-1 transition duration-200",
@@ -103,7 +107,9 @@ export function MarketPromos({
                   <div>
                     <div className="flex items-center justify-between gap-2">
                       <p className="text-[11px] text-[#8a8a8a]">
-                        In stock · {item.supplier}
+                        {item.marketId
+                          ? "Winner verificado · Market"
+                          : `In stock · ${item.supplier}`}
                       </p>
                       {active ? (
                         <span className="text-[11px] font-medium text-[#3665F3]">

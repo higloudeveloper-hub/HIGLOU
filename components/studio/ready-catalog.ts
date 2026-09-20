@@ -9,6 +9,11 @@ export type ReadyListing = {
   comps: number;
   supplier: string;
   ships: string;
+  /** Market drop id when sourced from Find Winners floor */
+  marketId?: string;
+  asin?: string;
+  affiliateUrl?: string | null;
+  keep?: number | null;
 };
 
 export const READY_LISTINGS: readonly ReadyListing[] = [
@@ -113,6 +118,8 @@ export type StoryItem = {
   price: number;
   comps: number;
   photos: readonly string[];
+  /** Deep-link into Market for live winners */
+  marketHref?: string;
 };
 
 export const STORY_CATALOG: StoryItem[] = READY_LISTINGS.map((item) => ({

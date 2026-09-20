@@ -1423,14 +1423,29 @@ export function ListingPipeline({
                 )}
               >
                 {i < filled ? (
-                  <>
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={src}
-                      alt=""
-                      className="absolute inset-0 size-full object-contain p-0.5"
-                    />
-                  </>
+                  item.marketHref ? (
+                    <Link
+                      href={item.marketHref}
+                      className="absolute inset-0 block"
+                      title="Ver en Market"
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={src}
+                        alt=""
+                        className="absolute inset-0 size-full object-contain p-0.5"
+                      />
+                    </Link>
+                  ) : (
+                    <>
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={src}
+                        alt=""
+                        className="absolute inset-0 size-full object-contain p-0.5"
+                      />
+                    </>
+                  )
                 ) : null}
               </motion.div>
             ))
@@ -1451,6 +1466,15 @@ export function ListingPipeline({
                     : "New listing"}
             {!dropMode && draftOn && typing.length < item.title.length ? (
               <span className="ml-0.5 inline-block h-3 w-px animate-pulse bg-[#191919]" />
+            ) : null}
+            {!dropMode && item.marketHref ? (
+              <Link
+                href={item.marketHref}
+                className="ml-2 inline-flex align-middle text-[11px] font-semibold text-[#3665F3] hover:underline"
+                onClick={(e) => e.stopPropagation()}
+              >
+                Market →
+              </Link>
             ) : null}
           </p>
           {descOn ? (

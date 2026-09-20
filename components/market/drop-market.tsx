@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { toast } from "sonner";
 import {
@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { MarketProductTile } from "@/components/market/market-product-tile";
 import { MarketDetailPanel } from "@/components/market/market-detail-panel";
+import { MarketEarnGuide } from "@/components/market/market-earn-guide";
 import {
   mergeMarketFeed,
   type MarketDropPublic,
@@ -52,6 +53,7 @@ function signed(n: number) {
 
 export function DropMarketStudio() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const reduce = useReducedMotion();
   const [drops, setDrops] = useState<MarketDropPublic[]>([]);
   const [note, setNote] = useState(
@@ -67,6 +69,7 @@ export function DropMarketStudio() {
   const [sortKey, setSortKey] = useState<SortKey>("keep");
   const [query, setQuery] = useState("");
   const [profitOnly, setProfitOnly] = useState(false);
+  const [deepLinkDone, setDeepLinkDone] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -135,6 +138,23 @@ export function DropMarketStudio() {
     };
   }, []);
 
+  // Home / promos deep-link: /market?drop=win-ASIN
+  useEffect(() => {
+    if (deepLinkDone || !drops.length) return;
+    const dropId = searchParams.get("drop")?.trim();
+    if (!dropId) {
+      setDeepLinkDone(true);
+      return;
+    }
+    const found = drops.find((d) => d.id === dropId);
+    if (found) {
+      setActiveId(found.id);
+      setPanelOpen(true);
+      setFilter("all");
+    }
+    setDeepLinkDone(true);
+  }, [drops, searchParams, deepLinkDone]);
+
   const arb = useMemo(
     () => drops.filter((d) => d.lane === "arbitrage"),
     [drops],
@@ -192,7 +212,9 @@ export function DropMarketStudio() {
   }, [drops, filter, query, profitOnly, sortKey]);
 
   const active =
-    filtered.find((d) => d.id === activeId) ?? null;
+    filtered.find((d) => d.id === activeId) ??
+    drops.find((d) => d.id === activeId) ??
+    null;
 
   const openKeep = useMemo(
     () =>
@@ -276,16 +298,22 @@ export function DropMarketStudio() {
     [router],
   );
 
+  /** One click: open tagged Amazon + copy shareable link. Single toast. */
   const earnLink = useCallback(async (item: MarketDropPublic) => {
     if (!item.asin) {
       toast.message("Necesitas ASIN — corre Find Winners");
       return;
     }
     setBusy(`aff-${item.id}`);
+    const tagged =
+      item.affiliateUrl ||
+      item.platformUrls?.amazon ||
+      null;
     try {
-      if (item.affiliateUrl) {
-        window.open(item.affiliateUrl, "_blank", "noopener,noreferrer");
+      if (tagged) {
+        window.open(tagged, "_blank", "noopener,noreferrer");
       }
+
       const res = await fetch("/api/money/affiliate/links", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -300,26 +328,40 @@ export function DropMarketStudio() {
         error?: string;
         link?: { destinationUrl?: string };
         smartLink?: { path?: string };
-        warnings?: string[];
       };
+
       if (!res.ok) {
-        if (!item.affiliateUrl) {
-          toast.error(body.error || "Affiliate falló — revisa tag en Settings");
+        if (tagged) {
+          toast.success("Amazon abierto con tu link affiliate");
+        } else {
+          toast.error(body.error || "Configura Associate tag en Settings");
         }
         return;
       }
-      toast.success("Link affiliate listo");
-      body.warnings?.slice(0, 1).forEach((w) => toast.message(w));
-      if (body.smartLink?.path) {
-        await navigator.clipboard?.writeText(
-          `${window.location.origin}${body.smartLink.path}`,
-        );
-        toast.message("Smart link copiado");
-      } else if (body.link?.destinationUrl) {
-        await navigator.clipboard?.writeText(body.link.destinationUrl);
+
+      const copyText = body.smartLink?.path
+        ? `${window.location.origin}${body.smartLink.path}`
+        : body.link?.destinationUrl || tagged;
+
+      if (copyText) {
+        try {
+          await navigator.clipboard?.writeText(copyText);
+        } catch {
+          /* clipboard optional */
+        }
       }
+
+      toast.success(
+        tagged
+          ? "Listo · Amazon abierto · link copiado"
+          : "Link affiliate listo · copiado",
+      );
     } catch {
-      toast.error("Affiliate falló");
+      if (tagged) {
+        toast.success("Amazon abierto con tu link affiliate");
+      } else {
+        toast.error("Affiliate falló");
+      }
     } finally {
       setBusy(null);
     }
@@ -366,8 +408,8 @@ export function DropMarketStudio() {
                 transition={{ delay: 0.1 }}
                 className="mt-2 max-w-lg text-[14px] leading-relaxed text-[#6b6560]"
               >
-                Deals listos para ganar: compara precios, busca más barato,
-                ponlos en tu tienda o cobra affiliate.
+                Cada winner ya trae tu link affiliate. Comparte, vende o busca
+                más barato — gana con clicks simples.
               </motion.p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
@@ -430,8 +472,8 @@ export function DropMarketStudio() {
           </div>
           <p className="mt-2 text-[12px] text-[#8a847c]">
             {tagReady
-              ? "Affiliate listo · links de dinero activos"
-              : "Tip: configura affiliate tag en Settings para ganar por click"}
+              ? "Affiliate activo · cada Amazon abre con tu tag"
+              : "Tip: configura Associate tag en Settings → Money"}
             {note ? ` · ${note}` : ""}
             {ledgerCount > 0 ? ` · ledger ${ledgerCount}` : ""}
           </p>
@@ -490,6 +532,10 @@ export function DropMarketStudio() {
       </div>
 
       <div className="mx-auto max-w-6xl px-4 py-6 pb-16 md:px-8">
+        {drops.length > 0 ? (
+          <MarketEarnGuide tagReady={tagReady} className="mb-6" />
+        ) : null}
+
         {drops.length === 0 ? (
           <motion.div
             initial={reduce ? false : { opacity: 0, y: 12 }}
@@ -508,7 +554,7 @@ export function DropMarketStudio() {
                 </p>
                 <p className="mt-3 text-[14px] leading-relaxed text-[#6b6560]">
                   Escanea winners primero. Cada oportunidad verificada llega
-                  aquí lista para tienda, comparar y ganar.
+                  aquí con link affiliate listo.
                 </p>
                 <Link
                   href="/winners"
@@ -548,8 +594,10 @@ export function DropMarketStudio() {
                     index={index}
                     selected={panelOpen && active?.id === item.id}
                     busy={busy === item.id}
+                    affBusy={busy === `aff-${item.id}`}
                     onOpen={() => openItem(item)}
                     onClaim={() => void claim(item)}
+                    onEarn={() => void earnLink(item)}
                   />
                 </li>
               ))}
@@ -562,6 +610,7 @@ export function DropMarketStudio() {
         item={panelOpen ? active : null}
         busy={busy === active?.id}
         affBusy={busy === `aff-${active?.id}`}
+        tagReady={tagReady}
         onClose={() => setPanelOpen(false)}
         onClaim={() => {
           if (active) void claim(active);

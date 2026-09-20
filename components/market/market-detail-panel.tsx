@@ -55,6 +55,7 @@ export function MarketDetailPanel({
   item,
   busy,
   affBusy,
+  tagReady,
   onClose,
   onClaim,
   onEarn,
@@ -62,6 +63,7 @@ export function MarketDetailPanel({
   item: MarketDropPublic | null;
   busy?: boolean;
   affBusy?: boolean;
+  tagReady?: boolean;
   onClose: () => void;
   onClaim: () => void;
   onEarn: () => void;
@@ -71,15 +73,17 @@ export function MarketDetailPanel({
   const keep = item ? item.netProfit ?? marketSpread(item) : 0;
   const showKeep = item?.lane !== "amazon" && keep > 0;
   const lane = item ? laneCopy(item.lane) : null;
+  const amazonHref =
+    item?.affiliateUrl || item?.platformUrls?.amazon || null;
 
   const comps = item
     ? [
         {
           key: "amazon",
-          label: "Amazon",
+          label: item.affiliateUrl ? "Amazon · Aff" : "Amazon",
           price: item.amazonPrice ?? (item.lane === "amazon" ? item.sell : item.buy),
           role: item.lane === "amazon" ? "Venta" : "Compra",
-          href: item.platformUrls?.amazon,
+          href: amazonHref,
         },
         {
           key: "ebay",
@@ -253,34 +257,43 @@ export function MarketDetailPanel({
                 </div>
               </section>
 
-              {/* Money actions */}
-              <section className="grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={onClaim}
-                  className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-[#141414] text-[13px] font-semibold text-white hover:bg-[#2a2a2a] disabled:opacity-40"
-                >
-                  {busy ? (
-                    <Loader2 className="size-4 animate-spin" />
-                  ) : (
-                    <Store className="size-4" />
-                  )}
-                  {busy ? "Agregando…" : "A mi tienda"}
-                </button>
-                <button
-                  type="button"
-                  disabled={affBusy || !item.asin}
-                  onClick={onEarn}
-                  className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-[#ddd7cd] bg-white text-[13px] font-semibold text-[#141414] hover:border-[#141414] disabled:opacity-40"
-                >
-                  {affBusy ? (
-                    <Loader2 className="size-4 animate-spin" />
-                  ) : (
-                    <Banknote className="size-4" />
-                  )}
-                  Ganar affiliate
-                </button>
+              {/* Money actions — 2 clear clicks */}
+              <section className="space-y-2">
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={onClaim}
+                    className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-[#141414] text-[13px] font-semibold text-white hover:bg-[#2a2a2a] disabled:opacity-40"
+                  >
+                    {busy ? (
+                      <Loader2 className="size-4 animate-spin" />
+                    ) : (
+                      <Store className="size-4" />
+                    )}
+                    {busy ? "Agregando…" : "A mi tienda"}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={affBusy || !item.asin}
+                    onClick={onEarn}
+                    className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-[#1f7a4d] text-[13px] font-semibold text-white hover:bg-[#196640] disabled:opacity-40"
+                  >
+                    {affBusy ? (
+                      <Loader2 className="size-4 animate-spin" />
+                    ) : (
+                      <Banknote className="size-4" />
+                    )}
+                    {item.affiliateUrl || tagReady
+                      ? "1 click · Ganar"
+                      : "Ganar affiliate"}
+                  </button>
+                </div>
+                <p className="text-[11px] leading-relaxed text-[#8a847c]">
+                  {item.affiliateUrl || tagReady
+                    ? "Abre Amazon con tu tag y copia el link para compartir. Comisión real vía Associates."
+                    : "Configura tu Associate tag en Settings → Money para activar links en cada producto."}
+                </p>
               </section>
 
               <CheapSourcePanel

@@ -147,6 +147,9 @@ describe("platform winners", () => {
       "https://www.amazon.com/dp/B0GOOD0001",
     );
     expect(arbDrop?.platformUrls.ebay).toMatch(/ebay\.com/);
+    const tagged = opportunityToMarketDrop(arb, "higlou-20");
+    expect(tagged?.affiliateUrl).toContain("tag=higlou-20");
+    expect(tagged?.platformUrls.amazon).toContain("tag=higlou-20");
   });
 
   it("sorts by keep", () => {
@@ -166,7 +169,19 @@ describe("higlou market + find winners wiring", () => {
       /Higlou · Floor verificado|Market/,
     );
     expect(readRepo("components/market/drop-market.tsx")).toMatch(
-      /MarketProductTile|MarketDetailPanel|A mi tienda|Ganar affiliate/,
+      /MarketProductTile|MarketDetailPanel|A mi tienda|Ganar affiliate|MarketEarnGuide|1 click/,
+    );
+    expect(readRepo("components/market/market-earn-guide.tsx")).toMatch(
+      /3 formas de hacer dinero/,
+    );
+    expect(readRepo("lib/market/home-winners.ts")).toMatch(
+      /marketDropsToReadyListings/,
+    );
+    expect(readRepo("components/studio/money-machine-home.tsx")).toMatch(
+      /marketDropsToReadyListings|\/market\?drop=/,
+    );
+    expect(readRepo("lib/market/from-opportunity.ts")).toMatch(
+      /withAffiliateAmazonLink/,
     );
     expect(readRepo("components/market/market-product-tile.tsx")).toMatch(
       /Tienda/,

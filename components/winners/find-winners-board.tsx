@@ -7,7 +7,6 @@ import {
   Loader2,
   Search,
   Store,
-  ArrowRight,
   Sparkles,
   Trash2,
 } from "lucide-react";
@@ -370,189 +369,146 @@ export function FindWinnersBoard({
   const scanning = searching || generalScanning;
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col bg-[#f6f4ef] text-[#141414]">
-      <header className="shrink-0 border-b border-[#e4e0d8] bg-[#141414] px-5 py-5 text-white md:px-8">
-        <p className="font-display text-[13px] tracking-[0.2em] text-[#f4c928] uppercase">
-          Higlou
-        </p>
-        <div className="mt-1 flex flex-wrap items-end justify-between gap-4">
-          <div>
-            <h1 className="font-display text-3xl leading-none md:text-4xl">
+    <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-[#f6f4ef] text-[#141414]">
+      {/* Compact chrome — results must own the viewport */}
+      <header className="shrink-0 border-b border-[#e4e0d8] bg-[#141414] px-4 py-3 text-white md:px-6">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="min-w-0">
+            <p className="font-display text-[11px] tracking-[0.18em] text-[#f4c928] uppercase">
+              Higlou
+            </p>
+            <h1 className="font-display text-2xl leading-none md:text-[28px]">
               Find Winners
             </h1>
-            <p className="mt-2 max-w-xl text-[14px] text-white/65">
-              Scan real opportunities, see every platform price and your profit,
-              then decide what to import.
-            </p>
           </div>
-          <Link
-            href="/market"
-            className="inline-flex h-10 items-center gap-2 bg-[#f4c928] px-4 text-[13px] font-semibold text-[#141414]"
-          >
-            <Store className="size-4" />
-            Open Market
-            <ArrowRight className="size-4" />
-          </Link>
-        </div>
-
-        <div className="mt-5 space-y-3">
-          <p className="text-[11px] font-semibold tracking-[0.16em] text-white/50 uppercase">
-            Buy → Sell route
-          </p>
-          <div className="flex flex-wrap gap-2">
-            {WINNER_ROUTES.map((row) => (
-              <button
-                key={row.id}
-                type="button"
-                onClick={() => setMode(row.id)}
-                className={cn(
-                  "h-9 px-3 text-[12px] font-semibold",
-                  mode === row.id
-                    ? "bg-[#f4c928] text-[#141414]"
-                    : "bg-white/10 text-white/80 hover:bg-white/15",
-                )}
-                title={row.hint}
-              >
-                {row.buy} → {row.sell}
-              </button>
-            ))}
-          </div>
-          <p className="text-[12px] text-white/55">
-            {route.label} · {route.hint}
-          </p>
-        </div>
-
-        {!retail ? (
-          <div className="mt-5 flex flex-wrap items-end gap-3 border-t border-white/10 pt-5">
-            <label className="w-28">
-              <span className="mb-1 block text-[11px] font-semibold tracking-wide text-white/50 uppercase">
-                How many
-              </span>
-              <select
-                value={limit}
-                onChange={(e) => setLimit(Number(e.target.value))}
-                disabled={locked || scanning}
-                className="h-12 w-full border border-white/20 bg-white/10 px-3 text-[14px] text-white outline-none focus:border-[#f4c928]"
-              >
-                {AMAZON_WINNER_LIMITS.map((n) => (
-                  <option key={n} value={n} className="text-[#141414]">
-                    {n}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <button
-              type="button"
-              disabled={locked || scanning}
-              onClick={() => void scanGeneral()}
-              className="inline-flex h-12 flex-1 items-center justify-center gap-2 bg-[#f4c928] px-6 text-[14px] font-semibold text-[#141414] disabled:opacity-40 sm:flex-none sm:min-w-[240px]"
+          <div className="flex flex-wrap items-center gap-2">
+            {!retail ? (
+              <>
+                <select
+                  value={limit}
+                  onChange={(e) => setLimit(Number(e.target.value))}
+                  disabled={locked || scanning}
+                  aria-label="How many"
+                  className="h-9 border border-white/20 bg-white/10 px-2 text-[13px] text-white outline-none"
+                >
+                  {AMAZON_WINNER_LIMITS.map((n) => (
+                    <option key={n} value={n} className="text-[#141414]">
+                      {n}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  disabled={locked || scanning}
+                  onClick={() => void scanGeneral()}
+                  className="inline-flex h-9 items-center gap-1.5 bg-[#f4c928] px-3 text-[13px] font-semibold text-[#141414] disabled:opacity-40"
+                >
+                  {generalScanning ? (
+                    <Loader2 className="size-3.5 animate-spin" />
+                  ) : (
+                    <Sparkles className="size-3.5" />
+                  )}
+                  Find {limit} real
+                </button>
+              </>
+            ) : null}
+            <Link
+              href="/market"
+              className="inline-flex h-9 items-center gap-1.5 border border-white/20 px-3 text-[13px] font-semibold text-white hover:bg-white/10"
             >
-              {generalScanning ? (
-                <>
-                  <Loader2 className="size-4 animate-spin" />
-                  Finding {limit} real…
-                </>
-              ) : (
-                <>
-                  <Sparkles className="size-4" />
-                  Find {limit} real opportunities
-                </>
-              )}
-            </button>
-            <p className="w-full text-[12px] text-white/50 sm:w-auto sm:max-w-xs">
-              Keepa + eBay + Walmart + Home Depot prices shown on each card.
-            </p>
+              <Store className="size-3.5" />
+              Market
+            </Link>
           </div>
-        ) : null}
+        </div>
+
+        <div className="mt-3 flex gap-1.5 overflow-x-auto pb-0.5">
+          {WINNER_ROUTES.map((row) => (
+            <button
+              key={row.id}
+              type="button"
+              onClick={() => setMode(row.id)}
+              className={cn(
+                "h-8 shrink-0 px-2.5 text-[11px] font-semibold whitespace-nowrap",
+                mode === row.id
+                  ? "bg-[#f4c928] text-[#141414]"
+                  : "bg-white/10 text-white/80 hover:bg-white/15",
+              )}
+              title={row.hint}
+            >
+              {row.buy} → {row.sell}
+            </button>
+          ))}
+        </div>
       </header>
 
-      <div className="shrink-0 border-b border-[#e4e0d8] bg-white px-5 py-4 md:px-8">
+      <div className="shrink-0 border-b border-[#e4e0d8] bg-white px-4 py-2.5 md:px-6">
         <form
-          className="flex flex-col gap-3 lg:flex-row lg:items-end"
+          className="flex flex-col gap-2 sm:flex-row sm:items-center"
           onSubmit={(e) => {
             e.preventDefault();
             void find();
           }}
         >
-          <label className="min-w-0 flex-1">
-            <span className="mb-1 block text-[11px] font-semibold tracking-wide text-[#6b6560] uppercase">
-              Product {retail ? "(required for retail)" : "(optional)"}
-            </span>
-            <input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder={
-                retail
-                  ? "cable organizer, drill bit, ASIN, UPC…"
-                  : "cable organizer, ASIN, or Amazon link"
-              }
-              disabled={locked || scanning}
-              className="h-12 w-full border border-[#d5d0c8] bg-[#fbfaf7] px-3 text-[15px] outline-none focus:border-[#141414]"
-            />
-          </label>
-          <label className="w-full lg:w-56">
-            <span className="mb-1 block text-[11px] font-semibold tracking-wide text-[#6b6560] uppercase">
-              Filter (optional)
-            </span>
-            <select
-              value={categoryId}
-              onChange={(e) => setCategoryId(e.target.value)}
-              disabled={locked || scanning}
-              className="h-12 w-full border border-[#d5d0c8] bg-[#fbfaf7] px-3 text-[14px] outline-none focus:border-[#141414]"
-            >
-              {AMAZON_WINNER_CATEGORIES.map((row) => (
-                <option key={row.id} value={row.id}>
-                  {row.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="w-full lg:w-28">
-            <span className="mb-1 block text-[11px] font-semibold tracking-wide text-[#6b6560] uppercase">
-              How many
-            </span>
-            <select
-              value={limit}
-              onChange={(e) => setLimit(Number(e.target.value))}
-              disabled={locked || scanning}
-              className="h-12 w-full border border-[#d5d0c8] bg-[#fbfaf7] px-3 text-[14px] outline-none focus:border-[#141414]"
-            >
-              {AMAZON_WINNER_LIMITS.map((n) => (
-                <option key={n} value={n}>
-                  {n}
-                </option>
-              ))}
-            </select>
-          </label>
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder={
+              retail
+                ? "Product, ASIN, UPC…"
+                : "Product, ASIN, or Amazon link (optional)"
+            }
+            disabled={locked || scanning}
+            className="h-10 min-w-0 flex-1 border border-[#d5d0c8] bg-[#fbfaf7] px-3 text-[14px] outline-none focus:border-[#141414]"
+          />
+          <select
+            value={categoryId}
+            onChange={(e) => setCategoryId(e.target.value)}
+            disabled={locked || scanning}
+            className="h-10 w-full border border-[#d5d0c8] bg-[#fbfaf7] px-2 text-[13px] outline-none sm:w-44"
+          >
+            {AMAZON_WINNER_CATEGORIES.map((row) => (
+              <option key={row.id} value={row.id}>
+                {row.label}
+              </option>
+            ))}
+          </select>
+          <select
+            value={limit}
+            onChange={(e) => setLimit(Number(e.target.value))}
+            disabled={locked || scanning}
+            className="h-10 w-full border border-[#d5d0c8] bg-[#fbfaf7] px-2 text-[13px] outline-none sm:w-20"
+          >
+            {AMAZON_WINNER_LIMITS.map((n) => (
+              <option key={n} value={n}>
+                {n}
+              </option>
+            ))}
+          </select>
           <button
             type="submit"
             disabled={locked || scanning}
-            className="inline-flex h-12 items-center justify-center gap-2 bg-[#141414] px-6 text-[14px] font-semibold text-white disabled:opacity-40"
+            className="inline-flex h-10 items-center justify-center gap-1.5 bg-[#141414] px-4 text-[13px] font-semibold text-white disabled:opacity-40"
           >
             {searching ? (
-              <>
-                <Loader2 className="size-4 animate-spin" />
-                Scanning…
-              </>
+              <Loader2 className="size-3.5 animate-spin" />
             ) : (
-              <>
-                <Search className="size-4" />
-                Scan winners
-              </>
+              <Search className="size-3.5" />
             )}
+            Scan
           </button>
         </form>
-        <div className="mt-3 flex flex-wrap gap-4 text-[12px] text-[#6b6560]">
+        <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[12px] text-[#6b6560]">
           <span>
             <strong className="text-[#141414]">{winners.length}</strong> verified
           </span>
           {justFound > 0 ? (
             <span className="font-semibold text-[#1f7a4d]">
-              {justFound} new this scan — decide below
+              {justFound} new — scroll to decide
             </span>
           ) : null}
           <span>
-            {demandLane ? "Demand sum " : "Pipeline keep "}
+            {demandLane ? "Demand " : "Keep "}
             <strong className="text-[#141414]">
               {demandLane ? Math.round(totalKeep) : signed(totalKeep)}
             </strong>
@@ -562,26 +518,23 @@ export function FindWinnersBoard({
           {sources?.retailSearch ? (
             <span className="text-[#1f7a4d]">Retail</span>
           ) : null}
-          {sources?.amazonCatalog ? (
-            <span className="text-[#1f7a4d]">Amazon</span>
-          ) : null}
           {error ? <span className="text-[#b42318]">{error}</span> : null}
         </div>
       </div>
 
       <div
         ref={resultsRef}
-        className="min-h-0 flex-1 overflow-y-auto px-5 py-5 md:px-8"
+        className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 md:px-6"
       >
         {winners.length === 0 ? (
-          <div className="mx-auto flex min-h-[320px] max-w-lg flex-col items-center justify-center text-center">
+          <div className="mx-auto flex min-h-[220px] max-w-lg flex-col items-center justify-center py-10 text-center">
             <p className="font-display text-2xl text-[#141414]">
               No verified winners yet
             </p>
             <p className="mt-2 text-[14px] leading-relaxed text-[#6b6560]">
-              Tap <strong>Find real opportunities</strong> (limit 1–5). Each
-              result shows Amazon / eBay / Walmart / Home Depot prices and your
-              profit so you can decide right here.
+              Tap <strong>Find {limit} real</strong>. Each result shows Amazon /
+              eBay / Walmart / Home Depot prices and your profit so you can
+              decide right here.
             </p>
             {!retail ? (
               <button
@@ -595,7 +548,7 @@ export function FindWinnersBoard({
                 ) : (
                   <Sparkles className="size-4" />
                 )}
-                Find {limit} real opportunities
+                Find {limit} real
               </button>
             ) : null}
           </div>
@@ -795,7 +748,7 @@ export function FindWinnersBoard({
         )}
       </div>
 
-      <div className="sticky bottom-0 shrink-0 border-t border-[#e4e0d8] bg-white px-5 py-3 md:px-8">
+      <div className="shrink-0 border-t border-[#e4e0d8] bg-white px-4 py-2.5 md:px-6">
         <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-3">
           <p className="text-[13px] text-[#6b6560]">
             {selected.length
@@ -806,7 +759,7 @@ export function FindWinnersBoard({
             type="button"
             disabled={locked || !selected.length}
             onClick={() => void importSelected()}
-            className="h-11 bg-[#f4c928] px-6 text-[14px] font-semibold text-[#141414] disabled:opacity-40"
+            className="h-10 bg-[#f4c928] px-5 text-[13px] font-semibold text-[#141414] disabled:opacity-40"
           >
             {importing && !importingId
               ? "Analyzing platforms…"

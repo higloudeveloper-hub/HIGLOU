@@ -39,14 +39,24 @@ export function AppShell({
   const [mobileOpen, setMobileOpen] = useState(false);
 
   return (
-    <div className="flex min-h-screen bg-background">
-      <div className="sticky top-0 hidden h-screen md:block">
+    <div
+      className={cn(
+        "flex bg-background",
+        flush ? "h-dvh min-h-0 overflow-hidden" : "min-h-dvh",
+      )}
+    >
+      <div
+        className={cn(
+          "sticky top-0 hidden md:block",
+          flush ? "h-dvh" : "h-screen",
+        )}
+      >
         <AppSidebar />
       </div>
       <div
         className={cn(
           "flex min-w-0 flex-1 flex-col",
-          flush && "md:h-dvh md:overflow-hidden",
+          flush && "min-h-0 overflow-hidden",
         )}
       >
         <div className="sticky top-0 z-30 flex items-center gap-3 border-b border-border/70 bg-background/90 px-4 py-3 backdrop-blur-md md:hidden">
@@ -103,9 +113,9 @@ export function AppShell({
         ) : null}
         <main
           className={cn(
-            "flex-1",
+            "min-h-0 flex-1",
             flush
-              ? "flex min-h-0 flex-col p-0"
+              ? "flex flex-col overflow-hidden p-0"
               : hideHeader
                 ? "px-5 pt-6 pb-16 sm:px-10 sm:pt-10"
                 : "px-5 pt-2 pb-16 sm:px-10",

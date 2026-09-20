@@ -55,7 +55,7 @@ export function CategoryQuadCard({
         <ChevronRight className="mt-1 size-5 shrink-0 text-[#0f1111]" />
       </button>
 
-      <div className="grid grid-cols-2 gap-3 overflow-visible">
+      <div className="grid grid-cols-2 gap-3 p-0.5">
         {quad.map((item) => (
           <DealProductTile
             key={item.id}

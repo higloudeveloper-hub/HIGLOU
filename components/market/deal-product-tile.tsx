@@ -3,7 +3,6 @@
 import type { MarketDropPublic } from "@/lib/market/from-opportunity";
 import { marketSpread } from "@/lib/market/catalog";
 import { AmazonPrice, dealOffPercent } from "@/components/market/amazon-price";
-import { PlatformOpenLinks } from "@/components/opportunity/platform-open-links";
 import { cn } from "@/lib/utils";
 
 function dealLabel(item: MarketDropPublic): string {
@@ -150,10 +149,6 @@ export function DealProductTile({
           />
         </p>
       </button>
-
-      {variant === "quad" ? (
-        <PlatformOpenLinks className="mt-2" size="sm" urls={urls} />
-      ) : null}
 
       <button
         type="button"

@@ -139,12 +139,14 @@ export function DropMarketStudio() {
     () => drops.filter((d) => d.lane === "retail"),
     [drops],
   );
-  // Deals for you always + only lanes that have stock (no blank middle column)
-  const visibleLanes =
-    1 +
+  // Deals for you always. Extra lane cards only when ≥2 lane types have stock
+  // (avoids empty middle column + duplicate Amazon-only twin columns).
+  const laneTypesWithStock =
     (arb.length > 0 ? 1 : 0) +
     (amazon.length > 0 ? 1 : 0) +
     (retail.length > 0 ? 1 : 0);
+  const showLaneCards = laneTypesWithStock >= 2;
+  const visibleLanes = 1 + (showLaneCards ? laneTypesWithStock : 0);
   const filtered = useMemo(() => {
     if (filter === "all") return drops;
     return drops.filter((d) => d.lane === filter);
@@ -393,7 +395,7 @@ export function DropMarketStudio() {
                 onClaim={(item) => void claim(item)}
                 onOpenAll={() => setFilter("all")}
               />
-              {arb.length > 0 ? (
+              {showLaneCards && arb.length > 0 ? (
                 <CategoryQuadCard
                   title="Arbitrage keep"
                   subtitle="Amazon → eBay after fees"
@@ -405,7 +407,7 @@ export function DropMarketStudio() {
                   onOpenAll={() => setFilter("arbitrage")}
                 />
               ) : null}
-              {amazon.length > 0 ? (
+              {showLaneCards && amazon.length > 0 ? (
                 <CategoryQuadCard
                   title="Sell on Amazon"
                   subtitle="Keepa demand lane"
@@ -417,7 +419,7 @@ export function DropMarketStudio() {
                   onOpenAll={() => setFilter("amazon")}
                 />
               ) : null}
-              {retail.length > 0 ? (
+              {showLaneCards && retail.length > 0 ? (
                 <CategoryQuadCard
                   title="Retail routes"
                   subtitle="Walmart & Home Depot"

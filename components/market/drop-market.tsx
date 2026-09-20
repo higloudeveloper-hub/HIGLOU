@@ -532,9 +532,7 @@ export function DropMarketStudio() {
       </div>
 
       <div className="mx-auto max-w-6xl px-4 py-6 pb-16 md:px-8">
-        {drops.length > 0 ? (
-          <MarketEarnGuide tagReady={tagReady} className="mb-6" />
-        ) : null}
+        <MarketEarnGuide tagReady={tagReady} className="mb-6" />
 
         {drops.length === 0 ? (
           <motion.div

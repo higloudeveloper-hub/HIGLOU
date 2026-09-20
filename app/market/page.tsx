@@ -6,7 +6,7 @@ import { DropMarketStudio } from "@/components/market/drop-market";
 
 function MarketFallback() {
   return (
-    <div className="flex min-h-[40vh] items-center justify-center bg-[#f7f5f1] text-[13px] text-[#8a847c]">
+    <div className="flex min-h-[40vh] items-center justify-center bg-[#f7f7f7] text-[13px] text-[#8a8a8a]">
       Cargando Market…
     </div>
   );

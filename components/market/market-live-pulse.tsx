@@ -1,22 +1,17 @@
 "use client";
 
 import { motion, useReducedMotion } from "motion/react";
-import { Activity, Radar } from "lucide-react";
 import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 
 const BEATS = [
-  "Escaneando Keepa en vivo",
-  "Verificando BSR y Buy Box",
-  "Filtrando margen real",
-  "Marcando winners verificados",
-  "Buscando demanda en Amazon",
+  "Escaneando Keepa",
+  "Verificando Buy Box",
+  "Filtrando keep real",
+  "Marcando winners",
 ] as const;
 
-/**
- * Credible live-machine pulse — soft status, not neon spam.
- * Communicates Higlou is actively hunting opportunities.
- */
+/** Soft live status — Home-style blue, no dark neon. */
 export function MarketLivePulse({
   refreshing,
   floorCount,
@@ -33,70 +28,44 @@ export function MarketLivePulse({
     if (reduce) return;
     const id = window.setInterval(() => {
       setBeat((n) => (n + 1) % BEATS.length);
-    }, 2800);
+    }, 2600);
     return () => window.clearInterval(id);
   }, [reduce]);
 
   return (
     <div
       className={cn(
-        "relative overflow-hidden rounded-2xl border border-[#ebe7e0] bg-[#141414] text-white",
+        "flex flex-wrap items-center gap-3 rounded-xl bg-[#3665F3] px-4 py-2.5 text-white",
         className,
       )}
     >
-      {!reduce ? (
-        <motion.div
-          aria-hidden
-          className="pointer-events-none absolute inset-y-0 w-1/3 bg-gradient-to-r from-transparent via-white/8 to-transparent"
-          animate={{ left: ["-30%", "120%"] }}
-          transition={{ duration: 3.6, repeat: Infinity, ease: "linear" }}
-        />
-      ) : null}
-      <div className="relative flex flex-wrap items-center gap-3 px-4 py-3 sm:px-5">
-        <div className="flex items-center gap-2">
-          <span className="relative flex size-2.5">
-            {!reduce ? (
-              <span className="absolute inline-flex size-full animate-ping rounded-full bg-[#f4c928]/50" />
-            ) : null}
-            <span className="relative inline-flex size-2.5 rounded-full bg-[#f4c928]" />
-          </span>
-          <Radar className="size-3.5 text-[#f4c928]" />
-          <p className="text-[11px] font-semibold tracking-[0.14em] text-[#f4c928] uppercase">
-            Opportunity machine
-          </p>
-        </div>
-        <div className="min-w-0 flex-1">
-          <AnimateBeat key={beat} text={BEATS[beat]!} reduce={Boolean(reduce)} />
-        </div>
-        <div className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-2.5 py-1 text-[11px] text-white/80">
-          <Activity className="size-3 text-[#7ddea8]" />
-          {refreshing ? "Sync…" : `${floorCount} verificados`}
-        </div>
+      <span className="relative flex size-2">
+        {!reduce ? (
+          <span className="absolute inline-flex size-full animate-ping rounded-full bg-white/50" />
+        ) : null}
+        <span className="relative size-2 rounded-full bg-white" />
+      </span>
+      <p className="text-[11px] font-semibold tracking-[0.16em] uppercase">
+        Live
+      </p>
+      <div className="min-w-0 flex-1">
+        {reduce ? (
+          <p className="truncate text-[13px] text-white/90">{BEATS[beat]}</p>
+        ) : (
+          <motion.p
+            key={beat}
+            initial={{ opacity: 0, y: 4 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.28 }}
+            className="truncate text-[13px] text-white/90"
+          >
+            {BEATS[beat]}
+          </motion.p>
+        )}
       </div>
+      <span className="rounded-full bg-white/15 px-2.5 py-1 text-[11px] font-medium text-white/90">
+        {refreshing ? "Sync…" : `${floorCount} en floor`}
+      </span>
     </div>
-  );
-}
-
-function AnimateBeat({
-  text,
-  reduce,
-}: {
-  text: string;
-  reduce: boolean;
-}) {
-  if (reduce) {
-    return <p className="truncate text-[13px] text-white/90">{text}</p>;
-  }
-  return (
-    <motion.p
-      initial={{ opacity: 0, y: 6 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0 }}
-      transition={{ duration: 0.35 }}
-      className="truncate text-[13px] text-white/90"
-    >
-      {text}
-      <span className="ml-1 text-white/40">· datos reales Keepa</span>
-    </motion.p>
   );
 }

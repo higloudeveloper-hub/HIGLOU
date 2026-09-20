@@ -8,7 +8,6 @@ import { toast } from "sonner";
 import {
   Loader2,
   Search,
-  ShieldCheck,
   Sparkles,
 } from "lucide-react";
 import { MarketProductTile } from "@/components/market/market-product-tile";
@@ -57,11 +56,7 @@ export function DropMarketStudio() {
   const searchParams = useSearchParams();
   const reduce = useReducedMotion();
   const [drops, setDrops] = useState<MarketDropPublic[]>([]);
-  const [note, setNote] = useState(
-    "Market se llena con winners verificados de Find Winners.",
-  );
   const [tagReady, setTagReady] = useState(false);
-  const [ledgerCount, setLedgerCount] = useState(0);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [panelOpen, setPanelOpen] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
@@ -74,20 +69,12 @@ export function DropMarketStudio() {
 
   useEffect(() => {
     let alive = true;
-    const emptyNote =
-      "Market vacío hasta que Find Winners verifique arbitraje o demanda Amazon.";
 
     const local = localVerifiedDrops();
     if (local.length) {
       setDrops(local);
-      setLedgerCount(local.length);
-      setNote(
-        `${local.length} winner${local.length === 1 ? "" : "s"} verificados desde Find Winners`,
-      );
     } else {
       setDrops([]);
-      setLedgerCount(0);
-      setNote(emptyNote);
     }
     setRefreshing(true);
 
@@ -103,28 +90,20 @@ export function DropMarketStudio() {
         if (!res.ok) throw new Error(`feed ${res.status}`);
         const body = (await res.json()) as {
           drops?: MarketDropPublic[];
-          note?: string;
           affiliateTagConfigured?: boolean;
-          ledgerCount?: number;
         };
         if (!alive) return;
         const remote = body.drops || [];
         if (remote.length) {
           setDrops(remote);
-          setLedgerCount(Number(body.ledgerCount) || remote.length);
-          setNote(body.note || "");
         } else if (!local.length) {
           setDrops([]);
-          setLedgerCount(0);
-          setNote(body.note || emptyNote);
         }
         setTagReady(Boolean(body.affiliateTagConfigured));
       } catch {
         if (!alive) return;
         if (!local.length) {
           setDrops([]);
-          setLedgerCount(0);
-          setNote(emptyNote);
         }
       } finally {
         window.clearTimeout(hardStop);
@@ -374,75 +353,30 @@ export function DropMarketStudio() {
   };
 
   return (
-    <div className="min-h-full bg-[#f7f5f1] text-[#141414]">
-      <header className="relative overflow-hidden border-b border-[#ebe7e0] bg-white">
-        <div
-          aria-hidden
-          className="pointer-events-none absolute inset-0"
-          style={{
-            background:
-              "radial-gradient(ellipse 70% 80% at 0% 0%, rgba(244,201,40,0.12), transparent 55%), radial-gradient(ellipse 50% 60% at 100% 0%, rgba(33,98,161,0.07), transparent 50%)",
-          }}
-        />
-        <div className="relative mx-auto max-w-6xl px-4 pt-6 pb-5 md:px-8">
-          <div className="flex flex-wrap items-end justify-between gap-4">
-            <div className="min-w-0">
-              <motion.p
-                initial={reduce ? false : { opacity: 0, y: 6 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="inline-flex items-center gap-1.5 text-[11px] font-semibold tracking-[0.18em] text-[#6b6560] uppercase"
-              >
-                <ShieldCheck className="size-3.5 text-[#1f7a4d]" />
-                Higlou · Floor verificado
-              </motion.p>
-              <motion.h1
-                initial={reduce ? false : { opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.05 }}
-                className="mt-1.5 font-display text-[36px] leading-[0.95] tracking-tight md:text-[44px]"
-              >
-                Market
-              </motion.h1>
-              <motion.p
-                initial={reduce ? false : { opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ delay: 0.1 }}
-                className="mt-2 max-w-lg text-[14px] leading-relaxed text-[#6b6560]"
-              >
-                Máquina de oportunidades en vivo: productos analizados, en
-                tendencia, con ruta clara — vender Amazon, eBay o sourcing.
-              </motion.p>
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <div className="rounded-full bg-[#f4f2ed] px-3 py-2 text-[12px] text-[#6b6560]">
-                <strong className="text-[#141414]">{drops.length}</strong> en
-                floor
-                {openKeep > 0 ? (
-                  <>
-                    {" "}
-                    · keep{" "}
-                    <strong className="text-[#1f7a4d]">{signed(openKeep)}</strong>
-                  </>
-                ) : null}
-                {refreshing ? " · sync…" : ""}
-              </div>
-              <Link
-                href="/winners"
-                className="inline-flex h-11 items-center gap-2 rounded-full bg-[#141414] px-5 text-[13px] font-semibold text-white shadow-[0_8px_24px_rgba(20,20,20,0.18)] hover:bg-[#2a2a2a]"
-              >
-                <Sparkles className="size-4 text-[#f4c928]" />
-                Find winners
-              </Link>
-            </div>
-          </div>
+    <div className="min-h-full bg-[#f7f7f7] text-[#191919]">
+      <header className="border-b border-[#e5e5e5] bg-white">
+        <div className="flex flex-wrap items-center gap-3 bg-[#3665F3] px-4 py-2.5 text-white md:px-8">
+          <span className="size-2 rounded-full bg-white" />
+          <p className="text-[11px] font-semibold tracking-[0.2em] uppercase">
+            Market
+          </p>
+          <p className="hidden min-w-0 flex-1 truncate text-[13px] text-white/85 sm:block">
+            {drops.length
+              ? `${drops.length} verificados${openKeep > 0 ? ` · keep ${signed(openKeep)}` : ""}`
+              : "Floor vacío · escaneá Find Winners"}
+            {refreshing ? " · sync…" : ""}
+          </p>
+          <Link
+            href="/winners"
+            className="inline-flex h-9 items-center gap-1.5 rounded-full bg-white px-3.5 text-[12px] font-semibold text-[#191919]"
+          >
+            <Sparkles className="size-3.5 text-[#3665F3]" />
+            Find winners
+          </Link>
+        </div>
 
-          <MarketLivePulse
-            refreshing={refreshing}
-            floorCount={drops.length}
-            className="mt-5"
-          />
-
-          <div className="mt-5 inline-flex rounded-full border border-[#ebe7e0] bg-[#f4f2ed] p-1">
+        <div className="mx-auto max-w-6xl px-4 py-4 md:px-8">
+          <div className="inline-flex max-w-full overflow-x-auto rounded-full border border-[#e5e5e5] bg-[#f7f7f7] p-1">
             {(
               [
                 ["all", "Todos", drops.length],
@@ -458,8 +392,8 @@ export function DropMarketStudio() {
                   type="button"
                   onClick={() => setFilter(id)}
                   className={cn(
-                    "relative rounded-full px-3.5 py-2 text-[13px] font-semibold transition",
-                    on ? "text-[#141414]" : "text-[#6b6560] hover:text-[#141414]",
+                    "relative shrink-0 rounded-full px-3.5 py-2 text-[13px] font-semibold transition",
+                    on ? "text-[#191919]" : "text-[#707070] hover:text-[#191919]",
                   )}
                 >
                   {on ? (
@@ -471,111 +405,101 @@ export function DropMarketStudio() {
                   ) : null}
                   <span className="relative z-10">
                     {label}
-                    <span className="ml-1 opacity-50">{count}</span>
+                    <span className="ml-1 opacity-45">{count}</span>
                   </span>
                 </button>
               );
             })}
           </div>
-          <p className="mt-2 text-[12px] text-[#8a847c]">
-            {tagReady
-              ? "Affiliate activo · cada Amazon abre con tu tag"
-              : "Tip: configura Associate tag en Settings → Money"}
-            {note ? ` · ${note}` : ""}
-            {ledgerCount > 0 ? ` · ledger ${ledgerCount}` : ""}
-          </p>
         </div>
       </header>
 
-      <div className="sticky top-0 z-20 border-b border-[#ebe7e0] bg-white/90 backdrop-blur-md">
+      <div className="sticky top-0 z-20 border-b border-[#e5e5e5] bg-white/95 backdrop-blur-md">
         <div className="mx-auto flex max-w-6xl flex-col gap-2 px-4 py-3 md:flex-row md:items-center md:px-8">
           <div className="relative min-w-0 flex-1">
-            <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-[#a8a29a]" />
+            <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-[#a8a8a8]" />
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Buscar en el floor · título, marca, ASIN"
-              className="h-11 w-full rounded-xl border border-[#ebe7e0] bg-[#faf9f6] pr-3 pl-10 text-[14px] outline-none transition focus:border-[#141414] focus:bg-white"
+              placeholder="Buscar título, marca o ASIN"
+              className="h-11 w-full rounded-xl border border-[#e5e5e5] bg-white pr-3 pl-10 text-[14px] outline-none transition focus:border-[#3665F3]"
             />
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="flex rounded-full bg-[#f4f2ed] p-0.5">
-              {(
-                [
-                  ["keep", "Keep"],
-                  ["demand", "Demanda"],
-                  ["hot", "Hot"],
-                ] as const
-              ).map(([key, label]) => (
-                <button
-                  key={key}
-                  type="button"
-                  onClick={() => setSortKey(key)}
-                  className={cn(
-                    "rounded-full px-3 py-1 text-[11px] font-semibold transition",
-                    sortKey === key
-                      ? "bg-white text-[#141414] shadow-sm"
-                      : "text-[#6b6560]",
-                  )}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
+          <div className="flex flex-wrap items-center gap-1.5">
+            {(
+              [
+                ["keep", "Keep"],
+                ["demand", "Demanda"],
+                ["hot", "Hot"],
+              ] as const
+            ).map(([key, label]) => (
+              <button
+                key={key}
+                type="button"
+                onClick={() => setSortKey(key)}
+                className={cn(
+                  "rounded-full px-3 py-1.5 text-[12px] font-semibold transition",
+                  sortKey === key
+                    ? "bg-[#191919] text-white"
+                    : "bg-[#f0f0f0] text-[#707070] hover:text-[#191919]",
+                )}
+              >
+                {label}
+              </button>
+            ))}
             <button
               type="button"
               onClick={() => setProfitOnly((v) => !v)}
               className={cn(
-                "rounded-full px-3 py-1 text-[11px] font-semibold ring-1 transition",
+                "rounded-full px-3 py-1.5 text-[12px] font-semibold transition",
                 profitOnly
-                  ? "bg-[#e8f5ee] text-[#1f7a4d] ring-[#b8dfc8]"
-                  : "bg-white text-[#6b6560] ring-[#ebe7e0]",
+                  ? "bg-[#e8f5ee] text-[#1f7a4d]"
+                  : "bg-[#f0f0f0] text-[#707070]",
               )}
             >
-              Solo money ≥ $12
+              ≥ $12
             </button>
           </div>
         </div>
       </div>
 
-      <div className="mx-auto max-w-6xl px-4 py-6 pb-16 md:px-8">
-        <MarketEarnGuide tagReady={tagReady} className="mb-6" />
+      <div className="mx-auto max-w-6xl px-4 py-5 pb-16 md:px-8">
+        <MarketEarnGuide tagReady={tagReady} className="mb-4" />
 
         {drops.length === 0 ? (
           <motion.div
-            initial={reduce ? false : { opacity: 0, y: 12 }}
+            initial={reduce ? false : { opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
-            className="mx-auto flex min-h-[320px] max-w-md flex-col items-center justify-center rounded-3xl border border-dashed border-[#ddd7cd] bg-white/70 px-6 py-14 text-center"
+            className="mx-auto flex min-h-[300px] max-w-md flex-col items-center justify-center rounded-2xl border border-dashed border-[#ddd] bg-white px-6 py-14 text-center"
           >
             {refreshing ? (
-              <Loader2 className="size-6 animate-spin text-[#8a847c]" />
+              <Loader2 className="size-6 animate-spin text-[#8a8a8a]" />
             ) : (
               <>
-                <p className="text-[11px] font-semibold tracking-[0.16em] text-[#8a847c] uppercase">
+                <p className="text-[11px] font-semibold tracking-[0.16em] text-[#8a8a8a] uppercase">
                   Floor
                 </p>
-                <p className="mt-2 font-display text-[28px] leading-none">
+                <p className="mt-2 text-[22px] font-semibold tracking-tight text-[#191919]">
                   Aún no hay deals
                 </p>
-                <p className="mt-3 text-[14px] leading-relaxed text-[#6b6560]">
-                  Escanea winners primero. Cada oportunidad verificada llega
-                  aquí con link affiliate listo.
+                <p className="mt-2 text-[14px] leading-relaxed text-[#707070]">
+                  Escaneá Find Winners. Los verificados llegan acá listos.
                 </p>
                 <Link
                   href="/winners"
-                  className="mt-6 inline-flex h-11 items-center gap-2 rounded-full bg-[#141414] px-5 text-[13px] font-semibold text-white"
+                  className="mt-6 inline-flex h-11 items-center gap-2 rounded-full bg-[#3665F3] px-5 text-[13px] font-semibold text-white"
                 >
-                  <Sparkles className="size-4 text-[#f4c928]" />
-                  Abrir Find Winners
+                  <Sparkles className="size-4" />
+                  Find Winners
                 </Link>
               </>
             )}
           </motion.div>
         ) : filtered.length === 0 ? (
-          <div className="rounded-3xl border border-dashed border-[#ddd7cd] bg-white/70 px-6 py-14 text-center">
-            <p className="font-display text-[24px]">Sin matches</p>
-            <p className="mt-2 text-[14px] text-[#6b6560]">
-              Prueba otro filtro o limpia la búsqueda.
+          <div className="rounded-2xl border border-dashed border-[#ddd] bg-white px-6 py-14 text-center">
+            <p className="text-[18px] font-semibold text-[#191919]">Sin matches</p>
+            <p className="mt-2 text-[14px] text-[#707070]">
+              Probá otro filtro o limpiá la búsqueda.
             </p>
             <button
               type="button"
@@ -584,16 +508,23 @@ export function DropMarketStudio() {
                 setFilter("all");
                 setProfitOnly(false);
               }}
-              className="mt-4 text-[13px] font-semibold text-[#2162a1] hover:underline"
+              className="mt-4 text-[13px] font-semibold text-[#3665F3] hover:underline"
             >
               Reset filtros
             </button>
           </div>
         ) : (
-          <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             <AnimatePresence mode="popLayout">
               {filtered.map((item, index) => (
-                <li key={item.id}>
+                <motion.li
+                  key={item.id}
+                  layout
+                  initial={reduce ? false : { opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.98 }}
+                  transition={{ delay: Math.min(index * 0.02, 0.2) }}
+                >
                   <MarketProductTile
                     item={item}
                     index={index}
@@ -604,7 +535,7 @@ export function DropMarketStudio() {
                     onClaim={() => void claim(item)}
                     onEarn={() => void earnLink(item)}
                   />
-                </li>
+                </motion.li>
               ))}
             </AnimatePresence>
           </ul>

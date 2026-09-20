@@ -7,13 +7,11 @@ import {
   ArrowRight,
   Loader2,
   Search,
-  ShieldCheck,
   Sparkles,
   Store,
 } from "lucide-react";
 import {
   AMAZON_WINNER_CATEGORIES,
-  AMAZON_WINNER_LIMITS,
 } from "@/lib/amazon/winner-categories";
 import { amazonProductScore } from "@/lib/opportunity/amazon-product-winner";
 import {
@@ -125,7 +123,6 @@ export function FindWinnersBoard({
   const [error, setError] = useState<string | null>(null);
   const [hits, setHits] = useState<BoardHit[]>([]);
   const [picked, setPicked] = useState<string[]>([]);
-  const [sources, setSources] = useState<SearchBody["sources"] | null>(null);
   const [hydrated, setHydrated] = useState(false);
   const [round, setRound] = useState(0);
   const [justFound, setJustFound] = useState(0);
@@ -138,7 +135,6 @@ export function FindWinnersBoard({
     setHydrated(false);
     setPicked([]);
     setError(null);
-    setSources(null);
     setJustFound(0);
     setOpenId(null);
     const local = loadLocalLedger(mode);
@@ -199,15 +195,9 @@ export function FindWinnersBoard({
   }, [hits, mode, profitOnly, demandLane, sortKey]);
 
   const selected = winners.filter((hit) => picked.includes(hitKey(hit)));
-  const totalKeep = winners.reduce((sum, hit) => {
-    if (demandLane) return sum + amazonProductScore(hit);
-    const board = boardFor(hit);
-    return sum + Math.max(0, platformKeep(hit) ?? board.activeKeep ?? 0);
-  }, 0);
 
   const applyFound = useCallback(
-    (found: BoardHit[], bodySources: SearchBody["sources"] | null) => {
-      setSources(bodySources);
+    (found: BoardHit[]) => {
       const next = sortPlatformWinners(
         found.filter((hit) => isPlatformWinner(hit, mode)),
       ) as BoardHit[];
@@ -263,7 +253,7 @@ export function FindWinnersBoard({
         );
         return;
       }
-      applyFound(body.products || [], body.sources || null);
+      applyFound(body.products || []);
     } catch {
       setError("Error de red. Intenta otra vez.");
     } finally {
@@ -322,7 +312,7 @@ export function FindWinnersBoard({
         );
         return;
       }
-      applyFound(body.products || [], body.sources || null);
+      applyFound(body.products || []);
     } catch {
       setError("Error de red. Intenta otra vez.");
     } finally {
@@ -470,106 +460,67 @@ export function FindWinnersBoard({
   };
 
   return (
-    <div className="min-h-full bg-[#f7f5f1] text-[#141414]">
-      {/* Light trust header */}
-      <header className="relative overflow-hidden border-b border-[#ebe7e0] bg-white">
-        <div
-          aria-hidden
-          className="pointer-events-none absolute inset-0"
-          style={{
-            background:
-              "radial-gradient(ellipse 70% 80% at 0% 0%, rgba(244,201,40,0.12), transparent 55%), radial-gradient(ellipse 50% 60% at 100% 0%, rgba(31,122,77,0.06), transparent 50%)",
-          }}
-        />
-        <div className="relative mx-auto max-w-6xl px-4 pt-6 pb-5 md:px-8">
-          <div className="flex flex-wrap items-end justify-between gap-4">
-            <div className="min-w-0">
-              <motion.p
-                initial={reduce ? false : { opacity: 0, y: 6 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="inline-flex items-center gap-1.5 text-[11px] font-semibold tracking-[0.18em] text-[#6b6560] uppercase"
-              >
-                <ShieldCheck className="size-3.5 text-[#1f7a4d]" />
-                Higlou · Verificado
-              </motion.p>
-              <motion.h1
-                initial={reduce ? false : { opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.05 }}
-                className="mt-1.5 font-display text-[36px] leading-[0.95] tracking-tight md:text-[44px]"
-              >
-                Find Winners
-              </motion.h1>
-              <motion.p
-                initial={reduce ? false : { opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ delay: 0.1 }}
-                className="mt-2 max-w-md text-[14px] leading-relaxed text-[#6b6560]"
-              >
-                Oportunidades reales con precios de mercado. Escanea, compara
-                keep y decide qué importar.
-              </motion.p>
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              {!retail ? (
-                <button
-                  type="button"
-                  disabled={locked || scanning}
-                  onClick={() => void scanGeneral()}
-                  className="inline-flex h-11 items-center gap-2 rounded-full bg-[#141414] px-5 text-[13px] font-semibold text-white shadow-[0_8px_24px_rgba(20,20,20,0.18)] transition hover:bg-[#2a2a2a] disabled:opacity-40"
-                >
-                  {generalScanning ? (
-                    <Loader2 className="size-4 animate-spin" />
-                  ) : (
-                    <Sparkles className="size-4 text-[#f4c928]" />
-                  )}
-                  Ver oportunidades
-                </button>
-              ) : null}
-              <Link
-                href="/market"
-                className="inline-flex h-11 items-center gap-1.5 rounded-full border border-[#ddd7cd] bg-white px-4 text-[13px] font-semibold text-[#141414] hover:border-[#141414]"
-              >
-                <Store className="size-3.5" />
-                Market
-              </Link>
-            </div>
-          </div>
+    <div className="min-h-full bg-[#f7f7f7] text-[#191919]">
+      <header className="border-b border-[#e5e5e5] bg-white">
+        <div className="flex flex-wrap items-center gap-3 bg-[#3665F3] px-4 py-2.5 text-white md:px-8">
+          <span className="size-2 rounded-full bg-white" />
+          <p className="text-[11px] font-semibold tracking-[0.2em] uppercase">
+            Find winners
+          </p>
+          <p className="hidden min-w-0 flex-1 truncate text-[13px] text-white/85 sm:block">
+            {play === "arbitrage"
+              ? "Compra barato · vende · keep neto"
+              : "Demanda Keepa · listá en Amazon"}
+          </p>
+          {!retail ? (
+            <button
+              type="button"
+              disabled={locked || scanning}
+              onClick={() => void scanGeneral()}
+              className="inline-flex h-9 items-center gap-1.5 rounded-full bg-white px-3.5 text-[12px] font-semibold text-[#191919] disabled:opacity-40"
+            >
+              {generalScanning ? (
+                <Loader2 className="size-3.5 animate-spin" />
+              ) : (
+                <Sparkles className="size-3.5 text-[#3665F3]" />
+              )}
+              Ver oportunidades
+            </button>
+          ) : null}
+          <Link
+            href="/market"
+            className="inline-flex h-9 items-center gap-1.5 rounded-full bg-white/15 px-3.5 text-[12px] font-semibold text-white hover:bg-white/25"
+          >
+            <Store className="size-3.5" />
+            Market
+          </Link>
+        </div>
 
-          {/* Segmented play control */}
-          <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div className="inline-flex rounded-full border border-[#ebe7e0] bg-[#f4f2ed] p-1">
-              {WINNER_PLAYS.map((p) => {
-                const on = p.id === play;
-                return (
-                  <button
-                    key={p.id}
-                    type="button"
-                    onClick={() => setPlay(p.id)}
-                    className={cn(
-                      "relative rounded-full px-4 py-2 text-[13px] font-semibold transition",
-                      on
-                        ? "text-[#141414]"
-                        : "text-[#6b6560] hover:text-[#141414]",
-                    )}
-                  >
-                    {on ? (
-                      <motion.span
-                        layoutId="play-pill"
-                        className="absolute inset-0 rounded-full bg-white shadow-sm"
-                        transition={{ type: "spring", stiffness: 420, damping: 34 }}
-                      />
-                    ) : null}
-                    <span className="relative z-10">{p.title}</span>
-                  </button>
-                );
-              })}
-            </div>
-            <p className="text-[12px] text-[#8a847c]">
-              {play === "arbitrage"
-                ? "Compra en un market · vende en otro · keep neto"
-                : "Demanda Keepa · listás directo en Amazon"}
-            </p>
+        <div className="mx-auto max-w-6xl px-4 py-4 md:px-8">
+          <div className="inline-flex rounded-full border border-[#e5e5e5] bg-[#f7f7f7] p-1">
+            {WINNER_PLAYS.map((p) => {
+              const on = p.id === play;
+              return (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() => setPlay(p.id)}
+                  className={cn(
+                    "relative rounded-full px-4 py-2 text-[13px] font-semibold transition",
+                    on ? "text-[#191919]" : "text-[#707070] hover:text-[#191919]",
+                  )}
+                >
+                  {on ? (
+                    <motion.span
+                      layoutId="play-pill"
+                      className="absolute inset-0 rounded-full bg-white shadow-sm"
+                      transition={{ type: "spring", stiffness: 420, damping: 34 }}
+                    />
+                  ) : null}
+                  <span className="relative z-10">{p.title}</span>
+                </button>
+              );
+            })}
           </div>
 
           {playRoutes.length > 1 ? (
@@ -581,10 +532,10 @@ export function FindWinnersBoard({
                   onClick={() => setMode(row.id)}
                   title={row.hint}
                   className={cn(
-                    "inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full px-3 text-[11px] font-semibold whitespace-nowrap transition",
+                    "inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full px-3 text-[12px] font-semibold whitespace-nowrap transition",
                     mode === row.id
-                      ? "bg-[#141414] text-white"
-                      : "bg-white text-[#6b6560] ring-1 ring-[#ebe7e0] hover:ring-[#cfc9bf]",
+                      ? "bg-[#191919] text-white"
+                      : "bg-white text-[#707070] ring-1 ring-[#e5e5e5] hover:text-[#191919]",
                   )}
                 >
                   {row.buy}
@@ -597,8 +548,8 @@ export function FindWinnersBoard({
         </div>
       </header>
 
-      {/* Search toolbar */}
-      <div className="sticky top-0 z-20 border-b border-[#ebe7e0] bg-white/90 backdrop-blur-md">
+      {/* Finder — one clear row */}
+      <div className="sticky top-0 z-20 border-b border-[#e5e5e5] bg-white/95 backdrop-blur-md">
         <form
           className="mx-auto flex max-w-6xl flex-col gap-2 px-4 py-3 md:flex-row md:items-center md:px-8"
           onSubmit={(e) => {
@@ -607,24 +558,24 @@ export function FindWinnersBoard({
           }}
         >
           <div className="relative min-w-0 flex-1">
-            <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-[#a8a29a]" />
+            <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-[#a8a8a8]" />
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder={
                 retail
                   ? "Producto, ASIN, UPC…"
-                  : "Buscar producto, ASIN o link Amazon"
+                  : "Buscá producto o ASIN · vacío = escanear todo"
               }
               disabled={locked || scanning}
-              className="h-11 w-full rounded-xl border border-[#ebe7e0] bg-[#faf9f6] pr-3 pl-10 text-[14px] outline-none transition focus:border-[#141414] focus:bg-white"
+              className="h-12 w-full rounded-xl border border-[#e5e5e5] bg-white pr-3 pl-10 text-[15px] outline-none transition focus:border-[#3665F3]"
             />
           </div>
           <select
             value={categoryId}
             onChange={(e) => setCategoryId(e.target.value)}
             disabled={locked || scanning}
-            className="h-11 rounded-xl border border-[#ebe7e0] bg-[#faf9f6] px-3 text-[13px] outline-none focus:border-[#141414] md:w-44"
+            className="h-12 rounded-xl border border-[#e5e5e5] bg-white px-3 text-[13px] outline-none focus:border-[#3665F3] md:w-40"
           >
             {AMAZON_WINNER_CATEGORIES.map((row) => (
               <option key={row.id} value={row.id}>
@@ -632,103 +583,64 @@ export function FindWinnersBoard({
               </option>
             ))}
           </select>
-          <select
-            value={limit}
-            onChange={(e) => setLimit(Number(e.target.value))}
-            disabled={locked || scanning}
-            aria-label="Cantidad"
-            className="h-11 rounded-xl border border-[#ebe7e0] bg-[#faf9f6] px-3 text-[13px] outline-none md:w-20"
-          >
-            {[...new Set([...AMAZON_WINNER_LIMITS, 8, 12])].sort((a, b) => a - b).map(
-              (n) => (
-                <option key={n} value={n}>
-                  {n}
-                </option>
-              ),
-            )}
-          </select>
           <button
             type="submit"
             disabled={locked || scanning}
-            className="inline-flex h-11 items-center justify-center gap-1.5 rounded-xl bg-[#f4c928] px-5 text-[13px] font-semibold text-[#141414] hover:bg-[#efbf1a] disabled:opacity-40"
+            className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-[#3665F3] px-6 text-[14px] font-semibold text-white hover:bg-[#2f5ae0] disabled:opacity-40"
           >
             {searching ? (
-              <Loader2 className="size-3.5 animate-spin" />
+              <Loader2 className="size-4 animate-spin" />
             ) : (
-              <Search className="size-3.5" />
+              <Search className="size-4" />
             )}
-            Escanear
+            {query.trim() ? "Buscar" : "Escanear"}
           </button>
         </form>
 
         <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-2 px-4 pb-3 md:px-8">
-          <div className="flex rounded-full bg-[#f4f2ed] p-0.5">
-            {(
-              [
-                ["keep", "Keep"],
-                ["demand", "Demanda"],
-                ["new", "Nuevas"],
-              ] as const
-            ).map(([key, label]) => (
-              <button
-                key={key}
-                type="button"
-                onClick={() => setSortKey(key)}
-                className={cn(
-                  "rounded-full px-3 py-1 text-[11px] font-semibold transition",
-                  sortKey === key
-                    ? "bg-white text-[#141414] shadow-sm"
-                    : "text-[#6b6560]",
-                )}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
+          {(
+            [
+              ["keep", "Keep"],
+              ["demand", "Demanda"],
+              ["new", "Nuevas"],
+            ] as const
+          ).map(([key, label]) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => setSortKey(key)}
+              className={cn(
+                "rounded-full px-3 py-1.5 text-[12px] font-semibold transition",
+                sortKey === key
+                  ? "bg-[#191919] text-white"
+                  : "bg-[#f0f0f0] text-[#707070]",
+              )}
+            >
+              {label}
+            </button>
+          ))}
           {!demandLane ? (
             <button
               type="button"
               onClick={() => setProfitOnly((v) => !v)}
               className={cn(
-                "rounded-full px-3 py-1 text-[11px] font-semibold ring-1 transition",
+                "rounded-full px-3 py-1.5 text-[12px] font-semibold transition",
                 profitOnly
-                  ? "bg-[#e8f5ee] text-[#1f7a4d] ring-[#b8dfc8]"
-                  : "bg-white text-[#6b6560] ring-[#ebe7e0]",
+                  ? "bg-[#e8f5ee] text-[#1f7a4d]"
+                  : "bg-[#f0f0f0] text-[#707070]",
               )}
             >
-              Solo keep ≥ $12
+              ≥ $12
             </button>
           ) : null}
-          <span className="text-[12px] text-[#8a847c]">
-            <strong className="text-[#141414]">{winners.length}</strong>{" "}
-            {play === "arbitrage" ? "arbitrajes" : "en Amazon"}
+          <span className="text-[12px] text-[#707070]">
+            <strong className="text-[#191919]">{winners.length}</strong>
             {justFound > 0 ? (
-              <span className="ml-2 font-semibold text-[#1f7a4d]">
+              <span className="ml-1.5 font-semibold text-[#1f7a4d]">
                 · {justFound} nuevas
               </span>
             ) : null}
-            <span className="ml-2">
-              {demandLane ? "Demanda " : "Keep "}
-              <strong className="text-[#141414]">
-                {demandLane ? Math.round(totalKeep) : signed(totalKeep)}
-              </strong>
-            </span>
           </span>
-          {sources?.keepa ? (
-            <span className="rounded-full bg-[#e8f5ee] px-2 py-0.5 text-[10px] font-semibold text-[#1f7a4d]">
-              Keepa
-            </span>
-          ) : null}
-          {sources?.ebayLive ? (
-            <span className="rounded-full bg-[#e8f5ee] px-2 py-0.5 text-[10px] font-semibold text-[#1f7a4d]">
-              eBay live
-            </span>
-          ) : null}
-          {sources?.retailSearch ? (
-            <span className="rounded-full bg-[#e8f5ee] px-2 py-0.5 text-[10px] font-semibold text-[#1f7a4d]">
-              Retail
-            </span>
-          ) : null}
           {error ? (
             <span className="text-[12px] font-medium text-[#b42318]">{error}</span>
           ) : null}
@@ -736,47 +648,53 @@ export function FindWinnersBoard({
       </div>
 
       {/* Product grid */}
-      <div ref={resultsRef} className="mx-auto max-w-6xl px-4 py-6 pb-28 md:px-8">
+      <div ref={resultsRef} className="mx-auto max-w-6xl px-4 py-5 pb-28 md:px-8">
         {winners.length === 0 ? (
           <motion.div
-            initial={reduce ? false : { opacity: 0, y: 12 }}
+            initial={reduce ? false : { opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
-            className="mx-auto flex min-h-[320px] max-w-md flex-col items-center justify-center rounded-3xl border border-dashed border-[#ddd7cd] bg-white/70 px-6 py-14 text-center"
+            className="mx-auto flex min-h-[300px] max-w-md flex-col items-center justify-center rounded-2xl border border-dashed border-[#ddd] bg-white px-6 py-14 text-center"
           >
-            <p className="text-[11px] font-semibold tracking-[0.16em] text-[#8a847c] uppercase">
-              {play === "arbitrage" ? "Arbitraje" : "Amazon directo"}
+            <p className="text-[11px] font-semibold tracking-[0.16em] text-[#8a8a8a] uppercase">
+              {play === "arbitrage" ? "Arbitraje" : "Amazon"}
             </p>
-            <p className="mt-2 font-display text-[28px] leading-none">
+            <p className="mt-2 text-[22px] font-semibold tracking-tight text-[#191919]">
               Listo para escanear
             </p>
-            <p className="mt-3 text-[14px] leading-relaxed text-[#6b6560]">
-              {play === "arbitrage"
-                ? "Encontramos spreads con keep neto después de fees. Abre cualquier tile para precios, suministro barato e import."
-                : "Encontramos demanda Keepa para listar directo en Amazon."}
+            <p className="mt-2 text-[14px] leading-relaxed text-[#707070]">
+              Tocá <strong className="font-medium text-[#191919]">Escanear</strong> o
+              escribí un producto. Los mejores keep aparecen acá.
             </p>
             {!retail ? (
               <button
                 type="button"
                 disabled={locked || scanning}
                 onClick={() => void scanGeneral()}
-                className="mt-6 inline-flex h-11 items-center gap-2 rounded-full bg-[#141414] px-5 text-[13px] font-semibold text-white disabled:opacity-40"
+                className="mt-6 inline-flex h-11 items-center gap-2 rounded-full bg-[#3665F3] px-5 text-[13px] font-semibold text-white disabled:opacity-40"
               >
                 {generalScanning ? (
                   <Loader2 className="size-4 animate-spin" />
                 ) : (
-                  <Sparkles className="size-4 text-[#f4c928]" />
+                  <Sparkles className="size-4" />
                 )}
                 Ver oportunidades
               </button>
             ) : null}
           </motion.div>
         ) : (
-          <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             <AnimatePresence mode="popLayout">
               {winners.map((hit, index) => {
                 const tile = toTile(hit, index);
                 return (
-                  <li key={tile.id}>
+                  <motion.li
+                    key={tile.id}
+                    layout
+                    initial={reduce ? false : { opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.98 }}
+                    transition={{ delay: Math.min(index * 0.02, 0.2) }}
+                  >
                     <WinnerProductTile
                       item={tile}
                       index={index}
@@ -791,7 +709,7 @@ export function FindWinnersBoard({
                       }
                       onSkip={() => removeHit(tile.id)}
                     />
-                  </li>
+                  </motion.li>
                 );
               })}
             </AnimatePresence>
@@ -856,24 +774,24 @@ export function FindWinnersBoard({
       />
 
       {/* Batch bar */}
-      <div className="sticky bottom-0 z-20 border-t border-[#ebe7e0] bg-white/95 px-4 py-3 backdrop-blur-md md:px-8">
+      <div className="sticky bottom-0 z-20 border-t border-[#e5e5e5] bg-white/95 px-4 py-3 backdrop-blur-md md:px-8">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3">
-          <p className="text-[13px] text-[#6b6560]">
+          <p className="text-[13px] text-[#707070]">
             {selected.length
-              ? `${selected.length} seleccionadas · check de plataformas al importar`
-              : "Toca un producto para ver precios · marca varios para importar"}
+              ? `${selected.length} seleccionadas`
+              : "Tocá un producto · marcá varios para importar"}
           </p>
           <button
             type="button"
             disabled={locked || !selected.length}
             onClick={() => void importSelected()}
-            className="h-10 rounded-full bg-[#f4c928] px-5 text-[13px] font-semibold text-[#141414] disabled:opacity-40"
+            className="h-10 rounded-full bg-[#3665F3] px-5 text-[13px] font-semibold text-white disabled:opacity-40"
           >
             {importing && !importingId
-              ? "Analizando…"
+              ? "Importando…"
               : selected.length
                 ? `Importar ${selected.length}`
-                : "Selecciona winners"}
+                : "Seleccioná winners"}
           </button>
         </div>
       </div>

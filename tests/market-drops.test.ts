@@ -214,7 +214,7 @@ describe("higlou market + find winners wiring", () => {
       /attachOpportunityBoards/,
     );
     expect(readRepo("app/api/winners/scan/route.ts")).toMatch(
-      /limit.*max\(5\)|max\(5\).*limit|z\.coerce\.number\(\)\.int\(\)\.min\(1\)\.max\(5\)/,
+      /z\.coerce\.number\(\)\.int\(\)\.min\(1\)\.max\(12\)/,
     );
     expect(readRepo("lib/keepa/finder.ts")).toMatch(/KEEPA_SCAN_ROOTS/);
     expect(readRepo("lib/opportunity/amazon-product-winner.ts")).toMatch(

@@ -1,8 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { Sparkles } from "lucide-react";
 import { ListingPipeline } from "@/components/studio/listing-pipeline";
 import { ListingCard } from "@/components/studio/listing-card";
 import { MarketPromos } from "@/components/studio/market-promos";
@@ -11,7 +10,11 @@ import { HomeWallet } from "@/components/studio/home-wallet";
 import { ReadyGrabGhost } from "@/components/studio/ready-grab-ghost";
 import { amazonListingUrl } from "@/lib/amazon/asin";
 import { formatRelativeTime } from "@/lib/format-relative-time";
-import { type ReadyListing, type StoryItem } from "@/components/studio/ready-catalog";
+import {
+  READY_LISTINGS,
+  type ReadyListing,
+  type StoryItem,
+} from "@/components/studio/ready-catalog";
 import { marketDropsToReadyListings } from "@/lib/market/home-winners";
 import type { MarketDropPublic } from "@/lib/market/from-opportunity";
 
@@ -36,10 +39,28 @@ function statusLabel(status?: string) {
   return { label: "Needs a look", ready: false };
 }
 
+/**
+ * Resolve Home animation catalog.
+ * Prefer live Market winners when present; otherwise account ready listings;
+ * finally the demo READY_LISTINGS so the money-machine story never goes blank.
+ */
+export function resolveHomeCatalog(opts: {
+  floorListings: ReadyListing[] | null;
+  readyListings?: ReadyListing[];
+}): { listings: ReadyListing[]; source: "live" | "account" | "demo" } {
+  if (opts.floorListings && opts.floorListings.length > 0) {
+    return { listings: opts.floorListings, source: "live" };
+  }
+  if (opts.readyListings && opts.readyListings.length > 0) {
+    return { listings: opts.readyListings, source: "account" };
+  }
+  return { listings: [...READY_LISTINGS], source: "demo" };
+}
+
 export function MoneyMachineHome({
   storeName,
   drafts = [],
-  readyListings: _readyListings,
+  readyListings,
   connectHref = null,
   showRestCta = false,
 }: {
@@ -51,7 +72,6 @@ export function MoneyMachineHome({
   connectHref?: string | null;
   showRestCta?: boolean;
   drafts?: HomeDraft[];
-  /** @deprecated Home animation uses live Market feed only */
   readyListings?: ReadyListing[];
 }) {
   const [floorListings, setFloorListings] = useState<ReadyListing[] | null>(
@@ -83,13 +103,13 @@ export function MoneyMachineHome({
     };
   }, []);
 
-  // Exact winners only — never mix demo SKUs with the live floor.
-  const listings: ReadyListing[] =
-    floorListings === null
-      ? [] // loading — wait for feed so animation matches Market
-      : floorListings;
+  const { listings, source } = useMemo(
+    () => resolveHomeCatalog({ floorListings, readyListings }),
+    [floorListings, readyListings],
+  );
 
-  const usingLiveWinners = listings.length > 0;
+  const usingLiveWinners = source === "live";
+
   const storyCatalog: StoryItem[] = listings.map((item) => ({
     name: item.name,
     title: item.title,
@@ -99,7 +119,7 @@ export function MoneyMachineHome({
     photos: item.photos,
     marketHref: item.marketId
       ? `/market?drop=${encodeURIComponent(item.marketId)}`
-      : "/market",
+      : undefined,
   }));
 
   return (
@@ -127,37 +147,15 @@ export function MoneyMachineHome({
       </div>
 
       <div className="relative grid min-h-0 flex-1 lg:grid-cols-[minmax(0,1.05fr)_minmax(420px,0.95fr)]">
-        {floorListings === null ? (
-          <div className="flex min-h-[320px] flex-col items-center justify-center gap-3 bg-[#fafafa] px-6 text-center">
-            <p className="text-[13px] text-[#6b6560]">Cargando winners del Market…</p>
-          </div>
-        ) : listings.length > 0 ? (
-          <ListingPipeline
-            storeName={storeName}
-            catalogItems={storyCatalog}
-            onWallet={setWallet}
-            onStory={setStory}
-            onRest={setResting}
-            showRestCta={showRestCta}
-          />
-        ) : (
-          <div className="flex min-h-[320px] flex-col items-center justify-center gap-3 bg-[#fafafa] px-6 text-center">
-            <Sparkles className="size-6 text-[#3665F3]" />
-            <p className="font-display text-[28px] leading-none text-[#141414]">
-              Sin winners aún
-            </p>
-            <p className="max-w-sm text-[14px] text-[#6b6560]">
-              Escanea Find Winners. Los productos verificados aparecen aquí —
-              sin duplicados, sin demos.
-            </p>
-            <Link
-              href="/winners"
-              className="mt-2 inline-flex h-11 items-center rounded-full bg-[#141414] px-5 text-[13px] font-semibold text-white"
-            >
-              Abrir Find Winners
-            </Link>
-          </div>
-        )}
+        <ListingPipeline
+          key={usingLiveWinners ? "live" : source}
+          storeName={storeName}
+          catalogItems={storyCatalog}
+          onWallet={setWallet}
+          onStory={setStory}
+          onRest={setResting}
+          showRestCta={showRestCta}
+        />
 
         <aside className="flex min-h-0 flex-col border-t border-[#eee] bg-[#f3f3f3] lg:border-t-0 lg:border-l">
           <HomeWallet available={wallet} />
@@ -173,30 +171,35 @@ export function MoneyMachineHome({
               </p>
             </div>
             <Link
-              href="/market"
+              href={usingLiveWinners ? "/market" : "/winners"}
               className="shrink-0 text-[13px] font-medium text-[#3665F3]"
             >
-              Open market
+              {usingLiveWinners ? "Open market" : "Find winners"}
             </Link>
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-4">
-            {listings.length > 0 ? (
-              <MarketPromos
-                activeIndex={resting ? -1 : story.sku}
-                listings={listings}
-              />
-            ) : (
-              <p className="rounded-2xl border border-dashed border-[#ddd] bg-white px-4 py-8 text-center text-[13px] text-[#707070]">
-                Cuando haya winners, la animación y esta lista muestran
-                exactamente esos productos — sin repetir.
-              </p>
-            )}
+            <MarketPromos
+              activeIndex={resting ? -1 : story.sku}
+              listings={listings}
+            />
             <p className="mt-3 text-[12px] text-[#707070]">
-              Hot drops con motion viven en{" "}
-              <Link href="/market" className="font-medium text-[#3665F3]">
-                Higlou Market
-              </Link>
-              .
+              {usingLiveWinners ? (
+                <>
+                  Hot drops con motion viven en{" "}
+                  <Link href="/market" className="font-medium text-[#3665F3]">
+                    Higlou Market
+                  </Link>
+                  .
+                </>
+              ) : (
+                <>
+                  Escanea{" "}
+                  <Link href="/winners" className="font-medium text-[#3665F3]">
+                    Find Winners
+                  </Link>{" "}
+                  para animar con productos reales del Market.
+                </>
+              )}
             </p>
             {drafts.length > 0 ? (
               <div className="mt-6">
@@ -248,7 +251,7 @@ export function MoneyMachineHome({
             ) : null}
           </div>
         </aside>
-        {story.phase !== "gone" && listings.length > 0 ? (
+        {story.phase !== "gone" ? (
           <ReadyGrabGhost
             key={story.sku}
             sku={story.sku}

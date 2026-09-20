@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { marketDropsToReadyListings } from "@/lib/market/home-winners";
+import { resolveHomeCatalog } from "@/components/studio/money-machine-home";
+import { READY_LISTINGS } from "@/components/studio/ready-catalog";
 import type { MarketDropPublic } from "@/lib/market/from-opportunity";
 
 function drop(
@@ -68,5 +70,38 @@ describe("home winners from market", () => {
       drop({ id: "win-B0NOPHOTO1", asin: "B0NOPHOTO1", photo: "", photos: [] }),
     ]);
     expect(list).toHaveLength(0);
+  });
+});
+
+describe("resolveHomeCatalog", () => {
+  it("prefers live Market winners when present", () => {
+    const live = [
+      {
+        ...READY_LISTINGS[0],
+        marketId: "win-1",
+        title: "Live Winner",
+      },
+    ];
+    const result = resolveHomeCatalog({
+      floorListings: live,
+      readyListings: [READY_LISTINGS[1]],
+    });
+    expect(result.source).toBe("live");
+    expect(result.listings[0]?.title).toBe("Live Winner");
+  });
+
+  it("falls back to account ready listings, then demo — never blank", () => {
+    const account = [{ ...READY_LISTINGS[1], title: "Account Ready" }];
+    expect(
+      resolveHomeCatalog({ floorListings: [], readyListings: account }).source,
+    ).toBe("account");
+    expect(
+      resolveHomeCatalog({ floorListings: null, readyListings: undefined })
+        .source,
+    ).toBe("demo");
+    expect(
+      resolveHomeCatalog({ floorListings: [], readyListings: [] }).listings
+        .length,
+    ).toBeGreaterThan(0);
   });
 });

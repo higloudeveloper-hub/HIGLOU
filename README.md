@@ -140,7 +140,7 @@ SHA256: `E8840560B3359BAB0825F1BEE48DAD3F4C58D6AF9BC2B412630FB928C4793C3A`
 
 - **Integraciones** (`/connect`): estado de eBay, Amazon Seller, Associates, Facebook y Smart Links — un CTA por canal.
 - **Affiliate** (`/affiliate`): pegá Tracking ID Associates, ves productos/stats y compartís.
-- **Facebook Ads** (`/facebook`): elegí links o Market winners y publicá en tu Page (sin Don Baratón).
+- **Facebook Ads** (`/facebook`): publicá **Afiliados**, **Importados**, **Market** o **Cualquiera** por separado. Estilos **Ads** (1 producto), **Carrusel** (2–10) y **Vitrina** (portada + pack) en tu Page.
 - **Settings → Stores → Facebook**: Page ID + token por usuario.
 - Apply `supabase/migrations/20260920_facebook_connections.sql`.
 - Optional `FACEBOOK_TOKEN_ENCRYPTION_KEY` (falls back to `EBAY_TOKEN_ENCRYPTION_KEY`).

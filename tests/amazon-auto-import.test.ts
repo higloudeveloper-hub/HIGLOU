@@ -429,7 +429,7 @@ describe("Amazon auto-import stays an eBay draft flow", () => {
     expect(panel).toMatch(/Analyzing live/);
     expect(panel).toMatch(/Product name, ASIN, or Amazon link/);
     expect(panel).toMatch(/Find opportunities/);
-    expect(panel).toMatch(/Keepa is not connected/);
+    expect(panel).toMatch(/skipped Keepa|Keepa tokens|manual Find/i);
     expect(panel).toMatch(/KEEPA_API_KEY/);
     expect(panel).toMatch(/Browse \(app credentials/);
     expect(panel).toMatch(/seed: nextRound - 1/);
@@ -492,7 +492,7 @@ describe("Amazon auto-import stays an eBay draft flow", () => {
     expect(panel).toMatch(/loadLocalLedger/);
     expect(panel).toMatch(/recordNicheLearn/);
     expect(engine).toMatch(/isCrowdedBestseller/);
-    expect(engine).toMatch(/sort: keepaOn \? "review-rank" : "featured"/);
+    expect(engine).toMatch(/keepaMode === "full" \? "review-rank" : "featured"/);
     expect(engine).toMatch(/checkAmazonEligibility/);
     expect(engine).toMatch(/getAmazonFeesEstimate/);
     expect(engine).toMatch(/searchEbayLivePrices/);

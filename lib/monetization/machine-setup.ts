@@ -125,7 +125,12 @@ export const MONEY_MACHINE_SERVICES: MachineServiceDef[] = [
     howTo: [
       { title: "Get a Keepa API key", detail: "keepa.com → API." },
       { title: "Add KEEPA_API_KEY to Vercel", detail: "Production + Preview." },
-      { title: "Redeploy & scan", detail: "Open Find Winners → live scan." },
+      {
+        title: "Keep live scan off Keepa",
+        detail:
+          "KEEPA_LIVE_ENABLED=false (default). Manual Find uses Keepa; live loop stays free.",
+      },
+      { title: "Redeploy & manual Find", detail: "Open Find Winners → Manual → Find." },
     ],
     docsUrl: "https://keepa.com/#!api",
   },

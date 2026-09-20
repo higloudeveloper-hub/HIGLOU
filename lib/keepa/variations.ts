@@ -118,7 +118,14 @@ async function keepaProductRow(
 export async function keepaVariationSet(
   asin: string,
 ): Promise<ListingVariationSet | null> {
-  if (!isKeepaConfigured() || !isAsin(asin)) return null;
+  const { keepaVariationsEnabled } = await import("@/lib/keepa/budget");
+  if (
+    !isKeepaConfigured() ||
+    !keepaVariationsEnabled() ||
+    !isAsin(asin)
+  ) {
+    return null;
+  }
   const row = await keepaProductRow(asin);
   if (!row) return null;
   const parsed = parseKeepaVariations(row);

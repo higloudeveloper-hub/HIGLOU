@@ -36,6 +36,9 @@ const bodySchema = z.object({
   cost: z.number().positive().max(100000).optional(),
   seed: z.coerce.number().int().optional().default(0),
   excludeAsins: z.array(z.string().min(10).max(12)).max(80).optional().default([]),
+  /** off = free Amazon path (live loop). full = Keepa finder. enrich = hydrate only. */
+  keepaMode: z.enum(["off", "enrich", "full"]).optional(),
+  keepaPurpose: z.enum(["live", "manual", "enrich"]).optional().default("manual"),
 });
 
 export async function POST(request: Request) {
@@ -116,6 +119,8 @@ export async function POST(request: Request) {
       supplierCost: body.cost,
       seed: body.seed,
       excludeAsins,
+      keepaMode: body.keepaMode,
+      keepaPurpose: body.keepaPurpose,
     });
     return NextResponse.json({
       ok: true,

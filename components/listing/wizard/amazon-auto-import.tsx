@@ -515,6 +515,8 @@ async function requestOpportunities(payload: {
   cost?: number;
   seed: number;
   excludeAsins: string[];
+  keepaMode?: "off" | "enrich" | "full";
+  keepaPurpose?: "live" | "manual" | "enrich";
 }): Promise<{
   ok: boolean;
   error: string;
@@ -567,7 +569,7 @@ export function AmazonAutoImportPanel({
 }) {
   const reduce = usePrefersReducedMotion();
   const [view, setView] = useState<"live" | "manual">("live");
-  const [liveOn, setLiveOn] = useState(true);
+  const [liveOn, setLiveOn] = useState(false);
   const [scanStep, setScanStep] = useState(0);
   const [scanLabel, setScanLabel] = useState("Home & Kitchen");
   const [categoryId, setCategoryId] = useState("");
@@ -736,6 +738,9 @@ export function AmazonAutoImportPanel({
             excludeAsins: refresh
               ? []
               : liveHitsRef.current.map((hit) => hitKey(hit)).slice(0, 80),
+            // Keepa is expensive — live loop stays on free Amazon/eBay paths.
+            keepaMode: "off",
+            keepaPurpose: "live",
           });
           if (cancelled || !liveOnRef.current) break;
           if (found.ok) {
@@ -838,6 +843,8 @@ export function AmazonAutoImportPanel({
         cost: costValue,
         seed: nextRound - 1,
         excludeAsins: [],
+        keepaMode: "full",
+        keepaPurpose: "manual",
       });
       if (!found.ok) {
         setManualHits([]);
@@ -1171,10 +1178,11 @@ export function AmazonAutoImportPanel({
             </>
           )}{" "}
           Add <span className="font-medium">KEEPA_API_KEY</span> on Vercel for
-          live BSR, buy-box history, and priced winners. Without Keepa the board
-          stays empty even after analyzing many ASINs.
+          BSR drops and buy-box on <span className="font-medium">manual Find</span>{" "}
+          only. Live scan stays Amazon/eBay-free so Keepa tokens are not burned
+          on idle loops.
           {sources && !sources.keepa
-            ? " Keepa is not connected."
+            ? " This round skipped Keepa (live path or budget)."
             : ""}
           {sources && !sources.ebayLive
             ? " No eBay asks priced yet this round."

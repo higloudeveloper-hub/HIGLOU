@@ -112,10 +112,10 @@ export function parseKeepaProduct(row: Record<string, unknown>): KeepaSnapshot |
     min90 != null && max90 != null && base
       ? Math.round(((max90 - min90) / base) * 1000) / 1000
       : null;
-  const currentNew = buyBox || newPrice;
+  // Discount vs 90d NEW average — never mix buy-box into this math.
   const discount90 =
-    avg90 != null && avg90 > 0 && currentNew != null
-      ? Math.round(((avg90 - currentNew) / avg90) * 1000) / 1000
+    avg90 != null && avg90 > 0 && newPrice != null
+      ? Math.round(((avg90 - newPrice) / avg90) * 1000) / 1000
       : null;
   const salesRank =
     statsSlot(stats, "current", KEEPA_INDEX.SALES) ??

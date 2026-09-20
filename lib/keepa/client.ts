@@ -1,3 +1,4 @@
+import { rememberKeepaTokens } from "@/lib/keepa/budget";
 import { KEEPA_US_DOMAIN, keepaApiKey } from "@/lib/keepa/config";
 
 type KeepaResponse = Record<string, unknown> & {
@@ -20,7 +21,14 @@ function keepaErrorMessage(error: unknown, fallback: string): string {
   return fallback;
 }
 
+function trackTokens(json: KeepaResponse): void {
+  if (typeof json.tokensLeft === "number") {
+    rememberKeepaTokens(json.tokensLeft);
+  }
+}
+
 function assertKeepaOk(path: string, res: Response, json: KeepaResponse): void {
+  trackTokens(json);
   if (!res.ok || json.error) {
     throw new Error(
       keepaErrorMessage(json.error, `Keepa ${path} failed (${res.status})`),
@@ -116,11 +124,11 @@ export async function keepaTokenStatus(): Promise<{
   refillRate: number | null;
 }> {
   const json = await keepaGet("token");
+  const tokensLeft = Number(json.tokensLeft ?? 0);
+  rememberKeepaTokens(tokensLeft);
   return {
-    tokensLeft: Number(json.tokensLeft ?? 0),
-    refillIn:
-      typeof json.refillIn === "number" ? json.refillIn : null,
-    refillRate:
-      typeof json.refillRate === "number" ? json.refillRate : null,
+    tokensLeft,
+    refillIn: typeof json.refillIn === "number" ? json.refillIn : null,
+    refillRate: typeof json.refillRate === "number" ? json.refillRate : null,
   };
 }

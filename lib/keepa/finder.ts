@@ -1,9 +1,14 @@
+import { keepaBudgetOk, keepaMaxProductsPerScan } from "@/lib/keepa/budget";
+import { setCachedKeepaProduct, takeCachedKeepaProducts } from "@/lib/keepa/cache";
 import { keepaGet, keepaQuery } from "@/lib/keepa/client";
 import { parseKeepaProduct, type KeepaSnapshot } from "@/lib/keepa/parse";
 import { OPPORTUNITY_RULES } from "@/lib/opportunity/types";
 
-/** Keepa Product Finder requires perPage ≥ 50. */
+/** Keepa Product Finder requires perPage ≥ 50 (~11 tokens / page). */
 export const KEEPA_FINDER_MIN_PER_PAGE = 50;
+
+/** Real demand signal — BSR drops beat broken deltaPercent filters. */
+export const KEEPA_MIN_BSR_DROPS_90 = 15;
 
 function asinsFromKeepa(json: Record<string, unknown>): string[] {
   const list = json.asinList;
@@ -28,7 +33,11 @@ function rootCategoryIds(raw?: string): number[] | undefined {
   return [id];
 }
 
-/** Shared selection for Product Finder — tested without burning tokens. */
+/**
+ * Shared selection for Product Finder.
+ * Avoid deltaPercent90_NEW — Keepa often returns ASINs that fail our discount math,
+ * burning product tokens for empty boards.
+ */
 export function buildKeepaFinderSelection(opts: {
   rootCategory?: string;
   title?: string;
@@ -39,7 +48,7 @@ export function buildKeepaFinderSelection(opts: {
   const mode = opts.mode || "amazon_to_ebay";
   const perPage = Math.max(
     KEEPA_FINDER_MIN_PER_PAGE,
-    Math.min(opts.perPage ?? KEEPA_FINDER_MIN_PER_PAGE, 100),
+    Math.min(opts.perPage ?? KEEPA_FINDER_MIN_PER_PAGE, 50),
   );
   const selection: Record<string, unknown> = {
     page: opts.page ?? 0,
@@ -48,9 +57,12 @@ export function buildKeepaFinderSelection(opts: {
     current_NEW_lte: Math.round(OPPORTUNITY_RULES.maxPrice * 100),
     current_SALES_gte: OPPORTUNITY_RULES.minBsr,
     current_SALES_lte: OPPORTUNITY_RULES.maxBsr,
-    deltaPercent90_NEW_lte: -Math.round(OPPORTUNITY_RULES.minDiscount90 * 100),
+    salesRankDrops90_gte: KEEPA_MIN_BSR_DROPS_90,
     packageWeight_lte: Math.round(OPPORTUNITY_RULES.maxPackageLb * 453.592),
-    sort: [["current_SALES", "asc"]],
+    sort: [
+      ["salesRankDrops90", "desc"],
+      ["current_SALES", "asc"],
+    ],
     productType: [0, 1],
   };
   if (mode === "amazon" || mode === "supplier") {
@@ -60,39 +72,64 @@ export function buildKeepaFinderSelection(opts: {
   }
   const roots = rootCategoryIds(opts.rootCategory);
   if (roots) selection.rootCategory = roots;
-  if (opts.title?.trim()) selection.title = [opts.title.trim()];
+  // Only exact product titles — category keywords make finder miss and trigger
+  // a second paid /search call.
+  if (opts.title?.trim() && opts.title.trim().split(/\s+/).length >= 3) {
+    selection.title = [opts.title.trim()];
+  }
   return selection;
 }
 
-/** Product Finder: price, BSR, 90-day discount, weight. */
+/** Product Finder: ~11 tokens. Returns ASINs only. */
 export async function keepaFindAsins(opts: {
   rootCategory?: string;
   title?: string;
   perPage?: number;
   mode?: "amazon" | "amazon_to_ebay" | "supplier" | string;
 }): Promise<string[]> {
+  if (!keepaBudgetOk(12)) return [];
   const selection = buildKeepaFinderSelection(opts);
   const json = await keepaQuery(selection);
   return [...new Set(asinsFromKeepa(json))].slice(0, 40);
 }
 
+/** Keyword search: ~10 tokens. Use only when finder returned nothing. */
 export async function keepaSearchAsins(term: string): Promise<string[]> {
-  const json = await keepaGet("search", { type: "product", term });
+  const clean = term.trim();
+  if (!clean || !keepaBudgetOk(10)) return [];
+  const json = await keepaGet("search", { type: "product", term: clean });
   return [...new Set(asinsFromKeepa(json))].slice(0, 20);
 }
 
+/**
+ * Hydrate ASINs with stats (no csv history). 1 token / ASIN.
+ * Uses in-memory cache so live/manual rescans do not re-bill.
+ */
 export async function keepaProducts(asins: string[]): Promise<KeepaSnapshot[]> {
   const clean = [...new Set(asins.map((asin) => asin.toUpperCase()))].filter(
     (asin) => /^[A-Z0-9]{10}$/.test(asin),
   );
   if (!clean.length) return [];
+
+  const capped = clean.slice(0, keepaMaxProductsPerScan());
+  const { hits, missing } = takeCachedKeepaProducts(capped);
+  if (!missing.length) return hits;
+  if (!keepaBudgetOk(missing.length)) return hits;
+
   const json = await keepaGet("product", {
-    asin: clean.slice(0, 20).join(","),
+    asin: missing.join(","),
     stats: 90,
-    history: 1,
+    history: 0,
+    rating: 1,
   });
   const products = Array.isArray(json.products) ? json.products : [];
-  return products
+  const fresh = products
     .map((row) => parseKeepaProduct(row))
+    .filter((row): row is KeepaSnapshot => Boolean(row));
+  for (const snap of fresh) setCachedKeepaProduct(snap);
+  const byAsin = new Map<string, KeepaSnapshot>();
+  for (const snap of [...hits, ...fresh]) byAsin.set(snap.asin, snap);
+  return capped
+    .map((asin) => byAsin.get(asin))
     .filter((row): row is KeepaSnapshot => Boolean(row));
 }

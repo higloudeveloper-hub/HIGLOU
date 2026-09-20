@@ -9,6 +9,12 @@ import {
 import { amazonWinnerKeywords } from "@/lib/amazon/winner-rank";
 import { isKeepaConfigured } from "@/lib/keepa/config";
 import {
+  keepaAllowedFor,
+  keepaMaxProductsPerScan,
+  resolveKeepaMode,
+  type KeepaMode,
+} from "@/lib/keepa/budget";
+import {
   keepaFindAsins,
   keepaProducts,
   keepaSearchAsins,
@@ -166,9 +172,8 @@ function cheapKeepaFilter(
   if (price != null && (price < OPPORTUNITY_RULES.minPrice || price > OPPORTUNITY_RULES.maxPrice)) {
     return false;
   }
-  if (snap.discount90 != null && snap.discount90 < OPPORTUNITY_RULES.minDiscount90) {
-    return false;
-  }
+  // Soft signal only — hard discount rejects burned tokens for empty boards.
+  // Finder already required salesRankDrops90; trust that demand gate.
   if (snap.packageLb != null && snap.packageLb > OPPORTUNITY_RULES.maxPackageLb) {
     return false;
   }
@@ -300,6 +305,9 @@ export async function findOpportunities(opts: {
   ebayToken?: string;
   seed?: number;
   excludeAsins?: string[];
+  /** off = never bill Keepa (live loop). full = finder+hydrate. enrich = hydrate only. */
+  keepaMode?: KeepaMode;
+  keepaPurpose?: "live" | "manual" | "enrich";
 }): Promise<{
   products: OpportunityProduct[];
   sources: OpportunitySources;
@@ -334,13 +342,20 @@ export async function findOpportunities(opts: {
     category ||
     fromId.category ||
     query;
-  const keepaOn = isKeepaConfigured();
+  const keepaMode = resolveKeepaMode(
+    opts.keepaMode,
+    opts.keepaPurpose || "manual",
+  );
+  const keepaOn =
+    isKeepaConfigured() &&
+    keepaMode !== "off" &&
+    keepaAllowedFor(opts.keepaPurpose === "live" ? "live" : "manual");
   const exclude = new Set(
     (opts.excludeAsins || [])
       .map((id) => id.trim().toUpperCase())
       .filter((id) => /^[A-Z0-9]{10}$/.test(id)),
   );
-  const queries = keepaOn
+  const queries = keepaOn && keepaMode === "full"
     ? [keywords].filter(Boolean)
     : pickCategoryQueries({
         categoryId: opts.categoryId,
@@ -390,18 +405,21 @@ export async function findOpportunities(opts: {
     asins.push(id);
   };
 
-  if (keepaOn) {
+  // Keepa finder only on explicit full mode — never on the live loop.
+  if (keepaOn && keepaMode === "full") {
     try {
       const found = keepaRoot || keywords
         ? await keepaFindAsins({
             rootCategory: keepaRoot || undefined,
-            title: keywords || undefined,
-            perPage: 20,
+            title: query.length >= 8 ? query : undefined,
             mode,
           })
         : [];
+      // Paid /search only if finder returned nothing (not when it returned "a few").
       const searched =
-        keywords && found.length < 8 ? await keepaSearchAsins(keywords) : [];
+        found.length === 0 && query.length >= 8
+          ? await keepaSearchAsins(query)
+          : [];
       for (const id of [...found, ...searched]) takeHit({ asin: id });
       sources.keepa = asins.length > 0;
     } catch {
@@ -447,7 +465,7 @@ export async function findOpportunities(opts: {
       searchAmazonWinnersPage({
         keywords: term,
         pageOrigin: opts.pageOrigin,
-        sort: keepaOn ? "review-rank" : "featured",
+        sort: keepaOn && keepaMode === "full" ? "review-rank" : "featured",
       }).catch(() => []),
     );
     pageChunks.flat().forEach(takeHit);
@@ -456,7 +474,7 @@ export async function findOpportunities(opts: {
   asins = [...new Set(asins.map((id) => id.toUpperCase()))].filter((id) =>
     /^[A-Z0-9]{10}$/.test(id) && !exclude.has(id),
   );
-  if (!keepaOn) {
+  if (!keepaOn || keepaMode !== "full") {
     const lean = asins.filter((id) => {
       const hit = seeds.get(id);
       if (!hit || hit.reviewCount == null) return true;
@@ -469,7 +487,7 @@ export async function findOpportunities(opts: {
   }
   if (!asins.length) {
     throw new Error(
-      keepaOn
+      keepaOn && keepaMode === "full"
         ? "No products passed the first Keepa filters. Try another category."
         : "No products found for this slice. Try Find different products or type a product name.",
     );
@@ -515,11 +533,17 @@ export async function findOpportunities(opts: {
     );
   }
 
-  const keepaSnaps = isKeepaConfigured()
-    ? await keepaProducts(allowed.slice(0, 12).map((hit) => hit.asin)).catch(
-        () => [] as KeepaSnapshot[],
-      )
-    : [];
+  const hydrateN = Math.min(
+    keepaMaxProductsPerScan(),
+    Math.max(limit + 2, limit),
+    allowed.length,
+  );
+  const keepaSnaps =
+    keepaOn && (keepaMode === "full" || keepaMode === "enrich")
+      ? await keepaProducts(allowed.slice(0, hydrateN).map((hit) => hit.asin)).catch(
+          () => [] as KeepaSnapshot[],
+        )
+      : [];
   if (keepaSnaps.length) sources.keepa = true;
   const keepaMap = new Map(keepaSnaps.map((row) => [row.asin, row]));
   const afterKeepa = allowed
@@ -529,11 +553,12 @@ export async function findOpportunities(opts: {
     })
     .filter((hit) => {
       const snap = keepaMap.get(hit.asin);
+      // Only drop Keepa-hydrated rows that fail hard gates; leave Amazon-only rows.
       return snap ? cheapKeepaFilter(snap, mode) : true;
     });
 
   const pool = afterKeepa.length ? afterKeepa : allowed;
-  const priced = await mapLimit(pool.slice(0, 10), 3, async (hit) => {
+  const priced = await mapLimit(pool.slice(0, Math.min(10, hydrateN + 2)), 3, async (hit) => {
     let next = hit;
     if (opts.amazonToken && opts.marketplaceId) {
       const live = await getAmazonLowestNewPrice({

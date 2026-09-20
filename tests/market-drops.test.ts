@@ -139,7 +139,16 @@ describe("higlou market + find winners wiring", () => {
     expect(readRepo("app/api/market/claim/route.ts")).not.toMatch(/getMarketDrop/);
     expect(readRepo("app/api/market/feed/route.ts")).toMatch(/Keepa Amazon/);
     expect(readRepo("components/market/drop-market.tsx")).toMatch(
-      /Keepa demand/,
+      /Higlou Market|Today.?s verified deals/,
+    );
+    expect(readRepo("components/market/drop-market.tsx")).toMatch(
+      /Comparative prices|You keep/,
+    );
+    expect(readRepo("components/market/drop-market.tsx")).toMatch(
+      /MarketTile/,
+    );
+    expect(readRepo("components/market/market-tile.tsx")).toMatch(
+      /You keep|Keepa demand/,
     );
     expect(readRepo("components/market/drop-market.tsx")).toMatch(
       /Sell on Amazon/,

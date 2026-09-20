@@ -314,11 +314,11 @@ export function DropMarketStudio() {
                 Live Keepa + eBay asks. See buy vs sell vs what you keep — then
                 add winners to your store.
               </p>
-              <div className="mt-5 flex flex-wrap items-center gap-3 opacity-80">
-                <AmazonMark className="h-3.5 brightness-0 invert" />
+              <div className="mt-5 flex flex-wrap items-center gap-3 opacity-90">
+                <AmazonMark className="h-3.5" invert />
                 <EbayMark className="h-3 brightness-0 invert" />
-                <WalmartMark className="h-3 brightness-0 invert" />
-                <HomeDepotMark className="h-3.5 brightness-0 invert" />
+                <WalmartMark className="h-3" invert />
+                <HomeDepotMark className="h-3.5" invert />
               </div>
             </div>
 

@@ -64,15 +64,17 @@ function cleanUrl(url?: string | null): string | null {
 
 /** Prefer product page; fall back to eBay search so sellers can always open comps. */
 export function buildPlatformUrls(
-  hit: Pick<
-    OpportunityProduct,
-    | "asin"
-    | "title"
-    | "brand"
-    | "upc"
-    | "sourceMarket"
-    | "sourceId"
-    | "platformUrls"
+  hit: Partial<
+    Pick<
+      OpportunityProduct,
+      | "asin"
+      | "title"
+      | "brand"
+      | "upc"
+      | "sourceMarket"
+      | "sourceId"
+      | "platformUrls"
+    >
   > & {
     walmartItemId?: string | null;
     ebayItemId?: string | null;

@@ -8,6 +8,7 @@ import {
   Home,
   Images,
   LogOut,
+  Plug,
   Search,
   Settings,
   Share2,
@@ -86,11 +87,18 @@ const WORKSPACE_NAV_BOTTOM: NavItem[] = [
   },
 ];
 
-const FACEBOOK_NAV: NavItem[] = [
+const GROW_NAV: NavItem[] = [
+  {
+    href: "/connect",
+    label: "Integraciones",
+    hint: "Todo en un vistazo",
+    icon: Plug,
+    match: (path) => path === "/connect" || path.startsWith("/connect/"),
+  },
   {
     href: "/facebook",
-    label: "Promo Facebook",
-    hint: "Carrusel · todas las cuentas",
+    label: "Facebook Ads",
+    hint: "Publicá ofertas",
     mark: "facebook",
     match: (path) => path === "/facebook" || path.startsWith("/facebook/"),
   },
@@ -100,7 +108,7 @@ const STORE_NAV: NavItem[] = [
   {
     href: "/settings",
     label: "Settings",
-    hint: "Store setup",
+    hint: "eBay · Amazon · FB",
     icon: Settings,
     match: (path) =>
       path === "/settings" ||
@@ -205,10 +213,10 @@ export function AppSidebar({
 
         <div>
           <p className="px-3 pb-1.5 text-[10px] font-semibold tracking-[0.16em] text-muted-foreground uppercase">
-            Facebook
+            Crecer
           </p>
           <div className="space-y-1">
-            <NavLinks items={FACEBOOK_NAV} pathname={pathname} onNavigate={onNavigate} />
+            <NavLinks items={GROW_NAV} pathname={pathname} onNavigate={onNavigate} />
           </div>
         </div>
 

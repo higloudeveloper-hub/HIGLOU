@@ -128,13 +128,14 @@ SHA256: `E8840560B3359BAB0825F1BEE48DAD3F4C58D6AF9BC2B412630FB928C4793C3A`
 - Photos: HTTPS URLs with `|`
 - Description: Higlou Store HTML
 
-## Affiliate & Facebook
+## Affiliate, Facebook & Integraciones
 
-- **Affiliate hub** (`/affiliate`): current Amazon Associates links, click/revenue stats, share to Facebook / WhatsApp / X.
-- **Settings → Stores → Facebook**: each user connects their own Page (token encrypted at rest).
-- **Promo Facebook** (`/facebook`): carousel/vitrina unlocked for every signed-in account.
-- Apply migration `supabase/migrations/20260920_facebook_connections.sql`.
-- Optional `FACEBOOK_TOKEN_ENCRYPTION_KEY` (falls back to `EBAY_TOKEN_ENCRYPTION_KEY`, ≥32 chars).
+- **Integraciones** (`/connect`): estado de eBay, Amazon Seller, Associates, Facebook y Smart Links — un CTA por canal.
+- **Affiliate** (`/affiliate`): pegá Tracking ID Associates, ves productos/stats y compartís.
+- **Facebook Ads** (`/facebook`): elegí links o Market winners y publicá en tu Page (sin Don Baratón).
+- **Settings → Stores → Facebook**: Page ID + token por usuario.
+- Apply `supabase/migrations/20260920_facebook_connections.sql`.
+- Optional `FACEBOOK_TOKEN_ENCRYPTION_KEY` (falls back to `EBAY_TOKEN_ENCRYPTION_KEY`).
 
 ## Scripts
 

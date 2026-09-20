@@ -142,9 +142,9 @@ export const MONEY_MACHINE_SERVICES: MachineServiceDef[] = [
     toggleable: true,
     configField: "associate_tag",
     howTo: [
-      { title: "Join Associates", detail: "affiliate-program.amazon.com (or your country site)." },
-      { title: "Copy Tracking ID", detail: "Looks like yourstore-20 — not your Seller ID." },
-      { title: "Paste below", detail: "Higlou saves it for tagged Amazon URLs. No self-purchase commissions." },
+      { title: "Entrá a Associates", detail: "affiliate-program.amazon.com → Tracking IDs." },
+      { title: "Copiá el Tracking ID", detail: "Se ve como tu-tienda-20 — no es el token Atzr|." },
+      { title: "Pegalo en Affiliate", detail: "Affiliate → Guardar y activar. Higlou tagea Market y ads." },
     ],
     docsUrl: "https://affiliate-program.amazon.com",
   },

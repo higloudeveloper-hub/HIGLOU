@@ -8,15 +8,15 @@ import {
   CheckCircle2,
   Copy,
   ExternalLink,
+  KeyRound,
   Link2,
   Loader2,
   MessageCircle,
   MousePointerClick,
   Share2,
   Sparkles,
-  XCircle,
 } from "lucide-react";
-import { FacebookFMark } from "@/components/brand/store-marks";
+import { AmazonMark, FacebookFMark } from "@/components/brand/store-marks";
 import { StudioFrame } from "@/components/layout/studio-frame";
 import { cn } from "@/lib/utils";
 
@@ -28,13 +28,10 @@ type AffLink = {
   source: string | null;
   click_count: number | null;
   created_at: string;
-  product_id: string | null;
-  provider_id: string | null;
   smartPath?: string | null;
 };
 
 type Dash = {
-  enabled?: boolean;
   flags?: { affiliateEngine?: boolean; smartLinks?: boolean };
   revenue?: { affiliateRevenue: number | null };
   performance?: {
@@ -43,6 +40,8 @@ type Dash = {
     conversionRate: number | null;
   };
 };
+
+const EASE = [0.22, 1, 0.36, 1] as const;
 
 function money(n: number | null | undefined) {
   if (n == null || !Number.isFinite(n)) return "—";
@@ -63,8 +62,7 @@ function absoluteSmartUrl(path: string | null | undefined, destination: string) 
 }
 
 function whatsappShareUrl(url: string, asin: string) {
-  const text = `Oferta verificada · ASIN ${asin}\n${url}`;
-  return `https://wa.me/?text=${encodeURIComponent(text)}`;
+  return `https://wa.me/?text=${encodeURIComponent(`Oferta · ASIN ${asin}\n${url}`)}`;
 }
 
 function xShareUrl(url: string, asin: string) {
@@ -79,18 +77,21 @@ export function AffiliateStudio() {
   const [links, setLinks] = useState<AffLink[]>([]);
   const [dash, setDash] = useState<Dash | null>(null);
   const [fbConnected, setFbConnected] = useState(false);
-  const [fbPageName, setFbPageName] = useState<string | null>(null);
+  const [associateTag, setAssociateTag] = useState("");
+  const [tagDraft, setTagDraft] = useState("");
   const [loading, setLoading] = useState(true);
+  const [savingTag, setSavingTag] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [linksRes, dashRes, fbRes] = await Promise.all([
+      const [linksRes, dashRes, fbRes, moneyRes] = await Promise.all([
         fetch("/api/money/affiliate/links", { cache: "no-store" }),
         fetch("/api/money/dashboard", { cache: "no-store" }),
         fetch("/api/facebook/connection", { cache: "no-store" }),
+        fetch("/api/settings/money-machine", { cache: "no-store" }),
       ]);
 
       if (linksRes.ok) {
@@ -102,24 +103,26 @@ export function AffiliateStudio() {
         setNote(body.note || null);
       } else {
         setLinks([]);
-        setNote("Activa Money Engine + Affiliate en Settings → Money");
+        setNote("Activá Money Engine + Affiliate en Settings → Money");
       }
 
-      if (dashRes.ok) {
-        setDash((await dashRes.json()) as Dash);
-      } else {
-        setDash(null);
-      }
+      if (dashRes.ok) setDash((await dashRes.json()) as Dash);
+      else setDash(null);
 
       if (fbRes.ok) {
         const fb = (await fbRes.json()) as {
-          connection?: {
-            connected?: boolean;
-            pageName?: string | null;
-          };
+          connection?: { connected?: boolean };
         };
         setFbConnected(Boolean(fb.connection?.connected));
-        setFbPageName(fb.connection?.pageName || null);
+      }
+
+      if (moneyRes.ok) {
+        const body = (await moneyRes.json()) as {
+          prefs?: { associateTag?: string };
+        };
+        const tag = String(body.prefs?.associateTag || "").trim();
+        setAssociateTag(tag);
+        setTagDraft(tag);
       }
     } finally {
       setLoading(false);
@@ -138,52 +141,34 @@ export function AffiliateStudio() {
     [links, dash],
   );
 
-  const conversions = dash?.performance?.conversions ?? null;
-  const conversionRate = dash?.performance?.conversionRate ?? null;
-
-  const integrations = useMemo(
-    () => [
-      {
-        id: "amazon",
-        title: "Amazon Associates",
-        hint: dash?.flags?.affiliateEngine
-          ? "Links con tag Associates"
-          : "Activalo en Settings → Money",
-        href: "/settings#money",
-        ready: Boolean(dash?.flags?.affiliateEngine),
-        accent: "#ff9900",
-      },
-      {
-        id: "smart",
-        title: "Smart Links",
-        hint: dash?.flags?.smartLinks
-          ? "Tracking /go/… listo"
-          : "Activalo en Settings → Money",
-        href: "/settings#money",
-        ready: Boolean(dash?.flags?.smartLinks),
-        accent: "#141414",
-      },
-      {
-        id: "facebook",
-        title: "Facebook Page",
-        hint: fbConnected
-          ? fbPageName || "Page conectada · post directo"
-          : "Conectá tu Page para ads",
-        href: "/settings#facebook-store",
-        ready: fbConnected,
-        accent: "#1877F2",
-      },
-      {
-        id: "promo",
-        title: "Promo Carrusel",
-        hint: "Carrusel / vitrina · todas las cuentas",
-        href: "/facebook",
-        ready: true,
-        accent: "#1877F2",
-      },
-    ],
-    [dash, fbConnected, fbPageName],
-  );
+  const saveTag = async () => {
+    const next = tagDraft.trim();
+    if (!next) {
+      toast.message("Pegá tu Tracking ID (ej. tu-tienda-20)");
+      return;
+    }
+    setSavingTag(true);
+    try {
+      const res = await fetch("/api/settings/money-machine", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          associateTag: next,
+          affiliateEngine: true,
+          moneyEngine: true,
+        }),
+      });
+      const body = (await res.json()) as { error?: string };
+      if (!res.ok) {
+        toast.error(body.error || "No se pudo guardar el tag");
+        return;
+      }
+      setAssociateTag(next);
+      toast.success("Associates listo");
+    } finally {
+      setSavingTag(false);
+    }
+  };
 
   const copyLink = async (url: string) => {
     try {
@@ -225,7 +210,7 @@ export function AffiliateStudio() {
         toast.message(
           fbConnected
             ? "Abriendo Facebook…"
-            : "Conectá Facebook en Settings para publicar directo en tu Page",
+            : "Conectá Facebook en Integraciones para post directo",
         );
       }
     } finally {
@@ -235,273 +220,335 @@ export function AffiliateStudio() {
 
   return (
     <StudioFrame
-      kicker="Money"
+      kicker="Ganar"
       title="Affiliate"
-      hint="Productos · stats · Facebook · WhatsApp · X · promo."
+      hint="Associates · links · stats · Facebook."
       scroll
       action={
         <div className="flex flex-wrap gap-2">
           <Link
-            href="/settings#facebook-store"
+            href="/connect"
             className="inline-flex h-10 items-center gap-1.5 rounded-full border border-[#ddd7cd] bg-white px-3.5 text-[12px] font-semibold text-[#141414]"
           >
-            <FacebookFMark className="size-3.5" />
-            {fbConnected ? "FB conectada" : "Conectar FB"}
+            Integraciones
           </Link>
           <Link
-            href="/market"
-            className="inline-flex h-10 items-center gap-1.5 rounded-full bg-[#141414] px-3.5 text-[12px] font-semibold text-white"
+            href="/facebook"
+            className="inline-flex h-10 items-center gap-1.5 rounded-full bg-[#1877F2] px-3.5 text-[12px] font-semibold text-white"
           >
-            <Sparkles className="size-3.5 text-[#f4c928]" />
-            Market
+            <FacebookFMark className="size-3.5" />
+            Facebook Ads
           </Link>
         </div>
       }
     >
-      <div className="space-y-5 p-5">
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          {[
-            {
-              label: "Links activos",
-              value: String(links.length),
-              hint: "Amazon Associates",
-            },
-            {
-              label: "Clicks",
-              value: String(totalClicks),
-              hint: "Smart links + affiliate",
-            },
-            {
-              label: "Conversiones",
-              value:
-                conversions == null
-                  ? "—"
-                  : `${conversions}${
-                      conversionRate != null
-                        ? ` · ${(conversionRate * 100).toFixed(1)}%`
-                        : ""
-                    }`,
-              hint: "Atribuidas cuando hay data",
-            },
-            {
-              label: "Revenue affiliate",
-              value: money(dash?.revenue?.affiliateRevenue),
-              hint:
-                dash?.revenue?.affiliateRevenue == null
-                  ? "Unknown hasta Associates"
-                  : "Atribuido",
-            },
-          ].map((stat) => (
-            <div
-              key={stat.label}
-              className="rounded-2xl border border-[#ebe7e0] bg-white px-4 py-3.5"
-            >
-              <p className="text-[10px] font-bold tracking-[0.14em] text-[#8a847c] uppercase">
-                {stat.label}
-              </p>
-              <p className="mt-1 font-display text-[26px] leading-none tabular-nums">
-                {loading ? "…" : stat.value}
-              </p>
-              <p className="mt-1.5 text-[11px] text-[#8a847c]">{stat.hint}</p>
-            </div>
-          ))}
-        </div>
-
-        <div>
-          <div className="mb-2 flex items-end justify-between gap-2">
-            <div>
-              <p className="text-[10px] font-bold tracking-[0.14em] text-[#8a847c] uppercase">
-                Integraciones
-              </p>
-              <p className="text-[14px] font-semibold text-[#141414]">
-                Canales listos para publicitar
-              </p>
-            </div>
-            <Link
-              href="/settings#facebook-store"
-              className="text-[12px] font-semibold text-[#1877F2] hover:underline"
-            >
-              Gestionar en Settings
-            </Link>
-          </div>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            {integrations.map((item) => (
-              <Link
-                key={item.id}
-                href={item.href}
-                className="group rounded-2xl border border-[#ebe7e0] bg-white px-4 py-3.5 transition hover:border-[#cfc8bc]"
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <span
-                    className="mt-0.5 size-2.5 rounded-full"
-                    style={{ background: item.accent }}
-                    aria-hidden
-                  />
-                  {item.ready ? (
-                    <CheckCircle2 className="size-4 text-[#1f7a4d]" />
+      <div className="relative overflow-hidden bg-[#f6f4f0]">
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-x-0 top-0 h-72 bg-[radial-gradient(ellipse_at_top_left,_rgba(255,153,0,0.18),_transparent_55%),radial-gradient(ellipse_at_top_right,_rgba(24,119,242,0.12),_transparent_50%)]"
+        />
+        <div className="relative space-y-5 p-5 sm:p-6">
+          {/* Associates hero setup */}
+          <motion.section
+            initial={reduce ? false : { opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4, ease: EASE }}
+            className="overflow-hidden rounded-[1.5rem] border border-[#ebe7e0] bg-white"
+          >
+            <div className="flex flex-col gap-5 p-5 sm:flex-row sm:items-center sm:p-6">
+              <div className="flex size-14 items-center justify-center rounded-2xl bg-[#232F3E]">
+                <AmazonMark invert className="h-5" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="font-display text-[28px] leading-none text-[#141414]">
+                    Amazon Associates
+                  </p>
+                  {associateTag ? (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-[#e8f5ee] px-2.5 py-1 text-[10px] font-bold tracking-wide text-[#1f7a4d] uppercase">
+                      <CheckCircle2 className="size-3" />
+                      Activo
+                    </span>
                   ) : (
-                    <XCircle className="size-4 text-[#b8b0a4]" />
+                    <span className="rounded-full bg-amber-50 px-2.5 py-1 text-[10px] font-bold tracking-wide text-amber-800 uppercase">
+                      Falta tag
+                    </span>
                   )}
                 </div>
-                <p className="mt-2 text-[14px] font-semibold text-[#141414]">
-                  {item.title}
+                <p className="mt-2 text-[14px] text-[#6b6560]">
+                  Pegá tu Tracking ID. Higlou lo usa en Market, Affiliate y
+                  Facebook Ads. No es el token Atzr| de Seller API.
                 </p>
-                <p className="mt-1 text-[12px] leading-snug text-[#8a847c]">
-                  {item.hint}
+              </div>
+            </div>
+            <div className="border-t border-[#efeae2] bg-[#faf9f6] px-5 py-4 sm:px-6">
+              <label className="block text-[11px] font-bold tracking-[0.12em] text-[#8a847c] uppercase">
+                Tracking ID
+              </label>
+              <div className="mt-2 flex flex-col gap-2 sm:flex-row">
+                <div className="relative flex-1">
+                  <KeyRound className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-[#8a847c]" />
+                  <input
+                    value={tagDraft}
+                    onChange={(e) => setTagDraft(e.target.value)}
+                    placeholder="tu-tienda-20"
+                    className="h-12 w-full rounded-2xl border border-[#ebe7e0] bg-white pr-3 pl-10 text-[15px] font-medium text-[#141414] outline-none focus:border-[#141414]"
+                  />
+                </div>
+                <button
+                  type="button"
+                  disabled={savingTag}
+                  onClick={() => void saveTag()}
+                  className="inline-flex h-12 items-center justify-center gap-2 rounded-full bg-[#141414] px-5 text-[13px] font-semibold text-white disabled:opacity-40"
+                >
+                  {savingTag ? (
+                    <Loader2 className="size-4 animate-spin" />
+                  ) : (
+                    <Sparkles className="size-4 text-[#f4c928]" />
+                  )}
+                  Guardar y activar
+                </button>
+              </div>
+              <p className="mt-2 text-[12px] text-[#8a847c]">
+                Associates Central → Tracking IDs.{" "}
+                <a
+                  href="https://affiliate-program.amazon.com"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="font-semibold text-[#2162a1] hover:underline"
+                >
+                  Abrir Associates
+                </a>
+              </p>
+            </div>
+          </motion.section>
+
+          {/* Stats */}
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            {[
+              {
+                label: "Links",
+                value: String(links.length),
+                hint: "Amazon tagged",
+              },
+              {
+                label: "Clicks",
+                value: String(totalClicks),
+                hint: "Smart + affiliate",
+              },
+              {
+                label: "Conversiones",
+                value:
+                  dash?.performance?.conversions == null
+                    ? "—"
+                    : String(dash.performance.conversions),
+                hint: "Cuando Associates reporta",
+              },
+              {
+                label: "Revenue",
+                value: money(dash?.revenue?.affiliateRevenue),
+                hint: "Unknown hasta reportes",
+              },
+            ].map((stat, i) => (
+              <motion.div
+                key={stat.label}
+                initial={reduce ? false : { opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.05 + i * 0.04, ease: EASE }}
+                className="rounded-2xl border border-[#ebe7e0] bg-white px-4 py-3.5"
+              >
+                <p className="text-[10px] font-bold tracking-[0.14em] text-[#8a847c] uppercase">
+                  {stat.label}
                 </p>
+                <p className="mt-1 font-display text-[28px] leading-none tabular-nums">
+                  {loading ? "…" : stat.value}
+                </p>
+                <p className="mt-1.5 text-[11px] text-[#8a847c]">{stat.hint}</p>
+              </motion.div>
+            ))}
+          </div>
+
+          {/* Quick integrations */}
+          <div className="grid gap-3 sm:grid-cols-3">
+            {[
+              {
+                title: "Smart Links",
+                ok: Boolean(dash?.flags?.smartLinks),
+                href: "/settings#money",
+                hint: "/go/… con tracking",
+              },
+              {
+                title: "Facebook Page",
+                ok: fbConnected,
+                href: "/settings#facebook-store",
+                hint: "Post directo a tu Page",
+              },
+              {
+                title: "Facebook Ads",
+                ok: true,
+                href: "/facebook",
+                hint: "Elegí y publicá ofertas",
+              },
+            ].map((item) => (
+              <Link
+                key={item.title}
+                href={item.href}
+                className="rounded-2xl border border-[#ebe7e0] bg-white px-4 py-3.5 transition hover:border-[#cfc8bc]"
+              >
+                <div className="flex items-center justify-between">
+                  <p className="text-[14px] font-semibold text-[#141414]">
+                    {item.title}
+                  </p>
+                  <span
+                    className={cn(
+                      "size-2 rounded-full",
+                      item.ok ? "bg-[#1f7a4d]" : "bg-[#d4cdc2]",
+                    )}
+                  />
+                </div>
+                <p className="mt-1 text-[12px] text-[#8a847c]">{item.hint}</p>
               </Link>
             ))}
           </div>
-        </div>
 
-        {note ? (
-          <p className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-[13px] text-amber-900">
-            {note}{" "}
-            <Link href="/settings#money" className="font-semibold underline">
-              Settings → Money
-            </Link>
-          </p>
-        ) : null}
+          {note ? (
+            <p className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-[13px] text-amber-900">
+              {note}{" "}
+              <Link href="/settings#money" className="font-semibold underline">
+                Settings → Money
+              </Link>
+            </p>
+          ) : null}
 
-        <div className="overflow-hidden rounded-3xl border border-[#ebe7e0] bg-white">
-          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#efeae2] bg-[#faf9f6] px-4 py-3">
-            <div>
-              <p className="text-[10px] font-bold tracking-[0.14em] text-[#8a847c] uppercase">
-                Productos en affiliate
-              </p>
-              <p className="text-[14px] font-semibold text-[#141414]">
-                Tus links actuales
-              </p>
-            </div>
-            <Link
-              href="/facebook"
-              className="inline-flex items-center gap-1.5 text-[12px] font-semibold text-[#1877F2] hover:underline"
-            >
-              <FacebookFMark className="size-3.5" />
-              Promo carrusel
-            </Link>
-          </div>
-
-          {loading ? (
-            <div className="flex h-40 items-center justify-center">
-              <Loader2 className="size-5 animate-spin text-[#8a847c]" />
-            </div>
-          ) : links.length === 0 ? (
-            <div className="px-6 py-14 text-center">
-              <p className="font-display text-[24px] leading-none">
-                Sin links aún
-              </p>
-              <p className="mx-auto mt-3 max-w-sm text-[14px] text-[#6b6560]">
-                Crea affiliate desde Market (Ganar) o desde el Money Engine de un
-                listing. Aquí verás productos, clicks y compartir en Facebook,
-                WhatsApp o X.
-              </p>
+          {/* Products */}
+          <div className="overflow-hidden rounded-[1.5rem] border border-[#ebe7e0] bg-white">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#efeae2] bg-[#faf9f6] px-4 py-3">
+              <div>
+                <p className="text-[10px] font-bold tracking-[0.14em] text-[#8a847c] uppercase">
+                  Productos
+                </p>
+                <p className="text-[14px] font-semibold text-[#141414]">
+                  Links actuales
+                </p>
+              </div>
               <Link
                 href="/market"
-                className="mt-5 inline-flex h-11 items-center rounded-full bg-[#141414] px-5 text-[13px] font-semibold text-white"
+                className="text-[12px] font-semibold text-[#2162a1] hover:underline"
               >
-                Abrir Market
+                + Crear desde Market
               </Link>
             </div>
-          ) : (
-            <ul className="divide-y divide-[#efeae2]">
-              <AnimatePresence initial={false}>
-                {links.map((link, i) => {
-                  const shareUrl = absoluteSmartUrl(
-                    link.smartPath,
-                    link.destination_url,
-                  );
-                  return (
-                    <motion.li
-                      key={link.id}
-                      initial={reduce ? false : { opacity: 0, y: 8 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: Math.min(i * 0.03, 0.2) }}
-                      className="flex flex-col gap-3 px-4 py-4 sm:flex-row sm:items-center"
-                    >
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-[14px] font-semibold text-[#141414]">
-                          ASIN {link.asin}
-                        </p>
-                        <p className="mt-0.5 truncate text-[12px] text-[#8a847c]">
-                          {link.source || "manual"} ·{" "}
-                          {new Date(link.created_at).toLocaleDateString()}
-                          {link.smartPath ? ` · ${link.smartPath}` : ""}
-                        </p>
-                        <p className="mt-1 inline-flex items-center gap-1 text-[12px] text-[#6b6560]">
-                          <MousePointerClick className="size-3.5" />
-                          {Number(link.click_count) || 0} clicks
-                        </p>
-                      </div>
-                      <div className="flex flex-wrap gap-1.5">
-                        <a
-                          href={link.destination_url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex h-9 items-center gap-1 rounded-full border border-[#ddd7cd] bg-white px-3 text-[11px] font-semibold text-[#2162a1]"
-                        >
-                          Amazon
-                          <ExternalLink className="size-3 opacity-60" />
-                        </a>
-                        {link.smartPath ? (
+
+            {loading ? (
+              <div className="flex h-40 items-center justify-center">
+                <Loader2 className="size-5 animate-spin text-[#8a847c]" />
+              </div>
+            ) : links.length === 0 ? (
+              <div className="px-6 py-14 text-center">
+                <p className="font-display text-[28px] leading-none">
+                  Empezá por un producto
+                </p>
+                <p className="mx-auto mt-3 max-w-sm text-[14px] text-[#6b6560]">
+                  En Market tocá <strong>Ganar</strong>. Acá verás el link, los
+                  clicks y los botones para Facebook / WhatsApp / X.
+                </p>
+                <Link
+                  href="/market"
+                  className="mt-5 inline-flex h-11 items-center rounded-full bg-[#141414] px-5 text-[13px] font-semibold text-white"
+                >
+                  Abrir Market
+                </Link>
+              </div>
+            ) : (
+              <ul className="divide-y divide-[#efeae2]">
+                <AnimatePresence initial={false}>
+                  {links.map((link, i) => {
+                    const shareUrl = absoluteSmartUrl(
+                      link.smartPath,
+                      link.destination_url,
+                    );
+                    return (
+                      <motion.li
+                        key={link.id}
+                        initial={reduce ? false : { opacity: 0, y: 8 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: Math.min(i * 0.03, 0.2), ease: EASE }}
+                        className="flex flex-col gap-3 px-4 py-4 sm:flex-row sm:items-center"
+                      >
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-[14px] font-semibold text-[#141414]">
+                            ASIN {link.asin}
+                          </p>
+                          <p className="mt-0.5 truncate text-[12px] text-[#8a847c]">
+                            {link.source || "manual"} ·{" "}
+                            {new Date(link.created_at).toLocaleDateString()}
+                            {link.smartPath ? ` · ${link.smartPath}` : ""}
+                          </p>
+                          <p className="mt-1 inline-flex items-center gap-1 text-[12px] text-[#6b6560]">
+                            <MousePointerClick className="size-3.5" />
+                            {Number(link.click_count) || 0} clicks
+                          </p>
+                        </div>
+                        <div className="flex flex-wrap gap-1.5">
+                          <a
+                            href={link.destination_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex h-9 items-center gap-1 rounded-full border border-[#ddd7cd] bg-white px-3 text-[11px] font-semibold text-[#2162a1]"
+                          >
+                            Amazon
+                            <ExternalLink className="size-3 opacity-60" />
+                          </a>
                           <button
                             type="button"
                             onClick={() => void copyLink(shareUrl)}
                             className="inline-flex h-9 items-center gap-1 rounded-full border border-[#ddd7cd] bg-white px-3 text-[11px] font-semibold text-[#141414]"
                           >
-                            <Link2 className="size-3" />
-                            Smart
+                            {link.smartPath ? (
+                              <Link2 className="size-3" />
+                            ) : (
+                              <Copy className="size-3" />
+                            )}
+                            {link.smartPath ? "Smart" : "Copiar"}
                           </button>
-                        ) : (
                           <button
                             type="button"
-                            onClick={() => void copyLink(shareUrl)}
-                            className="inline-flex h-9 items-center gap-1 rounded-full border border-[#ddd7cd] bg-white px-3 text-[11px] font-semibold text-[#141414]"
+                            disabled={busyId === link.id}
+                            onClick={() => void shareFacebook(link)}
+                            className="inline-flex h-9 items-center gap-1.5 rounded-full bg-[#1877F2] px-3 text-[11px] font-semibold text-white hover:bg-[#166fe5] disabled:opacity-40"
                           >
-                            <Copy className="size-3" />
-                            Copiar
+                            {busyId === link.id ? (
+                              <Loader2 className="size-3 animate-spin" />
+                            ) : (
+                              <Share2 className="size-3" />
+                            )}
+                            Facebook
                           </button>
-                        )}
-                        <button
-                          type="button"
-                          disabled={busyId === link.id}
-                          onClick={() => void shareFacebook(link)}
-                          className={cn(
-                            "inline-flex h-9 items-center gap-1.5 rounded-full px-3 text-[11px] font-semibold text-white",
-                            "bg-[#1877F2] hover:bg-[#166fe5] disabled:opacity-40",
-                          )}
-                        >
-                          {busyId === link.id ? (
-                            <Loader2 className="size-3 animate-spin" />
-                          ) : (
-                            <Share2 className="size-3" />
-                          )}
-                          Facebook ads
-                        </button>
-                        <a
-                          href={whatsappShareUrl(shareUrl, link.asin)}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex h-9 items-center gap-1 rounded-full bg-[#25D366] px-3 text-[11px] font-semibold text-white"
-                        >
-                          <MessageCircle className="size-3" />
-                          WhatsApp
-                        </a>
-                        <a
-                          href={xShareUrl(shareUrl, link.asin)}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex h-9 items-center gap-1 rounded-full bg-[#141414] px-3 text-[11px] font-semibold text-white"
-                        >
-                          X
-                        </a>
-                      </div>
-                    </motion.li>
-                  );
-                })}
-              </AnimatePresence>
-            </ul>
-          )}
+                          <a
+                            href={whatsappShareUrl(shareUrl, link.asin)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex h-9 items-center gap-1 rounded-full bg-[#25D366] px-3 text-[11px] font-semibold text-white"
+                          >
+                            <MessageCircle className="size-3" />
+                            WhatsApp
+                          </a>
+                          <a
+                            href={xShareUrl(shareUrl, link.asin)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex h-9 items-center gap-1 rounded-full bg-[#141414] px-3 text-[11px] font-semibold text-white"
+                          >
+                            X
+                          </a>
+                        </div>
+                      </motion.li>
+                    );
+                  })}
+                </AnimatePresence>
+              </ul>
+            )}
+          </div>
         </div>
       </div>
     </StudioFrame>

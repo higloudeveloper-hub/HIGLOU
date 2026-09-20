@@ -146,8 +146,8 @@ export function SettingsStudio() {
                     Facebook
                   </h2>
                   <p className="mt-1 text-sm text-muted-foreground">
-                    Conectá tu Page para compartir affiliate links y potenciar
-                    publicidad. Disponible para todas las cuentas.
+                    Conectá tu Page. Luego publicá desde Facebook Ads con tus
+                    links Associates — para cualquier cuenta Higlou.
                   </p>
                 </div>
                 <FacebookConnectForm />

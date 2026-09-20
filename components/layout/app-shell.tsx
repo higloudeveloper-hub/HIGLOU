@@ -83,7 +83,7 @@ export function AppShell({
             className="inline-flex h-8 items-center gap-1.5 rounded-full border border-[#1877F2]/30 bg-[#1877F2]/10 px-2.5 text-[12px] font-semibold text-[#1877F2]"
           >
             <FacebookFMark className="size-3.5" />
-            Promo FB
+            FB Ads
           </Link>
           <NewListingButton size="sm" className="ml-auto" label="New" />
         </div>

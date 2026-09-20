@@ -1,20 +1,12 @@
 "use client";
 
 import { AppShell } from "@/components/layout/app-shell";
-import { StudioFrame } from "@/components/layout/studio-frame";
-import { PromoCarouselStudio } from "@/components/facebook/promo-carousel-studio";
+import { FacebookAdsStudio } from "@/components/facebook/facebook-ads-studio";
 
-export default function FacebookPromoPage() {
+export default function FacebookAdsPage() {
   return (
     <AppShell hideHeader flush>
-      <StudioFrame
-        kicker="Facebook"
-        title="Promo Facebook"
-        hint="Carrusel / vitrina · disponible para todas las cuentas"
-        scroll={false}
-      >
-        <PromoCarouselStudio />
-      </StudioFrame>
+      <FacebookAdsStudio />
     </AppShell>
   );
 }

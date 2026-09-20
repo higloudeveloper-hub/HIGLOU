@@ -69,7 +69,7 @@ export function DropMarketStudio() {
   const [ledgerCount, setLedgerCount] = useState(0);
   const [active, setActive] = useState(0);
   const [busy, setBusy] = useState<string | null>(null);
-  const [bootstrapped, setBootstrapped] = useState(false);
+  // Never gate the floor on bootstrap — show empty/local immediately, soft-sync feed.
   const [refreshing, setRefreshing] = useState(false);
   const [filter, setFilter] = useState<LaneFilter>("all");
 
@@ -90,11 +90,10 @@ export function DropMarketStudio() {
       setLedgerCount(0);
       setNote(emptyNote);
     }
-    setBootstrapped(true);
     setRefreshing(true);
 
     const controller = new AbortController();
-    const hardStop = window.setTimeout(() => controller.abort(), 5000);
+    const hardStop = window.setTimeout(() => controller.abort(), 4000);
 
     void (async () => {
       try {
@@ -141,8 +140,6 @@ export function DropMarketStudio() {
       controller.abort();
     };
   }, []);
-
-  const loading = !bootstrapped;
 
   const filtered = useMemo(() => {
     if (filter === "all") return drops;
@@ -272,7 +269,7 @@ export function DropMarketStudio() {
   ];
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col bg-[#f3f0ea] text-[#141414]">
+    <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-[#f3f0ea] text-[#141414]">
       {/* Full-bleed marketplace hero */}
       <section className="relative shrink-0 overflow-hidden bg-[#141414] text-white">
         <div
@@ -390,7 +387,7 @@ export function DropMarketStudio() {
               <span className="ml-1.5 tabular-nums opacity-60">{row.count}</span>
             </button>
           ))}
-          {!loading && note ? (
+          {note ? (
             <span className="ml-auto hidden text-[12px] text-[#8a847c] lg:inline">
               {note}
             </span>
@@ -399,13 +396,8 @@ export function DropMarketStudio() {
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto">
-        {loading ? (
-          <div className="flex min-h-[360px] items-center justify-center gap-2 text-[14px] text-[#6b6560]">
-            <Loader2 className="size-4 animate-spin" />
-            Opening the floor…
-          </div>
-        ) : drops.length === 0 ? (
-          <div className="mx-auto flex min-h-[480px] max-w-lg flex-col items-center justify-center px-6 text-center">
+        {drops.length === 0 ? (
+          <div className="mx-auto flex min-h-[420px] max-w-lg flex-col items-center justify-center px-6 text-center">
             <p className="font-display text-3xl text-[#141414]">
               Floor is empty
             </p>

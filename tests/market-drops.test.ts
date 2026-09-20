@@ -150,9 +150,10 @@ describe("higlou market + find winners wiring", () => {
     expect(readRepo("components/market/market-tile.tsx")).toMatch(
       /You keep|Keepa demand/,
     );
-    expect(readRepo("components/market/drop-market.tsx")).toMatch(
-      /Sell on Amazon/,
+    expect(readRepo("components/market/drop-market.tsx")).not.toMatch(
+      /Opening the floor/,
     );
+    expect(readRepo("app/market/page.tsx")).toMatch(/flush/);
     expect(readRepo("components/studio/find-winners-studio.tsx")).toMatch(
       /FindWinnersBoard/,
     );

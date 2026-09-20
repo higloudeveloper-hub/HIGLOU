@@ -3,6 +3,7 @@ import {
   isListableEbayCategoryId,
   resolveEbayCategory,
 } from "@/config/ebay-categories";
+import { isCategoryProductMismatch } from "@/lib/ebay/category-guard";
 import { isAdultSexualWellnessText } from "@/lib/ebay/listing-helpers";
 
 const US_CATEGORY_TREE_ID = "0";
@@ -141,13 +142,22 @@ export async function ensureListableEbayCategory(
   }
 
   if (isListableEbayCategoryId(currentId) && (!adult || adultLeafName)) {
-    const leaf = await isEbayLeafCategory(accessToken, currentId);
-    if (leaf) {
-      return {
-        categoryId: currentId,
-        categoryName: String(input.categoryName || "").trim(),
-        source: "listing",
-      };
+    const mismatch = isCategoryProductMismatch({
+      categoryId: currentId,
+      categoryName: input.categoryName,
+      productType: input.productType,
+      title: input.title,
+      brand: input.brand,
+    });
+    if (!mismatch) {
+      const leaf = await isEbayLeafCategory(accessToken, currentId);
+      if (leaf) {
+        return {
+          categoryId: currentId,
+          categoryName: String(input.categoryName || "").trim(),
+          source: "listing",
+        };
+      }
     }
   }
 
@@ -172,13 +182,37 @@ export async function ensureListableEbayCategory(
     };
   }
 
+  // Catalog already resolved a pool chemical (etc.) — prefer it over Taxonomy
+  // when Taxonomy tends to mis-route (e.g. "Green Aid" → ammo).
+  if (
+    isListableEbayCategoryId(resolved.categoryId) &&
+    resolved.inferred &&
+    (resolved.confidence || 0) >= 0.45
+  ) {
+    return {
+      categoryId: resolved.categoryId,
+      categoryName: resolved.categoryName,
+      source: "catalog-strong",
+    };
+  }
+
   if (query) {
     try {
       const suggestions = await suggestEbayLeafCategories(accessToken, query);
-      if (suggestions[0]) {
+      const safe = suggestions.find(
+        (row) =>
+          !isCategoryProductMismatch({
+            categoryId: row.categoryId,
+            categoryName: row.categoryName,
+            productType: input.productType,
+            title: input.title,
+            brand: input.brand,
+          }),
+      );
+      if (safe) {
         return {
-          categoryId: suggestions[0].categoryId,
-          categoryName: suggestions[0].categoryName,
+          categoryId: safe.categoryId,
+          categoryName: safe.categoryName,
           source: "taxonomy",
         };
       }
@@ -201,6 +235,19 @@ export async function ensureListableEbayCategory(
       categoryId: "117503",
       categoryName: "Chandeliers & Ceiling Fixtures",
       source: "fallback-lighting",
+    };
+  }
+
+  // Pool chemicals fallback when Taxonomy failed / only returned ammo.
+  if (
+    /\b(pool\s*(chemical|shock|clarifier|algaecide|chlorine)|algaecide|green\s*aid|coral\s*seas)\b/i.test(
+      query,
+    )
+  ) {
+    return {
+      categoryId: "262996",
+      categoryName: "Pool Chlorine, Bromine & Algaecide",
+      source: "fallback-pool-chemical",
     };
   }
 

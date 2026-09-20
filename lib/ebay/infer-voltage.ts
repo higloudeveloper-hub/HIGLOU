@@ -938,6 +938,11 @@ const DNA_REQUIRED = new Set(
     "Fragrance Name",
     "Scent",
     "Fragrance",
+    // Firearm-only aspects — DNA when product is clearly not ammo
+    // (Taxonomy sometimes mis-routes pool chemicals → ammo leaves).
+    "Ammunition Type",
+    "Caliber",
+    "Gauge",
   ].map((n) => n.toLowerCase()),
 );
 
@@ -980,9 +985,17 @@ export function ensureRequiredCategoryAspects(
   for (const name of requiredNames) {
     const trimmed = String(name || "").trim();
     if (!trimmed || listingHasAspect(aspects, trimmed)) continue;
+    const isAmmoAspect = /^(ammunition\s*type|caliber|gauge)$/i.test(trimmed);
+    const looksLikeAmmo =
+      /\b(ammunition|ammo|cartridge|bullet|primer|reloading|9mm|5\.56|shotshell|\.22\s*lr)\b/i.test(
+        hay,
+      );
+    const dnaOk =
+      DNA_REQUIRED.has(trimmed.toLowerCase()) &&
+      (!isAmmoAspect || !looksLikeAmmo);
     const value =
       inferAspectValueFromText(trimmed, hay, extras) ||
-      (DNA_REQUIRED.has(trimmed.toLowerCase()) ? "Does Not Apply" : "") ||
+      (dnaOk ? "Does Not Apply" : "") ||
       (/^item\s*(length|width|height)$/i.test(trimmed)
         ? fallbackDimensionAspect(trimmed, hay, {
             lengthIn: extras.packageLengthIn,
@@ -1097,6 +1110,14 @@ export function inferFilledAspectForEbayError(
   if (/^(model|mpn|compatible\s|fragrance|scent)/i.test(name)) {
     return "Does Not Apply";
   }
+  // Firearm aspects on non-ammo products (pool chemicals mis-categorized, etc.)
+  if (/^(ammunition\s*type|caliber|gauge)$/i.test(name)) {
+    const looksLikeAmmo =
+      /\b(ammunition|ammo|cartridge|bullet|primer|reloading|9mm|5\.56|shotshell|\.22\s*lr)\b/i.test(
+        hay,
+      );
+    if (!looksLikeAmmo) return "Does Not Apply";
+  }
   if (/^item\s*(length|width|height)$/i.test(name)) {
     return fallbackDimensionAspect(name, hay, {
       lengthIn: extras?.packageLengthIn,
@@ -1119,6 +1140,8 @@ export function humanizeEbayPublishError(raw: string): {
         ? "Try again — Higlou fills the Amazon brand, or Unbranded if Amazon has none."
       : /^volume$/i.test(aspect)
         ? "Try again — Higlou fills the bottle size (3.4 fl. oz. for a 100 ml perfume)."
+      : /^(ammunition\s*type|caliber|gauge)$/i.test(aspect)
+        ? "Try again — Higlou fills Does Not Apply on non-ammo products, or pick the correct pool/garden category."
       : "Try again — Higlou fills it from the product (or Does Not Apply).";
     return {
       headline: `eBay needs “${aspect}”`,

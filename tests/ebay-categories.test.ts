@@ -128,6 +128,28 @@ describe("resolveEbayCategory", () => {
     expect(result.inferred).toBe(true);
   });
 
+  it("maps Coral Seas Green Aid pool algaecide to pool chemicals, not ammo", () => {
+    const result = resolveEbayCategory({
+      title: "Coral Seas Green Aid Green To Clean - 2 lbs.",
+      brand: "Coral Seas",
+      productType: "Pool Chemical",
+    });
+    expect(result.categoryId).toBe("262996");
+    expect(result.categoryName).toMatch(/Pool Chlorine|Algaecide/i);
+    expect(result.inferred).toBe(true);
+  });
+
+  it("rejects an ammo leaf for pool algaecide titles", () => {
+    const result = resolveEbayCategory({
+      categoryId: "31769",
+      categoryName: "Ammunition",
+      title: "Coral Seas Green Aid Green To Clean - 2 lbs.",
+      brand: "Coral Seas",
+    });
+    expect(result.categoryId).toBe("262996");
+    expect(result.inferred).toBe(true);
+  });
+
   it("maps bottled water keywords to soft drinks", () => {
     const result = resolveEbayCategory({
       productType: "Purified Water",

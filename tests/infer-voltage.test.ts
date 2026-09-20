@@ -671,3 +671,41 @@ describe("Brand aspect (eBay 25002 Brand)", () => {
     expect(item.aspects?.Brand?.[0]).toBe("Unbranded");
   });
 });
+
+describe("Ammunition Type aspect (eBay 25002 mis-routed pool chemicals)", () => {
+  it("fills Does Not Apply for pool algaecide on 25002 retry", () => {
+    expect(
+      inferFilledAspectForEbayError(
+        "Ammunition Type",
+        "Coral Seas Green Aid Green To Clean - 2 lbs.",
+        {
+          title: "Coral Seas Green Aid Green To Clean - 2 lbs.",
+          brand: "Coral Seas",
+          productType: "Pool Chemical",
+        },
+      ),
+    ).toBe("Does Not Apply");
+  });
+
+  it("DNA-fills Ammunition Type for non-ammo products before Inventory PUT", () => {
+    const aspects: Record<string, string[]> = {};
+    ensureRequiredCategoryAspects(aspects, ["Ammunition Type"], {
+      title: "Coral Seas Green Aid Green To Clean - 2 lbs.",
+      brand: "Coral Seas",
+      productType: "Pool Chemical",
+      categoryName: "Ammunition",
+    });
+    expect(aspects["Ammunition Type"]).toEqual(["Does Not Apply"]);
+  });
+
+  it("does not DNA-fill Ammunition Type for real ammo titles", () => {
+    const aspects: Record<string, string[]> = {};
+    ensureRequiredCategoryAspects(aspects, ["Ammunition Type"], {
+      title: "9mm Hollow Point Ammunition 50 Rounds",
+      brand: "Federal",
+      productType: "Ammunition",
+      categoryName: "Ammunition",
+    });
+    expect(aspects["Ammunition Type"]).toBeUndefined();
+  });
+});

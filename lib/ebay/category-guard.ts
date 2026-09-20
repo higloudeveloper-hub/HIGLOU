@@ -31,6 +31,26 @@ const BEDDING_PRODUCT =
 export const PATIO_OUTDOOR_PRODUCT =
   /\b(patio|outdoor\s+furniture|outdoor\s+patio|juego\s+de\s+patio|muebles?\s+de\s+(patio|exterior|jard[ií]n)|patio\s+(set|dining|furniture|table|chair)|jard[ií]n\s+(set|muebles)|garden\s+furniture|wicker\s+patio)\b/i;
 
+/** Pool / spa chemicals — must never land in ammo / reloading leaves. */
+export const POOL_CHEMICAL_PRODUCT =
+  /\b(pool\s*(chemical|shock|clarifier|sanitizer|algaecide|chlorine|bromine)|algaecide|green\s*aid|green\s*to\s*clean|coral\s*seas|natural\s*chemistry|swimming\s*pool\s*(chemical|care|treatment)|pool\s*maintenance)\b/i;
+
+const AMMO_CATEGORY_IDS = new Set([
+  "31769", // Ammunition
+  "179197",
+  "179198",
+  "31772",
+  "31773",
+  "7301", // Reloading
+  "179199",
+]);
+
+const AMMO_CATEGORY_NAME =
+  /\b(ammunition|ammo|reloading|cartridge|bullet|primer|gunpowder|firearm|shells?\b|shotshell)\b/i;
+
+const AMMO_PRODUCT =
+  /\b(ammunition|ammo|cartridge|bullet|primer|reloading|9mm|5\.56|shotshell|\.22\s*lr|hollow\s*point)\b/i;
+
 const INDOOR_FURNITURE_CATEGORY_IDS = new Set([
   "3197", // Furniture (catch-all → "Muebles")
   "107578", // Dining Sets (indoor)
@@ -126,6 +146,22 @@ export function isCategoryProductMismatch(input: {
     (INDOOR_FURNITURE_CATEGORY_IDS.has(id) ||
       (INDOOR_FURNITURE_NAME.test(name) &&
         !/\b(patio|outdoor|exterior|jard[ií]n)\b/i.test(name)))
+  ) {
+    return true;
+  }
+
+  // Pool chemicals must never stay under ammo / reloading leaves
+  // (Taxonomy often mis-reads "Green Aid" as green-tip ammo).
+  const poolChemical = POOL_CHEMICAL_PRODUCT.test(product);
+  const ammoSignal =
+    AMMO_CATEGORY_IDS.has(id) || AMMO_CATEGORY_NAME.test(name);
+  if (poolChemical && ammoSignal && !AMMO_PRODUCT.test(product)) {
+    return true;
+  }
+  // Reverse: real ammo must not land in pool chemical leaf.
+  if (
+    AMMO_PRODUCT.test(product) &&
+    (id === "262996" || /pool\s*(chlorine|bromine|algaecide)/i.test(name))
   ) {
     return true;
   }

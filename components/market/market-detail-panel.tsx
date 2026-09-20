@@ -13,7 +13,12 @@ import {
 import { PlatformOpenLinks } from "@/components/opportunity/platform-open-links";
 import { CheapSourcePanel } from "@/components/winners/cheap-source-panel";
 import type { MarketDropPublic } from "@/lib/market/from-opportunity";
-import { marketSpread } from "@/lib/market/catalog";
+import {
+  hasArbitrageKeep,
+  marketPlay,
+  marketTilePricing,
+  marketTrend,
+} from "@/lib/market/route-intent";
 import { cn } from "@/lib/utils";
 
 function money(n: number | null | undefined) {
@@ -27,28 +32,6 @@ function money(n: number | null | undefined) {
 function signed(n: number) {
   const abs = money(Math.abs(n));
   return n >= 0 ? `+${abs}` : `−${abs.replace("-", "")}`;
-}
-
-function laneCopy(lane: MarketDropPublic["lane"]) {
-  if (lane === "amazon") {
-    return {
-      title: "Amazon directo",
-      hint: "Demanda Keepa · listá en Amazon",
-      color: "text-[#8a6a10]",
-    };
-  }
-  if (lane === "retail") {
-    return {
-      title: "Retail arb",
-      hint: "Compra retail · vende marketplace",
-      color: "text-[#2a4a7a]",
-    };
-  }
-  return {
-    title: "Arbitraje",
-    hint: "Compra → vende · keep neto",
-    color: "text-[#1f7a4d]",
-  };
 }
 
 export function MarketDetailPanel({
@@ -70,11 +53,18 @@ export function MarketDetailPanel({
 }) {
   const reduce = useReducedMotion();
   const open = Boolean(item);
-  const keep = item ? item.netProfit ?? marketSpread(item) : 0;
-  const showKeep = item?.lane !== "amazon" && keep > 0;
-  const lane = item ? laneCopy(item.lane) : null;
+  const showKeep = item ? hasArbitrageKeep(item) : false;
+  const play = item ? marketPlay(item) : null;
+  const trend = item ? marketTrend(item) : null;
+  const pricing = item ? marketTilePricing(item) : null;
   const amazonHref =
     item?.affiliateUrl || item?.platformUrls?.amazon || null;
+  const playColor =
+    play?.play === "sell_amazon"
+      ? "text-[#8a6a10]"
+      : play?.play === "source_supply"
+        ? "text-[#2a4a7a]"
+        : "text-[#1f7a4d]";
 
   const comps = item
     ? [
@@ -82,7 +72,7 @@ export function MarketDetailPanel({
           key: "amazon",
           label: item.affiliateUrl ? "Amazon · Aff" : "Amazon",
           price: item.amazonPrice ?? (item.lane === "amazon" ? item.sell : item.buy),
-          role: item.lane === "amazon" ? "Venta" : "Compra",
+          role: item.lane === "amazon" ? "Buy Box" : "Compra",
           href: amazonHref,
         },
         {
@@ -111,7 +101,7 @@ export function MarketDetailPanel({
 
   return (
     <AnimatePresence>
-      {open && item && lane ? (
+      {open && item && play && trend && pricing ? (
         <>
           <motion.button
             type="button"
@@ -134,22 +124,26 @@ export function MarketDetailPanel({
           >
             <header className="flex items-start justify-between gap-3 border-b border-[#efeae2] px-5 py-4">
               <div className="min-w-0">
-                <p className={cn("text-[10px] font-bold tracking-[0.16em] uppercase", lane.color)}>
-                  {lane.title}
+                <p className={cn("text-[10px] font-bold tracking-[0.16em] uppercase", playColor)}>
+                  {play.badge}
                 </p>
-                <p className="mt-1 text-[12px] text-[#8a847c]">{lane.hint}</p>
+                <p className="mt-1 text-[12px] text-[#8a847c]">{play.hint}</p>
+                <p className="mt-1.5 text-[11px] font-semibold text-[#5a554e]">
+                  Tendencia {trend.label}
+                  <span className="font-normal text-[#8a847c]"> · {trend.detail}</span>
+                </p>
               </div>
               <div className="flex items-center gap-2">
                 <div className="text-right">
-                  {showKeep ? (
+                  {showKeep && pricing.mode === "spread" ? (
                     <>
                       <p
                         className={cn(
                           "font-display text-[28px] leading-none tabular-nums",
-                          keep >= 12 ? "text-[#1f7a4d]" : "text-[#141414]",
+                          pricing.keep >= 12 ? "text-[#1f7a4d]" : "text-[#141414]",
                         )}
                       >
-                        {signed(keep)}
+                        {signed(pricing.keep)}
                       </p>
                       <p className="text-[9px] font-semibold tracking-wider text-[#8a847c] uppercase">
                         Keep neto
@@ -158,10 +152,10 @@ export function MarketDetailPanel({
                   ) : (
                     <>
                       <p className="font-display text-[28px] leading-none tabular-nums">
-                        {Math.round(item.demandScore ?? item.score ?? 0)}
+                        {money(pricing.mode === "single" ? pricing.price : item.sell)}
                       </p>
                       <p className="text-[9px] font-semibold tracking-wider text-[#8a847c] uppercase">
-                        Demand
+                        {pricing.mode === "single" ? pricing.label : "Precio"}
                       </p>
                     </>
                   )}
@@ -250,11 +244,47 @@ export function MarketDetailPanel({
                   })}
                 </div>
                 <div className="border-t border-[#efeae2] px-3.5 py-2.5 text-[12px] text-[#6b6560]">
-                  Compra {money(item.buy)}
-                  <span className="mx-1.5 text-[#c5bfb5]">→</span>
-                  Venta {money(item.sell)}
-                  {showKeep ? ` · net ${signed(keep)}` : ""}
+                  {pricing.mode === "spread" ? (
+                    <>
+                      Compra {money(pricing.buy)}
+                      <span className="mx-1.5 text-[#c5bfb5]">→</span>
+                      Venta {money(pricing.sell)}
+                      {` · keep ${signed(pricing.keep)}`}
+                    </>
+                  ) : (
+                    <>
+                      {pricing.label} {money(pricing.price)}
+                      <span className="mx-1.5 text-[#c5bfb5]">·</span>
+                      {play.action}
+                    </>
+                  )}
                 </div>
+              </section>
+
+              {/* Trend meter */}
+              <section className="rounded-2xl border border-[#ebe7e0] px-3.5 py-3">
+                <div className="mb-1.5 flex items-center justify-between">
+                  <p className="text-[11px] font-semibold tracking-[0.12em] text-[#6b6560] uppercase">
+                    Tendencia verificada
+                  </p>
+                  <p className="text-[12px] font-semibold text-[#141414]">{trend.label}</p>
+                </div>
+                <div className="h-2 overflow-hidden rounded-full bg-[#efeae2]">
+                  <div
+                    className={cn(
+                      "h-full rounded-full",
+                      trend.level === "hot"
+                        ? "bg-[#c43c1a]"
+                        : trend.level === "high"
+                          ? "bg-[#1f7a4d]"
+                          : trend.level === "rising"
+                            ? "bg-[#2162a1]"
+                            : "bg-[#a8a29a]",
+                    )}
+                    style={{ width: `${trend.progress}%` }}
+                  />
+                </div>
+                <p className="mt-1.5 text-[11px] text-[#8a847c]">{trend.detail}</p>
               </section>
 
               {/* Money actions — 2 clear clicks */}
@@ -271,7 +301,11 @@ export function MarketDetailPanel({
                     ) : (
                       <Store className="size-4" />
                     )}
-                    {busy ? "Agregando…" : "A mi tienda"}
+                    {busy
+                      ? "Agregando…"
+                      : play.play === "sell_amazon"
+                        ? "Listar en Amazon"
+                        : "A mi tienda"}
                   </button>
                   <button
                     type="button"

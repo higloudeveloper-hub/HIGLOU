@@ -14,6 +14,7 @@ import {
 import { MarketProductTile } from "@/components/market/market-product-tile";
 import { MarketDetailPanel } from "@/components/market/market-detail-panel";
 import { MarketEarnGuide } from "@/components/market/market-earn-guide";
+import { MarketLivePulse } from "@/components/market/market-live-pulse";
 import {
   mergeMarketFeed,
   type MarketDropPublic,
@@ -408,8 +409,8 @@ export function DropMarketStudio() {
                 transition={{ delay: 0.1 }}
                 className="mt-2 max-w-lg text-[14px] leading-relaxed text-[#6b6560]"
               >
-                Cada winner ya trae tu link affiliate. Comparte, vende o busca
-                más barato — gana con clicks simples.
+                Máquina de oportunidades en vivo: productos analizados, en
+                tendencia, con ruta clara — vender Amazon, eBay o sourcing.
               </motion.p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
@@ -435,13 +436,19 @@ export function DropMarketStudio() {
             </div>
           </div>
 
-          <div className="mt-6 inline-flex rounded-full border border-[#ebe7e0] bg-[#f4f2ed] p-1">
+          <MarketLivePulse
+            refreshing={refreshing}
+            floorCount={drops.length}
+            className="mt-5"
+          />
+
+          <div className="mt-5 inline-flex rounded-full border border-[#ebe7e0] bg-[#f4f2ed] p-1">
             {(
               [
                 ["all", "Todos", drops.length],
-                ["arbitrage", "Arbitraje", arb.length],
-                ["amazon", "Amazon", amazon.length],
-                ["retail", "Retail", retail.length],
+                ["arbitrage", "→ eBay", arb.length],
+                ["amazon", "→ Amazon", amazon.length],
+                ["retail", "Suministro", retail.length],
               ] as const
             ).map(([id, label, count]) => {
               const on = filter === id;

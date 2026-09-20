@@ -169,7 +169,16 @@ describe("higlou market + find winners wiring", () => {
       /Higlou · Floor verificado|Market/,
     );
     expect(readRepo("components/market/drop-market.tsx")).toMatch(
-      /MarketProductTile|MarketDetailPanel|A mi tienda|Ganar affiliate|MarketEarnGuide|1 click/,
+      /MarketProductTile|MarketDetailPanel|MarketEarnGuide|MarketLivePulse|1 click/,
+    );
+    expect(readRepo("components/market/market-live-pulse.tsx")).toMatch(
+      /Opportunity machine/,
+    );
+    expect(readRepo("lib/market/route-intent.ts")).toMatch(
+      /Vender en Amazon|marketTilePricing/,
+    );
+    expect(readRepo("components/market/market-product-tile.tsx")).toMatch(
+      /Buy Box Amazon|Tendencia|Vender en Amazon/,
     );
     expect(readRepo("components/market/market-earn-guide.tsx")).toMatch(
       /3 formas de hacer dinero/,
@@ -182,9 +191,6 @@ describe("higlou market + find winners wiring", () => {
     );
     expect(readRepo("lib/market/from-opportunity.ts")).toMatch(
       /withAffiliateAmazonLink/,
-    );
-    expect(readRepo("components/market/market-product-tile.tsx")).toMatch(
-      /Tienda/,
     );
     expect(readRepo("components/market/market-detail-panel.tsx")).toMatch(
       /Comparar precios|CheapSourcePanel|Buscar más winners/,

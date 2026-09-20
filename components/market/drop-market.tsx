@@ -16,8 +16,12 @@ import { cn } from "@/lib/utils";
 
 function localVerifiedDrops(): MarketDropPublic[] {
   try {
-    const ledger = loadLocalLedger("amazon_to_ebay");
-    return mergeMarketFeed({ ledgerHits: ledger.hits, limit: 40 }).drops;
+    const arb = loadLocalLedger("amazon_to_ebay");
+    const amz = loadLocalLedger("amazon");
+    return mergeMarketFeed({
+      ledgerHits: [...arb.hits, ...amz.hits],
+      limit: 40,
+    }).drops;
   } catch {
     return [];
   }
@@ -121,7 +125,15 @@ export function DropMarketStudio() {
 
   const drop = drops[active] ?? null;
   const openKeep = useMemo(
-    () => drops.reduce((sum, d) => sum + Math.max(0, d.netProfit ?? marketSpread(d)), 0),
+    () =>
+      drops.reduce((sum, d) => {
+        if (d.lane === "amazon") return sum;
+        return sum + Math.max(0, d.netProfit ?? marketSpread(d));
+      }, 0),
+    [drops],
+  );
+  const amazonCount = useMemo(
+    () => drops.filter((d) => d.lane === "amazon").length,
     [drops],
   );
 
@@ -216,8 +228,8 @@ export function DropMarketStudio() {
               Market
             </h1>
             <p className="mt-2 max-w-xl text-[14px] text-white/65">
-              Only platform-verified winners from Find Winners. No demo
-              catalog — if it is here, Higlou checked the ask keep.
+              Platform-verified only: arbitrage keep (Amazon → eBay) and Keepa
+              Amazon demand winners. No demo catalog.
             </p>
           </div>
           <Link
@@ -242,6 +254,10 @@ export function DropMarketStudio() {
             <strong className="text-[#141414]">{signed(openKeep)}</strong>
           </span>
           <span>
+            Amazon lane{" "}
+            <strong className="text-[#141414]">{amazonCount}</strong>
+          </span>
+          <span>
             Ledger{" "}
             <strong className="text-[#141414]">{ledgerCount}</strong>
           </span>
@@ -262,8 +278,9 @@ export function DropMarketStudio() {
               Market is empty
             </p>
             <p className="mt-2 text-[14px] leading-relaxed text-[#6b6560]">
-              Run Find Winners. Products with real Amazon cost vs eBay low-ask
-              keep after fees stock this floor automatically — nothing invented.
+              Run Find Winners — arbitrage (Amazon → eBay keep) or Sell on
+              Amazon (Keepa BSR velocity). Only verified winners stock this
+              floor.
             </p>
             <Link
               href="/winners"
@@ -281,7 +298,9 @@ export function DropMarketStudio() {
               </p>
               <ul className="grid gap-3">
                 {drops.map((item, i) => {
+                  const isAmz = item.lane === "amazon";
                   const keep = item.netProfit ?? marketSpread(item);
+                  const demand = item.demandScore ?? item.score ?? 0;
                   const selected = i === active;
                   return (
                     <li key={item.id}>
@@ -307,12 +326,23 @@ export function DropMarketStudio() {
                         <div className="min-w-0 flex-1">
                           <p className="truncate text-[11px] font-semibold tracking-wide text-[#6b6560] uppercase">
                             {item.name}
+                            {isAmz ? " · Sell on Amazon" : " · Arbitrage"}
                           </p>
                           <p className="mt-0.5 line-clamp-2 text-[15px] font-semibold leading-snug">
                             {item.title}
                           </p>
                           <p className="mt-1 text-[13px] text-[#6b6560]">
-                            Buy {money(item.buy)} → List {money(item.sell)}
+                            {isAmz
+                              ? `${money(item.sell)}${
+                                  item.salesRank != null
+                                    ? ` · BSR ${item.salesRank.toLocaleString("en-US")}`
+                                    : ""
+                                }${
+                                  item.bsrDrops90 != null
+                                    ? ` · ${item.bsrDrops90} drops/90d`
+                                    : ""
+                                }`
+                              : `Buy ${money(item.buy)} → List ${money(item.sell)}`}
                           </p>
                           <p className="mt-1 text-[11px] text-[#8a847c]">
                             {item.note || "Platform verified"}
@@ -320,15 +350,17 @@ export function DropMarketStudio() {
                         </div>
                         <div className="shrink-0 text-right">
                           <p className="text-[11px] font-semibold tracking-wide text-[#6b6560] uppercase">
-                            You keep
+                            {isAmz ? "Keepa demand" : "You keep"}
                           </p>
                           <p
                             className={cn(
                               "font-display text-2xl leading-none",
-                              keep >= 12 ? "text-[#1f7a4d]" : "text-[#141414]",
+                              (isAmz ? demand >= 74 : keep >= 12)
+                                ? "text-[#1f7a4d]"
+                                : "text-[#141414]",
                             )}
                           >
-                            {signed(keep)}
+                            {isAmz ? demand : signed(keep)}
                           </p>
                         </div>
                       </button>
@@ -352,27 +384,54 @@ export function DropMarketStudio() {
                   ) : null}
                 </div>
                 <p className="mt-4 text-[11px] font-semibold tracking-wide text-[#6b6560] uppercase">
-                  {drop.name} · verified
+                  {drop.name} ·{" "}
+                  {drop.lane === "amazon" ? "Keepa Amazon" : "arbitrage"}{" "}
+                  · verified
                 </p>
                 <h2 className="mt-1 font-display text-2xl leading-tight">
                   {drop.title}
                 </h2>
                 <p className="mt-2 text-[13px] text-[#6b6560]">{drop.blurb}</p>
                 <div className="mt-4 flex flex-wrap gap-4 text-[13px]">
-                  <span>
-                    Cost{" "}
-                    <strong className="tabular-nums">{money(drop.buy)}</strong>
-                  </span>
-                  <span>
-                    List{" "}
-                    <strong className="tabular-nums">{money(drop.sell)}</strong>
-                  </span>
-                  <span>
-                    Keep{" "}
-                    <strong className="tabular-nums text-[#1f7a4d]">
-                      {signed(drop.netProfit ?? marketSpread(drop))}
-                    </strong>
-                  </span>
+                  {drop.lane === "amazon" ? (
+                    <>
+                      <span>
+                        Amazon{" "}
+                        <strong className="tabular-nums">{money(drop.sell)}</strong>
+                      </span>
+                      {drop.salesRank != null ? (
+                        <span>
+                          BSR{" "}
+                          <strong className="tabular-nums">
+                            {drop.salesRank.toLocaleString("en-US")}
+                          </strong>
+                        </span>
+                      ) : null}
+                      <span>
+                        Demand{" "}
+                        <strong className="tabular-nums text-[#1f7a4d]">
+                          {drop.demandScore ?? drop.score ?? "—"}
+                        </strong>
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <span>
+                        Cost{" "}
+                        <strong className="tabular-nums">{money(drop.buy)}</strong>
+                      </span>
+                      <span>
+                        List{" "}
+                        <strong className="tabular-nums">{money(drop.sell)}</strong>
+                      </span>
+                      <span>
+                        Keep{" "}
+                        <strong className="tabular-nums text-[#1f7a4d]">
+                          {signed(drop.netProfit ?? marketSpread(drop))}
+                        </strong>
+                      </span>
+                    </>
+                  )}
                 </div>
                 {drop.asin ? (
                   <p className="mt-2 text-[11px] text-[#8a847c]">ASIN {drop.asin}</p>

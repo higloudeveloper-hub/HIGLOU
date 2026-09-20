@@ -17,7 +17,7 @@ async function loadLedgerHits(userId: string): Promise<OpportunityProduct[]> {
       .select("asin, payload, net_profit, mode")
       .eq("user_id", userId)
       .order("updated_at", { ascending: false })
-      .limit(80);
+      .limit(120);
     if (error || !data?.length) return [];
     const out: OpportunityProduct[] = [];
     const seen = new Set<string>();
@@ -72,7 +72,7 @@ export async function GET() {
     drops: merged.drops,
     note:
       merged.ledgerCount > 0
-        ? `${merged.ledgerCount} Higlou-verified winner${merged.ledgerCount === 1 ? "" : "s"} from Find Winners`
-        : "Market is empty until Find Winners verifies a real ask spread. No demo products.",
+        ? `${merged.ledgerCount} Higlou-verified winner${merged.ledgerCount === 1 ? "" : "s"} (arbitrage + Keepa Amazon)`
+        : "Market is empty until Find Winners verifies arbitrage keep or Keepa Amazon demand. No demo products.",
   });
 }

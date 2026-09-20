@@ -1,5 +1,12 @@
 import { buildAmazonAssociatesUrl } from "@/lib/monetization/channels/affiliate";
 import {
+  amazonProductScore,
+  amazonWinnerBlurb,
+  amazonWinnerHeat,
+  isAmazonProductWinner,
+} from "@/lib/opportunity/amazon-product-winner";
+import {
+  isAmazonSellLane,
   isPlatformWinner,
   platformKeep,
   sortPlatformWinners,
@@ -14,12 +21,31 @@ export type MarketDropPublic = MarketDrop & {
   netProfit: number | null;
   score: number | null;
   note: string;
+  lane: "arbitrage" | "amazon";
+  demandScore: number | null;
+  bsrDrops90: number | null;
+  salesRank: number | null;
 };
 
 function heatFromProfit(net: number | null): MarketDrop["heat"] {
   if (net != null && net >= 25) return "hot";
   if (net != null && net >= 12) return "warm";
   return "fresh";
+}
+
+function baseFields(
+  hit: OpportunityProduct,
+  asin: string,
+  associateTag?: string | null,
+) {
+  const photo = String(hit.imageUrl || "").trim();
+  const title = String(hit.title || "").trim() || `ASIN ${asin}`;
+  const brand = String(hit.brand || "").trim();
+  const tag = String(associateTag || "").trim();
+  const affiliateUrl = tag
+    ? buildAmazonAssociatesUrl({ asin, associateTag: tag })
+    : null;
+  return { photo, title, brand, affiliateUrl };
 }
 
 /** Map a platform-verified Find Winners hit into a market drop. */
@@ -33,6 +59,52 @@ export function opportunityToMarketDrop(
     .trim()
     .toUpperCase();
   if (!/^[A-Z0-9]{10}$/.test(asin)) return null;
+
+  const lane = hit.mode || "amazon_to_ebay";
+  const amazonLane =
+    isAmazonSellLane(lane) ||
+    lane === "amazon" ||
+    (lane === "supplier" && isAmazonProductWinner(hit) && !platformKeep(hit));
+
+  if (amazonLane && isAmazonProductWinner(hit)) {
+    const buyBox =
+      (hit.buyBoxPrice != null && hit.buyBoxPrice > 0 ? hit.buyBoxPrice : null) ??
+      (hit.amazonPrice != null && hit.amazonPrice > 0 ? hit.amazonPrice : null);
+    if (buyBox == null) return null;
+    const demand = amazonProductScore(hit);
+    const { photo, title, brand, affiliateUrl } = baseFields(
+      hit,
+      asin,
+      associateTag,
+    );
+    return {
+      id: `win-${asin}`,
+      name: brand || "Amazon winner",
+      title,
+      blurb: amazonWinnerBlurb(hit),
+      photo:
+        photo ||
+        `https://m.media-amazon.com/images/I/01RmK+J4pJL._AC_SL1500_.jpg`,
+      photos: photo ? [photo] : [],
+      buy: Math.round(buyBox * 100) / 100,
+      sell: Math.round(buyBox * 100) / 100,
+      comps: Math.round(buyBox * 1.06 * 100) / 100,
+      supplier: "Sell on Amazon",
+      ships: "Keepa verified demand · Higlou Find Winners",
+      heat: amazonWinnerHeat(demand),
+      asin,
+      source: "ledger",
+      real: true,
+      affiliateUrl,
+      netProfit: null,
+      score: demand,
+      note: "Platform verified · Keepa BSR velocity + competition",
+      lane: "amazon",
+      demandScore: demand,
+      bsrDrops90: hit.bsrDrops90 ?? null,
+      salesRank: hit.avgSalesRank90 ?? hit.salesRank ?? null,
+    };
+  }
 
   const buy =
     (hit.cost != null && hit.cost > 0 ? hit.cost : null) ??
@@ -57,13 +129,11 @@ export function opportunityToMarketDrop(
       ? hit.ebayActiveMedian
       : Math.round(sell * 1.08);
 
-  const photo = String(hit.imageUrl || "").trim();
-  const title = String(hit.title || "").trim() || `ASIN ${asin}`;
-  const brand = String(hit.brand || "").trim();
-  const tag = String(associateTag || "").trim();
-  const affiliateUrl = tag
-    ? buildAmazonAssociatesUrl({ asin, associateTag: tag })
-    : null;
+  const { photo, title, brand, affiliateUrl } = baseFields(
+    hit,
+    asin,
+    associateTag,
+  );
 
   return {
     id: `win-${asin}`,
@@ -89,6 +159,10 @@ export function opportunityToMarketDrop(
     netProfit: Math.round(keep * 100) / 100,
     score: hit.score ?? null,
     note: "Platform verified · conservative eBay low ask after fees",
+    lane: "arbitrage",
+    demandScore: null,
+    bsrDrops90: hit.bsrDrops90 ?? null,
+    salesRank: hit.avgSalesRank90 ?? hit.salesRank ?? null,
   };
 }
 
@@ -110,6 +184,10 @@ export function curatedToPublic(
     netProfit: marketSpread(drop),
     score: null,
     note: "Curated showcase — disabled on live Market",
+    lane: "arbitrage",
+    demandScore: null,
+    bsrDrops90: null,
+    salesRank: null,
   };
 }
 

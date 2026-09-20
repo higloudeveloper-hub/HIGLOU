@@ -7,6 +7,11 @@ import {
   searchAmazonCatalogWinners,
 } from "@/lib/amazon/sp-api";
 import { amazonWinnerKeywords } from "@/lib/amazon/winner-rank";
+import {
+  amazonProductScore,
+  AMAZON_PRODUCT_WINNER_MIN,
+  isAmazonProductWinner,
+} from "@/lib/opportunity/amazon-product-winner";
 import { isKeepaConfigured } from "@/lib/keepa/config";
 import {
   keepaAllowedFor,
@@ -37,6 +42,7 @@ import {
 import {
   buildOpportunityReasons,
   isConfirmedOpportunity,
+  opportunityGrade,
   opportunityLabelFromScore,
   scoreOpportunity,
   sortByRealMoney,
@@ -267,6 +273,25 @@ function finishProduct(
     title: hit.title,
     ebayActiveCount: hit.ebayActiveCount,
   });
+
+  // Keepa product-quality lane — demand score is the source of truth for Amazon sell.
+  const demand =
+    mode === "amazon" || mode === "supplier"
+      ? amazonProductScore(hit)
+      : scored.demandScore;
+  const mergedScore =
+    mode === "amazon" ? Math.max(scored.score, demand) : scored.score;
+  const amazonVerdict =
+    mode === "amazon"
+      ? demand >= AMAZON_PRODUCT_WINNER_MIN
+        ? demand >= 82
+          ? ("winner" as const)
+          : ("good" as const)
+        : demand >= 55
+          ? ("watch" as const)
+          : ("reject" as const)
+      : undefined;
+
   const next: OpportunityProduct = {
     ...hit,
     amazonPrice,
@@ -281,10 +306,11 @@ function finishProduct(
     netProfit: profit.netProfit,
     roi: profit.roi,
     margin: profit.margin,
-    score: scored.score,
-    demandScore: scored.demandScore,
-    grade: scored.grade,
-    opportunity: opportunityLabelFromScore(scored.score, hit.eligibility),
+    score: mergedScore,
+    demandScore: demand,
+    grade: opportunityGrade(mergedScore),
+    opportunity: opportunityLabelFromScore(mergedScore, hit.eligibility),
+    ...(amazonVerdict ? { verdict: amazonVerdict } : {}),
   };
   next.reasons = buildOpportunityReasons(next);
   return next;
@@ -632,12 +658,17 @@ export async function findOpportunities(opts: {
 
   const confirmed = priced.filter((hit) => isConfirmedOpportunity(hit, mode));
   // Never fall back to money-losing asks — empty board beats fake "opportunities".
+  // Amazon lane: Keepa product winners only (BSR velocity + competition + proof).
   const passing =
     mode === "amazon"
-      ? confirmed
+      ? confirmed.filter((hit) => isAmazonProductWinner(hit))
       : confirmed.filter((hit) => isActionableAskSpread(hit));
   const ranked = diversifyOpportunityHits(
-    sortByRealMoney(passing),
+    mode === "amazon"
+      ? [...passing].sort(
+          (a, b) => amazonProductScore(b) - amazonProductScore(a) || b.score - a.score,
+        )
+      : sortByRealMoney(passing),
     Math.max(limit, 8),
   );
   return {

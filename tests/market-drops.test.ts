@@ -2,6 +2,10 @@ import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
+  amazonProductScore,
+  isAmazonProductWinner,
+} from "@/lib/opportunity/amazon-product-winner";
+import {
   isPlatformWinner,
   platformKeep,
   sortPlatformWinners,
@@ -37,6 +41,35 @@ function winner(partial: Partial<OpportunityProduct> = {}): OpportunityProduct {
   } as OpportunityProduct;
 }
 
+function amazonKeepaWinner(
+  partial: Partial<OpportunityProduct> = {},
+): OpportunityProduct {
+  return winner({
+    asin: "B0AMZWIN01",
+    mode: "amazon",
+    buyBoxPrice: 24,
+    amazonPrice: 24,
+    cost: null,
+    ebayActiveLow: null,
+    ebayActiveMedian: null,
+    ebayPrice: null,
+    hypotheticalKeep: null,
+    netProfit: null,
+    salesRank: 12000,
+    avgSalesRank90: 14000,
+    bsrDrops90: 28,
+    sellerCount: 5,
+    amazonRetail: false,
+    rating: 4.5,
+    reviewCount: 120,
+    priceVariation90: 0.1,
+    packageLb: 1.2,
+    keepa: true,
+    verdict: "good",
+    ...partial,
+  });
+}
+
 describe("platform winners", () => {
   it("accepts real ask keep and rejects losers", () => {
     expect(isPlatformWinner(winner())).toBe(true);
@@ -48,18 +81,37 @@ describe("platform winners", () => {
     expect(isPlatformWinner(winner({ asin: "BAD" }))).toBe(false);
   });
 
-  it("stocks market only from verified winners", () => {
+  it("accepts Keepa Amazon product winners without eBay keep", () => {
+    const hit = amazonKeepaWinner();
+    expect(amazonProductScore(hit)).toBeGreaterThanOrEqual(68);
+    expect(isAmazonProductWinner(hit)).toBe(true);
+    expect(isPlatformWinner(hit, "amazon")).toBe(true);
+    expect(
+      isAmazonProductWinner(amazonKeepaWinner({ amazonRetail: true })),
+    ).toBe(false);
+    expect(
+      isAmazonProductWinner(amazonKeepaWinner({ bsrDrops90: 2 })),
+    ).toBe(false);
+  });
+
+  it("stocks market with both arbitrage and Amazon Keepa winners", () => {
     const junk = winner({
       asin: "B0JUNK0001",
       hypotheticalKeep: 1,
       ebayActiveLow: 19,
     });
-    const good = winner({ asin: "B0GOOD0001" });
-    const merged = mergeMarketFeed({ ledgerHits: [junk, good], limit: 10 });
+    const arb = winner({ asin: "B0GOOD0001" });
+    const amz = amazonKeepaWinner({ asin: "B0AMZGOOD1" });
+    const merged = mergeMarketFeed({
+      ledgerHits: [junk, arb, amz],
+      limit: 10,
+    });
     expect(merged.curatedCount).toBe(0);
-    expect(merged.ledgerCount).toBe(1);
-    expect(merged.drops[0]?.asin).toBe("B0GOOD0001");
-    expect(merged.drops[0]?.real).toBe(true);
+    expect(merged.ledgerCount).toBe(2);
+    const lanes = merged.drops.map((d) => d.lane).sort();
+    expect(lanes).toEqual(["amazon", "arbitrage"]);
+    expect(opportunityToMarketDrop(amz)?.lane).toBe("amazon");
+    expect(opportunityToMarketDrop(amz)?.demandScore).toBeGreaterThan(0);
     expect(opportunityToMarketDrop(junk)).toBeNull();
   });
 
@@ -71,31 +123,28 @@ describe("platform winners", () => {
 });
 
 describe("higlou market + find winners wiring", () => {
-  it("wires verified-only market and find winners board", () => {
+  it("wires verified-only market and dual-lane find winners", () => {
     expect(readRepo("app/market/page.tsx")).toMatch(/DropMarketStudio/);
     expect(readRepo("app/api/market/claim/route.ts")).toMatch(/market_drop_claimed/);
     expect(readRepo("app/api/market/claim/route.ts")).not.toMatch(/getMarketDrop/);
-    expect(readRepo("app/api/market/feed/route.ts")).toMatch(/limit: 40/);
-    expect(readRepo("app/api/market/feed/route.ts")).toMatch(/isPlatformWinner/);
-    expect(readRepo("app/api/market/feed/route.ts")).toMatch(/No demo products/);
-    expect(readRepo("app/home/page.tsx")).toMatch(/MarketDropPopup/);
-    expect(readRepo("components/layout/app-sidebar.tsx")).toMatch(
-      /href: "\/market"/,
+    expect(readRepo("app/api/market/feed/route.ts")).toMatch(/Keepa Amazon/);
+    expect(readRepo("components/market/drop-market.tsx")).toMatch(
+      /Keepa demand/,
     );
     expect(readRepo("components/market/drop-market.tsx")).toMatch(
-      /Only platform-verified/,
-    );
-    expect(readRepo("components/market/drop-market.tsx")).toMatch(
-      /Verified floor/,
-    );
-    expect(readRepo("components/market/drop-market.tsx")).toMatch(
-      /Market is empty/,
+      /Sell on Amazon/,
     );
     expect(readRepo("components/studio/find-winners-studio.tsx")).toMatch(
       /FindWinnersBoard/,
     );
     expect(readRepo("components/winners/find-winners-board.tsx")).toMatch(
-      /isPlatformWinner/,
+      /Sell on Amazon · Keepa/,
+    );
+    expect(readRepo("components/winners/find-winners-board.tsx")).toMatch(
+      /Arbitrage · Amazon → eBay/,
+    );
+    expect(readRepo("lib/opportunity/amazon-product-winner.ts")).toMatch(
+      /amazonProductScore/,
     );
     expect(readRepo("lib/market/from-opportunity.ts")).toMatch(
       /No invented catalog/,

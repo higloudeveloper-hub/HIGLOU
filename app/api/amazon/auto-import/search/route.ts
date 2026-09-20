@@ -9,7 +9,12 @@ import {
 import { findAmazonWinners } from "@/lib/amazon/find-winners";
 import { loadWinnerMarketTokens } from "@/lib/amazon/winner-tokens";
 import { opportunitySearchText } from "@/lib/opportunity/categories";
+import { attachOpportunityBoards } from "@/lib/opportunity/attach-boards";
 import { onlySellableForMode } from "@/lib/opportunity/mode-copy";
+import {
+  isPlatformWinner,
+  sortPlatformWinners,
+} from "@/lib/opportunity/platform-winner";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -125,9 +130,20 @@ export async function POST(request: Request) {
       keepaMode: body.keepaMode,
       keepaPurpose: body.keepaPurpose,
     });
+    const winners = sortPlatformWinners(
+      (found.products || []).filter((hit) =>
+        isPlatformWinner(hit, body.mode),
+      ),
+    ).slice(0, body.limit);
+    const withBoards = await attachOpportunityBoards(winners, {
+      amazonToken: tokens.amazonToken,
+      marketplaceId: tokens.marketplaceId,
+      ebayToken: tokens.ebayToken,
+      deep: body.limit <= 5,
+    });
     return NextResponse.json({
       ok: true,
-      products: found.products,
+      products: withBoards,
       sources: found.sources,
       filteredOut: found.filteredOut,
       queries: found.queries,

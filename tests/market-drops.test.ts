@@ -148,10 +148,22 @@ describe("higlou market + find winners wiring", () => {
       /FindWinnersBoard/,
     );
     expect(readRepo("components/winners/find-winners-board.tsx")).toMatch(
-      /Find \$\{limit\} real opportunities|Find real opportunities/,
+      /Prices found/,
     );
     expect(readRepo("components/winners/find-winners-board.tsx")).toMatch(
-      /\/api\/winners\/scan/,
+      /Your profit/,
+    );
+    expect(readRepo("components/winners/find-winners-board.tsx")).toMatch(
+      /Import this/,
+    );
+    expect(readRepo("lib/opportunity/price-board.ts")).toMatch(
+      /buildOpportunityPriceBoard/,
+    );
+    expect(readRepo("lib/opportunity/attach-boards.ts")).toMatch(
+      /attachOpportunityBoards/,
+    );
+    expect(readRepo("app/api/winners/scan/route.ts")).toMatch(
+      /attachOpportunityBoards/,
     );
     expect(readRepo("app/api/winners/scan/route.ts")).toMatch(
       /limit.*max\(5\)|max\(5\).*limit|z\.coerce\.number\(\)\.int\(\)\.min\(1\)\.max\(5\)/,

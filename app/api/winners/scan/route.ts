@@ -8,6 +8,7 @@ import {
 } from "@/lib/api/rate-limit";
 import { findAmazonWinners } from "@/lib/amazon/find-winners";
 import { loadWinnerMarketTokens } from "@/lib/amazon/winner-tokens";
+import { attachOpportunityBoards } from "@/lib/opportunity/attach-boards";
 import {
   isPlatformWinner,
   sortPlatformWinners,
@@ -124,10 +125,26 @@ export async function POST(request: Request) {
       (found.products || []).filter((hit) => isPlatformWinner(hit, mode)),
     ).slice(0, body.limit);
 
+    const withBoards = await attachOpportunityBoards(winners, {
+      amazonToken: tokens.amazonToken,
+      marketplaceId: tokens.marketplaceId,
+      ebayToken: tokens.ebayToken,
+      deep: true,
+    });
+
     return NextResponse.json({
       ok: true,
-      products: winners,
-      sources: found.sources,
+      products: withBoards,
+      sources: {
+        ...found.sources,
+        retailSearch: withBoards.some((h) =>
+          h.priceBoard.platforms.some(
+            (p) =>
+              (p.platform === "walmart" || p.platform === "homedepot") &&
+              p.price != null,
+          ),
+        ),
+      },
       filteredOut: found.filteredOut,
       queries: found.queries,
       analyzed: found.analyzed,

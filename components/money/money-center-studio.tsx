@@ -390,7 +390,7 @@ export function MoneyCenterStudio() {
           </div>
         </header>
 
-        <div className="min-h-0 flex-1 overflow-y-auto bg-[#f7f7f7]">
+        <div className="bg-[#f7f7f7] pb-16">
           <div className="mx-auto max-w-6xl space-y-5 p-5">
             {/* Summary strip */}
             <motion.div

@@ -148,7 +148,13 @@ describe("higlou market + find winners wiring", () => {
       /MarketTile/,
     );
     expect(readRepo("components/market/market-tile.tsx")).toMatch(
-      /You keep|Keepa demand/,
+      /Add to store/,
+    );
+    expect(readRepo("components/market/market-tile.tsx")).toMatch(
+      /aspect-\[5\/4\]/,
+    );
+    expect(readRepo("app/api/market/claim/route.ts")).toMatch(
+      /dropFromTileSnapshot|product\.optional|body\.product/,
     );
     expect(readRepo("components/market/drop-market.tsx")).not.toMatch(
       /Opening the floor/,

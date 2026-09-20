@@ -20,24 +20,155 @@ export const runtime = "nodejs";
 
 const bodySchema = z.object({
   dropId: z.string().min(2).max(64),
+  /** Client snapshot when the winner lives in local ledger only. */
+  product: z
+    .object({
+      asin: z.string().min(10).max(12).optional(),
+      title: z.string().max(500).optional(),
+      brand: z.string().max(120).optional(),
+      imageUrl: z.string().max(2000).optional(),
+      amazonPrice: z.number().nullable().optional(),
+      buyBoxPrice: z.number().nullable().optional(),
+      ebayPrice: z.number().nullable().optional(),
+      ebayActiveLow: z.number().nullable().optional(),
+      ebayActiveMedian: z.number().nullable().optional(),
+      cost: z.number().nullable().optional(),
+      buy: z.number().nullable().optional(),
+      sell: z.number().nullable().optional(),
+      comps: z.number().nullable().optional(),
+      blurb: z.string().max(500).optional(),
+      supplier: z.string().max(120).optional(),
+      ships: z.string().max(200).optional(),
+      heat: z.enum(["hot", "warm", "fresh"]).optional(),
+      lane: z.enum(["arbitrage", "amazon", "retail"]).optional(),
+      netProfit: z.number().nullable().optional(),
+      hypotheticalKeep: z.number().nullable().optional(),
+      mode: z.string().max(40).optional(),
+      keepa: z.boolean().optional(),
+      bsrDrops90: z.number().nullable().optional(),
+      salesRank: z.number().nullable().optional(),
+      avgSalesRank90: z.number().nullable().optional(),
+      sellerCount: z.number().nullable().optional(),
+      amazonRetail: z.boolean().optional(),
+      rating: z.number().nullable().optional(),
+      reviewCount: z.number().nullable().optional(),
+      score: z.number().nullable().optional(),
+      verdict: z.string().max(40).optional(),
+      sourceMarket: z.string().max(40).optional(),
+      sourceId: z.string().max(80).optional(),
+      upc: z.string().max(32).optional(),
+    })
+    .optional(),
 });
 
-async function resolveDrop(
-  userId: string,
-  dropId: string,
-): Promise<MarketDrop | null> {
-  // Curated / invented catalog drops are no longer claimable.
-  const asin = asinFromWinnerDropId(dropId);
-  if (!asin || !isSupabaseConfigured()) return null;
+type ProductSnap = NonNullable<z.infer<typeof bodySchema>["product"]>;
 
+/** Floor tile already passed Find Winners — draft from prices even if re-gate is thin. */
+function dropFromTileSnapshot(
+  dropId: string,
+  asin: string,
+  snap: ProductSnap,
+): MarketDrop | null {
+  const buy =
+    (snap.buy != null && snap.buy > 0 ? snap.buy : null) ??
+    (snap.cost != null && snap.cost > 0 ? snap.cost : null) ??
+    (snap.buyBoxPrice != null && snap.buyBoxPrice > 0
+      ? snap.buyBoxPrice
+      : null) ??
+    (snap.amazonPrice != null && snap.amazonPrice > 0
+      ? snap.amazonPrice
+      : null);
+  const sell =
+    (snap.sell != null && snap.sell > 0 ? snap.sell : null) ??
+    (snap.ebayActiveLow != null && snap.ebayActiveLow > 0
+      ? snap.ebayActiveLow
+      : null) ??
+    (snap.ebayPrice != null && snap.ebayPrice > 0 ? snap.ebayPrice : null) ??
+    (snap.buyBoxPrice != null && snap.buyBoxPrice > 0
+      ? snap.buyBoxPrice
+      : null) ??
+    (snap.amazonPrice != null && snap.amazonPrice > 0
+      ? snap.amazonPrice
+      : null);
+  const title = String(snap.title || "").trim();
+  if (buy == null || sell == null || !title) return null;
+
+  const photo = String(snap.imageUrl || "").trim();
+  const id = /^win-/i.test(dropId) ? dropId.toLowerCase() : `win-${asin}`;
+  return {
+    id,
+    name: String(snap.brand || "").trim() || "Higlou Market",
+    title,
+    blurb:
+      String(snap.blurb || "").trim() ||
+      "Verified Market drop · confirm cost before publish",
+    photo:
+      photo ||
+      "https://m.media-amazon.com/images/I/01RmK+J4pJL._AC_SL1500_.jpg",
+    photos: photo ? [photo] : [],
+    buy: Math.round(buy * 100) / 100,
+    sell: Math.round(sell * 100) / 100,
+    comps:
+      snap.comps != null && snap.comps > 0
+        ? Math.round(snap.comps * 100) / 100
+        : Math.round(sell * 1.06 * 100) / 100,
+    supplier: String(snap.supplier || "").trim() || "Higlou Market",
+    ships: String(snap.ships || "").trim() || "Verified by Higlou Find Winners",
+    heat: snap.heat || "fresh",
+    asin,
+  };
+}
+
+function hitFromSnapshot(
+  asin: string,
+  snap: ProductSnap,
+): OpportunityProduct {
+  return {
+    asin,
+    title: snap.title || "",
+    brand: snap.brand || "",
+    imageUrl: snap.imageUrl || "",
+    amazonPrice: snap.amazonPrice ?? snap.buyBoxPrice ?? null,
+    buyBoxPrice: snap.buyBoxPrice ?? snap.amazonPrice ?? null,
+    ebayPrice: snap.ebayPrice ?? null,
+    ebayActiveLow: snap.ebayActiveLow ?? null,
+    ebayActiveMedian: snap.ebayActiveMedian ?? null,
+    cost: snap.cost ?? snap.amazonPrice ?? snap.buyBoxPrice ?? null,
+    netProfit: snap.netProfit ?? null,
+    hypotheticalKeep: snap.hypotheticalKeep ?? snap.netProfit ?? null,
+    mode: (snap.mode as OpportunityProduct["mode"]) || "amazon_to_ebay",
+    keepa: Boolean(snap.keepa),
+    bsrDrops90: snap.bsrDrops90 ?? null,
+    salesRank: snap.salesRank ?? null,
+    avgSalesRank90: snap.avgSalesRank90 ?? null,
+    sellerCount: snap.sellerCount ?? null,
+    amazonRetail: Boolean(snap.amazonRetail),
+    rating: snap.rating ?? null,
+    reviewCount: snap.reviewCount ?? null,
+    score: snap.score ?? 0,
+    verdict: (snap.verdict as OpportunityProduct["verdict"]) || "candidate",
+    sourceMarket:
+      (snap.sourceMarket as OpportunityProduct["sourceMarket"]) || "amazon",
+    sourceId: snap.sourceId || "",
+    upc: snap.upc || "",
+  } as OpportunityProduct;
+}
+
+async function resolveFromLedger(
+  userId: string,
+  asin: string,
+): Promise<MarketDrop | null> {
+  if (!isSupabaseConfigured()) return null;
   try {
     const admin = createAdminClient();
     const { data } = await admin
       .from("opportunity_ledger")
-      .select("payload, net_profit, amazon_price, ebay_price, title, brand, image_url, mode")
+      .select(
+        "payload, net_profit, amazon_price, ebay_price, title, brand, image_url, mode",
+      )
       .eq("user_id", userId)
       .eq("asin", asin)
-      .order("net_profit", { ascending: false })
+      .order("last_seen_at", { ascending: false })
       .limit(1)
       .maybeSingle();
     if (!data) return null;
@@ -55,16 +186,21 @@ async function resolveDrop(
       amazonPrice:
         (data.payload as OpportunityProduct)?.amazonPrice ??
         (data.amazon_price != null ? Number(data.amazon_price) : null),
+      buyBoxPrice:
+        (data.payload as OpportunityProduct)?.buyBoxPrice ??
+        (data.amazon_price != null ? Number(data.amazon_price) : null),
       ebayPrice:
         (data.payload as OpportunityProduct)?.ebayPrice ??
         (data.ebay_price != null ? Number(data.ebay_price) : null),
       netProfit:
         (data.payload as OpportunityProduct)?.netProfit ??
         (data.net_profit != null ? Number(data.net_profit) : null),
+      keepa: Boolean((data.payload as OpportunityProduct)?.keepa),
     } as OpportunityProduct;
-    if (!isPlatformWinner(payload, payload.mode || "amazon_to_ebay")) return null;
-    const mapped = opportunityToMarketDrop(payload);
-    return mapped;
+    if (!isPlatformWinner(payload, payload.mode || "amazon_to_ebay")) {
+      return null;
+    }
+    return opportunityToMarketDrop(payload);
   } catch {
     return null;
   }
@@ -75,17 +211,41 @@ export async function POST(request: Request) {
   const auth = await requireUser();
   if (!auth.ok) return auth.response;
 
-  let dropId: string;
+  let body: z.infer<typeof bodySchema>;
   try {
-    dropId = bodySchema.parse(await request.json()).dropId;
+    body = bodySchema.parse(await request.json());
   } catch {
     return NextResponse.json({ error: "Send { dropId }" }, { status: 400 });
   }
 
-  const drop = await resolveDrop(auth.user.id, dropId);
+  const asin =
+    asinFromWinnerDropId(body.dropId) ||
+    String(body.product?.asin || "")
+      .trim()
+      .toUpperCase() ||
+    null;
+
+  let drop: MarketDrop | null = null;
+  if (asin && /^[A-Z0-9]{10}$/.test(asin)) {
+    drop = await resolveFromLedger(auth.user.id, asin);
+    if (!drop && body.product) {
+      const hit = hitFromSnapshot(asin, body.product);
+      if (isPlatformWinner(hit, hit.mode || "amazon_to_ebay")) {
+        drop = opportunityToMarketDrop(hit);
+      }
+      // Tile already on the floor — draft from buy/sell even if Keepa re-gate is thin.
+      if (!drop) {
+        drop = dropFromTileSnapshot(body.dropId, asin, body.product);
+      }
+    }
+  }
+
   if (!drop) {
     return NextResponse.json(
-      { error: "Winner not found — run Find Winners to verify a real ask spread" },
+      {
+        error:
+          "Winner not found — open Find Winners, scan again, then Add to store",
+      },
       { status: 404 },
     );
   }

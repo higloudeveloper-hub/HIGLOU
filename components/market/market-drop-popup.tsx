@@ -103,7 +103,44 @@ export function MarketDropPopup() {
       const res = await fetch("/api/market/claim", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ dropId: drop.id }),
+        body: JSON.stringify({
+          dropId: drop.id,
+          product: {
+            asin: drop.asin,
+            title: drop.title,
+            brand: drop.name,
+            imageUrl: drop.photo,
+            amazonPrice: drop.lane === "amazon" ? drop.sell : drop.buy,
+            buyBoxPrice: drop.lane === "amazon" ? drop.sell : drop.buy,
+            ebayPrice: drop.lane === "amazon" ? null : drop.sell,
+            ebayActiveLow: drop.lane === "amazon" ? null : drop.sell,
+            cost: drop.buy,
+            buy: drop.buy,
+            sell: drop.sell,
+            comps: drop.comps,
+            blurb: drop.blurb,
+            supplier: drop.supplier,
+            ships: drop.ships,
+            heat: drop.heat,
+            lane: drop.lane,
+            netProfit: drop.netProfit,
+            hypotheticalKeep: drop.netProfit,
+            mode:
+              drop.lane === "amazon"
+                ? "amazon"
+                : drop.lane === "retail"
+                  ? "walmart_to_ebay"
+                  : "amazon_to_ebay",
+            keepa: true,
+            amazonRetail: false,
+            bsrDrops90: drop.bsrDrops90,
+            salesRank: drop.salesRank,
+            avgSalesRank90: drop.salesRank,
+            score: drop.demandScore ?? drop.score,
+            verdict: "candidate",
+            sourceMarket: "amazon",
+          },
+        }),
       });
       const body = (await res.json()) as {
         error?: string;

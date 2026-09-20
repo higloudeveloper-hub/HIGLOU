@@ -171,13 +171,50 @@ export function DropMarketStudio() {
       : null;
 
   const claim = useCallback(
-    async (id: string) => {
-      setBusy(id);
+    async (item: MarketDropPublic) => {
+      setBusy(item.id);
       try {
         const res = await fetch("/api/market/claim", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ dropId: id }),
+          body: JSON.stringify({
+            dropId: item.id,
+            product: {
+              asin: item.asin,
+              title: item.title,
+              brand: item.name,
+              imageUrl: item.photo,
+              amazonPrice: item.lane === "amazon" ? item.sell : item.buy,
+              buyBoxPrice: item.lane === "amazon" ? item.sell : item.buy,
+              ebayPrice: item.lane === "amazon" ? null : item.sell,
+              ebayActiveLow: item.lane === "amazon" ? null : item.sell,
+              cost: item.buy,
+              buy: item.buy,
+              sell: item.sell,
+              comps: item.comps,
+              blurb: item.blurb,
+              supplier: item.supplier,
+              ships: item.ships,
+              heat: item.heat,
+              lane: item.lane,
+              netProfit: item.netProfit,
+              hypotheticalKeep: item.netProfit,
+              mode:
+                item.lane === "amazon"
+                  ? "amazon"
+                  : item.lane === "retail"
+                    ? "walmart_to_ebay"
+                    : "amazon_to_ebay",
+              keepa: true,
+              amazonRetail: false,
+              bsrDrops90: item.bsrDrops90,
+              salesRank: item.salesRank,
+              avgSalesRank90: item.salesRank,
+              score: item.demandScore ?? item.score,
+              verdict: "candidate",
+              sourceMarket: "amazon",
+            },
+          }),
         });
         const body = (await res.json()) as {
           error?: string;
@@ -298,20 +335,20 @@ export function DropMarketStudio() {
           </motion.div>
         ) : null}
 
-        <div className="relative px-5 py-8 md:px-10 md:py-12">
-          <p className="font-display text-[13px] tracking-[0.22em] text-[#f4c928] uppercase">
+        <div className="relative px-5 py-5 md:px-10 md:py-7">
+          <p className="font-display text-[12px] tracking-[0.22em] text-[#f4c928] uppercase">
             Higlou Market
           </p>
-          <div className="mt-3 flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+          <div className="mt-2 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
             <div className="max-w-xl">
-              <h1 className="font-display text-4xl leading-[0.95] md:text-5xl lg:text-6xl">
+              <h1 className="font-display text-3xl leading-[0.95] md:text-4xl lg:text-5xl">
                 Today&apos;s verified deals
               </h1>
-              <p className="mt-3 max-w-md text-[15px] leading-relaxed text-white/65">
-                Live Keepa + eBay asks. See buy vs sell vs what you keep — then
-                add winners to your store.
+              <p className="mt-2 max-w-md text-[14px] leading-relaxed text-white/65">
+                Live Keepa + eBay asks. Buy vs sell vs keep — add winners to
+                your store.
               </p>
-              <div className="mt-5 flex flex-wrap items-center gap-3 opacity-90">
+              <div className="mt-3 flex flex-wrap items-center gap-3 opacity-90">
                 <AmazonMark className="h-3.5" invert />
                 <EbayMark className="h-3 brightness-0 invert" />
                 <WalmartMark className="h-3" invert />
@@ -324,22 +361,22 @@ export function DropMarketStudio() {
                 <motion.div
                   initial={reduce ? false : { opacity: 0, y: 12 }}
                   animate={{ opacity: 1, y: 0 }}
-                  className="min-w-[200px] border border-white/15 bg-white/5 px-4 py-3 backdrop-blur-sm"
+                  className="min-w-[180px] border border-white/15 bg-white/5 px-3 py-2.5 backdrop-blur-sm"
                 >
                   <p className="text-[10px] font-semibold tracking-[0.16em] text-[#f4c928] uppercase">
                     Featured keep
                   </p>
-                  <p className="mt-1 font-display text-3xl leading-none text-[#f4c928]">
+                  <p className="mt-1 font-display text-2xl leading-none text-[#f4c928]">
                     {signed(featuredKeep)}
                   </p>
-                  <p className="mt-1 line-clamp-1 text-[12px] text-white/55">
+                  <p className="mt-1 line-clamp-1 text-[11px] text-white/55">
                     Buy {money(featured.buy)} → Sell {money(featured.sell)}
                   </p>
                 </motion.div>
               ) : null}
               <Link
                 href="/winners"
-                className="inline-flex h-12 items-center gap-2 bg-[#f4c928] px-5 text-[14px] font-semibold text-[#141414]"
+                className="inline-flex h-10 items-center gap-2 bg-[#f4c928] px-4 text-[13px] font-semibold text-[#141414]"
               >
                 <Search className="size-4" />
                 Find more winners
@@ -454,7 +491,7 @@ export function DropMarketStudio() {
                     selected={drop?.id === item.id}
                     busy={busy === item.id || busy === `aff-${item.id}`}
                     onSelect={() => setActive(i)}
-                    onClaim={() => void claim(item.id)}
+                    onClaim={() => void claim(item)}
                     onEarn={
                       item.asin ? () => void earnLink(item) : undefined
                     }
@@ -595,7 +632,7 @@ export function DropMarketStudio() {
                       <button
                         type="button"
                         disabled={busy === drop.id}
-                        onClick={() => void claim(drop.id)}
+                        onClick={() => void claim(drop)}
                         className="inline-flex h-12 w-full items-center justify-center gap-2 bg-[#f4c928] text-[14px] font-semibold text-[#141414] disabled:opacity-50"
                       >
                         {busy === drop.id ? (

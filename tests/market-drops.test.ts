@@ -187,7 +187,7 @@ describe("higlou market + find winners wiring", () => {
     expect(readRepo("app/market/page.tsx")).not.toMatch(/flush/);
     expect(readRepo("app/winners/page.tsx")).not.toMatch(/flush/);
     expect(readRepo("components/winners/find-winners-board.tsx")).toMatch(
-      /Find \{limit\} real opportunities/,
+      /Ver oportunidades|Find Winners/,
     );
     expect(readRepo("components/market/drop-market.tsx")).not.toMatch(
       /Opening the floor/,
@@ -196,13 +196,13 @@ describe("higlou market + find winners wiring", () => {
       /FindWinnersBoard/,
     );
     expect(readRepo("components/winners/find-winners-board.tsx")).toMatch(
-      /Prices found/,
+      /WinnerProductTile|WinnerDetailPanel|Arbitraje/,
     );
-    expect(readRepo("components/winners/find-winners-board.tsx")).toMatch(
-      /Your profit/,
+    expect(readRepo("components/winners/winner-detail-panel.tsx")).toMatch(
+      /Importar listing|Precios verificados/,
     );
-    expect(readRepo("components/winners/find-winners-board.tsx")).toMatch(
-      /Import this/,
+    expect(readRepo("components/winners/winner-product-tile.tsx")).toMatch(
+      /Keep|Demand/,
     );
     expect(readRepo("lib/opportunity/price-board.ts")).toMatch(
       /buildOpportunityPriceBoard/,

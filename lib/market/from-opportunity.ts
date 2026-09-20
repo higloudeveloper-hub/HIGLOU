@@ -6,7 +6,6 @@ import {
   isAmazonProductWinner,
 } from "@/lib/opportunity/amazon-product-winner";
 import {
-  isAmazonSellLane,
   isPlatformWinner,
   platformKeep,
   sortPlatformWinners,
@@ -60,13 +59,13 @@ export function opportunityToMarketDrop(
     .toUpperCase();
   if (!/^[A-Z0-9]{10}$/.test(asin)) return null;
 
-  const lane = hit.mode || "amazon_to_ebay";
-  const amazonLane =
-    isAmazonSellLane(lane) ||
-    lane === "amazon" ||
-    (lane === "supplier" && isAmazonProductWinner(hit) && !platformKeep(hit));
+  const hasAskKeep =
+    platformKeep(hit) != null &&
+    (hit.ebayActiveLow ?? hit.ebayActiveMedian ?? hit.ebayPrice) != null &&
+    (platformKeep(hit) ?? 0) >= 12;
 
-  if (amazonLane && isAmazonProductWinner(hit)) {
+  // Prefer arbitrage drop when ask keep is real; else Keepa Amazon demand.
+  if (!hasAskKeep && isAmazonProductWinner(hit)) {
     const buyBox =
       (hit.buyBoxPrice != null && hit.buyBoxPrice > 0 ? hit.buyBoxPrice : null) ??
       (hit.amazonPrice != null && hit.amazonPrice > 0 ? hit.amazonPrice : null);

@@ -17,10 +17,9 @@ export function isAmazonSellLane(mode: OpportunityMode): boolean {
 }
 
 /**
- * Platform-verified winner — Higlou's bar for Market.
- * - Arbitrage lanes: landed ask keep after fees with a real Amazon cost.
- * - Amazon sell lanes: Keepa demand (BSR velocity, competition, proof).
- * - Supplier: either Keepa Amazon product or arbitrage keep.
+ * Platform-verified winner — Higlou's bar for Market + Find Winners.
+ * Either real Amazon→eBay ask keep, or Keepa demand for selling on Amazon.
+ * Clients care about opportunities first — not which category box we opened.
  */
 export function platformKeep(hit: OpportunityProduct): number | null {
   if (hit.soldVerified && hit.netProfit != null && Number.isFinite(hit.netProfit)) {
@@ -34,7 +33,7 @@ export function platformKeep(hit: OpportunityProduct): number | null {
 
 export function isPlatformWinner(
   hit: OpportunityProduct,
-  mode: OpportunityMode = hit.mode || "amazon_to_ebay",
+  _mode: OpportunityMode = hit.mode || "amazon_to_ebay",
 ): boolean {
   if (hit.verdict === "reject") return false;
   if (isStarterBlocked(hit)) return false;
@@ -42,15 +41,7 @@ export function isPlatformWinner(
   const asin = String(hit.asin || "").toUpperCase();
   if (!/^[A-Z0-9]{10}$/.test(asin)) return false;
 
-  const lane = hit.mode || mode;
-
-  if (lane === "amazon" || isAmazonSellLane(lane)) {
-    return isAmazonProductWinner(hit);
-  }
-  if (lane === "supplier") {
-    return isAmazonProductWinner(hit) || isArbitrageWinner(hit);
-  }
-  return isArbitrageWinner(hit);
+  return isArbitrageWinner(hit) || isAmazonProductWinner(hit);
 }
 
 function isArbitrageWinner(hit: OpportunityProduct): boolean {
@@ -74,19 +65,19 @@ function isStarterBlocked(hit: OpportunityProduct): boolean {
 }
 
 export function sortPlatformWinners(hits: OpportunityProduct[]): OpportunityProduct[] {
-  const amazonish = hits.filter(
-    (hit) => isAmazonSellLane(hit.mode || "amazon_to_ebay") && isAmazonProductWinner(hit),
+  const keepHits = hits.filter((hit) => isArbitrageWinner(hit));
+  const demandHits = hits.filter(
+    (hit) => isAmazonProductWinner(hit) && !isArbitrageWinner(hit),
   );
-  const rest = hits.filter((hit) => !amazonish.includes(hit));
 
-  const byKeep = [...rest].sort((a, b) => {
+  const byKeep = [...keepHits].sort((a, b) => {
     const ka = platformKeep(a) ?? -Infinity;
     const kb = platformKeep(b) ?? -Infinity;
     if (kb !== ka) return kb - ka;
     return (b.score ?? 0) - (a.score ?? 0);
   });
 
-  return [...sortAmazonProductWinners(amazonish), ...byKeep];
+  return [...byKeep, ...sortAmazonProductWinners(demandHits)];
 }
 
 export function platformWinnerMetric(hit: OpportunityProduct): {
@@ -94,10 +85,12 @@ export function platformWinnerMetric(hit: OpportunityProduct): {
   value: number;
   label: string;
 } {
-  if (isAmazonSellLane(hit.mode || "amazon_to_ebay") && isAmazonProductWinner(hit)) {
-    const demand = amazonProductScore(hit);
-    return { kind: "demand", value: demand, label: `Demand ${demand}` };
+  if (isArbitrageWinner(hit)) {
+    const keep = platformKeep(hit) ?? 0;
+    return { kind: "keep", value: keep, label: "You keep" };
   }
-  const keep = platformKeep(hit) ?? 0;
-  return { kind: "keep", value: keep, label: "You keep" };
+  const demand = amazonProductScore(hit);
+  return { kind: "demand", value: demand, label: `Demand ${demand}` };
 }
+
+export { isArbitrageWinner };

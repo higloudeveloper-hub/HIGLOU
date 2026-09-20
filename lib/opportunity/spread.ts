@@ -45,7 +45,7 @@ export function isActionableAskSpread(hit: {
     }) ?? null;
   if (cost == null || cost <= 0 || sale == null || sale <= 0) return false;
   // Need meaningful gross before fees (avoids $0.50 "opportunities").
-  if (sale < cost * 1.28) return false;
+  if (sale < cost * 1.18) return false;
   if ((hit.packageLb ?? 0) > OPPORTUNITY_RULES.maxPackageLb) return false;
 
   if (hit.hypotheticalKeep != null) {

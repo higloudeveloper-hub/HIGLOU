@@ -1,6 +1,12 @@
 /** Keepa / Amazon US browse nodes for the first opportunity set. */
 export const OPPORTUNITY_CATEGORIES = [
   {
+    id: "all",
+    label: "All Amazon · hot now",
+    query: "",
+    keepaRoot: "",
+  },
+  {
     id: "home",
     label: "Home & Kitchen",
     query: "home kitchen storage organizer",

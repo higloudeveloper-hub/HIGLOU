@@ -225,7 +225,7 @@ export function nextLiveScanTarget(
   seed: number;
   query: string;
 } {
-  const cats = OPPORTUNITY_CATEGORIES;
+  const cats = OPPORTUNITY_CATEGORIES.filter((row) => row.id !== "all");
   const index = Math.max(0, Math.floor(Number(step) || 0));
   const row = cats[index % cats.length];
   const niches = CATEGORY_NICHES[row.id] || [];

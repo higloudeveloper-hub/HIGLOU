@@ -36,7 +36,7 @@ export function keepaMinTokens(): number {
 
 /** Cap product hydrations per scan (1 token each). */
 export function keepaMaxProductsPerScan(): number {
-  return Math.min(20, Math.max(1, envInt("KEEPA_MAX_PRODUCTS_PER_SCAN", 6)));
+  return Math.min(20, Math.max(1, envInt("KEEPA_MAX_PRODUCTS_PER_SCAN", 10)));
 }
 
 export function resolveKeepaMode(

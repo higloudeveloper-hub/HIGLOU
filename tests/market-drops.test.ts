@@ -138,10 +138,14 @@ describe("higlou market + find winners wiring", () => {
       /FindWinnersBoard/,
     );
     expect(readRepo("components/winners/find-winners-board.tsx")).toMatch(
-      /Sell on Amazon · Keepa/,
+      /Scan winners/,
     );
     expect(readRepo("components/winners/find-winners-board.tsx")).toMatch(
-      /Arbitrage · Amazon → eBay/,
+      /Sell on Amazon · Keepa/,
+    );
+    expect(readRepo("lib/keepa/finder.ts")).toMatch(/keepaFindHotWinners/);
+    expect(readRepo("lib/opportunity/categories.ts")).toMatch(
+      /All Amazon · hot now/,
     );
     expect(readRepo("lib/opportunity/amazon-product-winner.ts")).toMatch(
       /amazonProductScore/,

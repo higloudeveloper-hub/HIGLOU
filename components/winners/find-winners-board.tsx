@@ -13,7 +13,6 @@ import {
   saveLocalLedger,
 } from "@/lib/opportunity/ledger";
 import {
-  isAmazonSellLane,
   isPlatformWinner,
   platformKeep,
   platformWinnerMetric,
@@ -78,7 +77,7 @@ export function FindWinnersBoard({
   const [lane, setLane] = useState<WinnerLane>("arbitrage");
   const mode = modeForLane(lane);
   const amazonLane = lane === "amazon";
-  const [categoryId, setCategoryId] = useState("home");
+  const [categoryId, setCategoryId] = useState("all");
   const [query, setQuery] = useState("");
   const [limit, setLimit] = useState(5);
   const [searching, setSearching] = useState(false);
@@ -136,10 +135,6 @@ export function FindWinnersBoard({
 
   const find = useCallback(async () => {
     if (searching || busy) return;
-    if (!categoryId && query.trim().length < 2) {
-      setError("Pick a category or type a product name.");
-      return;
-    }
     setSearching(true);
     setError(null);
     const nextRound = round + 1;
@@ -150,7 +145,7 @@ export function FindWinnersBoard({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           query: query.trim(),
-          categoryId,
+          categoryId: categoryId || "all",
           limit,
           mode,
           onlySellable: false,
@@ -172,8 +167,8 @@ export function FindWinnersBoard({
       if (!found.length) {
         setError(
           amazonLane
-            ? "No Keepa Amazon winners this round. Try another category — we need real BSR velocity and room to sell."
-            : "No arbitrage winners this round. Try another category — we only keep real ask keep after fees.",
+            ? "Keepa found no Amazon demand winners this round — tap Scan again for the next hot page."
+            : "No winners this round. Scan again — we pull the next Keepa hot page across Amazon.",
         );
         return;
       }
@@ -240,8 +235,8 @@ export function FindWinnersBoard({
             </h1>
             <p className="mt-2 max-w-xl text-[14px] text-white/65">
               {amazonLane
-                ? "Keepa demand — BSR velocity, sellers, ratings. Great products to sell on Amazon, verified by Higlou."
-                : "Amazon cost vs eBay low ask after fees. Real keep stocks Market as arbitrage winners."}
+                ? "Scan all of Amazon with Keepa — BSR velocity first. Category is optional."
+                : "Scan hot Keepa movers across Amazon, then check eBay ask keep. Opportunities before categories."}
             </p>
           </div>
           <Link
@@ -303,7 +298,7 @@ export function FindWinnersBoard({
           </label>
           <label className="w-full lg:w-56">
             <span className="mb-1 block text-[11px] font-semibold tracking-wide text-[#6b6560] uppercase">
-              Category
+              Filter (optional)
             </span>
             <select
               value={categoryId}
@@ -343,12 +338,12 @@ export function FindWinnersBoard({
             {searching ? (
               <>
                 <Loader2 className="size-4 animate-spin" />
-                Finding…
+                Scanning Keepa…
               </>
             ) : (
               <>
                 <Search className="size-4" />
-                Find winners
+                Scan winners
               </>
             )}
           </button>
@@ -380,23 +375,21 @@ export function FindWinnersBoard({
             </p>
             <p className="mt-2 text-[14px] leading-relaxed text-[#6b6560]">
               {amazonLane
-                ? "Pick a category and hit Find. Keepa must show real BSR drops, healthy competition, and sellable price — those stock Market as Amazon winners."
-                : "Pick a category and hit Find. We only keep products where Amazon cost clears eBay low-ask fees with real keep — those stock Market."}
+                ? "Hit Scan winners — Keepa pulls the hottest BSR movers across Amazon. No category required."
+                : "Hit Scan winners — Keepa finds hot products first, then we check eBay ask keep. Real opportunities before anyone else."}
             </p>
           </div>
         ) : (
           <ul className="mx-auto grid max-w-5xl gap-3">
             {winners.map((hit) => {
               const id = hitKey(hit);
-              const metric = platformWinnerMetric(hit);
-              const checked = picked.includes(id);
-              const ebay = hit.ebayActiveLow ?? hit.ebayActiveMedian ?? hit.ebayPrice;
-              const price = hit.buyBoxPrice ?? hit.amazonPrice;
-              const rank = hit.avgSalesRank90 ?? hit.salesRank;
-              const isAmz =
-                amazonLane ||
-                (isAmazonSellLane(hit.mode) && metric.kind === "demand");
-              return (
+                  const metric = platformWinnerMetric(hit);
+                  const checked = picked.includes(id);
+                  const ebay = hit.ebayActiveLow ?? hit.ebayActiveMedian ?? hit.ebayPrice;
+                  const price = hit.buyBoxPrice ?? hit.amazonPrice;
+                  const rank = hit.avgSalesRank90 ?? hit.salesRank;
+                  const isDemand = metric.kind === "demand";
+                  return (
                 <li
                   key={id}
                   className={cn(
@@ -435,12 +428,12 @@ export function FindWinnersBoard({
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-[11px] font-semibold tracking-wide text-[#6b6560] uppercase">
                       {hit.brand || "Amazon"}
-                      {isAmz ? " · Sell on Amazon" : " · Arbitrage"}
+                      {isDemand ? " · Keepa demand" : " · Arbitrage"}
                     </p>
                     <p className="mt-0.5 line-clamp-2 text-[15px] font-semibold leading-snug text-[#141414]">
                       {hit.title || id}
                     </p>
-                    {isAmz ? (
+                    {isDemand ? (
                       <p className="mt-1 text-[13px] text-[#6b6560]">
                         {money(price)}
                         {rank != null ? ` · BSR ${rank.toLocaleString("en-US")}` : ""}
@@ -466,17 +459,17 @@ export function FindWinnersBoard({
                   </div>
                   <div className="shrink-0 text-right">
                     <p className="text-[11px] font-semibold tracking-wide text-[#6b6560] uppercase">
-                      {isAmz ? "Keepa demand" : "You keep"}
+                      {isDemand ? "Keepa demand" : "You keep"}
                     </p>
                     <p
                       className={cn(
                         "font-display text-2xl leading-none",
-                        (isAmz ? metric.value >= 74 : metric.value >= 12)
+                        (isDemand ? metric.value >= 74 : metric.value >= 12)
                           ? "text-[#1f7a4d]"
                           : "text-[#141414]",
                       )}
                     >
-                      {isAmz ? metric.value : signed(metric.value)}
+                      {isDemand ? metric.value : signed(metric.value)}
                     </p>
                     <p className="mt-1 text-[11px] text-[#8a847c]">
                       Score {hit.score}/100 · Market ready

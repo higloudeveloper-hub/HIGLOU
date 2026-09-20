@@ -20,7 +20,7 @@ import {
   type KeepaMode,
 } from "@/lib/keepa/budget";
 import {
-  keepaFindAsins,
+  keepaFindHotWinners,
   keepaProducts,
   keepaSearchAsins,
 } from "@/lib/keepa/finder";
@@ -176,21 +176,21 @@ function cheapKeepaFilter(
   mode: OpportunityMode,
 ): boolean {
   const price = snap.buyBoxPrice ?? snap.newPrice;
-  if (price != null && (price < OPPORTUNITY_RULES.minPrice || price > OPPORTUNITY_RULES.maxPrice)) {
+  if (price != null && (price < 10 || price > 150)) {
     return false;
   }
   // Soft signal only — hard discount rejects burned tokens for empty boards.
   // Finder already required salesRankDrops90; trust that demand gate.
-  if (snap.packageLb != null && snap.packageLb > OPPORTUNITY_RULES.maxPackageLb) {
+  if (snap.packageLb != null && snap.packageLb > OPPORTUNITY_RULES.maxPackageLb + 2) {
     return false;
   }
   if (isStarterRestrictedTitle(snap.title)) return false;
   const rank = snap.avgSalesRank90 ?? snap.salesRank;
-  if (rank != null && (rank < OPPORTUNITY_RULES.minBsr || rank > OPPORTUNITY_RULES.maxBsr)) {
+  if (rank != null && (rank < 200 || rank > 250_000)) {
     return false;
   }
   if (mode === "amazon" || mode === "supplier") {
-    if (snap.sellerCount != null && snap.sellerCount > OPPORTUNITY_RULES.maxSellers) {
+    if (snap.sellerCount != null && snap.sellerCount > 20) {
       return false;
     }
     if (snap.amazonRetail) return false;
@@ -360,9 +360,11 @@ export async function findOpportunities(opts: {
   const limit = Math.min(Math.max(opts.limit ?? 8, 1), 8);
   const query = String(opts.query || "").trim();
   const category = String(opts.category || "").trim();
-  const fromId = opts.categoryId
-    ? opportunitySearchText(opts.categoryId, query)
-    : { query, category, keepaRoot: opts.keepaRoot || "" };
+  const categoryId = String(opts.categoryId || "all").trim() || "all";
+  const globalScan = categoryId === "all" || !categoryId;
+  const fromId = globalScan
+    ? { query, category: "", keepaRoot: "" }
+    : opportunitySearchText(categoryId, query);
   const keepaRoot = opts.keepaRoot || fromId.keepaRoot;
   const keywords =
     amazonWinnerKeywords(query, category || fromId.category) ||
@@ -382,18 +384,30 @@ export async function findOpportunities(opts: {
       .map((id) => id.trim().toUpperCase())
       .filter((id) => /^[A-Z0-9]{10}$/.test(id)),
   );
-  const queries = keepaOn && keepaMode === "full"
-    ? [keywords].filter(Boolean)
-    : pickCategoryQueries({
-        categoryId: opts.categoryId,
-        extra: query,
-        generic: keywords,
-        seed: opts.seed,
-        count: query ? 1 : 3,
-      });
+  const queries =
+    keepaOn && keepaMode === "full"
+      ? [keywords].filter(Boolean)
+      : pickCategoryQueries({
+          categoryId: globalScan ? undefined : categoryId,
+          extra: query,
+          generic: keywords,
+          seed: opts.seed,
+          count: query ? 1 : 3,
+        });
   const asin = parseAmazonLink(query)?.asin || "";
-  if (!query && !category && !fromId.category && !asin && !keepaRoot && !queries.length) {
-    throw new Error("Pick a category or type the product you want Higlou to find.");
+  // Global Keepa scan needs no category / query — opportunity-first.
+  if (
+    !keepaOn &&
+    !query &&
+    !category &&
+    !fromId.category &&
+    !asin &&
+    !keepaRoot &&
+    !queries.length
+  ) {
+    throw new Error(
+      "Connect Keepa or type a product. Global winner scan needs Keepa.",
+    );
   }
 
   const sources: OpportunitySources = {
@@ -432,22 +446,22 @@ export async function findOpportunities(opts: {
     asins.push(id);
   };
 
-  // Keepa finder only on explicit full mode — never on the live loop.
+  // Keepa opportunity-first scan — global by default, category optional.
   if (keepaOn && keepaMode === "full") {
     try {
-      const found = keepaRoot || keywords
-        ? await keepaFindAsins({
-            rootCategory: keepaRoot || undefined,
-            title: query.length >= 8 ? query : undefined,
-            mode,
-          })
-        : [];
-      // Paid /search only if finder returned nothing (not when it returned "a few").
-      const searched =
-        found.length === 0 && query.length >= 8
-          ? await keepaSearchAsins(query)
-          : [];
-      for (const id of [...found, ...searched]) takeHit({ asin: id });
+      const hot = await keepaFindHotWinners({
+        mode,
+        rootCategory: keepaRoot || undefined,
+        title: query.length >= 8 ? query : undefined,
+        seed: opts.seed,
+        preferGlobal: globalScan || !keepaRoot,
+      });
+      for (const id of hot.asins) takeHit({ asin: id });
+      // Paid /search only if finder returned nothing and user typed a product.
+      if (!hot.asins.length && query.length >= 8) {
+        const searched = await keepaSearchAsins(query);
+        for (const id of searched) takeHit({ asin: id });
+      }
       sources.keepa = asins.length > 0;
     } catch {
       sources.keepa = false;
@@ -585,7 +599,12 @@ export async function findOpportunities(opts: {
     });
 
   const pool = afterKeepa.length ? afterKeepa : allowed;
-  const priced = await mapLimit(pool.slice(0, Math.min(10, hydrateN + 2)), 3, async (hit) => {
+  const hydrateCap = Math.min(
+    Math.max(keepaMaxProductsPerScan(), limit + 2),
+    12,
+    pool.length,
+  );
+  const priced = await mapLimit(pool.slice(0, hydrateCap), 3, async (hit) => {
     let next = hit;
     if (opts.amazonToken && opts.marketplaceId) {
       const live = await getAmazonLowestNewPrice({
@@ -659,14 +678,26 @@ export async function findOpportunities(opts: {
   const confirmed = priced.filter((hit) => isConfirmedOpportunity(hit, mode));
   // Never fall back to money-losing asks — empty board beats fake "opportunities".
   // Amazon lane: Keepa product winners only (BSR velocity + competition + proof).
-  const passing =
+  // Arbitrage: ask keep first; if eBay is quiet, still surface Keepa-hot Amazon products
+  // so the board is never "basura vacía" when Keepa found real demand.
+  let passing =
     mode === "amazon"
       ? confirmed.filter((hit) => isAmazonProductWinner(hit))
       : confirmed.filter((hit) => isActionableAskSpread(hit));
+  if (
+    mode === "amazon_to_ebay" &&
+    !passing.length &&
+    confirmed.some((hit) => isAmazonProductWinner(hit))
+  ) {
+    passing = confirmed.filter((hit) => isAmazonProductWinner(hit));
+  }
   const ranked = diversifyOpportunityHits(
-    mode === "amazon"
+    mode === "amazon" ||
+      (mode === "amazon_to_ebay" &&
+        passing.every((hit) => isAmazonProductWinner(hit) && !isActionableAskSpread(hit)))
       ? [...passing].sort(
-          (a, b) => amazonProductScore(b) - amazonProductScore(a) || b.score - a.score,
+          (a, b) =>
+            amazonProductScore(b) - amazonProductScore(a) || b.score - a.score,
         )
       : sortByRealMoney(passing),
     Math.max(limit, 8),

@@ -22,14 +22,30 @@ describe("buildKeepaFinderSelection", () => {
     const selection = buildKeepaFinderSelection({
       rootCategory: "1055398",
       mode: "amazon_to_ebay",
+      tone: "strict",
     });
-    expect(selection.salesRankDrops90_gte).toBe(KEEPA_MIN_BSR_DROPS_90);
+    expect(selection.salesRankDrops90_gte).toBe(12);
     expect(selection.deltaPercent90_NEW_lte).toBeUndefined();
     expect(selection.current_NEW_gte).toBe(
       Math.round(OPPORTUNITY_RULES.minPrice * 100),
     );
     expect(selection.rootCategory).toEqual([1055398]);
     expect(selection.productType).toEqual([0, 1]);
+  });
+
+  it("runs a global opportunity scan without category", () => {
+    const selection = buildKeepaFinderSelection({
+      mode: "amazon",
+      tone: "open",
+      page: 2,
+    });
+    expect(selection.rootCategory).toBeUndefined();
+    expect(selection.salesRankDrops90_gte).toBe(KEEPA_MIN_BSR_DROPS_90);
+    expect(selection.page).toBe(2);
+    expect(selection.sort).toEqual([
+      ["salesRankDrops90", "desc"],
+      ["current_SALES", "asc"],
+    ]);
   });
 
   it("does not send short category keywords as title filters", () => {

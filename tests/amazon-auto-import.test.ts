@@ -484,7 +484,7 @@ describe("Amazon auto-import stays an eBay draft flow", () => {
     expect(importRoute).not.toMatch(/AMAZON_NOT_CONNECTED/);
     const engine = readRepo("lib/opportunity/engine.ts");
     expect(engine).toMatch(/skipAmazonGate/);
-    expect(engine).toMatch(/keepaFindAsins/);
+    expect(engine).toMatch(/keepaFindHotWinners/);
     expect(engine).toMatch(/diversifyOpportunityHits/);
     expect(panel).toMatch(/isConfirmedOpportunity/);
     expect(panel).toMatch(/Ask-based · not sold|Ask keep|Est\. if sold at low ask/);

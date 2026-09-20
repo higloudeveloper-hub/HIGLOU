@@ -77,12 +77,15 @@ export async function POST(request: Request) {
     );
   }
 
-  const fromId = opportunitySearchText(body.categoryId, body.query);
+  const fromId = opportunitySearchText(body.categoryId || "all", body.query);
   const query = body.query.trim() || fromId.query;
   const category = body.category.trim() || fromId.category;
-  if (!query && !category && !fromId.keepaRoot) {
+  const categoryId = body.categoryId.trim() || "all";
+  const globalScan = categoryId === "all";
+  // Global Keepa scan needs no typed query — opportunity-first.
+  if (!globalScan && !query && !category && !fromId.keepaRoot) {
     return NextResponse.json(
-      { error: "Pick a category or type the product you want Higlou to find." },
+      { error: "Pick All Amazon or type a product to scan." },
       { status: 400 },
     );
   }
@@ -106,7 +109,7 @@ export async function POST(request: Request) {
     const found = await findAmazonWinners({
       query,
       category,
-      categoryId: body.categoryId,
+      categoryId,
       keepaRoot: fromId.keepaRoot,
       limit: body.limit,
       pageOrigin: new URL(request.url).origin,
@@ -129,6 +132,7 @@ export async function POST(request: Request) {
       filteredOut: found.filteredOut,
       queries: found.queries,
       analyzed: found.analyzed,
+      scope: globalScan ? "global" : "category",
     });
   } catch (error) {
     const message =

@@ -2,10 +2,10 @@ import { OPPORTUNITY_RULES } from "@/lib/opportunity/types";
 import type { OpportunityProduct } from "@/lib/opportunity/types";
 
 /** Minimum Keepa demand score to stock Find Winners / Market as an Amazon product. */
-export const AMAZON_PRODUCT_WINNER_MIN = 68;
+export const AMAZON_PRODUCT_WINNER_MIN = 62;
 
-/** Soft floor — Product Finder uses 15; hydrated rows can clear a bit lower. */
-export const AMAZON_MIN_BSR_DROPS = 8;
+/** Soft floor — Product Finder uses 10; hydrated rows can clear a bit lower. */
+export const AMAZON_MIN_BSR_DROPS = 6;
 
 type KeepaSignals = {
   salesRank?: number | null;
@@ -99,14 +99,12 @@ export function isAmazonProductWinner(hit: KeepaSignals): boolean {
   if (hit.policyRisk === "high" || hit.returnRisk === "high") return false;
   if (hit.amazonRetail) return false;
 
-  const price =
+  const amazon =
     hit.buyBoxPrice ?? hit.amazonPrice ?? hit.newPrice ?? null;
-  if (price == null || price < OPPORTUNITY_RULES.minPrice || price > OPPORTUNITY_RULES.maxPrice) {
-    return false;
-  }
+  if (amazon == null || amazon < 10 || amazon > 150) return false;
 
   const rank = hit.avgSalesRank90 ?? hit.salesRank;
-  if (rank == null || rank < OPPORTUNITY_RULES.minBsr || rank > OPPORTUNITY_RULES.maxBsr) {
+  if (rank == null || rank < 200 || rank > 250_000) {
     return false;
   }
 
@@ -115,14 +113,14 @@ export function isAmazonProductWinner(hit: KeepaSignals): boolean {
 
   if (
     hit.sellerCount != null &&
-    hit.sellerCount > OPPORTUNITY_RULES.maxSellers
+    hit.sellerCount > 20
   ) {
     return false;
   }
 
   if (
     hit.packageLb != null &&
-    hit.packageLb > OPPORTUNITY_RULES.maxPackageLb
+    hit.packageLb > OPPORTUNITY_RULES.maxPackageLb + 2
   ) {
     return false;
   }

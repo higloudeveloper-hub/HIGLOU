@@ -10,6 +10,7 @@ import {
   estimateLandedCost,
   sellThrough90,
 } from "@/lib/opportunity/landed";
+import { askBasedSalePrice } from "@/lib/opportunity/spread";
 import { OPPORTUNITY_RULES } from "@/lib/opportunity/types";
 import type {
   OpportunityGrade,
@@ -141,7 +142,12 @@ export function judgeOpportunity(
     medianSold30: hit.medianSoldPrice,
     p25Sold90: hit.p25Sold90,
   });
-  const hypoSale = hit.ebayActiveMedian ?? hit.ebayPrice;
+  // Ask-based hypo uses the live LOW (or haircut median) — not the rosy median.
+  const hypoSale =
+    askBasedSalePrice({
+      low: hit.ebayActiveLow,
+      median: hit.ebayActiveMedian ?? hit.ebayPrice,
+    }) ?? hit.ebayActiveMedian ?? hit.ebayPrice;
   const str = sellThrough90(hit.sold90d, hit.ebayActiveCount);
   const days = daysToSellEstimate(hit.sold30d, hit.ebayActiveCount);
 
@@ -154,7 +160,7 @@ export function judgeOpportunity(
   const hypoLanded = estimateLandedCost({
     amazonPrice: hit.amazonPrice,
     salePrice: hypoSale,
-    ebayFee: hit.ebayFees,
+    ebayFee: hit.ebayFees ?? undefined,
     outboundShipping: hit.shipping,
   });
 
@@ -174,10 +180,11 @@ export function judgeOpportunity(
   );
 
   if (identity.reject || identity.confidence < 40) score = Math.min(score, 40);
-  else if (!hit.upc && !hit.mpn) score = Math.min(score, 59);
-  if (mode !== "amazon" && !soldVerified) score = Math.min(score, 49);
+  else if (!hit.upc && !hit.mpn) score = Math.min(score, 64);
+  // Without sold comps we still rank real ask spreads — never claim a winner.
+  if (mode !== "amazon" && !soldVerified) score = Math.min(score, 74);
   if (mode !== "amazon" && (hit.sold30d ?? 0) < 1 && (hit.sold90d ?? 0) < 1) {
-    score = Math.min(score, 49);
+    score = Math.min(score, 74);
   }
   if (isFragileTitle(hit.title) || (hit.packageLb ?? 0) > OPPORTUNITY_RULES.maxPackageLb) {
     score -= 15;
@@ -186,6 +193,13 @@ export function judgeOpportunity(
   if (hit.sellerCount === 1 && !hit.amazonRetail) score -= 10;
   if (isStarterRestrictedTitle(hit.title) || policyRisk === "high") {
     score = Math.min(score, 40);
+  }
+  // Boost clear ask spreads so they surface above noise.
+  const hypoKeep = hypoLanded.netProfit;
+  if (!soldVerified && hypoKeep != null && hypoKeep >= OPPORTUNITY_RULES.minWinnerProfit) {
+    score = Math.min(74, score + 8);
+  } else if (!soldVerified && hypoKeep != null && hypoKeep >= OPPORTUNITY_RULES.minNetProfit) {
+    score = Math.min(74, score + 4);
   }
   score = clamp(score);
 
@@ -207,14 +221,27 @@ export function judgeOpportunity(
     policyRisk !== "high" &&
     returnRisk !== "high";
 
+  const strongAsk =
+    !soldVerified &&
+    mode !== "amazon" &&
+    !identity.reject &&
+    identity.confidence >= 50 &&
+    (hypoKeep ?? 0) >= OPPORTUNITY_RULES.minWinnerProfit &&
+    (hit.ebayActiveCount == null ||
+      (hit.ebayActiveCount >= 2 &&
+        hit.ebayActiveCount <= OPPORTUNITY_RULES.maxActiveCompetitors)) &&
+    policyRisk !== "high" &&
+    returnRisk !== "high";
+
   let verdict: OpportunityVerdict = "candidate";
   if (identity.reject || policyRisk === "high" || isStarterRestrictedTitle(hit.title)) {
     verdict = "reject";
   } else if (winner && score >= 85) verdict = "winner";
   else if (soldVerified && score >= 70) verdict = "good";
   else if (soldVerified && score >= 50) verdict = "watch";
+  else if (strongAsk && score >= 58) verdict = "watch";
   else if (!soldVerified && mode !== "amazon") verdict = "candidate";
-  else if (score < 50) verdict = "reject";
+  else if (score < 45) verdict = "reject";
   else verdict = "candidate";
 
   const grade: OpportunityGrade =

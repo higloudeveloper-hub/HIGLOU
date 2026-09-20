@@ -133,11 +133,17 @@ function heroFor(hit: OpportunityProduct, mode: OpportunityMode) {
   }
 
   if (mode !== "amazon" && !hit.soldVerified) {
+    const askKeep = hypo;
     return {
-      kicker: "Est. eBay profit",
-      value: "Unverified",
-      amount: null as number | null,
-      detail: `CANDIDATE — SALES NOT VERIFIED · Amazon ${money(hit.amazonPrice)} → eBay ask ${money(ebay)}`,
+      kicker: "Est. if sold at low ask",
+      value: askKeep != null ? signedMoney(askKeep) : "No eBay ask",
+      amount: askKeep,
+      detail:
+        askKeep != null && askKeep >= 10
+          ? `Ask spread · Buy Amazon ${money(hit.amazonPrice)} → eBay low ${money(hit.ebayActiveLow ?? ebay)} · not sold comps`
+          : askKeep != null
+            ? `CANDIDATE ask spread · Amazon ${money(hit.amazonPrice)} → eBay ${money(hit.ebayActiveLow ?? ebay)}`
+            : `Need eBay asks · Amazon ${money(hit.amazonPrice)}`,
     };
   }
   const keep = keepFor(hit, mode);
@@ -218,12 +224,15 @@ function MoneyTicker({
 function dealChips(hit: OpportunityProduct, mode: OpportunityMode) {
   const chips: string[] = [];
   if (mode !== "amazon" && !hit.soldVerified) {
-    chips.push("CANDIDATE — SALES NOT VERIFIED");
+    const keep = hit.hypotheticalKeep;
+    if (keep != null && keep >= 12) chips.push(`Ask keep ${signedMoney(keep)}`);
+    else chips.push("Ask-based · not sold");
   }
   if (hit.verdict === "winner") chips.push("Winner");
-  const keep = hit.soldVerified ? keepFor(hit, mode) : null;
-  if (keep != null && keep >= 10) chips.push("Real payday");
-  else if (keep != null && keep > 0) chips.push("Positive keep");
+  if (hit.verdict === "watch" && !hit.soldVerified) chips.push("Strong spread");
+  const keep = hit.soldVerified ? keepFor(hit, mode) : hit.hypotheticalKeep;
+  if (hit.soldVerified && keep != null && keep >= 10) chips.push("Real payday");
+  else if (hit.soldVerified && keep != null && keep > 0) chips.push("Positive keep");
   const ebayN = hit.ebayActiveCount;
   if (ebayN != null && ebayN <= 6) chips.push("Thin eBay");
   else if (ebayN != null && ebayN <= 15) chips.push(`${ebayN} on eBay`);
@@ -300,8 +309,11 @@ function metricsFor(hit: OpportunityProduct, mode: OpportunityMode) {
   }
   return [
     ["Score", `${hit.score}/100`],
-    ["Est. eBay profit", hit.soldVerified ? money(hit.netProfit) : "Unverified"],
-    ["ROI", hit.soldVerified ? pct(hit.roi) : "—"],
+    [
+      "Est. at low ask",
+      hit.soldVerified ? money(hit.netProfit) : money(hit.hypotheticalKeep),
+    ],
+    ["ROI (ask)", pct(hit.roi)],
     ["Sold 30/90", `${hit.sold30d ?? "—"} / ${hit.sold90d ?? "—"}`],
     ["Competitors", hit.ebayActiveCount != null ? String(hit.ebayActiveCount) : "—"],
     ["Sell-through", pct(hit.sellThrough90)],
@@ -310,7 +322,7 @@ function metricsFor(hit: OpportunityProduct, mode: OpportunityMode) {
     ["Shipping", money(hit.shipping)],
     ["Fees", money(hit.ebayFees)],
     ["Return reserve", money(hit.returnsReserve)],
-    ["Net profit", money(hit.netProfit)],
+    ["Verified profit", money(hit.netProfit)],
     ["Days to sell", hit.daysToSell != null ? String(hit.daysToSell) : "—"],
     ["Identity", `${hit.identityConfidence || 0}%`],
     ["Policy risk", hit.policyRisk || "—"],
@@ -318,7 +330,7 @@ function metricsFor(hit: OpportunityProduct, mode: OpportunityMode) {
     [
       "eBay ask",
       ebay != null && hit.ebayActiveCount
-        ? `${money(ebay)} · ${hit.ebayActiveCount}`
+        ? `${money(hit.ebayActiveLow ?? ebay)}–${money(ebay)} · ${hit.ebayActiveCount}`
         : money(ebay),
     ],
     ["BSR", bsr],
@@ -480,7 +492,7 @@ function WinnerRow({
         )}
       </td>
       <td className="whitespace-nowrap px-2 tabular-nums">
-        {hit.soldVerified ? pct(hit.roi) : "—"}
+        {hit.roi != null ? pct(hit.roi) : "—"}
       </td>
       <td className="whitespace-nowrap px-2 tabular-nums text-[#565959]">{bsr}</td>
       <td className="whitespace-nowrap px-2 tabular-nums">
@@ -617,11 +629,22 @@ export function AmazonAutoImportPanel({
   const needsCost = mode === "amazon" || mode === "supplier";
   const canManualSearch = Boolean(categoryId || extra.trim().length >= 2);
   const sessionProfit = useMemo(
-    () => hits.reduce((sum, hit) => sum + (sessionKeep(hit, mode) ?? 0), 0),
+    () =>
+      hits.reduce((sum, hit) => {
+        const verified = sessionKeep(hit, mode);
+        if (verified != null) return sum + verified;
+        // Ask-based pipeline value — labeled separately in the UI.
+        return sum + Math.max(0, hit.hypotheticalKeep ?? 0);
+      }, 0),
     [hits, mode],
   );
   const selectedProfit = useMemo(
-    () => selected.reduce((sum, hit) => sum + (sessionKeep(hit, mode) ?? 0), 0),
+    () =>
+      selected.reduce((sum, hit) => {
+        const verified = sessionKeep(hit, mode);
+        if (verified != null) return sum + verified;
+        return sum + Math.max(0, hit.hypotheticalKeep ?? 0);
+      }, 0),
     [selected, mode],
   );
 
@@ -754,7 +777,13 @@ export function AmazonAutoImportPanel({
             setQueries(found.queries.length ? found.queries : [target.query]);
             setAnalyzedTotal((n) => n + (found.analyzed || found.products.length));
             const bestKeep = found.products.reduce(
-              (max, hit) => Math.max(max, sessionKeep(hit, modeRef.current) ?? 0),
+              (max, hit) =>
+                Math.max(
+                  max,
+                  sessionKeep(hit, modeRef.current) ??
+                    hit.hypotheticalKeep ??
+                    0,
+                ),
               0,
             );
             if (!refresh) {
@@ -1134,7 +1163,7 @@ export function AmazonAutoImportPanel({
         <p className="border-b border-[#d5d9d9] bg-[#f3f3f3] px-3 py-1.5 text-[11px] text-[#565959]">
           {mode === "amazon"
             ? "Restricted brands for your Amazon account are hidden automatically."
-            : "This path buys inventory on Amazon, then you inspect and publish on eBay. eBay figures are active listings, not sold. Session spread only counts verified sold comps."}{" "}
+            : "This path buys inventory on Amazon, then you inspect and publish on eBay. Numbers use a conservative eBay low ask (not Terapeak sold comps). Import only what still looks good after fees."}{" "}
           {mode === "amazon_to_ebay" ? (
             <>
               eBay asking prices use Browse (app credentials or{" "}
@@ -1256,7 +1285,7 @@ export function AmazonAutoImportPanel({
                     <p className="mt-1 max-w-xl text-[13px] text-[#565959]">
                       {scanLog[0]
                         ? `${scanLog[0].query}: ${scanLog[0].analyzed || 0} scored, ${scanLog[0].found} priced on Amazon and eBay. Active asks are not sold.`
-                        : "Higlou finds Amazon discounts, then checks eBay competition. Until Marketplace Insights is connected, cards stay CANDIDATE — SALES NOT VERIFIED and Session spread stays at $0."}
+                        : "Higlou ranks Amazon→eBay ask spreads using a conservative low BIN after fees/ship. Sold-comp winners need Marketplace Insights; until then the board shows ask-based keep, not fake sold cash."}
                     </p>
                     {liveOn && view === "live" && !reduce ? (
                       <p className="mt-3 text-[12px] text-[#8a8a8a]">

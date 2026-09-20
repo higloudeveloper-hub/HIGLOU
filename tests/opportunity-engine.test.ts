@@ -321,8 +321,11 @@ describe("verified-sales gates", () => {
     );
     expect(judged.soldVerified).toBe(false);
     expect(judged.netProfit).toBeNull();
-    expect(judged.score).toBeLessThanOrEqual(49);
-    expect(judged.verdict).toBe("candidate");
+    expect(judged.hypotheticalKeep).not.toBeNull();
+    expect(judged.score).toBeLessThanOrEqual(74);
+    expect(["candidate", "watch"]).toContain(judged.verdict);
+    expect(judged.verdict).not.toBe("winner");
+    expect(judged.verdict).not.toBe("good");
   });
 
   it("rejects a 1-pack vs 2-pack match", async () => {

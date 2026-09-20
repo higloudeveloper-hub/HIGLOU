@@ -451,7 +451,7 @@ describe("Amazon auto-import stays an eBay draft flow", () => {
     expect(panel).toMatch(/Amazon profit/);
     expect(panel).toMatch(/settings#amazon-store/);
     expect(panel).toMatch(/settings#ebay-store/);
-    expect(panel).toMatch(/active listings, not sold/);
+    expect(panel).toMatch(/conservative eBay low ask|not Terapeak sold comps/i);
     expect(categories).toMatch(/Home & Kitchen/);
     expect(categories).toMatch(/Tools & Home/);
     const amazonImport = readRepo("app/api/amazon/import/route.ts");
@@ -487,7 +487,7 @@ describe("Amazon auto-import stays an eBay draft flow", () => {
     expect(engine).toMatch(/keepaFindAsins/);
     expect(engine).toMatch(/diversifyOpportunityHits/);
     expect(panel).toMatch(/isConfirmedOpportunity/);
-    expect(panel).toMatch(/CANDIDATE — SALES NOT VERIFIED/);
+    expect(panel).toMatch(/Ask-based · not sold|Ask keep|Est\. if sold at low ask/);
     expect(panel).toMatch(/sessionKeepAmount/);
     expect(panel).toMatch(/loadLocalLedger/);
     expect(panel).toMatch(/recordNicheLearn/);

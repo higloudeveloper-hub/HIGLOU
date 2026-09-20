@@ -41,6 +41,7 @@ import {
   scoreOpportunity,
   sortByRealMoney,
 } from "@/lib/opportunity/score";
+import { isActionableAskSpread, askBasedSalePrice } from "@/lib/opportunity/spread";
 import type {
   OpportunityMode,
   OpportunityProduct,
@@ -593,26 +594,34 @@ export async function findOpportunities(opts: {
       }
     }
     if (opts.ebayToken && (next.title || next.upc) && mode !== "amazon") {
+      const amazonPrice = next.buyBoxPrice ?? next.amazonPrice;
       const live = await searchEbayLivePrices({
         accessToken: opts.ebayToken,
         query: next.title,
+        brand: next.brand,
         gtin: next.upc,
+        amazonPrice,
       }).catch(() => ({
         median: null,
         count: 0,
         low: null,
+        p25: null,
         kind: "active_listings" as const,
         sampleTitle: "",
         matchedByGtin: false,
       }));
+      const askSale = askBasedSalePrice({
+        low: live.low ?? live.p25,
+        median: live.median,
+      });
       next = {
         ...next,
         ebayActiveMedian: live.median,
-        ebayActiveLow: live.low,
+        ebayActiveLow: live.low ?? live.p25,
         ebayActiveCount: live.count,
         ebayPrice: live.median,
         ebayCount: live.count,
-        ebayFees: estimateEbayReferralFee(live.median),
+        ebayFees: estimateEbayReferralFee(askSale ?? live.median),
         ebayTitle: live.sampleTitle,
         ebayMatchedByGtin: live.matchedByGtin,
       };
@@ -621,9 +630,14 @@ export async function findOpportunities(opts: {
     return finishProduct(next, mode, opts.supplierCost);
   });
 
-  const passing = priced.filter((hit) =>
-    isConfirmedOpportunity(hit, mode),
-  );
+  const confirmed = priced.filter((hit) => isConfirmedOpportunity(hit, mode));
+  // Prefer spreads that clear fees on a conservative ask; fall back if none.
+  const actionable =
+    mode === "amazon"
+      ? confirmed
+      : confirmed.filter((hit) => isActionableAskSpread(hit));
+  const passing =
+    actionable.length >= Math.min(2, limit) ? actionable : confirmed;
   const ranked = diversifyOpportunityHits(
     sortByRealMoney(passing),
     Math.max(limit, 8),

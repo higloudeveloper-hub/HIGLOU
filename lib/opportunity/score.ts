@@ -347,15 +347,33 @@ export function sortByOpportunityScore<T extends { score: number; asin: string }
   });
 }
 
-/** Rank by cash you keep, then score. Never bury a real payday. */
+/** Rank by cash you keep, then ask-spread keep, then score. Never bury a real payday. */
 export function sortByRealMoney<
-  T extends { score: number; asin: string; netProfit?: number | null },
+  T extends {
+    score: number;
+    asin: string;
+    netProfit?: number | null;
+    hypotheticalKeep?: number | null;
+    soldVerified?: boolean;
+  },
 >(hits: T[]): T[] {
   return [...hits].sort((a, b) => {
-    const pa = a.netProfit;
-    const pb = b.netProfit;
-    const aKnown = pa != null && Number.isFinite(pa);
-    const bKnown = pb != null && Number.isFinite(pb);
+    const keepOf = (row: T) => {
+      if (row.soldVerified && row.netProfit != null && Number.isFinite(row.netProfit)) {
+        return row.netProfit as number;
+      }
+      if (row.hypotheticalKeep != null && Number.isFinite(row.hypotheticalKeep)) {
+        return row.hypotheticalKeep as number;
+      }
+      if (row.netProfit != null && Number.isFinite(row.netProfit)) {
+        return row.netProfit as number;
+      }
+      return null;
+    };
+    const pa = keepOf(a);
+    const pb = keepOf(b);
+    const aKnown = pa != null;
+    const bKnown = pb != null;
     if (aKnown && bKnown && pb !== pa) return (pb as number) - (pa as number);
     if (bKnown !== aKnown) return bKnown ? 1 : -1;
     if (b.score !== a.score) return b.score - a.score;

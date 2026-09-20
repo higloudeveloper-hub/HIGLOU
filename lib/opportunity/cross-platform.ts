@@ -207,15 +207,20 @@ export async function analyzeCrossPlatform(opts: {
       amazonPrice: quotes.find((q) => q.platform === "amazon")?.price,
     }).catch(() => null);
     if (live && (live.count > 0 || live.low != null || live.median != null)) {
-      quotes.push({
-        platform: "ebay",
-        price: live.low ?? live.median ?? null,
-        fees: estimateEbayReferralFee(live.low ?? live.median ?? null),
-        id: live.sampleItemId || "",
-        title: live.sampleTitle || title,
-        url: live.sampleItemUrl || "",
-        matchedBy: live.matchedByGtin ? "upc" : "title",
-      });
+      // When UPC is known, only trust GTIN-matched eBay — title hits are lookalikes.
+      if (upc.length >= 12 && !live.matchedByGtin) {
+        /* skip unreliable title-only eBay quote */
+      } else {
+        quotes.push({
+          platform: "ebay",
+          price: live.low ?? live.median ?? null,
+          fees: estimateEbayReferralFee(live.low ?? live.median ?? null),
+          id: live.sampleItemId || "",
+          title: live.sampleTitle || title,
+          url: live.sampleItemUrl || "",
+          matchedBy: live.matchedByGtin ? "upc" : "title",
+        });
+      }
     }
   }
 

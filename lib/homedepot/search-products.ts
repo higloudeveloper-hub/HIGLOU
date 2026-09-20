@@ -179,9 +179,9 @@ export async function searchHomeDepotBestMatch(
     if (!usedQuery && batch.length) usedQuery = q;
     const picked = pickBestRetailHit(pooled, hints, {
       minScore:
-        String(hints.upc || "").replace(/\D/g, "").length >= 12 ? 0.22 : 0.28,
+        String(hints.upc || "").replace(/\D/g, "").length >= 12 ? 0.45 : 0.5,
     });
-    if (picked && (picked.matchedBy === "upc" || picked.score >= 0.4)) {
+    if (picked && (picked.matchedBy === "upc" || picked.score >= 0.5)) {
       return {
         hit: picked.hit,
         matchedBy: picked.matchedBy,
@@ -192,7 +192,7 @@ export async function searchHomeDepotBestMatch(
     if (pooled.length >= 12) break;
   }
 
-  const picked = pickBestRetailHit(pooled, hints);
+  const picked = pickBestRetailHit(pooled, hints, { minScore: 0.5 });
   if (!picked) return null;
   return {
     hit: picked.hit,

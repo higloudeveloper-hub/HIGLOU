@@ -157,7 +157,10 @@ export function pickBestRetailHit<T extends { title: string; upc?: string }>(
 ): { hit: T; score: number; matchedBy: "upc" | "title" } | null {
   if (!hits.length) return null;
   const upc = String(hints.upc || "").replace(/\D/g, "");
-  const minScore = opts?.minScore ?? 0.28;
+  const brand = String(hints.brand || "").trim();
+  const model = String(hints.mpn || hints.model || "").trim();
+  // Strict default — prefer no match over a lookalike.
+  const minScore = opts?.minScore ?? 0.42;
 
   if (upc.length >= 12) {
     const byUpc = hits.find(
@@ -167,23 +170,26 @@ export function pickBestRetailHit<T extends { title: string; upc?: string }>(
   }
 
   let best: { hit: T; score: number } | null = null;
+  const compactModel =
+    model.length >= 3
+      ? model.toLowerCase().replace(/[^a-z0-9]/g, "")
+      : "";
+  const anyHasModel =
+    Boolean(compactModel) &&
+    hits.some((h) =>
+      h.title.toLowerCase().replace(/[^a-z0-9]/g, "").includes(compactModel),
+    );
+
   for (const hit of hits) {
     const score = retailTitleScore(hit.title, hints);
+    const hay = hit.title.toLowerCase();
+    if (brand && !hay.includes(brand.toLowerCase())) continue;
+    if (anyHasModel) {
+      const compactTitle = hay.replace(/[^a-z0-9]/g, "");
+      if (!compactTitle.includes(compactModel)) continue;
+    }
     if (!best || score > best.score) best = { hit, score };
   }
-  if (!best || best.score < minScore) {
-    // Soft fallback: if only one hit and brand matches, keep it.
-    if (hits.length === 1) {
-      const brand = String(hints.brand || "").trim();
-      if (
-        brand &&
-        hits[0].title.toLowerCase().includes(brand.toLowerCase()) &&
-        retailTitleScore(hits[0].title, hints) >= 0.18
-      ) {
-        return { hit: hits[0], score: retailTitleScore(hits[0].title, hints), matchedBy: "title" };
-      }
-    }
-    return null;
-  }
+  if (!best || best.score < minScore) return null;
   return { hit: best.hit, score: best.score, matchedBy: "title" };
 }

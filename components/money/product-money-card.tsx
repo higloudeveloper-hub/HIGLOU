@@ -1,46 +1,30 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { toast } from "sonner";
-import { ExternalLink, Eye, Link2, Loader2, QrCode, Store } from "lucide-react";
+import {
+  ExternalLink,
+  Eye,
+  Link2,
+  Loader2,
+  QrCode,
+  ShieldCheck,
+  Store,
+} from "lucide-react";
 import type { MonetizationDecision, MonetizationInput } from "@/lib/monetization/types";
 import { takeOpportunityMoneySeed } from "@/lib/monetization/from-opportunity";
+import {
+  amazonProductUrl,
+  buildPlatformUrls,
+  type PlatformUrls,
+} from "@/lib/opportunity/platform-links";
 import { cn } from "@/lib/utils";
 
 const EASE = [0.22, 1, 0.36, 1] as const;
 
-function formatMoney(value: number | null | undefined) {
-  if (value == null || !Number.isFinite(value)) return "Insufficient Data";
-  return `$${value.toFixed(2)}`;
-}
-
-function StatusRow({
-  label,
-  ok,
-  detail,
-}: {
-  label: string;
-  ok: boolean | "warn";
-  detail: string;
-}) {
-  const mark = ok === true ? "OK" : ok === "warn" ? "WARN" : "—";
-  const color =
-    ok === true
-      ? "text-emerald-700"
-      : ok === "warn"
-        ? "text-amber-800"
-        : "text-[#9b9b9b]";
-  return (
-    <div className="flex items-start justify-between gap-3 text-[13px]">
-      <span className="text-[#707070]">{label}</span>
-      <span className={cn("text-right font-medium", color)}>
-        {mark} · {detail}
-      </span>
-    </div>
-  );
-}
+type TabId = "ganar" | "vender" | "comparar";
 
 type MoneyFlags = {
   moneyEngine: boolean;
@@ -49,15 +33,57 @@ type MoneyFlags = {
   moneyScore: boolean;
 };
 
+function formatMoney(value: number | null | undefined) {
+  if (value == null || !Number.isFinite(value)) return "—";
+  return `$${value.toFixed(2)}`;
+}
+
+function LaneChip({
+  label,
+  tone,
+  detail,
+}: {
+  label: string;
+  tone: "ok" | "warn" | "bad" | "muted";
+  detail: string;
+}) {
+  const toneCls =
+    tone === "ok"
+      ? "border-[#b8dfc8] bg-[#e8f5ee] text-[#1a6b45]"
+      : tone === "warn"
+        ? "border-[#f0d9a8] bg-[#fff8e8] text-[#8a6a10]"
+        : tone === "bad"
+          ? "border-[#f0c4c0] bg-[#fdf2f1] text-[#b42318]"
+          : "border-[#ebe7e0] bg-[#faf9f6] text-[#8a847c]";
+  return (
+    <div className={cn("rounded-2xl border px-3.5 py-3", toneCls)}>
+      <p className="text-[10px] font-bold tracking-[0.14em] uppercase opacity-80">
+        {label}
+      </p>
+      <p className="mt-1 text-[13px] leading-snug font-medium">{detail}</p>
+    </div>
+  );
+}
+
 export function ProductMoneyCard({
   productId,
   asin,
   ebayPrice,
+  title,
+  brand,
+  upc,
+  amazonPrice,
+  cost,
   className,
 }: {
   productId?: string | null;
   asin?: string | null;
   ebayPrice?: number | null;
+  title?: string | null;
+  brand?: string | null;
+  upc?: string | null;
+  amazonPrice?: number | null;
+  cost?: number | null;
   className?: string;
 }) {
   const reduce = useReducedMotion() ?? false;
@@ -68,21 +94,48 @@ export function ProductMoneyCard({
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
   const [smartPath, setSmartPath] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [tab, setTab] = useState<TabId>("ganar");
+  const [seedUrls, setSeedUrls] = useState<PlatformUrls | null>(null);
+  const [seedPrices, setSeedPrices] = useState<{
+    amazon: number | null;
+    ebay: number | null;
+  }>({ amazon: null, ebay: null });
 
   useEffect(() => {
     let cancelled = false;
     void (async () => {
       try {
         const seed: MonetizationInput | null = takeOpportunityMoneySeed(asin);
+        const resolvedAsin = asin || seed?.asin || undefined;
+        const resolvedTitle = title || seed?.title || undefined;
+        const resolvedBrand = brand || seed?.brand || undefined;
+        const resolvedUpc = upc || seed?.upc || undefined;
+        const resolvedAmazon =
+          amazonPrice ?? seed?.amazonPrice ?? seed?.cost ?? null;
+        const resolvedEbay = ebayPrice ?? seed?.ebayPrice ?? null;
+
+        setSeedPrices({
+          amazon: resolvedAmazon ?? null,
+          ebay: resolvedEbay ?? null,
+        });
+        setSeedUrls(
+          buildPlatformUrls({
+            asin: resolvedAsin || "",
+            title: resolvedTitle || "",
+            brand: resolvedBrand || "",
+            upc: resolvedUpc || "",
+          }),
+        );
+
         const res = await fetch("/api/money/recommendation", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             productId: productId || undefined,
-            asin: asin || seed?.asin || undefined,
-            ebayPrice: ebayPrice ?? seed?.ebayPrice ?? undefined,
-            amazonPrice: seed?.amazonPrice ?? undefined,
-            cost: seed?.cost ?? undefined,
+            asin: resolvedAsin,
+            ebayPrice: resolvedEbay ?? undefined,
+            amazonPrice: resolvedAmazon ?? undefined,
+            cost: cost ?? seed?.cost ?? undefined,
             amazonFees: seed?.amazonFees ?? undefined,
             ebayFees: seed?.ebayFees ?? undefined,
             shipping: seed?.shipping ?? undefined,
@@ -94,8 +147,9 @@ export function ProductMoneyCard({
             opportunityScore: seed?.opportunityScore ?? undefined,
             opportunityVerdict: seed?.opportunityVerdict ?? undefined,
             soldVerified: seed?.soldVerified ?? undefined,
-            title: seed?.title ?? undefined,
-            brand: seed?.brand ?? undefined,
+            title: resolvedTitle,
+            brand: resolvedBrand,
+            upc: resolvedUpc,
           }),
         });
         if (res.status === 404) {
@@ -143,7 +197,7 @@ export function ProductMoneyCard({
     return () => {
       cancelled = true;
     };
-  }, [productId, asin, ebayPrice]);
+  }, [productId, asin, ebayPrice, title, brand, upc, amazonPrice, cost]);
 
   const createAffiliate = useCallback(async () => {
     if (!asin) {
@@ -186,14 +240,6 @@ export function ProductMoneyCard({
     }
   }, [asin, productId]);
 
-  const createSmartOnly = useCallback(async () => {
-    if (!asin) {
-      toast.message("Create an affiliate link first (ASIN required)");
-      return;
-    }
-    await createAffiliate();
-  }, [asin, createAffiliate]);
-
   const watchProduct = useCallback(async () => {
     if (!productId) {
       toast.message("Save the product first");
@@ -217,12 +263,23 @@ export function ProductMoneyCard({
     }
   }, [productId, asin]);
 
+  const urls = useMemo(() => {
+    const amazon =
+      seedUrls?.amazon || amazonProductUrl(asin) || null;
+    return {
+      amazon,
+      ebay: seedUrls?.ebay || null,
+      walmart: seedUrls?.walmart || null,
+      homedepot: seedUrls?.homedepot || null,
+    };
+  }, [seedUrls, asin]);
+
   if (!flags?.moneyEngine) return null;
   if (loading) {
     return (
       <div
         className={cn(
-          "flex min-h-[120px] items-center justify-center rounded-2xl border border-[#e5e5e5] bg-white",
+          "flex min-h-[140px] items-center justify-center rounded-3xl border border-[#ebe7e0] bg-white",
           className,
         )}
       >
@@ -235,6 +292,28 @@ export function ProductMoneyCard({
   const amz = decision?.channels.amazonSeller;
   const ebay = decision?.channels.ebaySeller;
   const aff = decision?.channels.amazonAffiliate;
+  const scoreLabel =
+    !flags.moneyScore ||
+    decision?.moneyScoreAvailability === "insufficient" ||
+    decision?.moneyScore == null
+      ? "—"
+      : `${decision.moneyScore}`;
+
+  const amzTone: "ok" | "warn" | "bad" | "muted" =
+    amz?.status === "SELLABLE"
+      ? "ok"
+      : amz?.status === "APPROVAL_REQUIRED"
+        ? "warn"
+        : amz?.status === "RESTRICTED" ||
+            amz?.status === "CONDITION_RESTRICTED"
+          ? "bad"
+          : "muted";
+
+  const tabs: Array<{ id: TabId; label: string }> = [
+    { id: "ganar", label: "Ganar" },
+    { id: "vender", label: "Vender" },
+    { id: "comparar", label: "Comparar" },
+  ];
 
   return (
     <motion.section
@@ -242,156 +321,348 @@ export function ProductMoneyCard({
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.4, ease: EASE }}
       className={cn(
-        "overflow-hidden rounded-2xl border border-[#e5e5e5] bg-white",
+        "overflow-hidden rounded-3xl border border-[#ebe7e0] bg-white shadow-[0_1px_0_rgba(20,20,20,0.04)]",
         className,
       )}
       data-money-card
     >
-      <div className="flex items-start justify-between gap-3 border-b border-[#e5e5e5] px-5 py-4">
-        <div>
-          <p className="text-[10px] font-semibold tracking-[0.16em] text-[#9b9b9b] uppercase">
-            Money Engine
-          </p>
-          <h3 className="mt-0.5 text-[16px] font-semibold tracking-tight text-[#191919]">
-            Make Money With This Product
-          </h3>
+      <div className="relative overflow-hidden border-b border-[#efeae2] px-5 py-4">
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0"
+          style={{
+            background:
+              "radial-gradient(ellipse 60% 80% at 0% 0%, rgba(244,201,40,0.1), transparent 55%), radial-gradient(ellipse 40% 60% at 100% 0%, rgba(31,122,77,0.06), transparent 50%)",
+          }}
+        />
+        <div className="relative flex items-start justify-between gap-3">
+          <div>
+            <p className="inline-flex items-center gap-1.5 text-[10px] font-semibold tracking-[0.16em] text-[#6b6560] uppercase">
+              <ShieldCheck className="size-3.5 text-[#1f7a4d]" />
+              Money Engine
+            </p>
+            <h3 className="mt-1 font-display text-[24px] leading-none tracking-tight text-[#141414]">
+              Gana con este producto
+            </h3>
+            <p className="mt-1.5 max-w-md text-[12px] text-[#8a847c]">
+              Elige cómo monetizar: vender, affiliate o comparar precios del
+              mismo SKU.
+            </p>
+          </div>
+          <div className="rounded-2xl border border-[#ebe7e0] bg-white/90 px-3.5 py-2.5 text-right shadow-sm">
+            <p className="text-[9px] font-bold tracking-[0.14em] text-[#8a847c] uppercase">
+              Money score
+            </p>
+            <p className="font-display text-[28px] leading-none tabular-nums text-[#141414]">
+              {scoreLabel}
+              {scoreLabel !== "—" ? (
+                <span className="text-[12px] text-[#8a847c]">/100</span>
+              ) : null}
+            </p>
+          </div>
         </div>
-        <div className="rounded-xl border border-[#e5e5e5] bg-[#f7f7f7] px-3 py-2 text-right">
-          <p className="text-[10px] font-semibold tracking-[0.12em] text-[#9b9b9b] uppercase">
-            Money Score
-          </p>
-          <p className="text-lg font-semibold tabular-nums text-[#191919]">
-            {!flags.moneyScore ||
-            decision?.moneyScoreAvailability === "insufficient" ||
-            decision?.moneyScore == null
-              ? "—"
-              : `${decision.moneyScore}/100`}
-          </p>
+
+        <div className="relative mt-4 inline-flex rounded-full border border-[#ebe7e0] bg-[#f4f2ed] p-1">
+          {tabs.map((t) => {
+            const on = tab === t.id;
+            return (
+              <button
+                key={t.id}
+                type="button"
+                onClick={() => setTab(t.id)}
+                className={cn(
+                  "relative rounded-full px-4 py-1.5 text-[12px] font-semibold transition",
+                  on ? "text-[#141414]" : "text-[#6b6560] hover:text-[#141414]",
+                )}
+              >
+                {on ? (
+                  <motion.span
+                    layoutId="money-tab-pill"
+                    className="absolute inset-0 rounded-full bg-white shadow-sm"
+                    transition={{ type: "spring", stiffness: 420, damping: 34 }}
+                  />
+                ) : null}
+                <span className="relative z-10">{t.label}</span>
+              </button>
+            );
+          })}
         </div>
       </div>
 
-      <div className="space-y-4 p-5">
+      <div className="p-5">
         {error ? (
           <p className="text-sm text-amber-800">{error}</p>
         ) : decision ? (
-          <AnimatePresence>
+          <AnimatePresence mode="wait">
             <motion.div
-              initial={reduce ? false : { opacity: 0 }}
-              animate={{ opacity: 1 }}
+              key={tab}
+              initial={reduce ? false : { opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={reduce ? undefined : { opacity: 0, y: -6 }}
+              transition={{ duration: 0.22, ease: EASE }}
               className="space-y-4"
             >
-              <div className="space-y-2.5 rounded-xl border border-[#e5e5e5] bg-[#fafafa] p-3.5">
-                <StatusRow
-                  label="Amazon Seller"
-                  ok={
-                    amz?.status === "SELLABLE"
-                      ? true
-                      : amz?.status === "APPROVAL_REQUIRED"
-                        ? "warn"
-                        : false
-                  }
-                  detail={amz?.message || "Unknown"}
-                />
-                <StatusRow
-                  label="eBay Seller"
-                  ok={Boolean(ebay?.available)}
-                  detail={ebay?.message || "Unknown"}
-                />
-                <StatusRow
-                  label="Amazon Affiliate"
-                  ok={aff?.configured ? (aff.available ? true : "warn") : false}
-                  detail={aff?.message || "Not configured"}
-                />
-                <StatusRow
-                  label="Estimated Profit"
-                  ok={ebay?.netProfit.value != null && ebay.netProfit.value > 0}
-                  detail={formatMoney(ebay?.netProfit.value ?? null)}
-                />
-              </div>
-
-              <div>
-                <p className="text-[10px] font-semibold tracking-[0.14em] text-[#9b9b9b] uppercase">
-                  Recommendation
-                </p>
-                <p className="mt-1 text-[15px] font-semibold text-[#191919]">
-                  {decision.primaryAction}
-                </p>
-                {decision.secondaryAction ? (
-                  <p className="mt-1 text-[13px] text-[#707070]">
-                    Secondary: {decision.secondaryAction}
-                  </p>
-                ) : null}
-                <ul className="mt-2 space-y-1">
-                  {decision.reasons.slice(0, 4).map((reason) => (
-                    <li key={reason.text} className="text-[12.5px] text-[#707070]">
-                      · {reason.text}
-                    </li>
-                  ))}
-                </ul>
-                {decision.warnings.length ? (
-                  <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[12px] text-amber-900">
-                    {decision.warnings[0]}
+              {tab === "ganar" ? (
+                <>
+                  <div className="rounded-2xl border border-[#ebe7e0] bg-[#faf9f6] px-4 py-3.5">
+                    <p className="text-[10px] font-bold tracking-[0.14em] text-[#8a847c] uppercase">
+                      Recomendación
+                    </p>
+                    <p className="mt-1 text-[16px] font-semibold text-[#141414]">
+                      {decision.primaryAction}
+                    </p>
+                    {decision.secondaryAction ? (
+                      <p className="mt-1 text-[13px] text-[#6b6560]">
+                        También: {decision.secondaryAction}
+                      </p>
+                    ) : null}
+                    <ul className="mt-3 space-y-1.5">
+                      {decision.reasons.slice(0, 3).map((reason) => (
+                        <li
+                          key={reason.text}
+                          className="flex gap-2 text-[12.5px] text-[#6b6560]"
+                        >
+                          <span
+                            className={cn(
+                              "mt-1 size-1.5 shrink-0 rounded-full",
+                              reason.ok ? "bg-[#1f7a4d]" : "bg-[#c5bfb5]",
+                            )}
+                          />
+                          {reason.text}
+                        </li>
+                      ))}
+                    </ul>
+                    {decision.warnings[0] ? (
+                      <p className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[12px] text-amber-900">
+                        {decision.warnings[0]}
+                      </p>
+                    ) : null}
                   </div>
-                ) : null}
-              </div>
 
-              <div className="flex flex-wrap gap-2">
-                <Link
-                  href={productId ? `/listings/${productId}` : "/listings/new"}
-                  className="inline-flex h-9 items-center gap-1.5 rounded-full bg-[#191919] px-3.5 text-[12.5px] font-semibold text-white"
-                >
-                  <Store className="size-3.5" />
-                  Publish
-                </Link>
-                <button
-                  type="button"
-                  disabled={!flags.affiliateEngine || busy === "affiliate"}
-                  onClick={() => void createAffiliate()}
-                  className="inline-flex h-9 items-center gap-1.5 rounded-full border border-[#e5e5e5] bg-white px-3.5 text-[12.5px] font-medium text-[#191919] disabled:opacity-40"
-                >
-                  <ExternalLink className="size-3.5" />
-                  Affiliate Link
-                </button>
-                <button
-                  type="button"
-                  disabled={!flags.smartLinks || busy === "affiliate"}
-                  onClick={() => void createSmartOnly()}
-                  className="inline-flex h-9 items-center gap-1.5 rounded-full border border-[#e5e5e5] bg-white px-3.5 text-[12.5px] font-medium text-[#191919] disabled:opacity-40"
-                >
-                  <Link2 className="size-3.5" />
-                  Smart Link
-                </button>
-                <button
-                  type="button"
-                  disabled={!qrDataUrl && !smartPath}
-                  onClick={() => {
-                    if (qrDataUrl) {
-                      const w = window.open("");
-                      w?.document.write(
-                        `<img alt="QR" src="${qrDataUrl}" /><p>${smartPath || ""}</p>`,
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      disabled={!flags.affiliateEngine || busy === "affiliate"}
+                      onClick={() => void createAffiliate()}
+                      className="inline-flex h-10 items-center gap-1.5 rounded-full bg-[#141414] px-4 text-[12.5px] font-semibold text-white disabled:opacity-40"
+                    >
+                      {busy === "affiliate" ? (
+                        <Loader2 className="size-3.5 animate-spin" />
+                      ) : (
+                        <ExternalLink className="size-3.5" />
+                      )}
+                      Crear affiliate
+                    </button>
+                    <button
+                      type="button"
+                      disabled={!flags.smartLinks || busy === "affiliate"}
+                      onClick={() => void createAffiliate()}
+                      className="inline-flex h-10 items-center gap-1.5 rounded-full border border-[#ddd7cd] bg-white px-4 text-[12.5px] font-semibold text-[#141414] disabled:opacity-40"
+                    >
+                      <Link2 className="size-3.5" />
+                      Smart link
+                    </button>
+                    <button
+                      type="button"
+                      disabled={!qrDataUrl && !smartPath}
+                      onClick={() => {
+                        if (qrDataUrl) {
+                          const w = window.open("");
+                          w?.document.write(
+                            `<img alt="QR" src="${qrDataUrl}" /><p>${smartPath || ""}</p>`,
+                          );
+                        } else toast.message("Crea un Smart Link primero");
+                      }}
+                      className="inline-flex h-10 items-center gap-1.5 rounded-full border border-[#ddd7cd] bg-white px-4 text-[12.5px] font-semibold text-[#141414] disabled:opacity-40"
+                    >
+                      <QrCode className="size-3.5" />
+                      QR
+                    </button>
+                    <button
+                      type="button"
+                      disabled={busy === "watch"}
+                      onClick={() => void watchProduct()}
+                      className="inline-flex h-10 items-center gap-1.5 rounded-full border border-[#ddd7cd] bg-white px-4 text-[12.5px] font-semibold text-[#141414] disabled:opacity-40"
+                    >
+                      <Eye className="size-3.5" />
+                      Watch
+                    </button>
+                  </div>
+                  {smartPath ? (
+                    <p className="text-[12px] text-[#6b6560]">
+                      Smart link:{" "}
+                      <span className="font-medium text-[#141414]">
+                        {smartPath}
+                      </span>
+                    </p>
+                  ) : null}
+                  {aff?.message ? (
+                    <p className="text-[12px] text-[#8a847c]">{aff.message}</p>
+                  ) : null}
+                </>
+              ) : null}
+
+              {tab === "vender" ? (
+                <>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    <LaneChip
+                      label="Amazon seller"
+                      tone={amzTone}
+                      detail={amz?.message || "Sin datos"}
+                    />
+                    <LaneChip
+                      label="eBay seller"
+                      tone={ebay?.available ? "ok" : "muted"}
+                      detail={ebay?.message || "Sin datos"}
+                    />
+                    <LaneChip
+                      label="Profit estimado"
+                      tone={
+                        ebay?.netProfit.value != null && ebay.netProfit.value > 0
+                          ? "ok"
+                          : "muted"
+                      }
+                      detail={
+                        ebay?.netProfit.value != null
+                          ? formatMoney(ebay.netProfit.value)
+                          : "Insufficient Data"
+                      }
+                    />
+                    <LaneChip
+                      label="Affiliate"
+                      tone={
+                        aff?.configured
+                          ? aff.available
+                            ? "ok"
+                            : "warn"
+                          : "muted"
+                      }
+                      detail={aff?.message || "No configurado"}
+                    />
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Link
+                      href={productId ? `/listings/${productId}` : "/listings/new"}
+                      className="inline-flex h-10 items-center gap-1.5 rounded-full bg-[#f4c928] px-4 text-[12.5px] font-semibold text-[#141414]"
+                    >
+                      <Store className="size-3.5" />
+                      Publicar listing
+                    </Link>
+                    <Link
+                      href="/winners"
+                      className="inline-flex h-10 items-center gap-1.5 rounded-full border border-[#ddd7cd] bg-white px-4 text-[12.5px] font-semibold text-[#141414]"
+                    >
+                      Buscar winners
+                    </Link>
+                  </div>
+                </>
+              ) : null}
+
+              {tab === "comparar" ? (
+                <>
+                  <p className="text-[12px] text-[#6b6560]">
+                    Solo enlaces al mismo producto (ASIN / item id / UPC). Si no
+                    hay match exacto, no inventamos un similar.
+                  </p>
+                  <div className="grid grid-cols-2 gap-2">
+                    {(
+                      [
+                        {
+                          key: "amazon",
+                          label: "Amazon",
+                          price:
+                            seedPrices.amazon ??
+                            amz?.salePrice.value ??
+                            amz?.cost.value ??
+                            null,
+                          href: urls.amazon,
+                          exact: Boolean(urls.amazon?.includes("/dp/")),
+                        },
+                        {
+                          key: "ebay",
+                          label: "eBay",
+                          price:
+                            seedPrices.ebay ?? ebay?.salePrice.value ?? null,
+                          href: urls.ebay,
+                          exact: Boolean(urls.ebay?.includes("/itm/")),
+                        },
+                        {
+                          key: "walmart",
+                          label: "Walmart",
+                          price: null,
+                          href: urls.walmart,
+                          exact: Boolean(urls.walmart?.includes("/ip/")),
+                        },
+                        {
+                          key: "homedepot",
+                          label: "Home Depot",
+                          price: null,
+                          href: urls.homedepot,
+                          exact: Boolean(
+                            urls.homedepot?.match(/homedepot\.com\/p\//),
+                          ),
+                        },
+                      ] as const
+                    ).map((row) => {
+                      const inner = (
+                        <>
+                          <div className="flex items-center justify-between gap-2">
+                            <p className="text-[10px] font-bold tracking-wide text-[#8a847c] uppercase">
+                              {row.label}
+                            </p>
+                            <span
+                              className={cn(
+                                "rounded-full px-1.5 py-0.5 text-[9px] font-bold uppercase",
+                                row.exact
+                                  ? "bg-[#e8f5ee] text-[#1f7a4d]"
+                                  : row.href
+                                    ? "bg-[#fff8e8] text-[#8a6a10]"
+                                    : "bg-[#f0ebe3] text-[#8a847c]",
+                              )}
+                            >
+                              {row.exact
+                                ? "Mismo SKU"
+                                : row.href
+                                  ? "Buscar UPC"
+                                  : "Sin match"}
+                            </span>
+                          </div>
+                          <p className="mt-2 font-display text-[22px] leading-none tabular-nums">
+                            {formatMoney(row.price)}
+                          </p>
+                          {row.href ? (
+                            <p className="mt-2 inline-flex items-center gap-1 text-[11px] font-semibold text-[#2162a1]">
+                              Abrir
+                              <ExternalLink className="size-3 opacity-70" />
+                            </p>
+                          ) : (
+                            <p className="mt-2 text-[11px] text-[#8a847c]">
+                              Sin enlace confirmado
+                            </p>
+                          )}
+                        </>
                       );
-                    } else toast.message("Create a Smart Link first");
-                  }}
-                  className="inline-flex h-9 items-center gap-1.5 rounded-full border border-[#e5e5e5] bg-white px-3.5 text-[12.5px] font-medium text-[#191919] disabled:opacity-40"
-                >
-                  <QrCode className="size-3.5" />
-                  QR
-                </button>
-                <button
-                  type="button"
-                  disabled={busy === "watch"}
-                  onClick={() => void watchProduct()}
-                  className="inline-flex h-9 items-center gap-1.5 rounded-full border border-[#e5e5e5] bg-white px-3.5 text-[12.5px] font-medium text-[#191919] disabled:opacity-40"
-                >
-                  <Eye className="size-3.5" />
-                  Watch
-                </button>
-              </div>
-              {smartPath ? (
-                <p className="text-[12px] text-[#707070]">
-                  Smart link:{" "}
-                  <span className="font-medium text-[#191919]">{smartPath}</span>
-                </p>
+                      return row.href ? (
+                        <a
+                          key={row.key}
+                          href={row.href}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="rounded-2xl border border-[#ebe7e0] bg-[#faf9f6] p-3 transition hover:border-[#141414]"
+                        >
+                          {inner}
+                        </a>
+                      ) : (
+                        <div
+                          key={row.key}
+                          className="rounded-2xl border border-dashed border-[#ebe7e0] bg-white p-3 opacity-70"
+                        >
+                          {inner}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </>
               ) : null}
             </motion.div>
           </AnimatePresence>

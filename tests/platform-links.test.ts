@@ -45,10 +45,16 @@ describe("platform-links", () => {
     expect(amazonProductUrl("bad")).toBeNull();
   });
 
-  it("falls back to eBay search when no item id", () => {
+  it("falls back to exact eBay search (brand + tokens), not vague junk", () => {
     const url = ebaySearchUrl("Cable organizer desk kit", "Higlou");
     expect(url).toMatch(/^https:\/\/www\.ebay\.com\/sch\/i\.html\?/);
     expect(url).toContain("_nkw=");
+    expect(url).toContain(encodeURIComponent("Higlou"));
+  });
+
+  it("prefers UPC for eBay search when available", () => {
+    const url = ebaySearchUrl("Anything", "Brand", { upc: "012345678905" });
+    expect(url).toContain(encodeURIComponent("012345678905"));
   });
 
   it("stamps platformUrls on an opportunity for side-by-side comparison", () => {

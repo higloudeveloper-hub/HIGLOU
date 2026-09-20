@@ -974,6 +974,9 @@ export function ReviewScreen({
           productId={productId}
           asin={amazonAsin}
           ebayPrice={listing.price}
+          title={listing.title}
+          brand={listing.brand}
+          upc={listing.upc || undefined}
           className="mt-6"
         />
 

@@ -56,10 +56,25 @@ export function DropMarketStudio() {
         `${local.length} Higlou-verified winner${local.length === 1 ? "" : "s"} from Find Winners`,
       );
       setLoading(false);
+    } else {
+      setNote("Market is empty until Find Winners verifies a real ask spread.");
     }
+
+    const controller = new AbortController();
+    const safety = window.setTimeout(() => {
+      if (cancelled) return;
+      controller.abort();
+      setLoading(false);
+      if (!local.length) {
+        setNote(
+          "Market is empty until Find Winners verifies a real ask spread.",
+        );
+      }
+    }, 8000);
+
     void (async () => {
       try {
-        const res = await fetch("/api/market/feed");
+        const res = await fetch("/api/market/feed", { signal: controller.signal });
         if (!res.ok) throw new Error("feed");
         const body = (await res.json()) as {
           drops?: MarketDropPublic[];
@@ -85,13 +100,22 @@ export function DropMarketStudio() {
         setTagReady(Boolean(body.affiliateTagConfigured));
         setActive(0);
       } catch {
-        if (!cancelled && !local.length) setNote("Could not load market feed");
+        if (!cancelled && !local.length) {
+          setDrops([]);
+          setLedgerCount(0);
+          setNote(
+            "Market is empty until Find Winners verifies a real ask spread.",
+          );
+        }
       } finally {
+        window.clearTimeout(safety);
         if (!cancelled) setLoading(false);
       }
     })();
     return () => {
       cancelled = true;
+      window.clearTimeout(safety);
+      controller.abort();
     };
   }, []);
 

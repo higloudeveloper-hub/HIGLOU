@@ -29,6 +29,7 @@ const cardSchema = z.object({
   sourceId: z.string().optional(),
   sourceMarket: z.string().optional(),
   upc: z.string().optional().default(""),
+  mpn: z.string().optional().default(""),
   cost: z.number().nullable().optional(),
 });
 

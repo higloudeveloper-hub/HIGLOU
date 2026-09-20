@@ -176,18 +176,17 @@ describe("higlou market + find winners wiring", () => {
       /dropFromLoose|extractAsin/,
     );
     expect(readRepo("components/layout/app-shell.tsx")).toMatch(
-      /min-h-dvh/,
-    );
-    expect(readRepo("components/layout/app-shell.tsx")).not.toMatch(
       /h-dvh min-h-0 overflow-hidden/,
     );
+    expect(readRepo("app/home/page.tsx")).toMatch(/flush/);
+    expect(readRepo("app/market/page.tsx")).not.toMatch(/flush/);
+    expect(readRepo("app/winners/page.tsx")).not.toMatch(/flush/);
     expect(readRepo("components/winners/find-winners-board.tsx")).toMatch(
       /Find \{limit\} real opportunities/,
     );
     expect(readRepo("components/market/drop-market.tsx")).not.toMatch(
       /Opening the floor/,
     );
-    expect(readRepo("app/market/page.tsx")).toMatch(/flush/);
     expect(readRepo("components/studio/find-winners-studio.tsx")).toMatch(
       /FindWinnersBoard/,
     );

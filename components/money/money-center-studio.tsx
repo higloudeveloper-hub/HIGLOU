@@ -357,8 +357,8 @@ export function MoneyCenterStudio() {
 
   return (
     <AppShell hideHeader>
-      <div className="flex min-h-0 flex-1 flex-col bg-white md:h-full">
-        <header className="flex shrink-0 items-center gap-3 border-b border-[#e5e5e5] px-5 py-2.5">
+      <div className="bg-white">
+        <header className="flex items-center gap-3 border-b border-[#e5e5e5] px-5 py-2.5">
           <div className="min-w-0 flex-1">
             <p className="flex items-center gap-2 text-[11px] font-semibold tracking-[0.2em] text-[#707070] uppercase">
               <LiveDot tone="muted" />

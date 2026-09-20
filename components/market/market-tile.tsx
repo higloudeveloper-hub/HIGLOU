@@ -1,11 +1,18 @@
 "use client";
 
 import { motion, useReducedMotion } from "motion/react";
+import {
+  AmazonMark,
+  EbayMark,
+  HomeDepotMark,
+  WalmartMark,
+} from "@/components/brand/store-marks";
 import type { MarketDropPublic } from "@/lib/market/from-opportunity";
 import { marketSpread } from "@/lib/market/catalog";
 import { cn } from "@/lib/utils";
 
-function money(n: number) {
+function money(n: number | null | undefined) {
+  if (n == null || !Number.isFinite(n)) return "—";
   return new Intl.NumberFormat("en-US", {
     style: "currency",
     currency: "USD",
@@ -39,10 +46,10 @@ export function MarketTile({
   const keep = item.netProfit ?? marketSpread(item);
   const demand = item.demandScore ?? item.score ?? 0;
   const reduce = useReducedMotion() ?? false;
-  const cut =
-    !isAmz && item.comps > item.sell
-      ? Math.round(((item.comps - item.sell) / item.comps) * 100)
-      : 0;
+  const amazon = item.amazonPrice ?? (isAmz ? item.sell : item.buy);
+  const ebay = item.ebayPrice ?? (item.lane === "arbitrage" ? item.sell : null);
+  const walmart = item.walmartPrice;
+  const homedepot = item.homedepotPrice;
 
   return (
     <motion.article
@@ -86,63 +93,72 @@ export function MarketTile({
             {item.title}
           </p>
 
-          {isAmz ? (
-            <div>
-              <p className="font-display text-[22px] leading-none tabular-nums">
-                {money(item.sell)}
-              </p>
-              <p className="mt-1 text-[11px] text-[#6b6560]">
-                Amazon
-                {item.bsrDrops90 != null
-                  ? ` · ${item.bsrDrops90} drops/90d`
-                  : ""}
-              </p>
-            </div>
+          {!isAmz && item.netProfit != null ? (
+            <p className="font-display text-[22px] leading-none tabular-nums text-[#1f7a4d]">
+              {signed(keep)}
+              <span className="ml-1.5 text-[11px] font-sans font-semibold tracking-wide text-[#6b6560] uppercase">
+                you keep
+              </span>
+            </p>
           ) : (
-            <div>
-              <div className="flex items-baseline gap-2">
-                <p className="font-display text-[22px] leading-none tabular-nums">
-                  {money(item.sell)}
-                </p>
-                {item.comps > item.sell ? (
-                  <span className="text-[12px] text-[#9a948a] line-through tabular-nums">
-                    {money(item.comps)}
-                  </span>
-                ) : null}
-                {cut > 0 ? (
-                  <span className="text-[11px] font-semibold text-[#c45c26]">
-                    −{cut}%
-                  </span>
-                ) : null}
-              </div>
-              <div className="mt-2 grid grid-cols-3 gap-1 text-center">
-                <div className="bg-[#f7f4ef] px-1 py-1">
-                  <p className="text-[8px] font-semibold tracking-wide text-[#8a847c] uppercase">
-                    Buy
-                  </p>
-                  <p className="text-[11px] font-semibold tabular-nums">
-                    {money(item.buy)}
-                  </p>
-                </div>
-                <div className="bg-[#f7f4ef] px-1 py-1">
-                  <p className="text-[8px] font-semibold tracking-wide text-[#8a847c] uppercase">
-                    Sell
-                  </p>
-                  <p className="text-[11px] font-semibold tabular-nums">
-                    {money(item.sell)}
-                  </p>
-                </div>
-                <div className="bg-[#141414] px-1 py-1 text-[#f4c928]">
-                  <p className="text-[8px] font-semibold tracking-wide uppercase opacity-80">
-                    Keep
-                  </p>
-                  <p className="text-[11px] font-semibold tabular-nums">
-                    {signed(keep)}
-                  </p>
-                </div>
-              </div>
-            </div>
+            <p className="font-display text-[22px] leading-none tabular-nums">
+              {money(item.sell)}
+            </p>
           )}
+
+          {/* Prices per platform */}
+          <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
+            <div className="bg-[#f7f4ef] px-1.5 py-1.5">
+              <div className="flex items-center gap-1">
+                <AmazonMark className="h-2.5" />
+                <p className="text-[8px] font-semibold tracking-wide text-[#8a847c] uppercase">
+                  Amazon
+                </p>
+              </div>
+              <p className="mt-0.5 text-[12px] font-semibold tabular-nums">
+                {money(amazon)}
+              </p>
+            </div>
+            <div className="bg-[#f7f4ef] px-1.5 py-1.5">
+              <div className="flex items-center gap-1">
+                <EbayMark className="h-2.5" />
+                <p className="text-[8px] font-semibold tracking-wide text-[#8a847c] uppercase">
+                  eBay
+                </p>
+              </div>
+              <p className="mt-0.5 text-[12px] font-semibold tabular-nums">
+                {money(ebay)}
+              </p>
+            </div>
+            <div className="bg-[#f7f4ef] px-1.5 py-1.5">
+              <div className="flex items-center gap-1">
+                <WalmartMark className="h-2.5" />
+                <p className="text-[8px] font-semibold tracking-wide text-[#8a847c] uppercase">
+                  Walmart
+                </p>
+              </div>
+              <p className="mt-0.5 text-[12px] font-semibold tabular-nums">
+                {money(walmart)}
+              </p>
+            </div>
+            <div className="bg-[#f7f4ef] px-1.5 py-1.5">
+              <div className="flex items-center gap-1">
+                <HomeDepotMark className="h-2.5" />
+                <p className="text-[8px] font-semibold tracking-wide text-[#8a847c] uppercase">
+                  HD
+                </p>
+              </div>
+              <p className="mt-0.5 text-[12px] font-semibold tabular-nums">
+                {money(homedepot)}
+              </p>
+            </div>
+          </div>
+
+          {item.bsrDrops90 != null ? (
+            <p className="text-[11px] text-[#6b6560]">
+              {item.bsrDrops90} Keepa drops / 90d
+            </p>
+          ) : null}
         </div>
       </button>
 

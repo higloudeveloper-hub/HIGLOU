@@ -25,7 +25,44 @@ export type MarketDropPublic = MarketDrop & {
   demandScore: number | null;
   bsrDrops90: number | null;
   salesRank: number | null;
+  /** Live platform quotes for the tile price strip */
+  amazonPrice: number | null;
+  ebayPrice: number | null;
+  walmartPrice: number | null;
+  homedepotPrice: number | null;
 };
+
+function platformQuotes(hit: OpportunityProduct) {
+  const amazon =
+    (hit.buyBoxPrice != null && hit.buyBoxPrice > 0 ? hit.buyBoxPrice : null) ??
+    (hit.amazonPrice != null && hit.amazonPrice > 0 ? hit.amazonPrice : null) ??
+    (hit.sourceMarket === "amazon" && hit.cost != null && hit.cost > 0
+      ? hit.cost
+      : null);
+  const ebay =
+    (hit.ebayActiveLow != null && hit.ebayActiveLow > 0
+      ? hit.ebayActiveLow
+      : null) ??
+    (hit.ebayActiveMedian != null && hit.ebayActiveMedian > 0
+      ? hit.ebayActiveMedian
+      : null) ??
+    (hit.ebayPrice != null && hit.ebayPrice > 0 ? hit.ebayPrice : null);
+  const walmart =
+    hit.sourceMarket === "walmart" && hit.cost != null && hit.cost > 0
+      ? hit.cost
+      : null;
+  const homedepot =
+    hit.sourceMarket === "homedepot" && hit.cost != null && hit.cost > 0
+      ? hit.cost
+      : null;
+  return {
+    amazonPrice: amazon != null ? Math.round(amazon * 100) / 100 : null,
+    ebayPrice: ebay != null ? Math.round(ebay * 100) / 100 : null,
+    walmartPrice: walmart != null ? Math.round(walmart * 100) / 100 : null,
+    homedepotPrice:
+      homedepot != null ? Math.round(homedepot * 100) / 100 : null,
+  };
+}
 
 function heatFromProfit(net: number | null): MarketDrop["heat"] {
   if (net != null && net >= 25) return "hot";
@@ -121,6 +158,7 @@ export function opportunityToMarketDrop(
       demandScore: null,
       bsrDrops90: hit.bsrDrops90 ?? null,
       salesRank: hit.avgSalesRank90 ?? hit.salesRank ?? null,
+      ...platformQuotes(hit),
     };
   }
 
@@ -166,6 +204,7 @@ export function opportunityToMarketDrop(
       demandScore: demand,
       bsrDrops90: hit.bsrDrops90 ?? null,
       salesRank: hit.avgSalesRank90 ?? hit.salesRank ?? null,
+      ...platformQuotes(hit),
     };
   }
 
@@ -225,6 +264,7 @@ export function opportunityToMarketDrop(
     demandScore: null,
     bsrDrops90: hit.bsrDrops90 ?? null,
     salesRank: hit.avgSalesRank90 ?? hit.salesRank ?? null,
+    ...platformQuotes(hit),
   };
 }
 
@@ -250,6 +290,10 @@ export function curatedToPublic(
     demandScore: null,
     bsrDrops90: null,
     salesRank: null,
+    amazonPrice: drop.buy,
+    ebayPrice: drop.sell,
+    walmartPrice: null,
+    homedepotPrice: null,
   };
 }
 

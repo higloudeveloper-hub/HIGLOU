@@ -184,10 +184,10 @@ export function DropMarketStudio() {
               title: item.title,
               brand: item.name,
               imageUrl: item.photo,
-              amazonPrice: item.lane === "amazon" ? item.sell : item.buy,
-              buyBoxPrice: item.lane === "amazon" ? item.sell : item.buy,
-              ebayPrice: item.lane === "amazon" ? null : item.sell,
-              ebayActiveLow: item.lane === "amazon" ? null : item.sell,
+              amazonPrice: item.amazonPrice ?? (item.lane === "amazon" ? item.sell : item.buy),
+              buyBoxPrice: item.amazonPrice ?? (item.lane === "amazon" ? item.sell : item.buy),
+              ebayPrice: item.ebayPrice ?? (item.lane === "amazon" ? null : item.sell),
+              ebayActiveLow: item.ebayPrice ?? (item.lane === "amazon" ? null : item.sell),
               cost: item.buy,
               buy: item.buy,
               sell: item.sell,
@@ -306,9 +306,9 @@ export function DropMarketStudio() {
   ];
 
   return (
-    <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-[#f3f0ea] text-[#141414]">
+    <div className="bg-[#f3f0ea] text-[#141414]">
       {/* Full-bleed marketplace hero */}
-      <section className="relative shrink-0 overflow-hidden bg-[#141414] text-white">
+      <section className="relative overflow-hidden bg-[#141414] text-white">
         <div
           className="pointer-events-none absolute inset-0 opacity-40"
           style={{
@@ -406,7 +406,7 @@ export function DropMarketStudio() {
       </section>
 
       {/* Filters */}
-      <div className="sticky top-0 z-10 shrink-0 border-b border-[#e4e0d8] bg-[#f3f0ea]/95 px-5 py-3 backdrop-blur-md md:px-10">
+      <div className="sticky top-0 z-10 border-b border-[#e4e0d8] bg-[#f3f0ea]/95 px-5 py-3 backdrop-blur-md md:px-10">
         <div className="flex flex-wrap items-center gap-2">
           {filters.map((row) => (
             <button
@@ -432,7 +432,7 @@ export function DropMarketStudio() {
         </div>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto">
+      <div>
         {drops.length === 0 ? (
           <div className="mx-auto flex min-h-[420px] max-w-lg flex-col items-center justify-center px-6 text-center">
             <p className="font-display text-3xl text-[#141414]">
@@ -502,7 +502,7 @@ export function DropMarketStudio() {
 
             {/* Sticky product detail — comparative pricing */}
             {drop ? (
-              <aside className="sticky top-[4.5rem] h-fit self-start">
+              <aside className="lg:sticky lg:top-16 lg:h-fit lg:self-start">
                 <motion.div
                   key={drop.id}
                   initial={reduce ? false : { opacity: 0, y: 10 }}

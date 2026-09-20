@@ -369,10 +369,10 @@ export function FindWinnersBoard({
   const scanning = searching || generalScanning;
 
   return (
-    <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-[#f6f4ef] text-[#141414]">
-      {/* Compact chrome — results must own the viewport */}
-      <header className="shrink-0 border-b border-[#e4e0d8] bg-[#141414] px-4 py-3 text-white md:px-6">
-        <div className="flex flex-wrap items-center justify-between gap-2">
+    <div className="bg-[#f6f4ef] text-[#141414]">
+      {/* Compact chrome — page scrolls as one unit */}
+      <header className="border-b border-[#e4e0d8] bg-[#141414] px-4 py-4 text-white md:px-6">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="min-w-0">
             <p className="font-display text-[11px] tracking-[0.18em] text-[#f4c928] uppercase">
               Higlou
@@ -380,6 +380,10 @@ export function FindWinnersBoard({
             <h1 className="font-display text-2xl leading-none md:text-[28px]">
               Find Winners
             </h1>
+            <p className="mt-1.5 max-w-md text-[13px] text-white/60">
+              Principal search finds real keep across Amazon, eBay, Walmart &amp;
+              Home Depot — losers stay out.
+            </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             {!retail ? (
@@ -389,7 +393,7 @@ export function FindWinnersBoard({
                   onChange={(e) => setLimit(Number(e.target.value))}
                   disabled={locked || scanning}
                   aria-label="How many"
-                  className="h-9 border border-white/20 bg-white/10 px-2 text-[13px] text-white outline-none"
+                  className="h-11 border border-white/20 bg-white/10 px-2 text-[13px] text-white outline-none"
                 >
                   {AMAZON_WINNER_LIMITS.map((n) => (
                     <option key={n} value={n} className="text-[#141414]">
@@ -401,20 +405,20 @@ export function FindWinnersBoard({
                   type="button"
                   disabled={locked || scanning}
                   onClick={() => void scanGeneral()}
-                  className="inline-flex h-9 items-center gap-1.5 bg-[#f4c928] px-3 text-[13px] font-semibold text-[#141414] disabled:opacity-40"
+                  className="inline-flex h-11 items-center gap-2 bg-[#f4c928] px-5 text-[14px] font-semibold text-[#141414] disabled:opacity-40"
                 >
                   {generalScanning ? (
-                    <Loader2 className="size-3.5 animate-spin" />
+                    <Loader2 className="size-4 animate-spin" />
                   ) : (
-                    <Sparkles className="size-3.5" />
+                    <Sparkles className="size-4" />
                   )}
-                  Find {limit} real
+                  Find {limit} real opportunities
                 </button>
               </>
             ) : null}
             <Link
               href="/market"
-              className="inline-flex h-9 items-center gap-1.5 border border-white/20 px-3 text-[13px] font-semibold text-white hover:bg-white/10"
+              className="inline-flex h-11 items-center gap-1.5 border border-white/20 px-3 text-[13px] font-semibold text-white hover:bg-white/10"
             >
               <Store className="size-3.5" />
               Market
@@ -442,7 +446,7 @@ export function FindWinnersBoard({
         </div>
       </header>
 
-      <div className="shrink-0 border-b border-[#e4e0d8] bg-white px-4 py-2.5 md:px-6">
+      <div className="sticky top-0 z-10 border-b border-[#e4e0d8] bg-white px-4 py-2.5 md:px-6">
         <form
           className="flex flex-col gap-2 sm:flex-row sm:items-center"
           onSubmit={(e) => {
@@ -522,19 +526,16 @@ export function FindWinnersBoard({
         </div>
       </div>
 
-      <div
-        ref={resultsRef}
-        className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 md:px-6"
-      >
+      <div ref={resultsRef} className="px-4 py-4 pb-24 md:px-6">
         {winners.length === 0 ? (
           <div className="mx-auto flex min-h-[220px] max-w-lg flex-col items-center justify-center py-10 text-center">
             <p className="font-display text-2xl text-[#141414]">
               No verified winners yet
             </p>
             <p className="mt-2 text-[14px] leading-relaxed text-[#6b6560]">
-              Tap <strong>Find {limit} real</strong>. Each result shows Amazon /
-              eBay / Walmart / Home Depot prices and your profit so you can
-              decide right here.
+              Tap <strong>Find {limit} real opportunities</strong>. Each result
+              shows Amazon / eBay / Walmart / Home Depot prices and your profit
+              so you can decide right here.
             </p>
             {!retail ? (
               <button
@@ -548,7 +549,7 @@ export function FindWinnersBoard({
                 ) : (
                   <Sparkles className="size-4" />
                 )}
-                Find {limit} real
+                Find {limit} real opportunities
               </button>
             ) : null}
           </div>
@@ -557,13 +558,14 @@ export function FindWinnersBoard({
             {winners.map((hit, index) => {
               const id = hitKey(hit);
               const board = boardFor(hit);
+              // Prefer live board keep — never flash a stored money-losing hypo.
+              const keep = board.activeKeep ?? platformKeep(hit) ?? null;
+              const showDemand =
+                (demandLane || keep == null) &&
+                (board.demandScore != null && board.demandScore >= 50);
               const checked = picked.includes(id);
               const isNew = justFound > 0 && index < justFound;
-              const keep =
-                platformKeep(hit) ?? board.activeKeep ?? null;
-              const showDemand =
-                demandLane || (keep == null && board.demandScore != null);
-              const profitRoutes = board.routes.filter((r) => r.keep >= 6);
+              const profitRoutes = board.routes.filter((r) => r.keep >= 12);
 
               return (
                 <li
@@ -670,7 +672,7 @@ export function FindWinnersBoard({
                           <p className="text-[11px] font-semibold tracking-wide text-[#6b6560] uppercase">
                             Your profit · {route.label}
                           </p>
-                          {showDemand && keep == null ? (
+                          {showDemand && (keep == null || keep < 12) ? (
                             <p className="mt-1 font-display text-3xl leading-none text-[#141414]">
                               Demand {board.demandScore ?? amazonProductScore(hit)}
                             </p>
@@ -680,7 +682,7 @@ export function FindWinnersBoard({
                                 "mt-1 font-display text-3xl leading-none",
                                 (keep ?? 0) >= 12
                                   ? "text-[#1f7a4d]"
-                                  : "text-[#141414]",
+                                  : "text-[#b42318]",
                               )}
                             >
                               {keep != null ? signed(keep) : "—"}
@@ -689,9 +691,11 @@ export function FindWinnersBoard({
                           <p className="mt-1 text-[13px] text-[#6b6560]">
                             Buy {money(board.activeBuy)} → Sell{" "}
                             {money(board.activeSell)}
-                            {hit.ebayFees != null || hit.amazonFees != null
-                              ? ` · fees ~${money(hit.ebayFees ?? hit.amazonFees)}`
-                              : ""}
+                            {board.activeKeep != null
+                              ? ` · net after fees/ship ${signed(board.activeKeep)}`
+                              : hit.ebayFees != null || hit.amazonFees != null
+                                ? ` · fees ~${money(hit.ebayFees ?? hit.amazonFees)}`
+                                : ""}
                           </p>
                           {profitRoutes.length > 1 ? (
                             <div className="mt-2 flex flex-wrap gap-1.5">
@@ -748,7 +752,7 @@ export function FindWinnersBoard({
         )}
       </div>
 
-      <div className="shrink-0 border-t border-[#e4e0d8] bg-white px-4 py-2.5 md:px-6">
+      <div className="sticky bottom-0 z-10 border-t border-[#e4e0d8] bg-white/95 px-4 py-2.5 backdrop-blur-md md:px-6">
         <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-3">
           <p className="text-[13px] text-[#6b6560]">
             {selected.length

@@ -53,8 +53,12 @@ export function isPlatformWinner(
   if (isAmazonSellLane(lane) || lane === "amazon" || lane === "supplier") {
     return isAmazonProductWinner(hit);
   }
-  // Amazon→eBay: Keepa velocity counts even when eBay asks are quiet.
-  return isAmazonProductWinner(hit) || isKeepaBuyVelocityWinner(hit);
+  // Amazon→eBay: Keepa velocity when asks are quiet — never a money-losing ask.
+  if (isAmazonProductWinner(hit)) return true;
+  if (!isKeepaBuyVelocityWinner(hit)) return false;
+  const keep = platformKeep(hit);
+  if (keep == null) return true;
+  return keep >= OPPORTUNITY_RULES.minWinnerProfit;
 }
 
 function isRetailRouteWinner(hit: OpportunityProduct): boolean {

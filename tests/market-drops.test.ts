@@ -100,8 +100,27 @@ describe("platform winners", () => {
       amazonRetail: true,
       bsrDrops90: 40,
       sellerCount: 8,
+      hypotheticalKeep: null,
+      netProfit: null,
+      ebayActiveLow: null,
+      ebayPrice: null,
     });
     expect(isPlatformWinner(hit, "amazon_to_ebay")).toBe(true);
+  });
+
+  it("rejects money-losing ask spreads even with Keepa velocity", () => {
+    const hit = amazonKeepaWinner({
+      mode: "amazon_to_ebay",
+      amazonRetail: true,
+      bsrDrops90: 40,
+      cost: 10,
+      amazonPrice: 10,
+      ebayActiveLow: 23,
+      ebayPrice: 23,
+      hypotheticalKeep: -2.44,
+      netProfit: -2.44,
+    });
+    expect(isPlatformWinner(hit, "amazon_to_ebay")).toBe(false);
   });
 
   it("stocks market with both arbitrage and Amazon Keepa winners", () => {
@@ -153,8 +172,20 @@ describe("higlou market + find winners wiring", () => {
     expect(readRepo("components/market/market-tile.tsx")).toMatch(
       /aspect-\[5\/4\]/,
     );
+    expect(readRepo("components/market/market-tile.tsx")).toMatch(
+      /Amazon|eBay|Walmart/,
+    );
     expect(readRepo("app/api/market/claim/route.ts")).toMatch(
-      /dropFromTileSnapshot|product\.optional|body\.product/,
+      /dropFromLoose|extractAsin/,
+    );
+    expect(readRepo("components/layout/app-shell.tsx")).toMatch(
+      /min-h-dvh/,
+    );
+    expect(readRepo("components/layout/app-shell.tsx")).not.toMatch(
+      /h-dvh min-h-0 overflow-hidden/,
+    );
+    expect(readRepo("components/winners/find-winners-board.tsx")).toMatch(
+      /Find \{limit\} real opportunities/,
     );
     expect(readRepo("components/market/drop-market.tsx")).not.toMatch(
       /Opening the floor/,

@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import { z } from "zod";
 import { requireUser } from "@/lib/auth/require-user";
 import { marketSpread, type MarketDrop } from "@/lib/market/catalog";
 import {
@@ -18,140 +17,114 @@ import type { OpportunityProduct } from "@/lib/opportunity/types";
 
 export const runtime = "nodejs";
 
-const bodySchema = z.object({
-  dropId: z.string().min(2).max(64),
-  /** Client snapshot when the winner lives in local ledger only. */
-  product: z
-    .object({
-      asin: z.string().min(10).max(12).optional(),
-      title: z.string().max(500).optional(),
-      brand: z.string().max(120).optional(),
-      imageUrl: z.string().max(2000).optional(),
-      amazonPrice: z.number().nullable().optional(),
-      buyBoxPrice: z.number().nullable().optional(),
-      ebayPrice: z.number().nullable().optional(),
-      ebayActiveLow: z.number().nullable().optional(),
-      ebayActiveMedian: z.number().nullable().optional(),
-      cost: z.number().nullable().optional(),
-      buy: z.number().nullable().optional(),
-      sell: z.number().nullable().optional(),
-      comps: z.number().nullable().optional(),
-      blurb: z.string().max(500).optional(),
-      supplier: z.string().max(120).optional(),
-      ships: z.string().max(200).optional(),
-      heat: z.enum(["hot", "warm", "fresh"]).optional(),
-      lane: z.enum(["arbitrage", "amazon", "retail"]).optional(),
-      netProfit: z.number().nullable().optional(),
-      hypotheticalKeep: z.number().nullable().optional(),
-      mode: z.string().max(40).optional(),
-      keepa: z.boolean().optional(),
-      bsrDrops90: z.number().nullable().optional(),
-      salesRank: z.number().nullable().optional(),
-      avgSalesRank90: z.number().nullable().optional(),
-      sellerCount: z.number().nullable().optional(),
-      amazonRetail: z.boolean().optional(),
-      rating: z.number().nullable().optional(),
-      reviewCount: z.number().nullable().optional(),
-      score: z.number().nullable().optional(),
-      verdict: z.string().max(40).optional(),
-      sourceMarket: z.string().max(40).optional(),
-      sourceId: z.string().max(80).optional(),
-      upc: z.string().max(32).optional(),
-    })
-    .optional(),
-});
+const PLACEHOLDER =
+  "https://m.media-amazon.com/images/I/01RmK+J4pJL._AC_SL1500_.jpg";
 
-type ProductSnap = NonNullable<z.infer<typeof bodySchema>["product"]>;
+type LooseSnap = Record<string, unknown>;
 
-/** Floor tile already passed Find Winners — draft from prices even if re-gate is thin. */
-function dropFromTileSnapshot(
-  dropId: string,
-  asin: string,
-  snap: ProductSnap,
-): MarketDrop | null {
-  const buy =
-    (snap.buy != null && snap.buy > 0 ? snap.buy : null) ??
-    (snap.cost != null && snap.cost > 0 ? snap.cost : null) ??
-    (snap.buyBoxPrice != null && snap.buyBoxPrice > 0
-      ? snap.buyBoxPrice
-      : null) ??
-    (snap.amazonPrice != null && snap.amazonPrice > 0
-      ? snap.amazonPrice
-      : null);
-  const sell =
-    (snap.sell != null && snap.sell > 0 ? snap.sell : null) ??
-    (snap.ebayActiveLow != null && snap.ebayActiveLow > 0
-      ? snap.ebayActiveLow
-      : null) ??
-    (snap.ebayPrice != null && snap.ebayPrice > 0 ? snap.ebayPrice : null) ??
-    (snap.buyBoxPrice != null && snap.buyBoxPrice > 0
-      ? snap.buyBoxPrice
-      : null) ??
-    (snap.amazonPrice != null && snap.amazonPrice > 0
-      ? snap.amazonPrice
-      : null);
-  const title = String(snap.title || "").trim();
-  if (buy == null || sell == null || !title) return null;
-
-  const photo = String(snap.imageUrl || "").trim();
-  const id = /^win-/i.test(dropId) ? dropId.toLowerCase() : `win-${asin}`;
-  return {
-    id,
-    name: String(snap.brand || "").trim() || "Higlou Market",
-    title,
-    blurb:
-      String(snap.blurb || "").trim() ||
-      "Verified Market drop · confirm cost before publish",
-    photo:
-      photo ||
-      "https://m.media-amazon.com/images/I/01RmK+J4pJL._AC_SL1500_.jpg",
-    photos: photo ? [photo] : [],
-    buy: Math.round(buy * 100) / 100,
-    sell: Math.round(sell * 100) / 100,
-    comps:
-      snap.comps != null && snap.comps > 0
-        ? Math.round(snap.comps * 100) / 100
-        : Math.round(sell * 1.06 * 100) / 100,
-    supplier: String(snap.supplier || "").trim() || "Higlou Market",
-    ships: String(snap.ships || "").trim() || "Verified by Higlou Find Winners",
-    heat: snap.heat || "fresh",
-    asin,
-  };
+function num(...vals: unknown[]): number | null {
+  for (const v of vals) {
+    if (v == null || v === "") continue;
+    const n = typeof v === "number" ? v : Number(v);
+    if (Number.isFinite(n) && n > 0) return Math.round(n * 100) / 100;
+  }
+  return null;
 }
 
-function hitFromSnapshot(
-  asin: string,
-  snap: ProductSnap,
-): OpportunityProduct {
+function str(v: unknown, max = 500): string {
+  return String(v ?? "")
+    .trim()
+    .slice(0, max);
+}
+
+function extractAsin(dropId: string, snap?: LooseSnap): string | null {
+  const fromId = asinFromWinnerDropId(dropId);
+  if (fromId) return fromId;
+  const m = String(dropId || "")
+    .trim()
+    .toUpperCase()
+    .match(/(?:^WIN-|[/\-_=])([A-Z0-9]{10})$/);
+  if (m?.[1]) return m[1];
+  const fromSnap = str(snap?.asin, 12).toUpperCase();
+  if (/^[A-Z0-9]{10}$/.test(fromSnap)) return fromSnap;
+  return null;
+}
+
+function hitFromSnapshot(asin: string, snap: LooseSnap): OpportunityProduct {
   return {
     asin,
-    title: snap.title || "",
-    brand: snap.brand || "",
-    imageUrl: snap.imageUrl || "",
-    amazonPrice: snap.amazonPrice ?? snap.buyBoxPrice ?? null,
-    buyBoxPrice: snap.buyBoxPrice ?? snap.amazonPrice ?? null,
-    ebayPrice: snap.ebayPrice ?? null,
-    ebayActiveLow: snap.ebayActiveLow ?? null,
-    ebayActiveMedian: snap.ebayActiveMedian ?? null,
-    cost: snap.cost ?? snap.amazonPrice ?? snap.buyBoxPrice ?? null,
-    netProfit: snap.netProfit ?? null,
-    hypotheticalKeep: snap.hypotheticalKeep ?? snap.netProfit ?? null,
-    mode: (snap.mode as OpportunityProduct["mode"]) || "amazon_to_ebay",
-    keepa: Boolean(snap.keepa),
-    bsrDrops90: snap.bsrDrops90 ?? null,
-    salesRank: snap.salesRank ?? null,
-    avgSalesRank90: snap.avgSalesRank90 ?? null,
-    sellerCount: snap.sellerCount ?? null,
+    title: str(snap.title),
+    brand: str(snap.brand, 120),
+    imageUrl: str(snap.imageUrl, 2000),
+    amazonPrice: num(snap.amazonPrice, snap.buyBoxPrice, snap.buy),
+    buyBoxPrice: num(snap.buyBoxPrice, snap.amazonPrice, snap.buy),
+    ebayPrice: num(snap.ebayPrice, snap.ebayActiveLow, snap.sell),
+    ebayActiveLow: num(snap.ebayActiveLow, snap.ebayPrice, snap.sell),
+    ebayActiveMedian: num(snap.ebayActiveMedian),
+    cost: num(snap.cost, snap.buy, snap.amazonPrice, snap.buyBoxPrice),
+    netProfit: num(snap.netProfit),
+    hypotheticalKeep: num(snap.hypotheticalKeep, snap.netProfit),
+    mode: (str(snap.mode, 40) as OpportunityProduct["mode"]) || "amazon_to_ebay",
+    keepa: Boolean(snap.keepa ?? true),
+    bsrDrops90: num(snap.bsrDrops90),
+    salesRank: num(snap.salesRank),
+    avgSalesRank90: num(snap.avgSalesRank90, snap.salesRank),
+    sellerCount: num(snap.sellerCount),
     amazonRetail: Boolean(snap.amazonRetail),
-    rating: snap.rating ?? null,
-    reviewCount: snap.reviewCount ?? null,
-    score: snap.score ?? 0,
-    verdict: (snap.verdict as OpportunityProduct["verdict"]) || "candidate",
+    rating: num(snap.rating),
+    reviewCount: num(snap.reviewCount),
+    score: num(snap.score) ?? 0,
+    verdict:
+      (str(snap.verdict, 40) as OpportunityProduct["verdict"]) || "candidate",
     sourceMarket:
-      (snap.sourceMarket as OpportunityProduct["sourceMarket"]) || "amazon",
-    sourceId: snap.sourceId || "",
-    upc: snap.upc || "",
+      (str(snap.sourceMarket, 40) as OpportunityProduct["sourceMarket"]) ||
+      "amazon",
+    sourceId: str(snap.sourceId, 80),
+    upc: str(snap.upc, 32),
   } as OpportunityProduct;
+}
+
+/** Always build a draftable drop from floor tile numbers — never 404 a visible deal. */
+function dropFromLoose(
+  dropId: string,
+  asin: string,
+  snap: LooseSnap,
+): MarketDrop {
+  const buy =
+    num(snap.buy, snap.cost, snap.buyBoxPrice, snap.amazonPrice) ?? 1;
+  const sell =
+    num(
+      snap.sell,
+      snap.ebayActiveLow,
+      snap.ebayPrice,
+      snap.buyBoxPrice,
+      snap.amazonPrice,
+      buy,
+    ) ?? buy;
+  const photo = str(snap.imageUrl, 2000);
+  const title = str(snap.title) || `Amazon ${asin}`;
+  const heatRaw = str(snap.heat, 10);
+  const heat =
+    heatRaw === "hot" || heatRaw === "warm" || heatRaw === "fresh"
+      ? heatRaw
+      : "fresh";
+  return {
+    id: /^win-/i.test(dropId) ? dropId.toLowerCase() : `win-${asin}`,
+    name: str(snap.brand, 120) || "Higlou Market",
+    title,
+    blurb:
+      str(snap.blurb) ||
+      "Verified Market drop · confirm cost before publish",
+    photo: photo || PLACEHOLDER,
+    photos: photo ? [photo] : [],
+    buy,
+    sell,
+    comps: num(snap.comps) ?? Math.round(sell * 1.06 * 100) / 100,
+    supplier: str(snap.supplier, 120) || "Higlou Market",
+    ships: str(snap.ships, 200) || "Verified by Higlou Find Winners",
+    heat,
+    asin,
+  };
 }
 
 async function resolveFromLedger(
@@ -211,43 +184,46 @@ export async function POST(request: Request) {
   const auth = await requireUser();
   if (!auth.ok) return auth.response;
 
-  let body: z.infer<typeof bodySchema>;
+  let raw: LooseSnap = {};
   try {
-    body = bodySchema.parse(await request.json());
+    raw = (await request.json()) as LooseSnap;
   } catch {
     return NextResponse.json({ error: "Send { dropId }" }, { status: 400 });
   }
 
-  const asin =
-    asinFromWinnerDropId(body.dropId) ||
-    String(body.product?.asin || "")
-      .trim()
-      .toUpperCase() ||
-    null;
-
-  let drop: MarketDrop | null = null;
-  if (asin && /^[A-Z0-9]{10}$/.test(asin)) {
-    drop = await resolveFromLedger(auth.user.id, asin);
-    if (!drop && body.product) {
-      const hit = hitFromSnapshot(asin, body.product);
-      if (isPlatformWinner(hit, hit.mode || "amazon_to_ebay")) {
-        drop = opportunityToMarketDrop(hit);
-      }
-      // Tile already on the floor — draft from buy/sell even if Keepa re-gate is thin.
-      if (!drop) {
-        drop = dropFromTileSnapshot(body.dropId, asin, body.product);
-      }
-    }
+  const dropId = str(raw.dropId, 64);
+  if (dropId.length < 2) {
+    return NextResponse.json({ error: "Send { dropId }" }, { status: 400 });
   }
 
-  if (!drop) {
+  const snap: LooseSnap =
+    raw.product && typeof raw.product === "object"
+      ? (raw.product as LooseSnap)
+      : {};
+
+  const asin = extractAsin(dropId, snap);
+  if (!asin) {
     return NextResponse.json(
       {
         error:
-          "Winner not found — open Find Winners, scan again, then Add to store",
+          "Missing ASIN — open Find Winners, scan again, then Add to store",
       },
       { status: 404 },
     );
+  }
+
+  let drop: MarketDrop | null = await resolveFromLedger(auth.user.id, asin);
+
+  if (!drop && Object.keys(snap).length > 0) {
+    const hit = hitFromSnapshot(asin, snap);
+    if (isPlatformWinner(hit, hit.mode || "amazon_to_ebay")) {
+      drop = opportunityToMarketDrop(hit);
+    }
+  }
+
+  // Visible floor tile → always draftable (local ledger / thin Keepa re-gate).
+  if (!drop) {
+    drop = dropFromLoose(dropId, asin, snap);
   }
 
   const images = [drop.photo, ...drop.photos]
@@ -265,52 +241,65 @@ export async function POST(request: Request) {
     }));
 
   const brand = drop.asin ? drop.name : "Higlou Market";
-  const payload = productBodySchema.parse({
-    title: drop.title,
-    brand,
-    sku: drop.asin
-      ? `WIN-${drop.asin}`
-      : `MKT-${drop.id.toUpperCase().slice(0, 20)}`,
-    amazonAsin: drop.asin || "",
-    condition: "New",
-    conditionId: "NEW",
-    price: drop.sell,
-    quantity: 1,
-    listingFormat: "FixedPrice",
-    descriptionSummary: drop.blurb,
-    descriptionHtml: `<p>${drop.blurb}</p><p>Supplier: ${drop.supplier}. ${drop.ships}.</p><p><em>Est. cost $${drop.buy} · suggested list $${drop.sell}. Spread is an estimate — verify before publish.</em></p>${drop.asin ? `<p>ASIN: ${drop.asin}</p>` : ""}`,
-    productType: drop.name,
-    status: "Uploaded",
-    itemLocation: "United States",
-    handlingTime: 2,
-    country: "US",
-    features: [
-      `${drop.ships}`,
-      `Est. supplier cost $${drop.buy}`,
-      drop.asin ? `ASIN ${drop.asin}` : "Ready draft from Higlou Market",
-    ],
-    images,
-    itemSpecifics: [
-      { key: "Brand", label: "Brand", value: brand },
-      { key: "Type", label: "Type", value: drop.name },
+  let payload;
+  try {
+    payload = productBodySchema.parse({
+      title: drop.title,
+      brand,
+      sku: drop.asin
+        ? `WIN-${drop.asin}`
+        : `MKT-${drop.id.toUpperCase().slice(0, 20)}`,
+      amazonAsin: drop.asin || "",
+      condition: "New",
+      conditionId: "NEW",
+      price: drop.sell,
+      quantity: 1,
+      listingFormat: "FixedPrice",
+      descriptionSummary: drop.blurb,
+      descriptionHtml: `<p>${drop.blurb}</p><p>Supplier: ${drop.supplier}. ${drop.ships}.</p><p><em>Est. cost $${drop.buy} · suggested list $${drop.sell}. Spread is an estimate — verify before publish.</em></p>${drop.asin ? `<p>ASIN: ${drop.asin}</p>` : ""}`,
+      productType: drop.name,
+      status: "Uploaded",
+      itemLocation: "United States",
+      handlingTime: 2,
+      country: "US",
+      features: [
+        `${drop.ships}`,
+        `Est. supplier cost $${drop.buy}`,
+        drop.asin ? `ASIN ${drop.asin}` : "Ready draft from Higlou Market",
+      ],
+      images,
+      itemSpecifics: [
+        { key: "Brand", label: "Brand", value: brand },
+        { key: "Type", label: "Type", value: drop.name },
+        {
+          key: "C:MarketDrop",
+          label: "Market drop",
+          value: drop.id,
+          isCustom: true,
+        },
+        ...(drop.asin
+          ? [
+              {
+                key: "C:ASIN",
+                label: "ASIN",
+                value: drop.asin,
+                isCustom: true,
+              },
+            ]
+          : []),
+      ],
+    });
+  } catch (err) {
+    return NextResponse.json(
       {
-        key: "C:MarketDrop",
-        label: "Market drop",
-        value: drop.id,
-        isCustom: true,
+        error:
+          err instanceof Error
+            ? err.message
+            : "Could not build listing from this drop",
       },
-      ...(drop.asin
-        ? [
-            {
-              key: "C:ASIN",
-              label: "ASIN",
-              value: drop.asin,
-              isCustom: true,
-            },
-          ]
-        : []),
-    ],
-  });
+      { status: 400 },
+    );
+  }
 
   const columns = toDbColumns(payload);
   const { data: inserted, error } = await auth.supabase

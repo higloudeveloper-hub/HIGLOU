@@ -33,32 +33,17 @@ export function AppShell({
   /** Home / conversational screens — no admin chrome title bar */
   hideHeader?: boolean;
   contentClassName?: string;
-  /** Fill the PC viewport with no page padding (Stats machine). */
+  /** No page padding — still one unified document scroll (no nested box). */
   flush?: boolean;
 }) {
   const [mobileOpen, setMobileOpen] = useState(false);
 
   return (
-    <div
-      className={cn(
-        "flex bg-background",
-        flush ? "h-dvh min-h-0 overflow-hidden" : "min-h-dvh",
-      )}
-    >
-      <div
-        className={cn(
-          "sticky top-0 hidden md:block",
-          flush ? "h-dvh" : "h-screen",
-        )}
-      >
+    <div className="flex min-h-dvh bg-background">
+      <div className="sticky top-0 hidden h-screen self-start md:block">
         <AppSidebar />
       </div>
-      <div
-        className={cn(
-          "flex min-w-0 flex-1 flex-col",
-          flush && "min-h-0 overflow-hidden",
-        )}
-      >
+      <div className="flex min-w-0 flex-1 flex-col">
         <div className="sticky top-0 z-30 flex items-center gap-3 border-b border-border/70 bg-background/90 px-4 py-3 backdrop-blur-md md:hidden">
           <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
             <SheetTrigger
@@ -113,9 +98,9 @@ export function AppShell({
         ) : null}
         <main
           className={cn(
-            "min-h-0 flex-1",
+            "flex-1",
             flush
-              ? "flex flex-col overflow-hidden p-0"
+              ? "p-0"
               : hideHeader
                 ? "px-5 pt-6 pb-16 sm:px-10 sm:pt-10"
                 : "px-5 pt-2 pb-16 sm:px-10",

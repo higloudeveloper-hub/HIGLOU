@@ -303,7 +303,7 @@ export function curatedToPublic(
     walmartPrice: null,
     homedepotPrice: null,
     platformUrls: buildPlatformUrls({
-      asin: drop.asin,
+      asin: drop.asin || "",
       title: drop.title,
       brand: drop.name,
     }),

@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { ExternalLink, Factory, Loader2, ScanSearch } from "lucide-react";
 import { toast } from "sonner";
+import { usePaidActionOptional } from "@/components/credits/paid-action-provider";
 import { cn } from "@/lib/utils";
 
 type CheapOffer = {
@@ -82,6 +83,7 @@ export function CheapSourcePanel({
   sellPrice?: number | null;
   className?: string;
 }) {
+  const { requirePro } = usePaidActionOptional();
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<CheapResult | null>(null);
 
@@ -94,6 +96,8 @@ export function CheapSourcePanel({
   }, [result]);
 
   const run = async () => {
+    const pro = await requirePro("cheap_source");
+    if (!pro) return;
     setBusy(true);
     try {
       const res = await fetch("/api/winners/cheap-source", {
@@ -161,6 +165,7 @@ export function CheapSourcePanel({
             <Factory className="size-3.5" />
           )}
           {busy ? "Buscando…" : "Buscar suministro"}
+          <span className="ml-1 text-[10px] font-semibold text-[#f4c928]">Pro</span>
         </button>
       </header>
 

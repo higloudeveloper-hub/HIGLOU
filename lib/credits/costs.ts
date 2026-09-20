@@ -2,27 +2,27 @@
 export const CREDIT_ACTIONS = {
   winners_scan: {
     id: "winners_scan",
-    label: "Find Winners scan",
+    label: "Escanear winners",
     cost: 5,
   },
   market_claim: {
     id: "market_claim",
-    label: "Add winner to store",
+    label: "Agregar a tu tienda",
     cost: 3,
   },
   analyze_product: {
     id: "analyze_product",
-    label: "AI listing analysis",
+    label: "Análisis AI",
     cost: 8,
   },
   affiliate_link: {
     id: "affiliate_link",
-    label: "Create affiliate link",
+    label: "Crear link afiliado",
     cost: 1,
   },
   facebook_share: {
     id: "facebook_share",
-    label: "Facebook Page post",
+    label: "Publicar en Facebook",
     cost: 2,
   },
 } as const;

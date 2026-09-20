@@ -431,3 +431,221 @@ export async function listCreditLedger(userId: string, limit = 20) {
     .limit(limit);
   return data || [];
 }
+
+export type CreditEntitlements = {
+  plan: "free" | "pro";
+  unlockedFeatures: string[];
+};
+
+/** Derive Pro plan + feature unlocks from ledger (no extra columns required). */
+export async function getCreditEntitlements(
+  userId: string,
+): Promise<CreditEntitlements> {
+  const rows = await listCreditLedger(userId, 120);
+  const unlocked = new Set<string>();
+  let plan: "free" | "pro" = "free";
+
+  for (const row of rows) {
+    const action = String((row as { action?: string }).action || "");
+    const meta = ((row as { meta?: Record<string, unknown> }).meta ||
+      {}) as Record<string, unknown>;
+    if (
+      action === "recharge_mock" &&
+      (meta.packId === "pro" || meta.unlockPro === true)
+    ) {
+      plan = "pro";
+    }
+    if (action === "unlock_pro_plan") plan = "pro";
+    if (action === "unlock_pro_feature") {
+      const id = String(meta.featureId || "").trim();
+      if (id) unlocked.add(id);
+    }
+  }
+
+  return { plan, unlockedFeatures: [...unlocked] };
+}
+
+export async function unlockProFeature(opts: {
+  userId: string;
+  featureId: string;
+  cost: number;
+  title: string;
+}): Promise<
+  | { ok: true; wallet: CreditWalletPublic; entitlements: CreditEntitlements }
+  | {
+      ok: false;
+      error: string;
+      code?: "insufficient" | "already" | "unavailable";
+      balance?: number;
+      needed?: number;
+    }
+> {
+  const entitlements = await getCreditEntitlements(opts.userId);
+  if (
+    entitlements.plan === "pro" ||
+    entitlements.unlockedFeatures.includes(opts.featureId)
+  ) {
+    return {
+      ok: true,
+      wallet: await getCreditWallet(opts.userId),
+      entitlements,
+    };
+  }
+
+  const admin = adminOrNull();
+  if (!admin) return { ok: false, error: "Supabase required", code: "unavailable" };
+
+  const ensured = await ensureWalletRow(opts.userId);
+  if (!ensured.ok) {
+    if (ensured.error.includes("20260920_credits")) {
+      return {
+        ok: true,
+        wallet: emptyWallet(ensured.error),
+        entitlements: { plan: "pro", unlockedFeatures: [opts.featureId] },
+      };
+    }
+    return { ok: false, error: ensured.error, code: "unavailable" };
+  }
+
+  const cost = Math.max(1, Math.floor(opts.cost));
+  if (ensured.row.balance < cost) {
+    return {
+      ok: false,
+      error: `Necesitás ${cost} créditos para desbloquear. Tenés ${ensured.row.balance}.`,
+      code: "insufficient",
+      balance: ensured.row.balance,
+      needed: cost,
+    };
+  }
+
+  const nextBalance = ensured.row.balance - cost;
+  const { data, error } = await admin
+    .from("credit_wallets")
+    .update({
+      balance: nextBalance,
+      lifetime_spent: ensured.row.lifetime_spent + cost,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("user_id", opts.userId)
+    .gte("balance", cost)
+    .select(
+      "user_id, balance, lifetime_granted, lifetime_spent, onboarded_at, welcome_bonus_at",
+    )
+    .maybeSingle();
+
+  if (error) return { ok: false, error: error.message, code: "unavailable" };
+  if (!data) {
+    return {
+      ok: false,
+      error: `Necesitás ${cost} créditos.`,
+      code: "insufficient",
+      balance: ensured.row.balance,
+      needed: cost,
+    };
+  }
+
+  await appendLedger({
+    userId: opts.userId,
+    delta: -cost,
+    balanceAfter: nextBalance,
+    action: "unlock_pro_feature",
+    reason: `Unlock Pro · ${opts.title}`,
+    meta: { featureId: opts.featureId, cost },
+  });
+
+  return {
+    ok: true,
+    wallet: toPublic(data as WalletRow),
+    entitlements: await getCreditEntitlements(opts.userId),
+  };
+}
+
+export async function unlockProPlanWithCredits(opts: {
+  userId: string;
+  cost: number;
+}): Promise<
+  | { ok: true; wallet: CreditWalletPublic; entitlements: CreditEntitlements }
+  | {
+      ok: false;
+      error: string;
+      code?: "insufficient" | "unavailable";
+      balance?: number;
+      needed?: number;
+    }
+> {
+  const entitlements = await getCreditEntitlements(opts.userId);
+  if (entitlements.plan === "pro") {
+    return {
+      ok: true,
+      wallet: await getCreditWallet(opts.userId),
+      entitlements,
+    };
+  }
+
+  const admin = adminOrNull();
+  if (!admin) return { ok: false, error: "Supabase required", code: "unavailable" };
+
+  const ensured = await ensureWalletRow(opts.userId);
+  if (!ensured.ok) {
+    if (ensured.error.includes("20260920_credits")) {
+      return {
+        ok: true,
+        wallet: emptyWallet(ensured.error),
+        entitlements: { plan: "pro", unlockedFeatures: [] },
+      };
+    }
+    return { ok: false, error: ensured.error, code: "unavailable" };
+  }
+
+  const cost = Math.max(1, Math.floor(opts.cost));
+  if (ensured.row.balance < cost) {
+    return {
+      ok: false,
+      error: `Necesitás ${cost} créditos para Pro. Tenés ${ensured.row.balance}.`,
+      code: "insufficient",
+      balance: ensured.row.balance,
+      needed: cost,
+    };
+  }
+
+  const nextBalance = ensured.row.balance - cost;
+  const { data, error } = await admin
+    .from("credit_wallets")
+    .update({
+      balance: nextBalance,
+      lifetime_spent: ensured.row.lifetime_spent + cost,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("user_id", opts.userId)
+    .gte("balance", cost)
+    .select(
+      "user_id, balance, lifetime_granted, lifetime_spent, onboarded_at, welcome_bonus_at",
+    )
+    .maybeSingle();
+
+  if (error) return { ok: false, error: error.message, code: "unavailable" };
+  if (!data) {
+    return {
+      ok: false,
+      error: `Necesitás ${cost} créditos.`,
+      code: "insufficient",
+      balance: ensured.row.balance,
+      needed: cost,
+    };
+  }
+
+  await appendLedger({
+    userId: opts.userId,
+    delta: -cost,
+    balanceAfter: nextBalance,
+    action: "unlock_pro_plan",
+    reason: "Unlock Plan Pro",
+    meta: { cost },
+  });
+
+  return {
+    ok: true,
+    wallet: toPublic(data as WalletRow),
+    entitlements: { plan: "pro", unlockedFeatures: entitlements.unlockedFeatures },
+  };
+}

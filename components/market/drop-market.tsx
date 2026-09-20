@@ -13,6 +13,8 @@ import {
 import { MarketProductTile } from "@/components/market/market-product-tile";
 import { MarketDetailPanel } from "@/components/market/market-detail-panel";
 import { MarketEarnGuide } from "@/components/market/market-earn-guide";
+import { usePaidActionOptional } from "@/components/credits/paid-action-provider";
+import { CREDIT_ACTIONS } from "@/lib/credits/costs";
 import {
   mergeMarketFeed,
   type MarketDropPublic,
@@ -54,6 +56,7 @@ export function DropMarketStudio() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const reduce = useReducedMotion();
+  const { confirmSpend, refresh } = usePaidActionOptional();
   const [drops, setDrops] = useState<MarketDropPublic[]>([]);
   const [tagReady, setTagReady] = useState(false);
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -206,6 +209,11 @@ export function DropMarketStudio() {
 
   const claim = useCallback(
     async (item: MarketDropPublic) => {
+      const ok = await confirmSpend(
+        "market_claim",
+        `Agregar “${item.title.slice(0, 48)}” a tu tienda`,
+      );
+      if (!ok) return;
       setBusy(item.id);
       try {
         const res = await fetch("/api/market/claim", {
@@ -272,9 +280,10 @@ export function DropMarketStudio() {
         toast.error("Claim falló");
       } finally {
         setBusy(null);
+        void refresh();
       }
     },
-    [router],
+    [confirmSpend, refresh, router],
   );
 
   /** One click: open tagged Amazon + copy shareable link. Single toast. */

@@ -9,6 +9,7 @@ import { ChevronLeft, ChevronRight, Sparkles, X, Zap } from "lucide-react";
 import type { MarketDropPublic } from "@/lib/market/from-opportunity";
 import { marketSpread } from "@/lib/market/catalog";
 import { CREDIT_ACTIONS } from "@/lib/credits/costs";
+import { usePaidActionOptional } from "@/components/credits/paid-action-provider";
 import { cn } from "@/lib/utils";
 
 const STORAGE_KEY = "higlou_winners_popup_v2";
@@ -48,6 +49,7 @@ function writeStored(data: Stored) {
 export function MarketDropPopup() {
   const router = useRouter();
   const reduce = useReducedMotion() ?? false;
+  const { confirmSpend, refresh } = usePaidActionOptional();
   const [open, setOpen] = useState(false);
   const [drops, setDrops] = useState<MarketDropPublic[]>([]);
   const [index, setIndex] = useState(0);
@@ -96,6 +98,11 @@ export function MarketDropPopup() {
 
   const claim = useCallback(async () => {
     if (!drop) return;
+    const ok = await confirmSpend(
+      "market_claim",
+      "Meter este winner a tu tienda",
+    );
+    if (!ok) return;
     setBusy(true);
     try {
       const res = await fetch("/api/market/claim", {
@@ -167,8 +174,9 @@ export function MarketDropPopup() {
       toast.error("Claim failed");
     } finally {
       setBusy(false);
+      void refresh();
     }
-  }, [dismiss, drop, router]);
+  }, [confirmSpend, dismiss, drop, refresh, router]);
 
   if (!drop) return null;
   const spread = drop.netProfit ?? marketSpread(drop);

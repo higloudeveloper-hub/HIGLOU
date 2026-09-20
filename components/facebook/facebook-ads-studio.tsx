@@ -13,6 +13,8 @@ import {
   Sparkles,
 } from "lucide-react";
 import { FacebookFMark } from "@/components/brand/store-marks";
+import { usePaidActionOptional } from "@/components/credits/paid-action-provider";
+import { CREDIT_ACTIONS } from "@/lib/credits/costs";
 import { cn } from "@/lib/utils";
 
 type AffLink = {
@@ -101,6 +103,7 @@ function Thumb({ url, alt }: { url: string; alt: string }) {
 
 export function FacebookAdsStudio() {
   const reduce = useReducedMotion();
+  const { confirmSpend, requirePro, refresh } = usePaidActionOptional();
   const [links, setLinks] = useState<AffLink[]>([]);
   const [imported, setImported] = useState<ImportedProduct[]>([]);
   const [drops, setDrops] = useState<MarketDrop[]>([]);
@@ -315,6 +318,19 @@ export function FacebookAdsStudio() {
       );
       return;
     }
+    if (format === "carousel" || format === "vitrina") {
+      const pro = await requirePro("facebook_carousel");
+      if (!pro) return;
+    }
+    const ok = await confirmSpend(
+      "facebook_share",
+      format === "ads"
+        ? "Post Ads en tu Page"
+        : format === "vitrina"
+          ? "Publicar vitrina en tu Page"
+          : "Publicar carrusel en tu Page",
+    );
+    if (!ok) return;
     setBusy(true);
     setPostUrl(null);
     try {
@@ -414,6 +430,7 @@ export function FacebookAdsStudio() {
       }
     } finally {
       setBusy(false);
+      void refresh();
     }
   };
 
@@ -495,8 +512,8 @@ export function FacebookAdsStudio() {
             {(
               [
                 { id: "ads" as const, label: "Ads", icon: Share2 },
-                { id: "carousel" as const, label: "Carrusel", icon: PanelsTopLeft },
-                { id: "vitrina" as const, label: "Vitrina", icon: LayoutGrid },
+                { id: "carousel" as const, label: "Carrusel · Pro", icon: PanelsTopLeft },
+                { id: "vitrina" as const, label: "Vitrina · Pro", icon: LayoutGrid },
               ] as const
             ).map((f) => (
               <button
@@ -791,6 +808,10 @@ export function FacebookAdsStudio() {
           >
             {busy ? <Loader2 className="size-4 animate-spin" /> : <FacebookFMark className="size-3.5" />}
             {format === "ads" ? "Publicar" : format === "vitrina" ? "Publicar vitrina" : "Publicar carrusel"}
+            <span className="ml-1 opacity-80">
+              · {CREDIT_ACTIONS.facebook_share.cost} cr
+              {format !== "ads" ? " · Pro" : ""}
+            </span>
           </button>
 
           {postUrl ? (

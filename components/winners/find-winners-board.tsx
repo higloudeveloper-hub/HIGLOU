@@ -43,6 +43,8 @@ import {
   type WinnerTileModel,
 } from "@/components/winners/winner-product-tile";
 import { WinnerDetailPanel } from "@/components/winners/winner-detail-panel";
+import { usePaidActionOptional } from "@/components/credits/paid-action-provider";
+import { CREDIT_ACTIONS } from "@/lib/credits/costs";
 import { cn } from "@/lib/utils";
 
 type BoardHit = OpportunityProduct & {
@@ -111,6 +113,7 @@ export function FindWinnersBoard({
   ) => Promise<boolean | void>;
 }) {
   const reduce = useReducedMotion();
+  const { confirmSpend, requirePro, refresh } = usePaidActionOptional();
   const [mode, setMode] = useState<OpportunityMode>("amazon_to_ebay");
   const route = winnerRouteById(mode);
   const retail = isRetailToMarketplaceMode(mode);
@@ -230,6 +233,11 @@ export function FindWinnersBoard({
 
   const scanGeneral = useCallback(async () => {
     if (searching || generalScanning || busy || retail) return;
+    const ok = await confirmSpend(
+      "winners_scan",
+      "Si no hay winners, te devolvemos los créditos.",
+    );
+    if (!ok) return;
     setGeneralScanning(true);
     setError(null);
     const nextRound = round + 1;
@@ -265,9 +273,11 @@ export function FindWinnersBoard({
             "Sin winners esta ronda · no cobramos. Probá otra vez o buscá un ASIN.",
         );
         setJustFound(0);
+        await refresh();
         return;
       }
       applyFound(body.products || []);
+      await refresh();
     } catch {
       setError("Error de red. Intenta otra vez.");
     } finally {
@@ -276,9 +286,11 @@ export function FindWinnersBoard({
   }, [
     applyFound,
     busy,
+    confirmSpend,
     generalScanning,
     limit,
     mode,
+    refresh,
     retail,
     round,
     searching,
@@ -390,6 +402,10 @@ export function FindWinnersBoard({
 
   const importSelected = async () => {
     if (!selected.length || importing || busy) return;
+    if (selected.length > 1) {
+      const pro = await requirePro("batch_import");
+      if (!pro) return;
+    }
     setImporting(true);
     setImportingId(null);
     setError(null);
@@ -506,6 +522,9 @@ export function FindWinnersBoard({
                 <Sparkles className="size-3.5 text-[#3665F3]" />
               )}
               Ver oportunidades
+              <span className="ml-1 text-[10px] font-medium text-[#707070]">
+                · {CREDIT_ACTIONS.winners_scan.cost} cr
+              </span>
             </button>
           ) : null}
           <Link

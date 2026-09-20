@@ -8,6 +8,7 @@ import { HiglouLogo } from "@/components/brand/higlou-logo";
 import { NewListingButton } from "@/components/brand/new-listing-button";
 import { FacebookFMark } from "@/components/brand/store-marks";
 import { CreditsPill } from "@/components/credits/credits-pill";
+import { PaidActionProvider } from "@/components/credits/paid-action-provider";
 import {
   Sheet,
   SheetContent,
@@ -40,6 +41,7 @@ export function AppShell({
   const [mobileOpen, setMobileOpen] = useState(false);
 
   return (
+    <PaidActionProvider>
     <div
       className={cn(
         "flex bg-background",
@@ -128,5 +130,6 @@ export function AppShell({
         </main>
       </div>
     </div>
+    </PaidActionProvider>
   );
 }

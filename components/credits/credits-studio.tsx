@@ -122,9 +122,9 @@ export function CreditsStudio() {
               </span>
             </h2>
             <p className="mt-4 max-w-xl text-[15px] leading-relaxed text-white/70">
-              Find Winners, Market, AI listing y Facebook Ads consumen créditos.
-              Recargá cuando quieras — Stripe se conecta después con los mismos
-              packs.
+              Cada acción te avisa cuánto gasta antes de cobrar. Funciones Pro
+              (carrusel, suministro, import masivo) se desbloquean con créditos
+              o el pack Pro.
             </p>
             <div className="mt-5 flex flex-wrap gap-3 text-[12px] text-white/55">
               <span className="inline-flex items-center gap-1.5 rounded-full border border-white/15 bg-white/5 px-3 py-1.5">

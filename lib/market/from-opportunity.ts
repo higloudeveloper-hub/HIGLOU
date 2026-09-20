@@ -55,13 +55,19 @@ function platformQuotes(hit: OpportunityProduct) {
       : null) ??
     (hit.ebayPrice != null && hit.ebayPrice > 0 ? hit.ebayPrice : null);
   const walmart =
-    hit.sourceMarket === "walmart" && hit.cost != null && hit.cost > 0
+    (hit.walmartPrice != null && hit.walmartPrice > 0
+      ? hit.walmartPrice
+      : null) ??
+    (hit.sourceMarket === "walmart" && hit.cost != null && hit.cost > 0
       ? hit.cost
-      : null;
+      : null);
   const homedepot =
-    hit.sourceMarket === "homedepot" && hit.cost != null && hit.cost > 0
+    (hit.homedepotPrice != null && hit.homedepotPrice > 0
+      ? hit.homedepotPrice
+      : null) ??
+    (hit.sourceMarket === "homedepot" && hit.cost != null && hit.cost > 0
       ? hit.cost
-      : null;
+      : null);
   return {
     amazonPrice: amazon != null ? Math.round(amazon * 100) / 100 : null,
     ebayPrice: ebay != null ? Math.round(ebay * 100) / 100 : null,

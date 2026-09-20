@@ -1,11 +1,17 @@
 import { parseWalmartLink } from "@/lib/walmart/item-id";
 import { isWalmartBlockedPage } from "@/lib/walmart/parse-product";
+import {
+  buildRetailSearchQueries,
+  pickBestRetailHit,
+  type RetailMatchHints,
+} from "@/lib/opportunity/retail-match";
 
 export type WalmartSearchHit = {
   itemId: string;
   title: string;
   imageUrl: string;
   price: number | null;
+  upc?: string;
 };
 
 const FETCH_MS = 28_000;
@@ -105,7 +111,20 @@ function collectItems(
       typeof priceInfo?.currentPrice?.price === "number"
         ? priceInfo.currentPrice.price
         : null;
-    out.push({ itemId: id, title: name, imageUrl, price });
+    const upcDigits = String(rec.upc || rec.gtin || rec.ean || "").replace(
+      /\D/g,
+      "",
+    );
+    out.push({
+      itemId: id,
+      title: name,
+      imageUrl,
+      price,
+      upc:
+        upcDigits.length === 12 || upcDigits.length === 13
+          ? upcDigits
+          : undefined,
+    });
   }
   for (const child of Object.values(rec)) {
     if (child && typeof child === "object") {
@@ -148,4 +167,57 @@ export async function searchWalmartProducts(
   const html = await fetchSearchHtml(q);
   if (!html) return [];
   return parseWalmartSearchHits(html).slice(0, limit);
+}
+
+/**
+ * Try UPC → brand+model → short title until we get a confident Walmart hit.
+ * Never stop at an empty UPC result when a title query would work.
+ */
+export async function searchWalmartBestMatch(
+  hints: RetailMatchHints,
+  opts?: { limit?: number },
+): Promise<{
+  hit: WalmartSearchHit;
+  matchedBy: "upc" | "title";
+  score: number;
+  query: string;
+} | null> {
+  const queries = buildRetailSearchQueries(hints);
+  if (!queries.length) return null;
+  const limit = Math.min(Math.max(opts?.limit ?? 8, 1), 12);
+  const pooled: WalmartSearchHit[] = [];
+  const seen = new Set<string>();
+  let usedQuery = "";
+
+  for (const q of queries) {
+    const batch = await searchWalmartProducts(q, { limit });
+    for (const hit of batch) {
+      if (seen.has(hit.itemId)) continue;
+      seen.add(hit.itemId);
+      pooled.push(hit);
+    }
+    if (!usedQuery && batch.length) usedQuery = q;
+    const picked = pickBestRetailHit(pooled, hints, {
+      minScore:
+        String(hints.upc || "").replace(/\D/g, "").length >= 12 ? 0.22 : 0.28,
+    });
+    if (picked && (picked.matchedBy === "upc" || picked.score >= 0.4)) {
+      return {
+        hit: picked.hit,
+        matchedBy: picked.matchedBy,
+        score: picked.score,
+        query: q,
+      };
+    }
+    if (pooled.length >= 12) break;
+  }
+
+  const picked = pickBestRetailHit(pooled, hints);
+  if (!picked) return null;
+  return {
+    hit: picked.hit,
+    matchedBy: picked.matchedBy,
+    score: picked.score,
+    query: usedQuery || queries[0],
+  };
 }

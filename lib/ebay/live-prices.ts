@@ -49,24 +49,46 @@ const STOP = new Set([
   "pcs",
   "pc",
   "count",
+  "amazon",
+  "exclusive",
 ]);
 
 /** Brand + concrete title tokens — better eBay hit rate than raw Amazon titles. */
-export function buildEbaySearchQuery(title: string, brand?: string): string {
+export function buildEbaySearchQuery(
+  title: string,
+  brand?: string,
+  modelOrMpn?: string,
+): string {
+  const model = String(modelOrMpn || "").trim();
+  const brandWord = String(brand || "").trim();
+  const parts: string[] = [];
+  if (brandWord) parts.push(brandWord);
+  if (model && model.toLowerCase() !== brandWord.toLowerCase()) {
+    parts.push(model);
+  }
+
+  // Keep hyphen catalog codes intact (e.g. Milwaukee 48-73-1430).
+  const catalogCodes = String(title || "").match(/\b\d{2,4}-\d{2,4}-\d{2,6}\b/g) || [];
+  for (const code of catalogCodes) {
+    if (!parts.some((p) => p === code)) parts.push(code);
+  }
+
   const words = String(title || "")
     .split(/[^a-z0-9]+/i)
     .map((w) => w.trim())
-    .filter((w) => w.length > 2 && !STOP.has(w.toLowerCase()) && !/^\d+$/.test(w));
-  const core = words.slice(0, 7);
-  const brandWord = String(brand || "").trim();
-  if (
-    brandWord &&
-    brandWord.length > 1 &&
-    !core.some((w) => w.toLowerCase() === brandWord.toLowerCase())
-  ) {
-    return `${brandWord} ${core.join(" ")}`.trim().slice(0, 80);
+    .filter((w) => {
+      if (!w) return false;
+      if (STOP.has(w.toLowerCase())) return false;
+      if (/^\d+$/.test(w)) return w.length >= 3; // keep model digits
+      return w.length > 1;
+    });
+
+  for (const w of words) {
+    if (parts.some((p) => p.toLowerCase() === w.toLowerCase())) continue;
+    parts.push(w);
+    if (parts.length >= 8) break;
   }
-  return core.join(" ").slice(0, 80);
+  return parts.join(" ").trim().slice(0, 80);
 }
 
 function sanePrices(prices: number[], amazonHint?: number | null): number[] {
@@ -161,6 +183,8 @@ export async function searchEbayLivePrices(opts: {
   accessToken: string;
   query: string;
   brand?: string;
+  model?: string;
+  mpn?: string;
   gtin?: string;
   amazonPrice?: number | null;
 }): Promise<EbayActiveListings> {
@@ -185,22 +209,38 @@ export async function searchEbayLivePrices(opts: {
     if (byGtin.count) return { ...byGtin, matchedByGtin: true };
   }
 
-  const q = buildEbaySearchQuery(opts.query, opts.brand);
-  if (!q) return empty;
+  const modelHint = String(opts.mpn || opts.model || "").trim();
+  const queries = [
+    buildEbaySearchQuery(opts.query, opts.brand, modelHint),
+    buildEbaySearchQuery(opts.query, opts.brand),
+  ].filter((q, i, arr) => q && arr.indexOf(q) === i);
 
-  const filter = encodeURIComponent("buyingOptions:{FIXED_PRICE},conditions:{NEW}");
-  const primary = await browseSearch(
-    opts.accessToken,
-    `q=${encodeURIComponent(q)}&limit=40&filter=${filter}`,
-    opts.amazonPrice,
-  );
-  if (primary.count >= 3) return primary;
+  // Extra short brand+model when title is noisy.
+  if (opts.brand && modelHint) {
+    const short = `${opts.brand} ${modelHint}`.trim().slice(0, 80);
+    if (short && !queries.includes(short)) queries.unshift(short);
+  }
 
-  // Broader fallback without NEW filter when the tight query under-matched.
-  const loose = await browseSearch(
-    opts.accessToken,
-    `q=${encodeURIComponent(q)}&limit=40&filter=${encodeURIComponent("buyingOptions:{FIXED_PRICE}")}`,
-    opts.amazonPrice,
-  );
-  return loose.count > primary.count ? loose : primary;
+  let best = empty;
+  for (const q of queries.slice(0, 3)) {
+    const filter = encodeURIComponent(
+      "buyingOptions:{FIXED_PRICE},conditions:{NEW}",
+    );
+    const primary = await browseSearch(
+      opts.accessToken,
+      `q=${encodeURIComponent(q)}&limit=40&filter=${filter}`,
+      opts.amazonPrice,
+    );
+    if (primary.count > best.count) best = primary;
+    if (primary.count >= 5) return primary;
+
+    const loose = await browseSearch(
+      opts.accessToken,
+      `q=${encodeURIComponent(q)}&limit=40&filter=${encodeURIComponent("buyingOptions:{FIXED_PRICE}")}`,
+      opts.amazonPrice,
+    );
+    if (loose.count > best.count) best = loose;
+    if (loose.count >= 5) return loose;
+  }
+  return best;
 }

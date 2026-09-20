@@ -114,9 +114,11 @@ export function buildOpportunityPriceBoard(
       ? money(hit.cost)
       : null;
   const walmart =
-    hit.sourceMarket === "walmart" ? retailCost : null;
+    money(hit.walmartPrice) ??
+    (hit.sourceMarket === "walmart" ? retailCost : null);
   const homedepot =
-    hit.sourceMarket === "homedepot" ? retailCost : null;
+    money(hit.homedepotPrice) ??
+    (hit.sourceMarket === "homedepot" ? retailCost : null);
 
   const byOverlay = new Map(
     (overlay?.quotes || []).map((q) => [q.platform, money(q.price)]),

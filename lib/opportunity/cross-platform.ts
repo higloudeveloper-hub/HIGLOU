@@ -5,9 +5,9 @@ import {
   getAmazonLowestNewPrice,
 } from "@/lib/amazon/sp-api";
 import { searchEbayLivePrices } from "@/lib/ebay/live-prices";
-import { searchHomeDepotProducts } from "@/lib/homedepot/search-products";
+import { searchHomeDepotBestMatch } from "@/lib/homedepot/search-products";
 import { fetchHomeDepotProduct } from "@/lib/homedepot/fetch-product";
-import { searchWalmartProducts } from "@/lib/walmart/search-products";
+import { searchWalmartBestMatch } from "@/lib/walmart/search-products";
 import { fetchWalmartProduct } from "@/lib/walmart/fetch-product";
 import {
   estimateEbayReferralFee,
@@ -71,11 +71,13 @@ function routeLabel(mode: OpportunityMode): string {
 
 /**
  * Look up the same product across Amazon, eBay, Walmart, Home Depot.
- * UPC/GTIN is the strongest key; ASIN + title are fallbacks.
+ * UPC/GTIN is strongest; brand+model and short title are fallbacks.\n * Never stop after an empty UPC miss when title search would find the item.
  */
 export async function analyzeCrossPlatform(opts: {
   title: string;
   brand?: string;
+  model?: string;
+  mpn?: string;
   upc?: string;
   asin?: string;
   sourceMarket?: OpportunitySourceMarket | string;
@@ -87,11 +89,15 @@ export async function analyzeCrossPlatform(opts: {
   pageOrigin?: string;
 }): Promise<CrossPlatformAnalysis> {
   const title = String(opts.title || "").trim();
+  const brand = String(opts.brand || "").trim();
+  const model = String(opts.model || "").trim();
+  const mpn = String(opts.mpn || "").trim();
   const upc = String(opts.upc || "").replace(/\D/g, "");
   let asin = String(opts.asin || "")
     .trim()
     .toUpperCase();
   const quotes: PlatformPriceQuote[] = [];
+  const retailHints = { title, brand, model, mpn, upc };
 
   // --- Source quote (already known) ---
   const source = String(opts.sourceMarket || "");
@@ -189,16 +195,18 @@ export async function analyzeCrossPlatform(opts: {
     }
   }
 
-  // --- eBay ---
-  if (opts.ebayToken && (upc || title)) {
+  // --- eBay (app token or user token) ---
+  if (opts.ebayToken && (upc || title || model || mpn)) {
     const live = await searchEbayLivePrices({
       accessToken: opts.ebayToken,
       query: title,
-      brand: opts.brand,
+      brand,
+      model,
+      mpn,
       gtin: upc || undefined,
       amazonPrice: quotes.find((q) => q.platform === "amazon")?.price,
     }).catch(() => null);
-    if (live) {
+    if (live && (live.count > 0 || live.low != null || live.median != null)) {
       quotes.push({
         platform: "ebay",
         price: live.low ?? live.median ?? null,
@@ -212,34 +220,32 @@ export async function analyzeCrossPlatform(opts: {
   }
 
   // --- Walmart (skip if already from source) ---
-  if (!quotes.some((q) => q.platform === "walmart") && (upc || title)) {
+  if (!quotes.some((q) => q.platform === "walmart") && (upc || title || model)) {
     try {
-      const hits = await searchWalmartProducts(upc || title, { limit: 5 });
-      const hit = hits[0];
-      if (hit) {
-        let price = hit.price;
-        let resolvedUpc = "";
+      const matched = await searchWalmartBestMatch(retailHints, { limit: 8 });
+      if (matched?.hit) {
+        let price = matched.hit.price;
+        let resolvedUpc = matched.hit.upc || "";
         try {
           const detail = await fetchWalmartProduct(
-            `https://www.walmart.com/ip/${hit.itemId}`,
+            `https://www.walmart.com/ip/${matched.hit.itemId}`,
             { pageOrigin: opts.pageOrigin },
           );
           price = detail.price ?? price;
-          resolvedUpc = detail.upc || "";
+          resolvedUpc = detail.upc || resolvedUpc;
         } catch {
           /* seed price */
         }
+        const upcHit =
+          Boolean(resolvedUpc && upc && resolvedUpc.replace(/\D/g, "") === upc);
         quotes.push({
           platform: "walmart",
           price: money(price),
           fees: null,
-          id: hit.itemId,
-          title: hit.title || title,
-          url: `https://www.walmart.com/ip/${hit.itemId}`,
-          matchedBy:
-            resolvedUpc && upc && resolvedUpc.replace(/\D/g, "") === upc
-              ? "upc"
-              : "title",
+          id: matched.hit.itemId,
+          title: matched.hit.title || title,
+          url: `https://www.walmart.com/ip/${matched.hit.itemId}`,
+          matchedBy: upcHit || matched.matchedBy === "upc" ? "upc" : "title",
         });
       }
     } catch {
@@ -248,18 +254,18 @@ export async function analyzeCrossPlatform(opts: {
   }
 
   // --- Home Depot ---
-  if (!quotes.some((q) => q.platform === "homedepot") && (upc || title)) {
+  if (
+    !quotes.some((q) => q.platform === "homedepot") &&
+    (upc || title || model)
+  ) {
     try {
-      const hits = await searchHomeDepotProducts(upc || title, { limit: 5 });
-      const hit =
-        hits.find((row) => row.upc && upc && row.upc.replace(/\D/g, "") === upc) ||
-        hits[0];
-      if (hit) {
-        let price = hit.price;
-        let resolvedUpc = hit.upc;
+      const matched = await searchHomeDepotBestMatch(retailHints, { limit: 8 });
+      if (matched?.hit) {
+        let price = matched.hit.price;
+        let resolvedUpc = matched.hit.upc;
         try {
           const detail = await fetchHomeDepotProduct(
-            `https://www.homedepot.com/p/${hit.itemId}`,
+            `https://www.homedepot.com/p/${matched.hit.itemId}`,
             { pageOrigin: opts.pageOrigin },
           );
           price = detail.price ?? price;
@@ -267,17 +273,16 @@ export async function analyzeCrossPlatform(opts: {
         } catch {
           /* seed */
         }
+        const upcHit =
+          Boolean(resolvedUpc && upc && resolvedUpc.replace(/\D/g, "") === upc);
         quotes.push({
           platform: "homedepot",
           price: money(price),
           fees: null,
-          id: hit.itemId,
-          title: hit.title || title,
-          url: `https://www.homedepot.com/p/${hit.itemId}`,
-          matchedBy:
-            resolvedUpc && upc && resolvedUpc.replace(/\D/g, "") === upc
-              ? "upc"
-              : "title",
+          id: matched.hit.itemId,
+          title: matched.hit.title || title,
+          url: `https://www.homedepot.com/p/${matched.hit.itemId}`,
+          matchedBy: upcHit || matched.matchedBy === "upc" ? "upc" : "title",
         });
       }
     } catch {

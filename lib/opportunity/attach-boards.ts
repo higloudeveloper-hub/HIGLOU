@@ -44,6 +44,8 @@ export async function attachOpportunityBoards(
           analysis = await analyzeCrossPlatform({
             title: hit.title,
             brand: hit.brand,
+            model: hit.mpn || undefined,
+            mpn: hit.mpn || undefined,
             upc: hit.upc,
             asin: hit.asin,
             amazonToken: opts?.amazonToken,
@@ -71,11 +73,26 @@ export async function attachOpportunityBoards(
         const wm = analysis.quotes.find((q) => q.platform === "walmart");
         const hd = analysis.quotes.find((q) => q.platform === "homedepot");
         const eb = analysis.quotes.find((q) => q.platform === "ebay");
+        const amz = analysis.quotes.find((q) => q.platform === "amazon");
         next = {
           ...next,
           walmartItemId: wm?.id || next.walmartItemId || null,
           homedepotItemId: hd?.id || next.homedepotItemId || null,
           ebayItemId: eb?.id || next.ebayItemId || null,
+          walmartPrice:
+            wm?.price != null ? wm.price : (next.walmartPrice ?? null),
+          homedepotPrice:
+            hd?.price != null ? hd.price : (next.homedepotPrice ?? null),
+          ebayPrice:
+            eb?.price != null
+              ? eb.price
+              : (next.ebayActiveLow ?? next.ebayPrice ?? null),
+          ebayActiveLow:
+            eb?.price != null ? eb.price : (next.ebayActiveLow ?? null),
+          amazonPrice:
+            amz?.price != null
+              ? amz.price
+              : (next.buyBoxPrice ?? next.amazonPrice ?? null),
         };
       }
 

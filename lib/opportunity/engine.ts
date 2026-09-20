@@ -646,6 +646,8 @@ export async function findOpportunities(opts: {
         accessToken: opts.ebayToken,
         query: next.title,
         brand: next.brand,
+        model: next.mpn || undefined,
+        mpn: next.mpn || undefined,
         gtin: next.upc,
         amazonPrice,
       }).catch(() => ({

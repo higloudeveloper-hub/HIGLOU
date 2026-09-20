@@ -126,6 +126,9 @@ export type OpportunityProduct = {
   ebayItemId?: string | null;
   walmartItemId?: string | null;
   homedepotItemId?: string | null;
+  /** Live retail quotes stamped by cross-platform deep check. */
+  walmartPrice?: number | null;
+  homedepotPrice?: number | null;
 };
 
 export type OpportunitySources = {

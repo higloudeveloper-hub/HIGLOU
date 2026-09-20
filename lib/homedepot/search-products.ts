@@ -3,6 +3,11 @@ import {
   homeDepotSessionCookie,
   IPHONE_SAFARI_UA,
 } from "@/lib/homedepot/mobile-gallery";
+import {
+  buildRetailSearchQueries,
+  pickBestRetailHit,
+  type RetailMatchHints,
+} from "@/lib/opportunity/retail-match";
 
 export type HomeDepotSearchHit = {
   itemId: string;
@@ -145,4 +150,54 @@ export async function searchHomeDepotProducts(
     }
   }
   return [];
+}
+
+/** Multi-query Home Depot match — UPC first, then brand/model/title. */
+export async function searchHomeDepotBestMatch(
+  hints: RetailMatchHints,
+  opts?: { limit?: number },
+): Promise<{
+  hit: HomeDepotSearchHit;
+  matchedBy: "upc" | "title";
+  score: number;
+  query: string;
+} | null> {
+  const queries = buildRetailSearchQueries(hints);
+  if (!queries.length) return null;
+  const limit = Math.min(Math.max(opts?.limit ?? 8, 1), 12);
+  const pooled: HomeDepotSearchHit[] = [];
+  const seen = new Set<string>();
+  let usedQuery = "";
+
+  for (const q of queries) {
+    const batch = await searchHomeDepotProducts(q, { limit });
+    for (const hit of batch) {
+      if (seen.has(hit.itemId)) continue;
+      seen.add(hit.itemId);
+      pooled.push(hit);
+    }
+    if (!usedQuery && batch.length) usedQuery = q;
+    const picked = pickBestRetailHit(pooled, hints, {
+      minScore:
+        String(hints.upc || "").replace(/\D/g, "").length >= 12 ? 0.22 : 0.28,
+    });
+    if (picked && (picked.matchedBy === "upc" || picked.score >= 0.4)) {
+      return {
+        hit: picked.hit,
+        matchedBy: picked.matchedBy,
+        score: picked.score,
+        query: q,
+      };
+    }
+    if (pooled.length >= 12) break;
+  }
+
+  const picked = pickBestRetailHit(pooled, hints);
+  if (!picked) return null;
+  return {
+    hit: picked.hit,
+    matchedBy: picked.matchedBy,
+    score: picked.score,
+    query: usedQuery || queries[0],
+  };
 }

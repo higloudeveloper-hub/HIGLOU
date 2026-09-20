@@ -110,25 +110,23 @@ export function marketTilePricing(item: MarketDropPublic): MarketTilePricing {
     Number.isFinite(buy) &&
     Number.isFinite(sell) &&
     Math.abs(buy - sell) < 0.5;
+  const isAmazonLane = item.lane === "amazon";
+  const hasKeepSpread = !isAmazonLane && keep > 0 && !same;
 
-  if (item.lane === "amazon" || (same && !(keep > 0 && item.lane !== "amazon"))) {
+  if (isAmazonLane || (same && !hasKeepSpread)) {
     const price =
-      item.amazonPrice ??
-      (item.lane === "amazon" ? sell : buy) ??
-      sell ??
-      buy;
+      item.amazonPrice ?? (isAmazonLane ? sell : buy) ?? sell ?? buy;
     return {
       mode: "single",
       price,
-      label: item.lane === "amazon" ? "Buy Box Amazon" : "Precio",
+      label: isAmazonLane ? "Buy Box Amazon" : "Precio",
     };
   }
 
-  if (item.lane !== "amazon" && keep > 0 && !same) {
+  if (hasKeepSpread) {
     return { mode: "spread", buy, sell, keep };
   }
 
-  // Fallback single when spread is noise
   return {
     mode: "single",
     price: sell || buy,

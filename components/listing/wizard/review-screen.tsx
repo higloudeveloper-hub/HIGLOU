@@ -166,9 +166,7 @@ export function ReviewScreen({
     description: listing.descriptionHtml,
     itemSpecifics: listing.itemSpecifics,
   });
-  const showAmazonOptions = Boolean(
-    amazonAsin || listing.amazonUrl || variationSet,
-  );
+  const showAmazonOptions = false;
   const optionCounts = variationCounts(variationSet);
   const titleLen = listing.title.length;
 

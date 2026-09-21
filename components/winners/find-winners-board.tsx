@@ -12,6 +12,7 @@ import {
   Sparkles,
   Store,
 } from "lucide-react";
+import { amazonAsinPrimaryImage } from "@/lib/amazon/asin-image";
 import {
   AMAZON_WINNER_CATEGORIES,
 } from "@/lib/amazon/winner-categories";
@@ -479,7 +480,7 @@ export function FindWinnersBoard({
       id,
       title: hit.title || id,
       brand: hit.brand,
-      imageUrl: hit.imageUrl,
+      imageUrl: hit.imageUrl || amazonAsinPrimaryImage(id) || null,
       badge,
       platforms,
       keep,

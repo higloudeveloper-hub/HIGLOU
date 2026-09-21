@@ -153,7 +153,7 @@ export async function importAmazonCatalogProduct(opts: {
     features: product.features,
     sku: `AMZ-${product.asin}`,
     images,
-    variations: product.variations || null,
+    variations: null,
   };
 }
 

@@ -1,7 +1,6 @@
 import { DEFAULT_VALUES } from "@/config/default-values";
 import { isUsableCatalogBullet } from "@/lib/catalog/bullets";
 import { toEbayListingTitle } from "@/lib/ebay/listing-helpers";
-import { parseAmazonVariations } from "@/lib/amazon/parse-variations";
 import type { ListingVariationSet } from "@/lib/listing/variations";
 
 export type AmazonProductDraft = {
@@ -487,7 +486,8 @@ export function parseAmazonProductPage(
     upc: upcFromHtml(html),
     rating: reviews.rating,
     reviewCount: reviews.reviewCount,
-    variations: parseAmazonVariations(html),
+    // Always simple SKUs — variation families break photos and confuse sellers
+    variations: null,
   };
 }
 

@@ -25,33 +25,37 @@ type Row = {
   last_share_at: string | null;
 };
 
-export async function getFacebookConnectionPublic(
-  supabase: SupabaseClient,
-  userId: string,
-): Promise<FacebookConnectionPublic> {
-  const encryptionReady = canEncryptFacebookToken();
-  const { data } = await supabase
-    .from("facebook_connections")
-    .select(
-      "page_id, page_name, access_token_enc, connected_at, revoked_at, last_error, last_share_at",
-    )
-    .eq("user_id", userId)
-    .maybeSingle();
+async function dbForFacebook(
+  fallback: SupabaseClient,
+): Promise<SupabaseClient> {
+  try {
+    const { createAdminClient } = await import("@/lib/supabase/admin");
+    return createAdminClient();
+  } catch {
+    return fallback;
+  }
+}
 
-  const row = data as Row | null;
+function publicFromRow(
+  row: Row | null,
+  encryptionReady: boolean,
+): FacebookConnectionPublic {
   if (!row || row.revoked_at || !row.access_token_enc || !row.page_id) {
     return {
       connected: false,
-      pageId: null,
-      pageName: null,
-      connectedAt: null,
-      lastError: row?.last_error || null,
+      pageId: row?.page_id || null,
+      pageName: row?.page_name || null,
+      connectedAt: row?.connected_at || null,
+      lastError:
+        row?.last_error ||
+        (row?.revoked_at
+          ? "Page desconectada. Volvé a pegar Page ID + token."
+          : null),
       lastShareAt: row?.last_share_at || null,
       encryptionReady,
     };
   }
 
-  // Row exists but token must decrypt — otherwise UI lies "conectada" while publish falls back
   if (!encryptionReady) {
     return {
       connected: false,
@@ -64,6 +68,7 @@ export async function getFacebookConnectionPublic(
       encryptionReady,
     };
   }
+
   try {
     const token = decryptFacebookToken(row.access_token_enc);
     if (!token) {
@@ -101,6 +106,37 @@ export async function getFacebookConnectionPublic(
   };
 }
 
+export async function getFacebookConnectionPublic(
+  supabase: SupabaseClient,
+  userId: string,
+): Promise<FacebookConnectionPublic> {
+  const encryptionReady = canEncryptFacebookToken();
+  const db = await dbForFacebook(supabase);
+  const { data, error } = await db
+    .from("facebook_connections")
+    .select(
+      "page_id, page_name, access_token_enc, connected_at, revoked_at, last_error, last_share_at",
+    )
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (error) {
+    return {
+      connected: false,
+      pageId: null,
+      pageName: null,
+      connectedAt: null,
+      lastError: error.message.includes("facebook_connections")
+        ? "Falta la tabla facebook_connections en Supabase. Aplicá la migración."
+        : error.message,
+      lastShareAt: null,
+      encryptionReady,
+    };
+  }
+
+  return publicFromRow(data as Row | null, encryptionReady);
+}
+
 /** Confirm Page ID + Page access token against Graph before storing. */
 export async function verifyFacebookPageToken(
   pageId: string,
@@ -121,17 +157,16 @@ export async function verifyFacebookPageToken(
         ok: false,
         error:
           body?.error?.message ||
-          "Token inválido. Usá el access_token de la Page desde GET /me/accounts (no el User token).",
+          "Token inválido. Usá el access_token de la Page (Graph → Page seleccionada).",
       };
     }
-    if (String(body.id) !== pageId.replace(/\D/g, "") && String(body.id) !== pageId) {
-      // Graph sometimes returns the same id as string — allow match without digits-only
-      if (String(body.id).replace(/\D/g, "") !== pageId.replace(/\D/g, "")) {
-        return {
-          ok: false,
-          error: `El token no corresponde al Page ID ${pageId}. Copiá el id + access_token del mismo ítem en /me/accounts.`,
-        };
-      }
+    const want = pageId.replace(/\D/g, "");
+    const got = String(body.id).replace(/\D/g, "");
+    if (got !== want) {
+      return {
+        ok: false,
+        error: `El token no corresponde al Page ID ${pageId}. Copiá id + token de la misma Page.`,
+      };
     }
     return { ok: true, pageName: body.name || null };
   } catch (err) {
@@ -150,7 +185,10 @@ export async function saveFacebookConnection(
     pageName?: string | null;
     accessToken: string;
   },
-): Promise<{ ok: true } | { ok: false; error: string }> {
+): Promise<
+  | { ok: true; connection: FacebookConnectionPublic }
+  | { ok: false; error: string; connection?: FacebookConnectionPublic }
+> {
   if (!canEncryptFacebookToken()) {
     return {
       ok: false,
@@ -167,7 +205,6 @@ export async function saveFacebookConnection(
     };
   }
 
-  // Verify with Graph before saving — catches User tokens / bad Page ID early
   const verified = await verifyFacebookPageToken(pageId, token);
   if (!verified.ok) {
     return { ok: false, error: verified.error };
@@ -183,103 +220,107 @@ export async function saveFacebookConnection(
     };
   }
 
+  const connectedAt = new Date().toISOString();
+  const pageName =
+    String(opts.pageName || "").trim() || verified.pageName || null;
   const payload = {
     user_id: opts.userId,
     page_id: pageId,
-    page_name: String(opts.pageName || "").trim() || verified.pageName || null,
+    page_name: pageName,
     access_token_enc: enc,
-    connected_at: new Date().toISOString(),
-    revoked_at: null,
-    last_error: null,
-    updated_at: new Date().toISOString(),
+    connected_at: connectedAt,
+    revoked_at: null as string | null,
+    last_error: null as string | null,
+    updated_at: connectedAt,
   };
 
-  // Prefer service role so RLS upsert footguns never leave "OK" toast + Off badge
-  let writer: SupabaseClient = supabase;
-  try {
-    const { createAdminClient } = await import("@/lib/supabase/admin");
-    writer = createAdminClient();
-  } catch {
-    writer = supabase;
-  }
+  const db = await dbForFacebook(supabase);
 
-  const { data, error } = await writer
+  // Clean reconnect: delete then insert so revoked_at / empty token never linger
+  await db.from("facebook_connections").delete().eq("user_id", opts.userId);
+
+  const { data, error } = await db
     .from("facebook_connections")
-    .upsert(payload, { onConflict: "user_id" })
+    .insert(payload)
     .select(
-      "user_id, page_id, access_token_enc, revoked_at",
+      "page_id, page_name, access_token_enc, connected_at, revoked_at, last_error, last_share_at",
     )
     .maybeSingle();
 
-  if (error) {
-    // Fallback to user-scoped client if admin upsert failed for another reason
-    if (writer !== supabase) {
-      const retry = await supabase
-        .from("facebook_connections")
-        .upsert(payload, { onConflict: "user_id" })
-        .select("user_id, page_id, access_token_enc, revoked_at")
-        .maybeSingle();
-      if (retry.error || !retry.data?.access_token_enc || retry.data.revoked_at) {
-        return {
-          ok: false,
-          error:
-            retry.error?.message?.includes("facebook_connections") ||
-            error.message.includes("facebook_connections")
-              ? "Apply migration 20260920_facebook_connections.sql"
-              : retry.error?.message || error.message,
-        };
-      }
-      return { ok: true };
-    }
-    return {
-      ok: false,
-      error:
-        error.message.includes("facebook_connections")
-          ? "Apply migration 20260920_facebook_connections.sql"
-          : error.message,
-    };
-  }
+  if (error || !data?.access_token_enc) {
+    // Last resort: upsert if delete+insert blocked
+    const upsert = await db
+      .from("facebook_connections")
+      .upsert(
+        {
+          ...payload,
+          // Force clear revoke with a sentinel rewrite via update after
+        },
+        { onConflict: "user_id" },
+      )
+      .select(
+        "page_id, page_name, access_token_enc, connected_at, revoked_at, last_error, last_share_at",
+      )
+      .maybeSingle();
 
-  if (!data?.access_token_enc || data.revoked_at) {
-    return {
-      ok: false,
-      error:
-        "No se pudo guardar la conexión en la base. Probá de nuevo o aplicá la migración facebook_connections.",
-    };
-  }
-
-  // Round-trip decrypt to catch key mismatch before telling the UI "On"
-  try {
-    const roundTrip = decryptFacebookToken(data.access_token_enc);
-    if (!roundTrip) {
+    if (upsert.error || !upsert.data?.access_token_enc) {
       return {
         ok: false,
-        error: "Token guardado ilegible — revisá FACEBOOK/EBAY_TOKEN_ENCRYPTION_KEY.",
+        error:
+          error?.message?.includes("facebook_connections") ||
+          upsert.error?.message?.includes("facebook_connections")
+            ? "Apply migration 20260920_facebook_connections.sql in Supabase"
+            : error?.message ||
+              upsert.error?.message ||
+              "No se pudo guardar la conexión en Supabase.",
       };
     }
-  } catch {
-    return {
-      ok: false,
-      error: "Token guardado ilegible — revisá FACEBOOK/EBAY_TOKEN_ENCRYPTION_KEY.",
-    };
+
+    await db
+      .from("facebook_connections")
+      .update({
+        page_id: pageId,
+        page_name: pageName,
+        access_token_enc: enc,
+        connected_at: connectedAt,
+        revoked_at: null,
+        last_error: null,
+        updated_at: connectedAt,
+      })
+      .eq("user_id", opts.userId);
+
+    const again = await getFacebookConnectionPublic(db, opts.userId);
+    if (!again.connected) {
+      return {
+        ok: false,
+        error:
+          again.lastError ||
+          "Supabase guardó mal la fila (sigue Off). Revisá RLS / migración facebook_connections.",
+        connection: again,
+      };
+    }
+    return { ok: true, connection: again };
   }
 
-  return { ok: true };
+  const connection = publicFromRow(data as Row, true);
+  if (!connection.connected) {
+    return {
+      ok: false,
+      error:
+        connection.lastError ||
+        "Token guardado pero no legible. Revisá EBAY_TOKEN_ENCRYPTION_KEY en Vercel.",
+      connection,
+    };
+  }
+  return { ok: true, connection };
 }
 
 export async function disconnectFacebook(
   supabase: SupabaseClient,
   userId: string,
 ): Promise<void> {
-  await supabase
-    .from("facebook_connections")
-    .update({
-      revoked_at: new Date().toISOString(),
-      access_token_enc: "",
-      last_error: null,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("user_id", userId);
+  const db = await dbForFacebook(supabase);
+  await db.from("facebook_connections").delete().eq("user_id", userId);
 }
 
 export async function loadFacebookPageCredentials(
@@ -287,7 +328,8 @@ export async function loadFacebookPageCredentials(
   userId: string,
 ): Promise<{ pageId: string; accessToken: string; pageName: string | null } | null> {
   if (!canEncryptFacebookToken()) return null;
-  const { data } = await supabase
+  const db = await dbForFacebook(supabase);
+  const { data } = await db
     .from("facebook_connections")
     .select("page_id, page_name, access_token_enc, revoked_at")
     .eq("user_id", userId)

@@ -66,25 +66,16 @@ export async function POST(request: Request) {
     accessToken: parsed.accessToken,
   });
   if (!saved.ok) {
-    return NextResponse.json({ error: saved.error }, { status: 400 });
-  }
-
-  const connection = await getFacebookConnectionPublic(
-    auth.supabase,
-    auth.user.id,
-  );
-  if (!connection.connected) {
     return NextResponse.json(
       {
-        error:
-          connection.lastError ||
-          "Se guardó el intento pero la Page sigue Off. Revisá el token y la clave de cifrado.",
-        connection,
+        error: saved.error,
+        connection: saved.connection || null,
       },
       { status: 400 },
     );
   }
-  return NextResponse.json({ ok: true, connection });
+
+  return NextResponse.json({ ok: true, connection: saved.connection });
 }
 
 export async function DELETE() {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { toast } from "sonner";
@@ -51,49 +51,49 @@ function ScoreRing({
   value: number | null;
   reduce: boolean;
 }) {
-  const r = 34;
+  const r = 28;
   const c = 2 * Math.PI * r;
   const pct = value == null ? 0 : Math.max(0, Math.min(100, value)) / 100;
   const offset = c * (1 - pct);
   const tone =
     value == null
-      ? "#a8a29a"
+      ? "#c8c8c8"
       : value >= 70
         ? "#1f7a4d"
         : value >= 45
-          ? "#c9a227"
+          ? "#3665F3"
           : "#b42318";
 
   return (
-    <div className="relative size-[88px] shrink-0">
-      <svg viewBox="0 0 80 80" className="size-full -rotate-90">
+    <div className="relative size-[72px] shrink-0">
+      <svg viewBox="0 0 72 72" className="size-full -rotate-90">
         <circle
-          cx="40"
-          cy="40"
+          cx="36"
+          cy="36"
           r={r}
           fill="none"
-          stroke="rgba(255,255,255,0.12)"
-          strokeWidth="6"
+          stroke="#ececec"
+          strokeWidth="4"
         />
         <motion.circle
-          cx="40"
-          cy="40"
+          cx="36"
+          cy="36"
           r={r}
           fill="none"
           stroke={tone}
-          strokeWidth="6"
+          strokeWidth="4"
           strokeLinecap="round"
           strokeDasharray={c}
           initial={reduce ? false : { strokeDashoffset: c }}
           animate={{ strokeDashoffset: offset }}
-          transition={{ duration: 0.9, ease: EASE }}
+          transition={{ duration: 0.85, ease: EASE }}
         />
       </svg>
-      <div className="absolute inset-0 flex flex-col items-center justify-center text-white">
-        <p className="font-display text-[26px] leading-none tabular-nums">
+      <div className="absolute inset-0 flex flex-col items-center justify-center">
+        <p className="text-[18px] leading-none font-semibold tabular-nums text-[#191919]">
           {value == null ? "—" : Math.round(value)}
         </p>
-        <p className="mt-0.5 text-[8px] font-bold tracking-[0.16em] text-white/50 uppercase">
+        <p className="mt-0.5 text-[8px] font-semibold tracking-[0.14em] text-[#8a8a8a] uppercase">
           Score
         </p>
       </div>
@@ -116,35 +116,35 @@ function LaneChip({
 }) {
   const toneCls =
     tone === "ok"
-      ? "border-[#1f7a4d]/25 bg-gradient-to-br from-[#e8f5ee] to-white"
+      ? "border-[#cfe8d9] bg-white"
       : tone === "warn"
-        ? "border-[#c9a227]/35 bg-gradient-to-br from-[#fff8e8] to-white"
+        ? "border-[#e8dfc8] bg-white"
         : tone === "bad"
-          ? "border-[#b42318]/25 bg-gradient-to-br from-[#fdf2f1] to-white"
-          : "border-[#ebe7e0] bg-gradient-to-br from-[#faf9f6] to-white";
+          ? "border-[#edd5d2] bg-white"
+          : "border-[#e5e5e5] bg-white";
   const bar =
     tone === "ok"
       ? "bg-[#1f7a4d]"
       : tone === "warn"
-        ? "bg-[#c9a227]"
+        ? "bg-[#a8841a]"
         : tone === "bad"
           ? "bg-[#b42318]"
-          : "bg-[#c5bfb5]";
+          : "bg-[#c8c8c8]";
   return (
     <motion.div
-      initial={reduce ? false : { opacity: 0, y: 10 }}
+      initial={reduce ? false : { opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: index * 0.05, duration: 0.35, ease: EASE }}
+      transition={{ delay: index * 0.04, duration: 0.3, ease: EASE }}
       className={cn(
-        "relative overflow-hidden rounded-2xl border px-3.5 py-3.5",
+        "relative overflow-hidden rounded-xl border px-3.5 py-3",
         toneCls,
       )}
     >
-      <span className={cn("absolute top-0 left-0 h-full w-1", bar)} />
-      <p className="pl-2 text-[10px] font-bold tracking-[0.14em] text-[#6b6560] uppercase">
+      <span className={cn("absolute top-0 left-0 h-full w-0.5", bar)} />
+      <p className="pl-2 text-[10px] font-semibold tracking-[0.12em] text-[#8a8a8a] uppercase">
         {label}
       </p>
-      <p className="mt-1.5 pl-2 text-[13px] leading-snug font-semibold text-[#141414]">
+      <p className="mt-1 pl-2 text-[13px] leading-snug font-medium text-[#191919]">
         {detail}
       </p>
     </motion.div>
@@ -433,12 +433,12 @@ export function ProductMoneyCard({
     return (
       <div
         className={cn(
-          "flex min-h-[180px] items-center justify-center overflow-hidden rounded-3xl border border-[#1a1f1c]/10 bg-[#141814]",
+          "flex min-h-[180px] items-center justify-center overflow-hidden rounded-xl border border-[#1a1f1c]/10 bg-[#141814]",
           className,
         )}
       >
         <div className="flex flex-col items-center gap-2">
-          <Loader2 className="size-5 animate-spin text-[#e8c547]" />
+          <Loader2 className="size-5 animate-spin text-[#3665F3]" />
           <p className="text-[11px] tracking-[0.18em] text-white/50 uppercase">
             Analizando money paths…
           </p>
@@ -481,68 +481,41 @@ export function ProductMoneyCard({
 
   return (
     <motion.section
-      initial={reduce ? false : { opacity: 0, y: 14 }}
+      initial={reduce ? false : { opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.45, ease: EASE }}
+      transition={{ duration: 0.35, ease: EASE }}
       className={cn(
-        "overflow-hidden rounded-[28px] border border-[#1a1f1c]/12 bg-[#f7f5f1] shadow-[0_20px_50px_-28px_rgba(20,24,20,0.45)]",
+        "overflow-hidden rounded-xl border border-[#e5e5e5] bg-white shadow-[0_1px_0_rgba(0,0,0,0.04)]",
         className,
       )}
       data-money-card
-      style={
-        {
-          "--me-ink": "#141814",
-          "--me-gold": "#e8c547",
-          "--me-mint": "#1f7a4d",
-        } as CSSProperties
-      }
     >
-      {/* Hero terminal header */}
-      <div className="relative overflow-hidden bg-[var(--me-ink)] px-5 pt-5 pb-4 text-white sm:px-6">
-        <div
-          aria-hidden
-          className="pointer-events-none absolute inset-0"
-          style={{
-            background:
-              "radial-gradient(ellipse 70% 90% at 0% -10%, rgba(232,197,71,0.22), transparent 50%), radial-gradient(ellipse 50% 70% at 100% 0%, rgba(31,122,77,0.18), transparent 45%), linear-gradient(180deg, transparent 60%, rgba(0,0,0,0.25))",
-          }}
-        />
-        {!reduce ? (
-          <motion.div
-            aria-hidden
-            className="pointer-events-none absolute inset-y-0 w-1/4 bg-gradient-to-r from-transparent via-white/6 to-transparent"
-            animate={{ left: ["-25%", "120%"] }}
-            transition={{ duration: 4.2, repeat: Infinity, ease: "linear" }}
-          />
-        ) : null}
-
-        <div className="relative flex flex-wrap items-start justify-between gap-4">
+      {/* Pro header — matches Home / Find Winners chrome */}
+      <div className="border-b border-[#e5e5e5] bg-white px-5 pt-4 pb-3 sm:px-6">
+        <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="min-w-0 flex-1">
-            <p className="inline-flex items-center gap-2 text-[10px] font-bold tracking-[0.22em] text-[var(--me-gold)] uppercase">
-              <span className="relative flex size-2">
+            <p className="inline-flex items-center gap-2 text-[10px] font-semibold tracking-[0.18em] text-[#707070] uppercase">
+              <span className="relative flex size-1.5">
                 {!reduce ? (
-                  <span className="absolute inline-flex size-full animate-ping rounded-full bg-[var(--me-gold)]/50" />
+                  <span className="absolute inline-flex size-full animate-ping rounded-full bg-[#1f7a4d]/40" />
                 ) : null}
-                <span className="relative size-2 rounded-full bg-[var(--me-gold)]" />
+                <span className="relative size-1.5 rounded-full bg-[#1f7a4d]" />
               </span>
-              <ShieldCheck className="size-3.5" />
+              <ShieldCheck className="size-3.5 text-[#3665F3]" />
               Money Engine · live
             </p>
-            <h3 className="mt-2 font-display text-[32px] leading-[0.92] tracking-tight sm:text-[36px]">
-              Gana con
-              <br />
-              <span className="text-[var(--me-gold)]">este producto</span>
+            <h3 className="mt-2 text-[22px] leading-tight font-semibold tracking-tight text-[#191919] sm:text-[24px]">
+              Monetizá este producto
             </h3>
-            <p className="mt-2.5 max-w-sm text-[13px] leading-relaxed text-white/65">
-              Ruta clara: affiliate, vender en tienda o comparar el mismo SKU —
-              sin inventar márgenes.
+            <p className="mt-1.5 max-w-md text-[13px] leading-relaxed text-[#707070]">
+              Affiliate, vender en tienda o comparar el mismo SKU — sin inventar
+              márgenes.
             </p>
           </div>
           <ScoreRing value={scoreNum} reduce={reduce} />
         </div>
 
-        {/* Architectural tab rail */}
-        <div className="relative mt-5 grid grid-cols-3 gap-1 rounded-2xl bg-white/6 p-1 ring-1 ring-white/10 backdrop-blur-sm">
+        <div className="mt-4 grid grid-cols-3 gap-1 rounded-xl border border-[#e5e5e5] bg-[#f7f7f7] p-1">
           {tabs.map((t) => {
             const on = tab === t.id;
             const Icon = t.icon;
@@ -552,25 +525,25 @@ export function ProductMoneyCard({
                 type="button"
                 onClick={() => setTab(t.id)}
                 className={cn(
-                  "relative z-10 flex flex-col items-center gap-0.5 rounded-xl px-2 py-2.5 transition",
-                  on ? "text-[var(--me-ink)]" : "text-white/55 hover:text-white/85",
+                  "relative z-10 flex flex-col items-center gap-0.5 rounded-lg px-2 py-2 transition",
+                  on ? "text-[#191919]" : "text-[#8a8a8a] hover:text-[#555]",
                 )}
               >
                 {on ? (
                   <motion.span
                     layoutId="money-engine-tab"
-                    className="absolute inset-0 rounded-xl bg-[var(--me-gold)] shadow-[0_8px_24px_-8px_rgba(232,197,71,0.7)]"
+                    className="absolute inset-0 rounded-lg bg-white shadow-sm"
                     transition={{ type: "spring", stiffness: 420, damping: 34 }}
                   />
                 ) : null}
-                <span className="relative z-10 inline-flex items-center gap-1.5 text-[13px] font-bold tracking-tight">
-                  <Icon className="size-3.5 opacity-80" />
+                <span className="relative z-10 inline-flex items-center gap-1.5 text-[13px] font-semibold tracking-tight">
+                  <Icon className="size-3.5 opacity-70" />
                   {t.label}
                 </span>
                 <span
                   className={cn(
-                    "relative z-10 text-[9px] font-semibold tracking-[0.12em] uppercase",
-                    on ? "text-[var(--me-ink)]/55" : "text-white/35",
+                    "relative z-10 text-[9px] font-medium tracking-[0.1em] uppercase",
+                    on ? "text-[#8a8a8a]" : "text-[#b0b0b0]",
                   )}
                 >
                   {t.hint}
@@ -581,9 +554,9 @@ export function ProductMoneyCard({
         </div>
       </div>
 
-      <div className="p-5 sm:p-6">
+      <div className="bg-[#f7f7f7] p-4 sm:p-5">
         {error ? (
-          <p className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
             {error}
           </p>
         ) : decision ? (
@@ -598,14 +571,14 @@ export function ProductMoneyCard({
             >
               {tab === "ganar" ? (
                 <>
-                  <div className="relative overflow-hidden rounded-3xl border border-[#ebe7e0] bg-white">
+                  <div className="relative overflow-hidden rounded-xl border border-[#e5e5e5] bg-white">
                     <div
                       aria-hidden
-                      className="absolute inset-y-0 left-0 w-1.5 bg-gradient-to-b from-[var(--me-gold)] via-[var(--me-mint)] to-[var(--me-ink)]"
+                      className="absolute inset-y-0 left-0 w-1.5 bg-[#3665F3]"
                     />
                     <div className="px-5 py-5 pl-6">
                       <div className="flex flex-wrap items-center gap-2">
-                        <span className="inline-flex items-center gap-1 rounded-full bg-[#141814] px-2.5 py-1 text-[10px] font-bold tracking-[0.14em] text-[var(--me-gold)] uppercase">
+                        <span className="inline-flex items-center gap-1 rounded-full bg-[#191919] px-2.5 py-1 text-[10px] font-semibold tracking-[0.12em] text-white uppercase">
                           <Sparkles className="size-3" />
                           Recomendación
                         </span>
@@ -615,13 +588,13 @@ export function ProductMoneyCard({
                           </span>
                         ) : null}
                       </div>
-                      <p className="mt-3 font-display text-[26px] leading-[1.05] tracking-tight text-[#141414] sm:text-[30px]">
+                      <p className="mt-3 text-[20px] font-semibold leading-[1.05] tracking-tight text-[#191919] sm:text-[30px]">
                         {decision.primaryAction}
                       </p>
                       {decision.secondaryAction ? (
-                        <p className="mt-2 text-[14px] text-[#6b6560]">
+                        <p className="mt-2 text-[14px] text-[#707070]">
                           También:{" "}
-                          <span className="font-semibold text-[#141414]">
+                          <span className="font-semibold text-[#191919]">
                             {decision.secondaryAction}
                           </span>
                         </p>
@@ -634,14 +607,14 @@ export function ProductMoneyCard({
                             initial={reduce ? false : { opacity: 0, x: -6 }}
                             animate={{ opacity: 1, x: 0 }}
                             transition={{ delay: 0.08 + i * 0.06 }}
-                            className="flex gap-3 text-[13px] leading-snug text-[#5a554e]"
+                            className="flex gap-3 text-[13px] leading-snug text-[#555]"
                           >
                             <span
                               className={cn(
                                 "mt-1.5 size-2 shrink-0 rounded-full ring-4",
                                 reason.ok
                                   ? "bg-[#1f7a4d] ring-[#1f7a4d]/15"
-                                  : "bg-[#c5bfb5] ring-[#ebe7e0]",
+                                  : "bg-[#c8c8c8] ring-[#e5e5e5]",
                               )}
                             />
                             {reason.text}
@@ -650,7 +623,7 @@ export function ProductMoneyCard({
                       </ul>
 
                       {decision.warnings[0] ? (
-                        <p className="mt-4 rounded-2xl border border-[#e8d9a8] bg-[#fffbf0] px-3.5 py-2.5 text-[12px] leading-relaxed text-[#6b5510]">
+                        <p className="mt-4 rounded-xl border border-[#e5e5e5] bg-[#fafafa] px-3.5 py-2.5 text-[12px] leading-relaxed text-[#707070]">
                           {decision.warnings[0]}
                         </p>
                       ) : null}
@@ -662,12 +635,12 @@ export function ProductMoneyCard({
                       type="button"
                       disabled={!flags.affiliateEngine || busy === "affiliate"}
                       onClick={() => void createAffiliate()}
-                      className="inline-flex h-12 items-center gap-2 rounded-2xl bg-[var(--me-ink)] px-5 text-[13px] font-bold text-white shadow-[0_12px_28px_-12px_rgba(20,24,20,0.55)] transition hover:bg-[#1f2620] disabled:opacity-40"
+                      className="inline-flex h-12 items-center gap-2 rounded-xl bg-[#191919] px-5 text-[13px] font-semibold text-white hover:bg-[#2a2a2a] disabled:opacity-40"
                     >
                       {busy === "affiliate" ? (
                         <Loader2 className="size-4 animate-spin" />
                       ) : (
-                        <Banknote className="size-4 text-[var(--me-gold)]" />
+                        <Banknote className="size-4 text-white/80" />
                       )}
                       Crear affiliate
                     </button>
@@ -675,7 +648,7 @@ export function ProductMoneyCard({
                       type="button"
                       disabled={!flags.smartLinks || busy === "affiliate"}
                       onClick={() => void createAffiliate()}
-                      className="inline-flex h-12 items-center gap-2 rounded-2xl border border-[#ddd7cd] bg-white px-4 text-[13px] font-semibold text-[#141414] hover:border-[#141414] disabled:opacity-40"
+                      className="inline-flex h-12 items-center gap-2 rounded-xl border border-[#e5e5e5] bg-white px-4 text-[13px] font-semibold text-[#191919] hover:border-[#191919] disabled:opacity-40"
                     >
                       <Link2 className="size-4" />
                       Smart link
@@ -691,7 +664,7 @@ export function ProductMoneyCard({
                           );
                         } else toast.message("Crea un Smart Link primero");
                       }}
-                      className="inline-flex h-12 items-center gap-2 rounded-2xl border border-[#ddd7cd] bg-white px-4 text-[13px] font-semibold text-[#141414] hover:border-[#141414] disabled:opacity-40"
+                      className="inline-flex h-12 items-center gap-2 rounded-xl border border-[#e5e5e5] bg-white px-4 text-[13px] font-semibold text-[#191919] hover:border-[#191919] disabled:opacity-40"
                     >
                       <QrCode className="size-4" />
                       QR
@@ -700,7 +673,7 @@ export function ProductMoneyCard({
                       type="button"
                       disabled={!flags.affiliateEngine || busy === "facebook"}
                       onClick={() => void shareFacebook()}
-                      className="inline-flex h-12 items-center gap-2 rounded-2xl bg-[#1877F2] px-4 text-[13px] font-semibold text-white hover:bg-[#166fe5] disabled:opacity-40"
+                      className="inline-flex h-12 items-center gap-2 rounded-xl bg-[#1877F2] px-4 text-[13px] font-semibold text-white hover:bg-[#166fe5] disabled:opacity-40"
                     >
                       {busy === "facebook" ? (
                         <Loader2 className="size-4 animate-spin" />
@@ -713,29 +686,29 @@ export function ProductMoneyCard({
                       type="button"
                       disabled={busy === "watch"}
                       onClick={() => void watchProduct()}
-                      className="inline-flex h-12 items-center gap-2 rounded-2xl border border-[#ddd7cd] bg-white px-4 text-[13px] font-semibold text-[#141414] hover:border-[#141414] disabled:opacity-40"
+                      className="inline-flex h-12 items-center gap-2 rounded-xl border border-[#e5e5e5] bg-white px-4 text-[13px] font-semibold text-[#191919] hover:border-[#191919] disabled:opacity-40"
                     >
                       <Eye className="size-4" />
                       Watch
                     </button>
                     <Link
                       href="/affiliate"
-                      className="inline-flex h-12 items-center gap-2 rounded-2xl border border-[#ddd7cd] bg-white px-4 text-[13px] font-semibold text-[#141414] hover:border-[#141414]"
+                      className="inline-flex h-12 items-center gap-2 rounded-xl border border-[#e5e5e5] bg-white px-4 text-[13px] font-semibold text-[#191919] hover:border-[#191919]"
                     >
                       <Share2 className="size-4" />
                       Ver affiliate
                     </Link>
                   </div>
                   {smartPath ? (
-                    <p className="rounded-2xl border border-dashed border-[#ddd7cd] bg-white px-3.5 py-2.5 text-[12px] text-[#6b6560]">
+                    <p className="rounded-xl border border-dashed border-[#e5e5e5] bg-white px-3.5 py-2.5 text-[12px] text-[#707070]">
                       Smart link:{" "}
-                      <span className="font-semibold text-[#141414]">
+                      <span className="font-semibold text-[#191919]">
                         {smartPath}
                       </span>
                     </p>
                   ) : null}
                   {aff?.message ? (
-                    <p className="text-[12px] text-[#8a847c]">{aff.message}</p>
+                    <p className="text-[12px] text-[#8a8a8a]">{aff.message}</p>
                   ) : null}
                 </>
               ) : null}
@@ -744,7 +717,7 @@ export function ProductMoneyCard({
                 <>
                   <div className="mb-1 flex items-center gap-2">
                     <Scale className="size-4 text-[#1f7a4d]" />
-                    <p className="text-[12px] font-semibold text-[#6b6560]">
+                    <p className="text-[12px] font-semibold text-[#707070]">
                       Canales de venta · estado real
                     </p>
                   </div>
@@ -795,14 +768,14 @@ export function ProductMoneyCard({
                   <div className="flex flex-wrap gap-2 pt-1">
                     <Link
                       href={productId ? `/listings/${productId}` : "/listings/new"}
-                      className="inline-flex h-12 items-center gap-2 rounded-2xl bg-[var(--me-gold)] px-5 text-[13px] font-bold text-[var(--me-ink)] shadow-[0_12px_28px_-12px_rgba(232,197,71,0.65)] hover:brightness-105"
+                      className="inline-flex h-12 items-center gap-2 rounded-xl bg-[#3665F3] px-5 text-[13px] font-semibold text-white hover:bg-[#2f5ae0]"
                     >
                       <Store className="size-4" />
                       Publicar listing
                     </Link>
                     <Link
                       href="/winners"
-                      className="inline-flex h-12 items-center gap-2 rounded-2xl border border-[#ddd7cd] bg-white px-4 text-[13px] font-semibold text-[#141414] hover:border-[#141414]"
+                      className="inline-flex h-12 items-center gap-2 rounded-xl border border-[#e5e5e5] bg-white px-4 text-[13px] font-semibold text-[#191919] hover:border-[#191919]"
                     >
                       Buscar winners
                     </Link>
@@ -812,9 +785,9 @@ export function ProductMoneyCard({
 
               {tab === "comparar" ? (
                 <>
-                  <p className="text-[13px] leading-relaxed text-[#6b6560]">
+                  <p className="text-[13px] leading-relaxed text-[#707070]">
                     Solo el{" "}
-                    <strong className="font-semibold text-[#141414]">
+                    <strong className="font-semibold text-[#191919]">
                       mismo producto
                     </strong>{" "}
                     (ASIN / item id / UPC). Sin inventar similares.
@@ -862,7 +835,7 @@ export function ProductMoneyCard({
                       const inner = (
                         <>
                           <div className="flex items-center justify-between gap-2">
-                            <p className="text-[10px] font-bold tracking-[0.14em] text-[#8a847c] uppercase">
+                            <p className="text-[10px] font-bold tracking-[0.14em] text-[#8a8a8a] uppercase">
                               {row.label}
                             </p>
                             <span
@@ -871,8 +844,8 @@ export function ProductMoneyCard({
                                 row.exact
                                   ? "bg-[#e8f5ee] text-[#1f7a4d]"
                                   : row.href
-                                    ? "bg-[#fff8e8] text-[#8a6a10]"
-                                    : "bg-[#f0ebe3] text-[#8a847c]",
+                                    ? "bg-[#f7f7f7] text-[#707070]"
+                                    : "bg-[#f0f0f0] text-[#8a8a8a]",
                               )}
                             >
                               {row.exact
@@ -882,7 +855,7 @@ export function ProductMoneyCard({
                                   : "Sin match"}
                             </span>
                           </div>
-                          <p className="mt-3 font-display text-[26px] leading-none tabular-nums tracking-tight">
+                          <p className="mt-3 text-[20px] font-semibold leading-none tabular-nums tracking-tight">
                             {formatMoney(row.price)}
                           </p>
                           {row.href ? (
@@ -891,17 +864,17 @@ export function ProductMoneyCard({
                               <ExternalLink className="size-3 opacity-70" />
                             </p>
                           ) : (
-                            <p className="mt-3 text-[11px] text-[#8a847c]">
+                            <p className="mt-3 text-[11px] text-[#8a8a8a]">
                               Sin enlace confirmado
                             </p>
                           )}
                         </>
                       );
                       const cls = cn(
-                        "rounded-2xl border p-3.5 transition",
+                        "rounded-xl border p-3.5 transition",
                         row.href
-                          ? "border-[#ebe7e0] bg-white hover:border-[#141814] hover:shadow-[0_12px_28px_-16px_rgba(20,24,20,0.35)]"
-                          : "border-dashed border-[#ebe7e0] bg-[#faf9f6] opacity-70",
+                          ? "border-[#e5e5e5] bg-white hover:border-[#191919] hover:shadow-[0_12px_28px_-16px_rgba(20,24,20,0.35)]"
+                          : "border-dashed border-[#e5e5e5] bg-[#fafafa] opacity-70",
                       );
                       return row.href ? (
                         <motion.a

@@ -6,9 +6,7 @@ import {
   BadgeCheck,
   Check,
   ExternalLink,
-  Flame,
   Trash2,
-  TrendingUp,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -24,7 +22,6 @@ export type WinnerTileModel = {
   title: string;
   brand?: string;
   imageUrl?: string | null;
-  /** Short status chip */
   badge: "Verificado" | "Tendencia" | "Hot";
   platforms: PlatformPriceCell[];
   keep: number | null;
@@ -49,11 +46,6 @@ function money(n: number | null | undefined) {
   }).format(n);
 }
 
-function signed(n: number) {
-  const abs = money(Math.abs(n));
-  return n >= 0 ? `+${abs}` : `−${abs.replace("-", "")}`;
-}
-
 const EASE = [0.22, 1, 0.36, 1] as const;
 
 export function WinnerProductTile({
@@ -72,159 +64,143 @@ export function WinnerProductTile({
   onSkip: () => void;
 }) {
   const reduce = useReducedMotion();
-  const signalGood = item.showDemand
-    ? (item.demand ?? 0) >= 55
-    : (item.keep ?? 0) >= 12;
+  const score = item.showDemand
+    ? Math.round(item.demand ?? 0)
+    : item.keep != null
+      ? Math.round(item.keep)
+      : null;
   const priced = item.platforms.filter((p) => p.price != null).length;
 
   return (
     <motion.article
       layout
-      initial={reduce ? false : { opacity: 0, y: 22, scale: 0.96 }}
-      animate={{ opacity: 1, y: 0, scale: 1 }}
+      initial={reduce ? false : { opacity: 0, y: 18 }}
+      animate={{ opacity: 1, y: 0 }}
       transition={{
-        duration: 0.45,
-        delay: Math.min(index * 0.05, 0.35),
+        duration: 0.4,
+        delay: Math.min(index * 0.06, 0.4),
         ease: EASE,
       }}
-      whileHover={reduce ? undefined : { y: -4 }}
+      whileHover={
+        reduce
+          ? undefined
+          : {
+              y: -5,
+              transition: { type: "spring", stiffness: 400, damping: 28 },
+            }
+      }
       className={cn(
-        "group relative flex flex-col overflow-hidden rounded-2xl border bg-white shadow-[0_1px_0_rgba(20,20,20,0.04)] transition-[border-color,box-shadow]",
+        "group relative flex flex-col overflow-hidden rounded-xl border bg-white",
         item.selected
-          ? "border-[#3665F3] shadow-[0_12px_36px_rgba(54,101,243,0.18)] ring-2 ring-[#3665F3]/25"
-          : "border-[#e5e5e5] hover:border-[#c8c8c8] hover:shadow-[0_16px_40px_rgba(20,20,20,0.08)]",
-        item.isNew && "ring-2 ring-[#f4c928]/60",
+          ? "border-[#3665F3] shadow-[0_0_0_1px_#3665F3]"
+          : "border-[#e8e8e8] hover:border-[#d0d0d0] hover:shadow-[0_12px_32px_rgba(0,0,0,0.08)]",
       )}
     >
+      {/* Hover sheen */}
+      {!reduce ? (
+        <motion.span
+          aria-hidden
+          className="pointer-events-none absolute inset-0 z-[2] bg-gradient-to-br from-white/0 via-white/40 to-white/0 opacity-0 transition-opacity duration-300 group-hover:opacity-100"
+          style={{ mixBlendMode: "overlay" }}
+        />
+      ) : null}
+
       <button
         type="button"
         onClick={onOpen}
-        className="flex flex-1 flex-col text-left"
+        className="relative z-[1] flex flex-1 flex-col text-left"
       >
-        <div className="relative aspect-[4/3] overflow-hidden bg-[#f7f7f7]">
+        {/* Image — pure white, no cream */}
+        <div className="relative aspect-[5/4] overflow-hidden border-b border-[#f0f0f0] bg-white">
           {item.imageUrl ? (
-            <Image
-              src={item.imageUrl}
-              alt=""
-              fill
-              className="object-contain p-4 transition duration-500 group-hover:scale-[1.04]"
-              unoptimized
-            />
+            <motion.div
+              className="absolute inset-0"
+              whileHover={reduce ? undefined : { scale: 1.03 }}
+              transition={{ duration: 0.45, ease: EASE }}
+            >
+              <Image
+                src={item.imageUrl}
+                alt=""
+                fill
+                className="object-contain p-5"
+                unoptimized
+              />
+            </motion.div>
           ) : (
-            <div className="flex h-full items-center justify-center text-[12px] text-[#a8a8a8]">
+            <div className="flex h-full items-center justify-center text-[11px] text-[#b0b0b0]">
               Sin foto
             </div>
           )}
 
-          {!reduce ? (
+          {/* Verified chip — small, serious */}
+          <div className="absolute top-2.5 left-2.5">
             <motion.span
-              aria-hidden
-              className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-[#3665F3]/50 to-transparent"
-              animate={{ opacity: [0.2, 0.8, 0.2] }}
-              transition={{ duration: 2.4, repeat: Infinity }}
-            />
-          ) : null}
-
-          <div className="absolute top-2.5 left-2.5 flex flex-wrap gap-1.5">
-            <span
-              className={cn(
-                "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold tracking-wide uppercase backdrop-blur-sm",
-                item.badge === "Hot"
-                  ? "bg-[#ff6b35]/95 text-white"
-                  : item.badge === "Tendencia"
-                    ? "bg-[#3665F3]/95 text-white"
-                    : "bg-[#1f7a4d]/95 text-white",
-              )}
+              initial={reduce ? false : { opacity: 0, x: -6 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: 0.12 + index * 0.04, ease: EASE }}
+              className="inline-flex items-center gap-1 rounded-md border border-[#e5e5e5] bg-white/95 px-1.5 py-0.5 text-[10px] font-semibold tracking-wide text-[#191919] shadow-sm backdrop-blur-sm"
             >
-              {item.badge === "Verificado" ? (
-                <BadgeCheck className="size-3" />
-              ) : item.badge === "Hot" ? (
-                <Flame className="size-3" />
-              ) : (
-                <TrendingUp className="size-3" />
-              )}
+              <BadgeCheck className="size-3 text-[#1f7a4d]" strokeWidth={2.25} />
               {item.badge}
-            </span>
-            {item.isNew ? (
-              <motion.span
-                initial={reduce ? false : { scale: 0.7, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                className="rounded-full bg-[#191919]/90 px-2 py-0.5 text-[10px] font-semibold text-[#f4c928] uppercase"
-              >
-                Nueva
-              </motion.span>
+            </motion.span>
+          </div>
+
+          {/* Score — compact, not a giant green block */}
+          {score != null ? (
+            <motion.div
+              initial={reduce ? false : { opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.18 + index * 0.04, ease: EASE }}
+              className="absolute right-2.5 bottom-2.5 flex items-baseline gap-1 rounded-md border border-[#e5e5e5] bg-white/95 px-2 py-1 shadow-sm backdrop-blur-sm"
+            >
+              <span className="text-[11px] font-medium tracking-wide text-[#8a8a8a] uppercase">
+                {item.showDemand ? "Score" : "Keep"}
+              </span>
+              <span className="text-[13px] font-semibold tabular-nums text-[#191919]">
+                {item.showDemand ? score : money(score)}
+              </span>
+            </motion.div>
+          ) : null}
+        </div>
+
+        <div className="flex flex-1 flex-col gap-2.5 px-3 pt-3 pb-2.5">
+          <div>
+            <p className="line-clamp-2 min-h-[2.5em] text-[13px] leading-snug font-medium text-[#191919]">
+              {item.title}
+            </p>
+            {item.brand || item.meta ? (
+              <p className="mt-1 truncate text-[11px] text-[#8a8a8a]">
+                {[item.brand, item.meta].filter(Boolean).join(" · ")}
+              </p>
             ) : null}
           </div>
 
-          <div
-            className={cn(
-              "absolute right-2.5 bottom-2.5 rounded-xl px-2.5 py-1.5 shadow-sm backdrop-blur-md",
-              signalGood
-                ? "bg-[#1f7a4d]/95 text-white"
-                : "bg-white/95 text-[#191919]",
-            )}
-          >
-            {item.showDemand ? (
-              <>
-                <p className="text-[20px] leading-none font-semibold tabular-nums">
-                  {Math.round(item.demand ?? 0)}
-                </p>
-                <p className="mt-0.5 text-[9px] font-semibold tracking-wider uppercase opacity-80">
-                  Score
-                </p>
-              </>
-            ) : (
-              <>
-                <p className="text-[20px] leading-none font-semibold tabular-nums">
-                  {item.keep != null ? signed(item.keep) : "—"}
-                </p>
-                <p className="mt-0.5 text-[9px] font-semibold tracking-wider uppercase opacity-80">
-                  Keep
-                </p>
-              </>
-            )}
-          </div>
-        </div>
-
-        <div className="flex flex-1 flex-col gap-2.5 px-3.5 pt-3 pb-2">
-          <p className="line-clamp-2 min-h-[2.6em] text-[13px] leading-snug font-semibold text-[#191919]">
-            {item.title}
-          </p>
-          {item.brand || item.meta ? (
-            <p className="truncate text-[11px] text-[#8a8a8a]">
-              {[item.brand, item.meta].filter(Boolean).join(" · ")}
-            </p>
-          ) : null}
-
-          {/* Multi-platform prices — the wow strip */}
-          <div className="mt-auto rounded-xl border border-[#e5e5e5] bg-[#f7f7f7] p-1.5">
-            <div className="mb-1 flex items-center justify-between px-1">
-              <p className="text-[9px] font-bold tracking-[0.14em] text-[#8a8a8a] uppercase">
-                Precios Higlou
-              </p>
-              <p className="text-[9px] font-semibold text-[#1f7a4d]">
-                {priced}/4 live
-              </p>
+          {/* Platform prices — pro data table feel */}
+          <div className="mt-auto overflow-hidden rounded-lg border border-[#ebebeb]">
+            <div className="flex items-center justify-between border-b border-[#ebebeb] bg-[#fafafa] px-2 py-1">
+              <span className="text-[9px] font-semibold tracking-[0.12em] text-[#8a8a8a] uppercase">
+                Precios verificados
+              </span>
+              <span className="text-[9px] font-medium tabular-nums text-[#707070]">
+                {priced} fuentes
+              </span>
             </div>
-            <div className="grid grid-cols-2 gap-1 sm:grid-cols-4">
+            <div className="grid grid-cols-4 divide-x divide-[#ebebeb] bg-white">
               {item.platforms.map((p, i) => (
                 <motion.div
                   key={p.key}
-                  initial={reduce ? false : { opacity: 0, y: 6 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.08 + i * 0.04, ease: EASE }}
-                  className={cn(
-                    "rounded-lg bg-white px-1.5 py-1.5 text-center",
-                    p.price != null && "ring-1 ring-[#1f7a4d]/15",
-                  )}
+                  initial={reduce ? false : { opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ delay: 0.2 + i * 0.05, duration: 0.3 }}
+                  className="px-1 py-2 text-center"
                 >
-                  <p className="text-[8px] font-bold tracking-wide text-[#8a8a8a] uppercase">
+                  <p className="text-[8px] font-semibold tracking-wide text-[#a0a0a0] uppercase">
                     {p.label}
                   </p>
                   <p
                     className={cn(
-                      "mt-0.5 text-[12px] font-bold tabular-nums",
-                      p.price != null ? "text-[#191919]" : "text-[#c0c0c0]",
+                      "mt-0.5 text-[12px] font-semibold tabular-nums",
+                      p.price != null ? "text-[#191919]" : "text-[#d0d0d0]",
                     )}
                   >
                     {money(p.price)}
@@ -236,7 +212,7 @@ export function WinnerProductTile({
         </div>
       </button>
 
-      <div className="flex items-center gap-1 border-t border-[#e5e5e5] px-2 py-1.5">
+      <div className="relative z-[1] flex items-center gap-0.5 border-t border-[#f0f0f0] px-1.5 py-1">
         <button
           type="button"
           disabled={locked}
@@ -245,10 +221,10 @@ export function WinnerProductTile({
             onToggleSelect();
           }}
           className={cn(
-            "inline-flex size-8 items-center justify-center rounded-lg transition",
+            "inline-flex size-8 items-center justify-center rounded-md transition",
             item.selected
               ? "bg-[#3665F3] text-white"
-              : "text-[#8a8a8a] hover:bg-[#f0f0f0] hover:text-[#191919]",
+              : "text-[#a0a0a0] hover:bg-[#f5f5f5] hover:text-[#191919]",
           )}
           aria-label={item.selected ? "Quitar selección" : "Seleccionar"}
         >
@@ -260,10 +236,10 @@ export function WinnerProductTile({
             target="_blank"
             rel="noopener noreferrer"
             onClick={(e) => e.stopPropagation()}
-            className="inline-flex h-8 items-center gap-1 rounded-lg px-2 text-[11px] font-semibold text-[#3665F3] hover:bg-[#eef2ff]"
+            className="inline-flex h-8 items-center gap-1 rounded-md px-2 text-[11px] font-medium text-[#555] hover:bg-[#f5f5f5] hover:text-[#191919]"
           >
-            Amz
-            <ExternalLink className="size-3 opacity-60" />
+            Amazon
+            <ExternalLink className="size-2.5 opacity-50" />
           </a>
         ) : null}
         {item.ebayUrl ? (
@@ -272,10 +248,10 @@ export function WinnerProductTile({
             target="_blank"
             rel="noopener noreferrer"
             onClick={(e) => e.stopPropagation()}
-            className="inline-flex h-8 items-center gap-1 rounded-lg px-2 text-[11px] font-semibold text-[#3665F3] hover:bg-[#eef2ff]"
+            className="inline-flex h-8 items-center gap-1 rounded-md px-2 text-[11px] font-medium text-[#555] hover:bg-[#f5f5f5] hover:text-[#191919]"
           >
             eBay
-            <ExternalLink className="size-3 opacity-60" />
+            <ExternalLink className="size-2.5 opacity-50" />
           </a>
         ) : null}
         <button
@@ -285,7 +261,7 @@ export function WinnerProductTile({
             e.stopPropagation();
             onSkip();
           }}
-          className="ml-auto inline-flex size-8 items-center justify-center rounded-lg text-[#8a8a8a] hover:bg-[#f0f0f0] hover:text-[#191919] disabled:opacity-40"
+          className="ml-auto inline-flex size-8 items-center justify-center rounded-md text-[#a0a0a0] hover:bg-[#f5f5f5] hover:text-[#191919] disabled:opacity-40"
           aria-label="Descartar"
         >
           <Trash2 className="size-3.5" />

@@ -35,7 +35,7 @@ export type WinnerDetailHit = {
   sellLabel: string;
   keep: number | null;
   demand: number | null;
-  showDemand: boolean;
+  showScore: boolean;
   board: OpportunityPriceBoard;
   platformUrls?: PlatformUrls | null;
   cost?: number | null;
@@ -87,7 +87,7 @@ export function WinnerDetailPanel({
             exit={reduce ? undefined : { x: "100%" }}
             transition={{ type: "spring", stiffness: 380, damping: 36 }}
           >
-            <header className="flex items-start justify-between gap-3 border-b border-[#efeae2] px-5 py-4">
+            <header className="flex items-start justify-between gap-3 border-b border-[#e5e5e5] px-5 py-4">
               <div className="min-w-0">
                 <p
                   className={cn(
@@ -101,28 +101,28 @@ export function WinnerDetailPanel({
                 >
                   {hit.playLabel}
                 </p>
-                <p className="mt-1 flex items-center gap-1.5 text-[13px] font-semibold text-[#141414]">
+                <p className="mt-1 flex items-center gap-1.5 text-[13px] font-semibold text-[#191919]">
                   {hit.buyLabel}
-                  <ArrowRight className="size-3.5 text-[#a8a29a]" />
+                  <ArrowRight className="size-3.5 text-[#a8a8a8]" />
                   {hit.sellLabel}
                 </p>
               </div>
               <div className="flex items-center gap-2">
                 <div className="text-right">
-                  {hit.showDemand ? (
+                  {hit.showScore ? (
                     <>
-                      <p className="font-display text-[28px] leading-none tabular-nums">
+                      <p className="text-[18px] font-semibold leading-none tabular-nums">
                         {Math.round(hit.demand ?? 0)}
                       </p>
-                      <p className="text-[9px] font-semibold tracking-wider text-[#8a847c] uppercase">
-                        Demand
+                      <p className="text-[9px] font-semibold tracking-wider text-[#8a8a8a] uppercase">
+                        Score
                       </p>
                     </>
                   ) : (
                     <>
                       <p
                         className={cn(
-                          "font-display text-[28px] leading-none tabular-nums",
+                          "text-[18px] font-semibold leading-none tabular-nums",
                           (hit.keep ?? 0) >= 12
                             ? "text-[#1f7a4d]"
                             : "text-[#b42318]",
@@ -130,7 +130,7 @@ export function WinnerDetailPanel({
                       >
                         {hit.keep != null ? signed(hit.keep) : "—"}
                       </p>
-                      <p className="text-[9px] font-semibold tracking-wider text-[#8a847c] uppercase">
+                      <p className="text-[9px] font-semibold tracking-wider text-[#8a8a8a] uppercase">
                         Keep neto
                       </p>
                     </>
@@ -139,7 +139,7 @@ export function WinnerDetailPanel({
                 <button
                   type="button"
                   onClick={onClose}
-                  className="inline-flex size-9 items-center justify-center rounded-full bg-[#f4f2ed] text-[#6b6560] hover:bg-[#ebe7e0] hover:text-[#141414]"
+                  className="inline-flex size-9 items-center justify-center rounded-full bg-[#f5f5f5] text-[#707070] hover:bg-[#ebebeb] hover:text-[#191919]"
                 >
                   <X className="size-4" />
                 </button>
@@ -148,7 +148,7 @@ export function WinnerDetailPanel({
 
             <div className="flex-1 space-y-4 overflow-y-auto px-5 py-4">
               <div className="flex gap-4">
-                <div className="relative size-28 shrink-0 overflow-hidden rounded-xl bg-[#f4f2ed]">
+                <div className="relative size-28 shrink-0 overflow-hidden rounded-xl bg-[#f5f5f5]">
                   {hit.imageUrl ? (
                     <Image
                       src={hit.imageUrl}
@@ -160,23 +160,23 @@ export function WinnerDetailPanel({
                   ) : null}
                 </div>
                 <div className="min-w-0 flex-1">
-                  <h2 className="text-[16px] leading-snug font-semibold text-[#141414]">
+                  <h2 className="text-[16px] leading-snug font-semibold text-[#191919]">
                     {hit.title}
                   </h2>
-                  <p className="mt-1 text-[12px] text-[#8a847c]">
+                  <p className="mt-1 text-[12px] text-[#8a8a8a]">
                     {[hit.brand, hit.meta].filter(Boolean).join(" · ")}
                   </p>
                 </div>
               </div>
 
-              <section className="overflow-hidden rounded-2xl border border-[#ebe7e0]">
-                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#efeae2] bg-[#faf9f6] px-3.5 py-2.5">
-                  <p className="text-[11px] font-semibold tracking-[0.12em] text-[#6b6560] uppercase">
+              <section className="overflow-hidden rounded-2xl border border-[#e5e5e5]">
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#e5e5e5] bg-[#fafafa] px-3.5 py-2.5">
+                  <p className="text-[11px] font-semibold tracking-[0.12em] text-[#707070] uppercase">
                     Precios verificados
                   </p>
                   <PlatformOpenLinks size="sm" urls={hit.platformUrls} />
                 </div>
-                <div className="grid grid-cols-2 gap-px bg-[#efeae2]">
+                <div className="grid grid-cols-2 gap-px bg-[#e5e5e5]">
                   {hit.board.platforms.map((p) => {
                     const href = p.url || null;
                     const role =
@@ -187,15 +187,15 @@ export function WinnerDetailPanel({
                           : null;
                     const cell = (
                       <>
-                        <p className="text-[10px] font-semibold tracking-wide text-[#8a847c] uppercase">
+                        <p className="text-[10px] font-semibold tracking-wide text-[#8a8a8a] uppercase">
                           {p.label}
                           {role ? ` · ${role}` : ""}
                         </p>
-                        <p className="mt-1 font-display text-[22px] leading-none tabular-nums">
+                        <p className="mt-1 text-[18px] font-semibold leading-none tabular-nums">
                           {money(p.price)}
                         </p>
                         {p.note ? (
-                          <p className="mt-1 text-[10px] text-[#8a847c]">
+                          <p className="mt-1 text-[10px] text-[#8a8a8a]">
                             {p.note}
                           </p>
                         ) : null}
@@ -218,7 +218,7 @@ export function WinnerDetailPanel({
                         href={href}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className={cn(cls, "hover:bg-[#faf9f6]")}
+                        className={cn(cls, "hover:bg-[#fafafa]")}
                       >
                         {cell}
                       </a>
@@ -229,7 +229,7 @@ export function WinnerDetailPanel({
                     );
                   })}
                 </div>
-                <div className="border-t border-[#efeae2] px-3.5 py-2.5 text-[12px] text-[#6b6560]">
+                <div className="border-t border-[#e5e5e5] px-3.5 py-2.5 text-[12px] text-[#707070]">
                   Compra {money(hit.board.activeBuy)}
                   <span className="mx-1.5 text-[#c5bfb5]">→</span>
                   Venta {money(hit.board.activeSell)}
@@ -257,16 +257,16 @@ export function WinnerDetailPanel({
                   hit.ebayPrice ??
                   hit.salePrice
                 }
-                className="!border-[#ebe7e0] overflow-hidden rounded-2xl"
+                className="!border-[#e5e5e5] overflow-hidden rounded-2xl"
               />
             </div>
 
-            <footer className="flex gap-2 border-t border-[#efeae2] bg-[#faf9f6] px-5 py-3.5">
+            <footer className="flex gap-2 border-t border-[#e5e5e5] bg-[#fafafa] px-5 py-3.5">
               <button
                 type="button"
                 disabled={locked}
                 onClick={onSkip}
-                className="h-11 flex-1 rounded-xl border border-[#ddd7cd] bg-white text-[13px] font-semibold text-[#6b6560] hover:border-[#141414] hover:text-[#141414] disabled:opacity-40"
+                className="h-11 flex-1 rounded-xl border border-[#ddd7cd] bg-white text-[13px] font-semibold text-[#707070] hover:border-[#141414] hover:text-[#191919] disabled:opacity-40"
               >
                 Descartar
               </button>

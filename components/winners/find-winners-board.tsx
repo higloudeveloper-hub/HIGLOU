@@ -578,11 +578,7 @@ export function FindWinnersBoard({
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder={
-                retail
-                  ? "Producto, ASIN, UPC…"
-                  : "Buscá producto o ASIN · vacío = escanear todo"
-              }
+              placeholder="Buscá producto o ASIN · vacío = escanear winners"
               disabled={locked || scanning}
               className="h-12 w-full rounded-xl border border-[#e5e5e5] bg-white pr-3 pl-10 text-[15px] outline-none transition focus:border-[#3665F3]"
             />
@@ -616,9 +612,9 @@ export function FindWinnersBoard({
         <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-2 px-4 pb-3 md:px-8">
           {(
             [
-              ["keep", "Keep"],
-              ["demand", "Demanda"],
+              ["demand", "Score"],
               ["new", "Nuevas"],
+              ["keep", "Keep"],
             ] as const
           ).map(([key, label]) => (
             <button

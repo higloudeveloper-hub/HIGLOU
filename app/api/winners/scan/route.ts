@@ -198,11 +198,40 @@ export async function POST(request: Request) {
       });
     }
 
+    // Keepa Amazon winners → affiliate + smart /go (ready for Facebook ads)
+    let affiliate: {
+      created: number;
+      reused: number;
+      skipped: number;
+      error?: string;
+    } | null = null;
+    try {
+      const { ensureAffiliateLinksFromKeepaWinners } = await import(
+        "@/lib/monetization/affiliate/from-keepa-winners"
+      );
+      const aff = await ensureAffiliateLinksFromKeepaWinners(auth.supabase, {
+        userId: auth.user.id,
+        hits: withBoards,
+        source: "keepa_scan",
+        campaignName: "Keepa winners → Facebook",
+        limit: body.limit,
+      });
+      affiliate = {
+        created: aff.created,
+        reused: aff.reused,
+        skipped: aff.skipped,
+        error: aff.error,
+      };
+    } catch {
+      affiliate = null;
+    }
+
     return NextResponse.json({
       ok: true,
       products: withBoards,
       charged: true,
       spent: spent.spent,
+      affiliate,
       sources: {
         ...found.sources,
         retailSearch: withBoards.some((h) =>

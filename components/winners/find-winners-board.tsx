@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import { toast } from "sonner";
 import {
   BadgeCheck,
   Flame,
@@ -58,6 +59,12 @@ type SearchBody = {
   charged?: boolean;
   products?: BoardHit[];
   analyzed?: number;
+  affiliate?: {
+    created?: number;
+    reused?: number;
+    skipped?: number;
+    error?: string;
+  } | null;
   sources?: {
     keepa?: boolean;
     ebayLive?: boolean;
@@ -277,6 +284,29 @@ export function FindWinnersBoard({
         return;
       }
       applyFound(body.products || []);
+      const aff = body.affiliate;
+      if (aff?.created && aff.created > 0) {
+        toast.success(
+          `${aff.created} ganador${aff.created === 1 ? "" : "es"} Keepa → afiliado listo para Facebook`,
+          {
+            action: {
+              label: "Facebook",
+              onClick: () => {
+                window.location.href = "/facebook";
+              },
+            },
+          },
+        );
+      } else if (aff?.error && /tag|Affiliate Engine/i.test(aff.error)) {
+        toast.message(aff.error, {
+          action: {
+            label: "Affiliate",
+            onClick: () => {
+              window.location.href = "/affiliate";
+            },
+          },
+        });
+      }
       await refresh();
     } catch {
       setError("Error de red. Intenta otra vez.");
@@ -339,6 +369,29 @@ export function FindWinnersBoard({
         return;
       }
       applyFound(body.products || []);
+      const aff = body.affiliate;
+      if (aff?.created && aff.created > 0) {
+        toast.success(
+          `${aff.created} ganador${aff.created === 1 ? "" : "es"} Keepa → afiliado listo para Facebook`,
+          {
+            action: {
+              label: "Facebook",
+              onClick: () => {
+                window.location.href = "/facebook";
+              },
+            },
+          },
+        );
+      } else if (aff?.error && /tag|Affiliate Engine/i.test(aff.error)) {
+        toast.message(aff.error, {
+          action: {
+            label: "Affiliate",
+            onClick: () => {
+              window.location.href = "/affiliate";
+            },
+          },
+        });
+      }
     } catch {
       setError("Error de red. Intenta otra vez.");
     } finally {

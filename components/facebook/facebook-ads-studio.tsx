@@ -210,6 +210,24 @@ export function FacebookAdsStudio() {
       if (affRes.ok) {
         const body = (await affRes.json()) as { links?: AffLink[] };
         setLinks(body.links || []);
+        // Backfill Keepa ledger winners → affiliate (idempotent)
+        void fetch("/api/money/affiliate/sync-keepa-winners", {
+          method: "POST",
+        })
+          .then(async (res) => {
+            if (!res.ok) return;
+            const sync = (await res.json()) as { created?: number };
+            if ((sync.created || 0) > 0) {
+              const refreshed = await fetch("/api/money/affiliate/links", {
+                cache: "no-store",
+              });
+              if (refreshed.ok) {
+                const again = (await refreshed.json()) as { links?: AffLink[] };
+                setLinks(again.links || []);
+              }
+            }
+          })
+          .catch(() => undefined);
       } else setLinks([]);
 
       if (prodRes.ok) {
@@ -1119,10 +1137,10 @@ function EmptySource({ source }: { source: SourceTab }) {
   const copy =
     source === "affiliate"
       ? {
-          title: "Sin afiliados",
-          body: "Creá un link desde Market → Ganar.",
-          href: "/market",
-          cta: "Market",
+          title: "Sin afiliados aún",
+          body: "Escaneá Find Winners (Keepa Amazon) — cada ganador se convierte solo en link de afiliado listo para ads.",
+          href: "/winners",
+          cta: "Find Winners",
         }
       : source === "imported"
         ? {

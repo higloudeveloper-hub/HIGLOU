@@ -115,6 +115,22 @@ export async function POST(request: Request) {
       await admin.from("opportunity_ledger").upsert(rows, {
         onConflict: "user_id,mode,asin",
       });
+
+      // Keepa Amazon winners in the ledger → affiliate links for Facebook
+      try {
+        const { ensureAffiliateLinksFromKeepaWinners } = await import(
+          "@/lib/monetization/affiliate/from-keepa-winners"
+        );
+        await ensureAffiliateLinksFromKeepaWinners(auth.supabase, {
+          userId: auth.user.id,
+          hits,
+          source: "keepa_ledger",
+          campaignName: "Keepa winners → Facebook",
+          limit: 40,
+        });
+      } catch {
+        /* affiliate optional — ledger already saved */
+      }
     }
     if (parsed.learn.length) {
       await admin.from("opportunity_niche_stats").upsert(

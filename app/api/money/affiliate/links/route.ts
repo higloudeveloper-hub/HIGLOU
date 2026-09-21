@@ -217,9 +217,24 @@ export async function GET() {
     }
   }
 
-  // Keepa fill for ASINs still missing a real I/ image or title
+  // Keepa fill for ASINs still missing a real I/ image, title, or buy box
+  const priceByAsin = new Map<string, number>();
+  const seedPrice = (asin: string, snap: { buyBoxPrice?: number | null; newPrice?: number | null }) => {
+    const price = snap.buyBoxPrice ?? snap.newPrice;
+    if (price != null && price > 0 && !priceByAsin.has(asin)) {
+      priceByAsin.set(asin, price);
+    }
+  };
+  for (const asin of asins) {
+    const cached = getCachedKeepaProduct(asin);
+    if (cached) seedPrice(asin, cached);
+  }
+
   const needKeepa = asins.filter(
-    (asin) => !imageByAsin.has(asin) || !titleByAsin.has(asin),
+    (asin) =>
+      !imageByAsin.has(asin) ||
+      !titleByAsin.has(asin) ||
+      !priceByAsin.has(asin),
   );
   if (needKeepa.length) {
     const { hits, missing } = takeCachedKeepaProducts(needKeepa);
@@ -231,12 +246,14 @@ export async function GET() {
       if (snap.title && !titleByAsin.has(asin)) {
         titleByAsin.set(asin, snap.title);
       }
+      seedPrice(asin, snap);
     }
     if (missing.length && isKeepaConfigured()) {
       try {
         const json = await keepaGet("product", {
           asin: missing.slice(0, 12).join(","),
-          stats: 0,
+          stats: 90,
+          history: 0,
         });
         for (const row of json.products || []) {
           const snap = parseKeepaProduct(row);
@@ -249,6 +266,7 @@ export async function GET() {
           if (snap.title && !titleByAsin.has(asin)) {
             titleByAsin.set(asin, snap.title);
           }
+          seedPrice(asin, snap);
         }
       } catch {
         // Keepa optional — client still has ASIN image fallbacks
@@ -264,6 +282,7 @@ export async function GET() {
       if (snap.title && !titleByAsin.has(asin)) {
         titleByAsin.set(asin, snap.title);
       }
+      seedPrice(asin, snap);
     }
   }
 
@@ -286,6 +305,7 @@ export async function GET() {
         smartPath: smartByAff.get(link.id) || null,
         imageUrl,
         title,
+        amazonPrice: priceByAsin.get(asin) ?? null,
       };
     }),
   });

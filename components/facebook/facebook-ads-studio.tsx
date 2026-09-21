@@ -19,6 +19,7 @@ import {
   amazonAsinPrimaryImage,
 } from "@/lib/amazon/asin-image";
 import { CREDIT_ACTIONS } from "@/lib/credits/costs";
+import { promoPriceLabelForLink } from "@/lib/facebook/destination-price";
 import { cn } from "@/lib/utils";
 
 type AffLink = {
@@ -30,6 +31,8 @@ type AffLink = {
   smartPath?: string | null;
   imageUrl?: string | null;
   title?: string | null;
+  /** Live Amazon buy box when Keepa hydrated the link */
+  amazonPrice?: number | null;
 };
 
 type ImportedProduct = {
@@ -51,6 +54,10 @@ type MarketDrop = {
   photo: string;
   affiliateUrl?: string | null;
   sell?: number | null;
+  buy?: number | null;
+  lane?: "arbitrage" | "amazon" | "retail";
+  amazonPrice?: number | null;
+  ebayPrice?: number | null;
 };
 
 type FbConn = {
@@ -71,6 +78,7 @@ type PickCard = {
   linkUrl: string;
   priceLabel?: string | null;
   meta?: string;
+  asin?: string | null;
 };
 
 type CustomDraft = {
@@ -91,11 +99,11 @@ function absoluteUrl(path: string | null | undefined, fallback: string) {
 }
 
 function money(n: number | null | undefined) {
-  if (n == null || !Number.isFinite(n)) return null;
+  if (n == null || !Number.isFinite(n) || n <= 0) return null;
   return new Intl.NumberFormat("en-US", {
     style: "currency",
     currency: "USD",
-    maximumFractionDigits: 0,
+    maximumFractionDigits: 2,
   }).format(n);
 }
 
@@ -293,14 +301,23 @@ export function FacebookAdsStudio() {
           "Oferta verificada";
         const title = rawTitle.replace(/^ASIN\s+[A-Z0-9]{10}\s*/i, "").trim() ||
           "Oferta verificada";
+        const linkUrl = absoluteUrl(l.smartPath, l.destination_url);
+        const marketDrop = drops.find(
+          (d) => String(d.asin || "").toUpperCase() === asin,
+        );
         return {
           id: `aff:${l.id}`,
           title: title.slice(0, 80),
           imageUrl: img.url || amazonAsinPrimaryImage(l.asin),
           imageFallbacks: img.fallbacks,
-          linkUrl: absoluteUrl(l.smartPath, l.destination_url),
+          linkUrl,
           meta: l.smartPath || l.source || "affiliate",
-          priceLabel: null,
+          asin: asin || null,
+          // Amazon destination only — never invent a price from Market sell
+          priceLabel: promoPriceLabelForLink({
+            linkUrl: l.destination_url || linkUrl,
+            amazonPrice: l.amazonPrice ?? marketDrop?.amazonPrice ?? null,
+          }),
         };
       });
     }
@@ -326,13 +343,27 @@ export function FacebookAdsStudio() {
           : asin
             ? "Amazon"
             : "Listing";
+        const marketDrop = asin
+          ? drops.find(
+              (d) =>
+                String(d.asin || "").toUpperCase() === asin.toUpperCase(),
+            )
+          : undefined;
+        // eBay listing → own ask; Amazon → live buy box only (not listing sell)
+        const priceLabel = ebayId
+          ? money(p.price)
+          : promoPriceLabelForLink({
+              linkUrl,
+              amazonPrice: marketDrop?.amazonPrice ?? null,
+            });
         return {
           id: `imp:${p.id}`,
           title: p.title || "Listing",
           imageUrl: img.url,
           imageFallbacks: img.fallbacks,
           linkUrl,
-          priceLabel: money(p.price),
+          priceLabel,
+          asin: asin || null,
           meta: p.brand ? `${channel} · ${p.brand}` : channel,
         };
       });
@@ -340,15 +371,30 @@ export function FacebookAdsStudio() {
     if (source === "custom") {
       return customCards;
     }
-    return drops.map((d) => ({
-      id: `mkt:${d.id}`,
-      title: d.title,
-      imageUrl: d.photo,
-      imageFallbacks: amazonAsinImageCandidates(d.asin),
-      linkUrl: d.affiliateUrl || `https://www.amazon.com/dp/${d.asin}`,
-      priceLabel: money(d.sell),
-      meta: d.asin,
-    }));
+    return drops.map((d) => {
+      const linkUrl =
+        d.affiliateUrl || `https://www.amazon.com/dp/${d.asin}`;
+      // Link opens Amazon — use buy box / amazonPrice, never arbitrage sell
+      const amazonPrice =
+        d.amazonPrice ??
+        (d.lane === "amazon" ? d.sell : null) ??
+        d.buy ??
+        null;
+      return {
+        id: `mkt:${d.id}`,
+        title: d.title,
+        imageUrl: d.photo,
+        imageFallbacks: amazonAsinImageCandidates(d.asin),
+        linkUrl,
+        priceLabel: promoPriceLabelForLink({
+          linkUrl,
+          amazonPrice,
+          ebayPrice: d.ebayPrice,
+        }),
+        asin: d.asin || null,
+        meta: d.asin,
+      };
+    });
   }, [source, links, imported, drops, customCards, marketPhotoByAsin, titleByAsin]);
 
   const addCustomCard = () => {
@@ -466,6 +512,7 @@ export function FacebookAdsStudio() {
           c.linkUrl,
         ),
         priceLabel: c.priceLabel,
+        asin: c.asin || (c.meta && /^[A-Z0-9]{10}$/i.test(c.meta) ? c.meta : null),
       }));
       if (payloadCards.some((c) => !c.imageUrl)) {
         toast.error("Falta imagen en algún producto. Probá Mis listings o Market.");

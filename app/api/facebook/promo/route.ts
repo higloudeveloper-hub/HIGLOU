@@ -14,6 +14,7 @@ const cardSchema = z.object({
   imageUrl: z.string().url(),
   linkUrl: z.string().url(),
   priceLabel: z.string().max(40).optional().nullable(),
+  asin: z.string().max(12).optional().nullable(),
 });
 
 const bodySchema = z

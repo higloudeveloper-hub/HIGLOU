@@ -4,6 +4,7 @@ import {
   loadFacebookPageCredentials,
   markFacebookConnectionMeta,
 } from "@/lib/facebook/connection";
+import { enrichPromoCardPrices } from "@/lib/facebook/enrich-promo-prices";
 import { shareAffiliateToFacebook } from "@/lib/facebook/share";
 
 export type PromoFormat = "ads" | "carousel" | "vitrina";
@@ -14,6 +15,8 @@ export type PromoCard = {
   imageUrl: string;
   linkUrl: string;
   priceLabel?: string | null;
+  /** When link is a smart redirect, still stamp Amazon buy box via ASIN */
+  asin?: string | null;
 };
 
 function postUrlFromId(postId: string): string {
@@ -155,12 +158,14 @@ export async function publishFacebookPromo(
   | { ok: true; mode: "sharer"; shareUrl: string }
   | { ok: false; error: string }
 > {
-  const cards = opts.cards
+  const rawCards = opts.cards
     .map((c) => ({
       ...c,
       title: String(c.title || "").trim(),
       imageUrl: String(c.imageUrl || "").trim(),
       linkUrl: String(c.linkUrl || "").trim(),
+      priceLabel: c.priceLabel ?? null,
+      asin: c.asin ? String(c.asin).trim().toUpperCase() : null,
     }))
     .filter(
       (c) =>
@@ -169,6 +174,9 @@ export async function publishFacebookPromo(
         c.linkUrl &&
         /^https?:\/\//i.test(c.linkUrl),
     );
+
+  // Live Keepa buy box for Amazon links — never publish arbitrage "sell"
+  const cards = await enrichPromoCardPrices(rawCards);
 
   const creds = await loadFacebookPageCredentials(supabase, opts.userId);
 

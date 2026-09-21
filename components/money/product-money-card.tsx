@@ -439,11 +439,21 @@ export function ProductMoneyCard({
         return;
       }
       if (body.mode === "page_post") {
-        toast.success("Publicado en tu Facebook Page");
-        if (body.postUrl) window.open(body.postUrl, "_blank", "noopener,noreferrer");
+        toast.success("Publicado en tu Facebook Page vía API");
+        if (body.postUrl) {
+          toast.message("Post listo", {
+            action: {
+              label: "Ver en Facebook",
+              onClick: () =>
+                window.open(body.postUrl!, "_blank", "noopener,noreferrer"),
+            },
+          });
+        }
       } else if (body.shareUrl) {
         window.open(body.shareUrl, "_blank", "noopener,noreferrer");
-        toast.message("Abriendo Facebook — conectá tu Page en Settings para post directo");
+        toast.message(
+          "Conectá tu Page en Settings → Facebook para publicar por API",
+        );
       }
       if (path) setSmartPath(path);
     } finally {

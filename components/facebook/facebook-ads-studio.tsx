@@ -56,6 +56,7 @@ type FbConn = {
   connected: boolean;
   pageName: string | null;
   pageId: string | null;
+  lastError?: string | null;
 };
 
 type SourceTab = "affiliate" | "imported" | "market" | "custom";
@@ -506,22 +507,25 @@ export function FacebookAdsStudio() {
       if (body.mode === "page_post") {
         toast.success(
           format === "ads"
-            ? "Publicado en tu Page"
+            ? "Publicado en tu Page vía API"
             : format === "vitrina"
-              ? "Vitrina publicada"
-              : "Carrusel publicado",
+              ? "Vitrina publicada vía API"
+              : "Carrusel publicado vía API",
         );
         if (body.postUrl) {
           setPostUrl(body.postUrl);
-          window.open(body.postUrl, "_blank", "noopener,noreferrer");
+          // Stay in Higlou — link to open the post if they want
         }
       } else if (body.shareUrl) {
+        // Manual sharer only when Page is NOT connected
+        if (fb?.connected) {
+          toast.error(
+            "La Page está marcada conectada pero Graph no publicó. Reconectá el token en Settings → Facebook.",
+          );
+          return;
+        }
         window.open(body.shareUrl, "_blank", "noopener,noreferrer");
-        toast.message(
-          fb?.connected
-            ? "Abriendo Facebook…"
-            : "Conectá tu Page para publicar directo",
-        );
+        toast.message("Conectá tu Page en Settings para publicar por API");
       }
     } finally {
       setBusy(false);
@@ -555,7 +559,7 @@ export function FacebookAdsStudio() {
         </Link>
       </div>
 
-      {!fb?.connected || !hasTag ? (
+      {!fb?.connected || !hasTag || fb?.lastError ? (
         <div className="flex flex-wrap items-center gap-2 border-b border-[#e5e5e5] bg-[#f7f7f7] px-4 py-2 text-[12px] text-[#707070] md:px-5">
           {!fb?.connected ? (
             <Link href="/settings#facebook-store" className="font-medium text-[#3665F3] hover:underline">
@@ -567,6 +571,11 @@ export function FacebookAdsStudio() {
             <Link href="/affiliate" className="font-medium text-[#3665F3] hover:underline">
               Pegá tu Associate tag
             </Link>
+          ) : null}
+          {fb?.lastError ? (
+            <span className="w-full font-medium text-[#b42318] sm:w-auto">
+              Último error Graph: {fb.lastError}
+            </span>
           ) : null}
         </div>
       ) : null}

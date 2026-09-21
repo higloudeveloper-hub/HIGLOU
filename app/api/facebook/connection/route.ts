@@ -13,7 +13,7 @@ export const runtime = "nodejs";
 const saveSchema = z.object({
   pageId: z.string().min(5).max(40),
   pageName: z.string().max(120).optional().nullable(),
-  accessToken: z.string().min(20).max(800),
+  accessToken: z.string().min(20).max(4000),
 });
 
 export async function GET() {

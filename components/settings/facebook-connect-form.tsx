@@ -161,19 +161,25 @@ export function FacebookConnectForm() {
           <>
             <ol className="grid gap-2 sm:grid-cols-3">
               {[
-                "Meta Business → tu Page",
-                "Copiá Page ID",
-                "Copiá Page access token",
+                "Graph Explorer → GET /me/accounts",
+                "Copiá el id de tu Page",
+                "Copiá el access_token de esa Page (no el User token)",
               ].map((step, i) => (
                 <li
                   key={step}
-                  className="rounded-2xl border border-[#ebe7e0] bg-[#faf9f6] px-3 py-2.5 text-[12px] text-[#6b6560]"
+                  className="rounded-2xl border border-[#e8e8e8] bg-[#fafafa] px-3 py-2.5 text-[12px] text-[#707070]"
                 >
-                  <span className="font-bold text-[#141414]">{i + 1}.</span>{" "}
+                  <span className="font-bold text-[#191919]">{i + 1}.</span>{" "}
                   {step}
                 </li>
               ))}
             </ol>
+
+            {connection?.lastError ? (
+              <p className="rounded-2xl border border-red-200 bg-red-50 px-3.5 py-2.5 text-[12px] text-red-800">
+                {connection.lastError}
+              </p>
+            ) : null}
 
             {!connection?.encryptionReady ? (
               <p className="rounded-2xl border border-amber-200 bg-amber-50 px-3.5 py-2.5 text-[12px] text-amber-900">

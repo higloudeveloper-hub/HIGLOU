@@ -23,7 +23,7 @@ async function uploadUnpublishedPhoto(
   accessToken: string,
   imageUrl: string,
   caption?: string,
-): Promise<string | null> {
+): Promise<{ id: string | null; error?: string }> {
   const endpoint = new URL(`https://graph.facebook.com/v21.0/${pageId}/photos`);
   const res = await fetch(endpoint, {
     method: "POST",
@@ -37,15 +37,24 @@ async function uploadUnpublishedPhoto(
   });
   const body = (await res.json().catch(() => null)) as {
     id?: string;
-    error?: { message?: string };
+    error?: { message?: string; error_user_msg?: string };
   } | null;
-  if (!res.ok || !body?.id) return null;
-  return body.id;
+  if (!res.ok || !body?.id) {
+    return {
+      id: null,
+      error:
+        body?.error?.error_user_msg ||
+        body?.error?.message ||
+        `Facebook photos ${res.status}`,
+    };
+  }
+  return { id: body.id };
 }
 
 /**
  * Organic Page multi-photo post (carrusel / vitrina style).
  * True Ads carousel needs Marketing API later — this ships a swipeable photo pack + links.
+ * When Page is connected, always uses Graph API — never the Facebook sharer dialog.
  */
 export async function publishFacebookPromo(
   supabase: SupabaseClient,
@@ -80,6 +89,7 @@ export async function publishFacebookPromo(
       userId: opts.userId,
       url: first.linkUrl,
       message: opts.message,
+      imageUrl: first.imageUrl,
     });
   }
 
@@ -99,12 +109,13 @@ export async function publishFacebookPromo(
 
   const creds = await loadFacebookPageCredentials(supabase, opts.userId);
   if (!creds) {
-    // Fallback: open sharer on the first link
+    // Not connected — only then allow manual sharer on first link
     const first = cards[0]!;
     return shareAffiliateToFacebook(supabase, {
       userId: opts.userId,
       url: first.linkUrl || first.imageUrl,
       message: opts.message,
+      imageUrl: first.imageUrl,
     });
   }
 
@@ -124,33 +135,37 @@ export async function publishFacebookPromo(
 
   try {
     const mediaIds: string[] = [];
+    const uploadErrors: string[] = [];
     const cover = String(opts.coverImageUrl || "").trim();
     if (opts.format === "vitrina" && cover && /^https?:\/\//i.test(cover)) {
-      const coverId = await uploadUnpublishedPhoto(
+      const coverUp = await uploadUnpublishedPhoto(
         creds.pageId,
         creds.accessToken,
         cover,
         opts.collectionTitle || "Vitrina",
       );
-      if (coverId) mediaIds.push(coverId);
+      if (coverUp.id) mediaIds.push(coverUp.id);
+      else if (coverUp.error) uploadErrors.push(coverUp.error);
     }
 
     for (const card of cards) {
-      const id = await uploadUnpublishedPhoto(
+      const up = await uploadUnpublishedPhoto(
         creds.pageId,
         creds.accessToken,
         card.imageUrl,
         card.title,
       );
-      if (id) mediaIds.push(id);
+      if (up.id) mediaIds.push(up.id);
+      else if (up.error) uploadErrors.push(up.error);
     }
 
     if (mediaIds.length < 2) {
-      // Fall back to single link post
+      // Connected but multi-photo failed — try single photo Ads post, never sharer
       return shareAffiliateToFacebook(supabase, {
         userId: opts.userId,
         url: cards[0]!.linkUrl,
         message: opts.message,
+        imageUrl: cards[0]!.imageUrl,
       });
     }
 
@@ -168,23 +183,23 @@ export async function publishFacebookPromo(
     });
     const body = (await res.json().catch(() => null)) as {
       id?: string;
-      error?: { message?: string };
+      error?: { message?: string; error_user_msg?: string };
     } | null;
 
     if (!res.ok || !body?.id) {
+      const err =
+        body?.error?.error_user_msg ||
+        body?.error?.message ||
+        uploadErrors[0] ||
+        "No se pudo publicar el carrusel. Revisá el token de la Page (pages_manage_posts).";
       await supabase
         .from("facebook_connections")
         .update({
-          last_error: body?.error?.message || `Facebook ${res.status}`,
+          last_error: err,
           updated_at: new Date().toISOString(),
         })
         .eq("user_id", opts.userId);
-      return {
-        ok: false,
-        error:
-          body?.error?.message ||
-          "No se pudo publicar el carrusel. Revisá el token de la Page.",
-      };
+      return { ok: false, error: err };
     }
 
     await supabase

@@ -203,15 +203,29 @@ export function AffiliateStudio() {
         return;
       }
       if (body.mode === "page_post") {
-        toast.success("Publicado en tu Facebook Page");
-        if (body.postUrl) window.open(body.postUrl, "_blank", "noopener,noreferrer");
-      } else if (body.shareUrl) {
-        window.open(body.shareUrl, "_blank", "noopener,noreferrer");
-        toast.message(
-          fbConnected
-            ? "Abriendo Facebook…"
-            : "Conectá Facebook en Integraciones para post directo",
+        toast.success(
+          body.postUrl
+            ? "Publicado en tu Facebook Page vía API"
+            : "Publicado en tu Facebook Page vía API",
         );
+        if (body.postUrl) {
+          toast.message("Post listo", {
+            action: {
+              label: "Ver en Facebook",
+              onClick: () =>
+                window.open(body.postUrl!, "_blank", "noopener,noreferrer"),
+            },
+          });
+        }
+      } else if (body.shareUrl) {
+        if (fbConnected) {
+          toast.error(
+            "Graph no publicó. Reconectá el Page token en Settings → Facebook.",
+          );
+          return;
+        }
+        window.open(body.shareUrl, "_blank", "noopener,noreferrer");
+        toast.message("Conectá Facebook en Settings para post por API");
       }
     } finally {
       setBusyId(null);

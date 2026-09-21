@@ -51,6 +51,45 @@ export async function getFacebookConnectionPublic(
     };
   }
 
+  // Row exists but token must decrypt — otherwise UI lies "conectada" while publish falls back
+  if (!encryptionReady) {
+    return {
+      connected: false,
+      pageId: row.page_id,
+      pageName: row.page_name,
+      connectedAt: row.connected_at,
+      lastError:
+        "Falta FACEBOOK_TOKEN_ENCRYPTION_KEY (o EBAY_TOKEN_ENCRYPTION_KEY) en el servidor.",
+      lastShareAt: row.last_share_at,
+      encryptionReady,
+    };
+  }
+  try {
+    const token = decryptFacebookToken(row.access_token_enc);
+    if (!token) {
+      return {
+        connected: false,
+        pageId: row.page_id,
+        pageName: row.page_name,
+        connectedAt: row.connected_at,
+        lastError: "Token ilegible — reconectá la Page en Settings.",
+        lastShareAt: row.last_share_at,
+        encryptionReady,
+      };
+    }
+  } catch {
+    return {
+      connected: false,
+      pageId: row.page_id,
+      pageName: row.page_name,
+      connectedAt: row.connected_at,
+      lastError:
+        "No se pudo leer el token (clave de cifrado distinta). Reconectá la Page.",
+      lastShareAt: row.last_share_at,
+      encryptionReady,
+    };
+  }
+
   return {
     connected: true,
     pageId: row.page_id,
@@ -60,6 +99,47 @@ export async function getFacebookConnectionPublic(
     lastShareAt: row.last_share_at,
     encryptionReady,
   };
+}
+
+/** Confirm Page ID + Page access token against Graph before storing. */
+export async function verifyFacebookPageToken(
+  pageId: string,
+  accessToken: string,
+): Promise<{ ok: true; pageName: string | null } | { ok: false; error: string }> {
+  try {
+    const me = new URL(`https://graph.facebook.com/v21.0/${pageId}`);
+    me.searchParams.set("fields", "id,name");
+    me.searchParams.set("access_token", accessToken);
+    const res = await fetch(me);
+    const body = (await res.json().catch(() => null)) as {
+      id?: string;
+      name?: string;
+      error?: { message?: string; code?: number };
+    } | null;
+    if (!res.ok || !body?.id) {
+      return {
+        ok: false,
+        error:
+          body?.error?.message ||
+          "Token inválido. Usá el access_token de la Page desde GET /me/accounts (no el User token).",
+      };
+    }
+    if (String(body.id) !== pageId.replace(/\D/g, "") && String(body.id) !== pageId) {
+      // Graph sometimes returns the same id as string — allow match without digits-only
+      if (String(body.id).replace(/\D/g, "") !== pageId.replace(/\D/g, "")) {
+        return {
+          ok: false,
+          error: `El token no corresponde al Page ID ${pageId}. Copiá el id + access_token del mismo ítem en /me/accounts.`,
+        };
+      }
+    }
+    return { ok: true, pageName: body.name || null };
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : "No se pudo verificar el token",
+    };
+  }
 }
 
 export async function saveFacebookConnection(
@@ -87,6 +167,12 @@ export async function saveFacebookConnection(
     };
   }
 
+  // Verify with Graph before saving — catches User tokens / bad Page ID early
+  const verified = await verifyFacebookPageToken(pageId, token);
+  if (!verified.ok) {
+    return { ok: false, error: verified.error };
+  }
+
   let enc: string;
   try {
     enc = encryptFacebookToken(token);
@@ -101,7 +187,8 @@ export async function saveFacebookConnection(
     {
       user_id: opts.userId,
       page_id: pageId,
-      page_name: String(opts.pageName || "").trim() || null,
+      page_name:
+        String(opts.pageName || "").trim() || verified.pageName || null,
       access_token_enc: enc,
       connected_at: new Date().toISOString(),
       revoked_at: null,

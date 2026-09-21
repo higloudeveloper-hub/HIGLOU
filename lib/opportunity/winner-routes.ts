@@ -1,11 +1,11 @@
 import type { OpportunityMode } from "@/lib/opportunity/types";
 
-/** Two plays the seller picks first — then a concrete buy→sell route. */
-export type WinnerPlay = "arbitrage" | "amazon_direct";
+/** Finder plays shown in Find Winners (arbitrage removed from UI). */
+export type WinnerPlay = "amazon_direct";
 
 export type WinnerRoute = {
   id: OpportunityMode;
-  play: WinnerPlay;
+  play: WinnerPlay | "arbitrage";
   group: "arbitrage" | "retail" | "demand";
   label: string;
   buy: string;
@@ -16,11 +16,21 @@ export type WinnerRoute = {
 };
 
 /**
- * Real routes we ship in the UI.
- * Extra retail modes stay available to the API but are hidden — they rarely
- * return winners and confuse the finder.
+ * Find Winners UI is demand-first: verified trending Amazon winners with
+ * multi-platform prices. Arbitrage / retail modes stay API-compatible only.
  */
 export const WINNER_ROUTES: WinnerRoute[] = [
+  {
+    id: "amazon",
+    play: "amazon_direct",
+    group: "demand",
+    label: "Winners verificados",
+    buy: "Supplier",
+    sell: "Amazon",
+    hint: "Tendencias Keepa · precios en cada plataforma",
+    ui: true,
+  },
+  // API-only (hidden) — Market / imports / older ledgers still use these
   {
     id: "amazon_to_ebay",
     play: "arbitrage",
@@ -29,19 +39,8 @@ export const WINNER_ROUTES: WinnerRoute[] = [
     buy: "Amazon",
     sell: "eBay",
     hint: "Compras en Amazon, vendes en eBay · keep neto",
-    ui: true,
+    ui: false,
   },
-  {
-    id: "amazon",
-    play: "amazon_direct",
-    group: "demand",
-    label: "Vender en Amazon",
-    buy: "Supplier",
-    sell: "Amazon",
-    hint: "Demanda Keepa · listás directo en Amazon",
-    ui: true,
-  },
-  // API-only (hidden) — kept for older imports / deep links
   {
     id: "ebay_to_amazon",
     play: "arbitrage",
@@ -101,15 +100,9 @@ export const WINNER_PLAYS: Array<{
   defaultMode: OpportunityMode;
 }> = [
   {
-    id: "arbitrage",
-    title: "Arbitraje",
-    subtitle: "Amazon → eBay · keep neto",
-    defaultMode: "amazon_to_ebay",
-  },
-  {
     id: "amazon_direct",
-    title: "Vender en Amazon",
-    subtitle: "Demanda Keepa · listás en Amazon",
+    title: "Winners",
+    subtitle: "Verificados · tendencias · precios multi-plataforma",
     defaultMode: "amazon",
   },
 ];
@@ -119,10 +112,15 @@ export function winnerRouteById(id: OpportunityMode) {
 }
 
 export function playForMode(mode: OpportunityMode): WinnerPlay {
-  return winnerRouteById(mode).play;
+  const play = winnerRouteById(mode).play;
+  return play === "amazon_direct" ? "amazon_direct" : "amazon_direct";
 }
 
-/** UI routes only — one clear path per play. */
+/** UI routes only — demand winners in the finder. */
 export function routesForPlay(play: WinnerPlay) {
   return WINNER_ROUTES.filter((row) => row.play === play && row.ui !== false);
+}
+
+export function finderUiRoutes() {
+  return WINNER_ROUTES.filter((row) => row.ui !== false);
 }

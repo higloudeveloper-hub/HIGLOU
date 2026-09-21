@@ -30,7 +30,7 @@ export type WinnerDetailHit = {
   mpn?: string;
   upc?: string;
   meta?: string;
-  playLabel: "Arbitraje" | "Amazon";
+  playLabel: "Verificado" | "Tendencia" | "Hot" | "Amazon";
   buyLabel: string;
   sellLabel: string;
   keep: number | null;
@@ -91,10 +91,12 @@ export function WinnerDetailPanel({
               <div className="min-w-0">
                 <p
                   className={cn(
-                    "text-[10px] font-bold tracking-[0.16em] uppercase",
-                    hit.playLabel === "Arbitraje"
-                      ? "text-[#1f7a4d]"
-                      : "text-[#8a6a10]",
+                    "inline-flex items-center gap-1 text-[10px] font-bold tracking-[0.16em] uppercase",
+                    hit.playLabel === "Hot"
+                      ? "text-[#ff6b35]"
+                      : hit.playLabel === "Tendencia"
+                        ? "text-[#3665F3]"
+                        : "text-[#1f7a4d]",
                   )}
                 >
                   {hit.playLabel}

@@ -211,7 +211,7 @@ describe("higlou market + find winners wiring", () => {
     expect(readRepo("app/market/page.tsx")).not.toMatch(/flush/);
     expect(readRepo("app/winners/page.tsx")).not.toMatch(/flush/);
     expect(readRepo("components/winners/find-winners-board.tsx")).toMatch(
-      /Ver oportunidades|Find winners/,
+      /Escanear winners|Find winners/,
     );
     expect(readRepo("components/market/drop-market.tsx")).not.toMatch(
       /Opening the floor/,
@@ -220,13 +220,13 @@ describe("higlou market + find winners wiring", () => {
       /FindWinnersBoard/,
     );
     expect(readRepo("components/winners/find-winners-board.tsx")).toMatch(
-      /WinnerProductTile|WinnerDetailPanel|Arbitraje/,
+      /WinnerProductTile|WinnerDetailPanel|Verificados/,
     );
     expect(readRepo("components/winners/winner-detail-panel.tsx")).toMatch(
       /Importar listing|Precios verificados/,
     );
     expect(readRepo("components/winners/winner-product-tile.tsx")).toMatch(
-      /Keep|Demand/,
+      /Precios Higlou|Score|Keep/,
     );
     expect(readRepo("lib/opportunity/price-board.ts")).toMatch(
       /buildOpportunityPriceBoard/,
@@ -248,7 +248,7 @@ describe("higlou market + find winners wiring", () => {
       /isKeepaBuyVelocityWinner/,
     );
     expect(readRepo("components/winners/find-winners-board.tsx")).toMatch(
-      /Amazon → eBay|solo cobramos si hay winners/,
+      /Tendencias verificadas|precios en cada plataforma/,
     );
     expect(readRepo("lib/opportunity/winner-routes.ts")).toMatch(
       /walmart_to_amazon/,

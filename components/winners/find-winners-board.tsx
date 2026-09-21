@@ -4,7 +4,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import {
+  BadgeCheck,
+  Flame,
   Loader2,
+  Radar,
   Search,
   Sparkles,
   Store,
@@ -30,12 +33,7 @@ import {
   sortPlatformWinners,
 } from "@/lib/opportunity/platform-winner";
 import type { OpportunityMode, OpportunityProduct } from "@/lib/opportunity/types";
-import {
-  WINNER_PLAYS,
-  playForMode,
-  routesForPlay,
-  winnerRouteById,
-} from "@/lib/opportunity/winner-routes";
+import { winnerRouteById } from "@/lib/opportunity/winner-routes";
 import { stashOpportunityMoneySeed } from "@/lib/monetization/from-opportunity";
 import { buildPlatformUrls } from "@/lib/opportunity/platform-links";
 import {
@@ -114,10 +112,11 @@ export function FindWinnersBoard({
 }) {
   const reduce = useReducedMotion();
   const { confirmSpend, requirePro, refresh } = usePaidActionOptional();
-  const [mode, setMode] = useState<OpportunityMode>("amazon_to_ebay");
+  // Demand-first: arbitrage removed from Find Winners UI
+  const [mode] = useState<OpportunityMode>("amazon");
   const route = winnerRouteById(mode);
   const retail = isRetailToMarketplaceMode(mode);
-  const demandLane = mode === "amazon";
+  const demandLane = true;
   const [categoryId, setCategoryId] = useState("all");
   const [query, setQuery] = useState("");
   const [limit, setLimit] = useState(8);
@@ -131,7 +130,7 @@ export function FindWinnersBoard({
   const [hydrated, setHydrated] = useState(false);
   const [round, setRound] = useState(0);
   const [justFound, setJustFound] = useState(0);
-  const [sortKey, setSortKey] = useState<SortKey>("keep");
+  const [sortKey, setSortKey] = useState<SortKey>("demand");
   const [profitOnly, setProfitOnly] = useState(false);
   const [openId, setOpenId] = useState<string | null>(null);
   const resultsRef = useRef<HTMLDivElement>(null);
@@ -208,7 +207,7 @@ export function FindWinnersBoard({
       ) as BoardHit[];
       if (!next.length) {
         setError(
-          "Sin oportunidades con keep real esta ronda. Escanea de nuevo o cambia la ruta.",
+          "Sin winners verificados esta ronda. Escaneá de nuevo o buscá un ASIN.",
         );
         setJustFound(0);
         return;
@@ -443,21 +442,6 @@ export function FindWinnersBoard({
 
   const locked = busy || importing;
   const scanning = searching || generalScanning;
-  const play = playForMode(mode);
-
-  const setPlay = (nextPlay: (typeof WINNER_PLAYS)[number]["id"]) => {
-    if (nextPlay === play) return;
-    const def = WINNER_PLAYS.find((p) => p.id === nextPlay)!;
-    setMode(def.defaultMode);
-  };
-
-  // Keep mode on the real UI route for this play (drop hidden retail modes).
-  useEffect(() => {
-    const allowed = routesForPlay(play).map((r) => r.id);
-    if (!allowed.includes(mode) && allowed[0]) {
-      setMode(allowed[0]);
-    }
-  }, [play, mode]);
 
   const openHit = winners.find((h) => hitKey(h) === openId) || null;
 
@@ -466,19 +450,38 @@ export function FindWinnersBoard({
     const board = boardFor(hit);
     const keep = board.activeKeep ?? platformKeep(hit) ?? null;
     const demand = board.demandScore ?? amazonProductScore(hit);
-    const showDemand =
-      demandLane || ((keep == null || keep < 12) && demand >= 50);
+    const showDemand = true;
     const urls = hit.platformUrls || buildPlatformUrls(hit);
+    const platforms = (
+      ["amazon", "ebay", "walmart", "homedepot"] as const
+    ).map((key) => {
+      const row = board.platforms.find((p) => p.platform === key);
+      const short =
+        key === "amazon"
+          ? "Amazon"
+          : key === "ebay"
+            ? "eBay"
+            : key === "walmart"
+              ? "Walmart"
+              : "HD";
+      return {
+        key,
+        label: short,
+        price: row?.price ?? null,
+        url: row?.url ?? null,
+      };
+    });
+    const priced = platforms.filter((p) => p.price != null).length;
+    const hot = (hit.bsrDrops90 ?? 0) >= 40 || demand >= 75;
+    const badge =
+      hot ? ("Hot" as const) : priced >= 2 ? ("Verificado" as const) : ("Tendencia" as const);
     return {
       id,
       title: hit.title || id,
       brand: hit.brand,
       imageUrl: hit.imageUrl,
-      playLabel: play === "arbitrage" ? "Arbitraje" : "Amazon",
-      buyLabel: route.buy,
-      sellLabel: route.sell,
-      buyPrice: board.activeBuy,
-      sellPrice: board.activeSell,
+      badge,
+      platforms,
       keep,
       demand,
       showDemand,
@@ -486,10 +489,14 @@ export function FindWinnersBoard({
       selected: picked.includes(id),
       amazonUrl: urls.amazon,
       ebayUrl: urls.ebay,
+      walmartUrl: urls.walmart,
+      homedepotUrl: urls.homedepot,
+      bsrDrops: hit.bsrDrops90 ?? null,
       meta: [
         id.length <= 14 ? id : null,
-        hit.bsrDrops90 != null ? `${hit.bsrDrops90} BSR/90d` : null,
-        hit.keepa ? "Keepa" : null,
+        hit.bsrDrops90 != null ? `${hit.bsrDrops90} BSR↓/90d` : null,
+        hit.keepa ? "Keepa ✓" : null,
+        priced >= 2 ? `${priced} plataformas` : null,
       ]
         .filter(Boolean)
         .join(" · "),
@@ -500,33 +507,33 @@ export function FindWinnersBoard({
     <div className="min-h-full bg-[#f7f7f7] text-[#191919]">
       <header className="border-b border-[#e5e5e5] bg-white">
         <div className="flex flex-wrap items-center gap-3 bg-[#3665F3] px-4 py-2.5 text-white md:px-8">
-          <span className="size-2 rounded-full bg-white" />
+          <motion.span
+            className="size-2 rounded-full bg-white"
+            animate={reduce ? undefined : { opacity: [1, 0.35, 1] }}
+            transition={{ duration: 1.4, repeat: Infinity }}
+          />
           <p className="text-[11px] font-semibold tracking-[0.2em] uppercase">
             Find winners
           </p>
           <p className="hidden min-w-0 flex-1 truncate text-[13px] text-white/85 sm:block">
-            {play === "arbitrage"
-              ? "Amazon → eBay · solo cobramos si hay winners"
-              : "Demanda Keepa · solo cobramos si hay winners"}
+            Tendencias verificadas · precios en cada plataforma
           </p>
-          {!retail ? (
-            <button
-              type="button"
-              disabled={locked || scanning}
-              onClick={() => void scanGeneral()}
-              className="inline-flex h-9 items-center gap-1.5 rounded-full bg-white px-3.5 text-[12px] font-semibold text-[#191919] disabled:opacity-40"
-            >
-              {generalScanning ? (
-                <Loader2 className="size-3.5 animate-spin" />
-              ) : (
-                <Sparkles className="size-3.5 text-[#3665F3]" />
-              )}
-              Ver oportunidades
-              <span className="ml-1 text-[10px] font-medium text-[#707070]">
-                · {CREDIT_ACTIONS.winners_scan.cost} cr
-              </span>
-            </button>
-          ) : null}
+          <button
+            type="button"
+            disabled={locked || scanning}
+            onClick={() => void scanGeneral()}
+            className="inline-flex h-9 items-center gap-1.5 rounded-full bg-white px-3.5 text-[12px] font-semibold text-[#191919] disabled:opacity-40"
+          >
+            {generalScanning ? (
+              <Loader2 className="size-3.5 animate-spin" />
+            ) : (
+              <Sparkles className="size-3.5 text-[#3665F3]" />
+            )}
+            Escanear winners
+            <span className="ml-1 text-[10px] font-medium text-[#707070]">
+              · {CREDIT_ACTIONS.winners_scan.cost} cr
+            </span>
+          </button>
           <Link
             href="/market"
             className="inline-flex h-9 items-center gap-1.5 rounded-full bg-white/15 px-3.5 text-[12px] font-semibold text-white hover:bg-white/25"
@@ -537,36 +544,23 @@ export function FindWinnersBoard({
         </div>
 
         <div className="mx-auto max-w-6xl px-4 py-4 md:px-8">
-          <div className="inline-flex rounded-full border border-[#e5e5e5] bg-[#f7f7f7] p-1">
-            {WINNER_PLAYS.map((p) => {
-              const on = p.id === play;
-              return (
-                <button
-                  key={p.id}
-                  type="button"
-                  onClick={() => setPlay(p.id)}
-                  className={cn(
-                    "relative rounded-full px-4 py-2 text-[13px] font-semibold transition",
-                    on ? "text-[#191919]" : "text-[#707070] hover:text-[#191919]",
-                  )}
-                >
-                  {on ? (
-                    <motion.span
-                      layoutId="play-pill"
-                      className="absolute inset-0 rounded-full bg-white shadow-sm"
-                      transition={{ type: "spring", stiffness: 420, damping: 34 }}
-                    />
-                  ) : null}
-                  <span className="relative z-10">{p.title}</span>
-                </button>
-              );
-            })}
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="inline-flex items-center gap-2 rounded-full border border-[#e5e5e5] bg-[#f7f7f7] px-3.5 py-2">
+              <BadgeCheck className="size-4 text-[#1f7a4d]" />
+              <span className="text-[13px] font-semibold text-[#191919]">
+                Verificados por Higlou
+              </span>
+            </div>
+            <div className="inline-flex items-center gap-2 rounded-full border border-[#e5e5e5] bg-[#f7f7f7] px-3.5 py-2">
+              <Flame className="size-4 text-[#ff6b35]" />
+              <span className="text-[13px] font-semibold text-[#191919]">
+                En tendencia
+              </span>
+            </div>
+            <p className="text-[12px] text-[#707070]">
+              Amazon · eBay · Walmart · Home Depot — precios que Higlou encontró
+            </p>
           </div>
-          <p className="mt-2 text-[12px] text-[#707070]">
-            {play === "arbitrage"
-              ? "Ruta real: Amazon → eBay. Solo cobramos si hay winners."
-              : "Ruta real: demanda Keepa para listar en Amazon."}
-          </p>
         </div>
       </header>
 
@@ -671,37 +665,73 @@ export function FindWinnersBoard({
 
       {/* Product grid */}
       <div ref={resultsRef} className="mx-auto max-w-6xl px-4 py-5 pb-28 md:px-8">
+        {scanning ? (
+          <motion.div
+            initial={reduce ? false : { opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="mb-4 flex items-center gap-3 overflow-hidden rounded-2xl border border-[#3665F3]/25 bg-[#eef2ff] px-4 py-3"
+          >
+            <motion.span
+              className="grid size-10 place-items-center rounded-xl bg-[#3665F3] text-white"
+              animate={reduce ? undefined : { rotate: [0, 360] }}
+              transition={{ duration: 2.2, repeat: Infinity, ease: "linear" }}
+            >
+              <Radar className="size-5" />
+            </motion.span>
+            <div className="min-w-0 flex-1">
+              <p className="text-[14px] font-semibold text-[#191919]">
+                Escaneando winners verificados…
+              </p>
+              <p className="text-[12px] text-[#707070]">
+                Keepa · Amazon · eBay · Walmart · Home Depot
+              </p>
+            </div>
+            {!reduce ? (
+              <motion.span
+                className="hidden h-1.5 w-24 overflow-hidden rounded-full bg-white sm:block"
+              >
+                <motion.span
+                  className="block h-full w-1/2 rounded-full bg-[#3665F3]"
+                  animate={{ x: ["-100%", "200%"] }}
+                  transition={{ duration: 1.2, repeat: Infinity, ease: "easeInOut" }}
+                />
+              </motion.span>
+            ) : null}
+          </motion.div>
+        ) : null}
+
         {winners.length === 0 ? (
           <motion.div
             initial={reduce ? false : { opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             className="mx-auto flex min-h-[300px] max-w-md flex-col items-center justify-center rounded-2xl border border-dashed border-[#ddd] bg-white px-6 py-14 text-center"
           >
-            <p className="text-[11px] font-semibold tracking-[0.16em] text-[#8a8a8a] uppercase">
-              {play === "arbitrage" ? "Arbitraje" : "Amazon"}
+            <span className="grid size-14 place-items-center rounded-2xl bg-[#eef2ff] text-[#3665F3]">
+              <BadgeCheck className="size-7" />
+            </span>
+            <p className="mt-4 text-[11px] font-semibold tracking-[0.16em] text-[#8a8a8a] uppercase">
+              Winners verificados
             </p>
             <p className="mt-2 text-[22px] font-semibold tracking-tight text-[#191919]">
-              Listo para escanear
+              Listo para el wow
             </p>
             <p className="mt-2 text-[14px] leading-relaxed text-[#707070]">
-              Tocá <strong className="font-medium text-[#191919]">Escanear</strong> o
-              escribí un producto. Los mejores keep aparecen acá.
+              Tocá <strong className="font-medium text-[#191919]">Escanear winners</strong>{" "}
+              y Higlou te trae productos en tendencia con precios en cada plataforma.
             </p>
-            {!retail ? (
-              <button
-                type="button"
-                disabled={locked || scanning}
-                onClick={() => void scanGeneral()}
-                className="mt-6 inline-flex h-11 items-center gap-2 rounded-full bg-[#3665F3] px-5 text-[13px] font-semibold text-white disabled:opacity-40"
-              >
-                {generalScanning ? (
-                  <Loader2 className="size-4 animate-spin" />
-                ) : (
-                  <Sparkles className="size-4" />
-                )}
-                Ver oportunidades
-              </button>
-            ) : null}
+            <button
+              type="button"
+              disabled={locked || scanning}
+              onClick={() => void scanGeneral()}
+              className="mt-6 inline-flex h-11 items-center gap-2 rounded-full bg-[#3665F3] px-5 text-[13px] font-semibold text-white disabled:opacity-40"
+            >
+              {generalScanning ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <Sparkles className="size-4" />
+              )}
+              Escanear winners
+            </button>
           </motion.div>
         ) : (
           <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
@@ -747,9 +777,7 @@ export function FindWinnersBoard({
                 const keep = board.activeKeep ?? platformKeep(openHit) ?? null;
                 const demand =
                   board.demandScore ?? amazonProductScore(openHit);
-                const showDemand =
-                  demandLane ||
-                  ((keep == null || keep < 12) && demand >= 50);
+                const showDemand = true;
                 return {
                   id: hitKey(openHit),
                   title: openHit.title || hitKey(openHit),
@@ -760,13 +788,13 @@ export function FindWinnersBoard({
                   meta: [
                     hitKey(openHit),
                     openHit.bsrDrops90 != null
-                      ? `${openHit.bsrDrops90} BSR/90d`
+                      ? `${openHit.bsrDrops90} BSR↓/90d`
                       : null,
-                    openHit.keepa ? "Keepa" : null,
+                    openHit.keepa ? "Keepa ✓" : null,
                   ]
                     .filter(Boolean)
                     .join(" · "),
-                  playLabel: play === "arbitrage" ? "Arbitraje" : "Amazon",
+                  playLabel: "Verificado",
                   buyLabel: route.buy,
                   sellLabel: route.sell,
                   keep,

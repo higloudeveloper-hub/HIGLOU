@@ -103,7 +103,8 @@ export async function shareAffiliateToFacebook(
   const message =
     String(opts.message || "").trim() ||
     "Oferta verificada · compra con este link";
-  const caption = `${message}\n\n${destination}`.trim();
+  // Keep destination in caption only for photo posts (image itself is not a link)
+  const caption = `${message}\n\n👉 ${destination}`.trim();
   const imageUrl = String(opts.imageUrl || "").trim();
 
   try {

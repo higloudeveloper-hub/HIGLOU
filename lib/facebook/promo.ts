@@ -22,21 +22,94 @@ function postUrlFromId(postId: string): string {
     : `https://www.facebook.com/${postId}`;
 }
 
-async function uploadUnpublishedPhoto(
-  pageId: string,
-  accessToken: string,
-  imageUrl: string,
-  caption?: string,
-): Promise<{ id: string | null; error?: string }> {
-  const endpoint = new URL(`https://graph.facebook.com/v21.0/${pageId}/photos`);
+type ChildAttachment = {
+  link: string;
+  name: string;
+  description?: string;
+  picture: string;
+};
+
+function toChildAttachments(cards: PromoCard[]): ChildAttachment[] {
+  return cards
+    .filter(
+      (c) =>
+        /^https?:\/\//i.test(c.linkUrl) && /^https?:\/\//i.test(c.imageUrl),
+    )
+    .slice(0, 10)
+    .map((c) => ({
+      link: c.linkUrl,
+      name: (c.title || "Oferta").slice(0, 80),
+      description: (c.priceLabel || "Oferta verificada · Higlou").slice(0, 120),
+      picture: c.imageUrl,
+    }));
+}
+
+/**
+ * Alibaba-style multi-link carousel: each card image opens its own product URL.
+ * Uses Graph `child_attachments` (not a photo album).
+ */
+async function publishLinkCarousel(opts: {
+  pageId: string;
+  accessToken: string;
+  message: string;
+  cards: PromoCard[];
+}): Promise<{ id?: string; error?: string }> {
+  const children = toChildAttachments(opts.cards);
+  if (children.length < 2) {
+    return { error: "Carrusel Alibaba: necesitás al menos 2 productos con imagen + link." };
+  }
+
+  const endpoint = new URL(
+    `https://graph.facebook.com/v21.0/${opts.pageId}/feed`,
+  );
   const res = await fetch(endpoint, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      url: imageUrl,
-      published: false,
-      caption: caption || undefined,
-      access_token: accessToken,
+      message: opts.message,
+      // Primary link required; each child has its own tappable link
+      link: children[0]!.link,
+      child_attachments: children,
+      access_token: opts.accessToken,
+    }),
+  });
+  const body = (await res.json().catch(() => null)) as {
+    id?: string;
+    error?: { message?: string; error_user_msg?: string };
+  } | null;
+
+  if (!res.ok || !body?.id) {
+    return {
+      error: humanizeFacebookGraphError(
+        body?.error?.error_user_msg ||
+          body?.error?.message ||
+          `Facebook carousel ${res.status}`,
+      ),
+    };
+  }
+  return { id: body.id };
+}
+
+/**
+ * Single product: link share (tappable card). No raw URL dump in the caption.
+ * Facebook scrapes the destination for the preview image when we don't own the domain.
+ */
+async function publishSingleLinkCard(opts: {
+  pageId: string;
+  accessToken: string;
+  message: string;
+  card: PromoCard;
+}): Promise<{ id?: string; error?: string }> {
+  const endpoint = new URL(
+    `https://graph.facebook.com/v21.0/${opts.pageId}/feed`,
+  );
+  const res = await fetch(endpoint, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      message: opts.message,
+      link: opts.card.linkUrl,
+      access_token: opts.accessToken,
     }),
   });
   const body = (await res.json().catch(() => null)) as {
@@ -45,11 +118,10 @@ async function uploadUnpublishedPhoto(
   } | null;
   if (!res.ok || !body?.id) {
     return {
-      id: null,
       error: humanizeFacebookGraphError(
         body?.error?.error_user_msg ||
           body?.error?.message ||
-          `Facebook photos ${res.status}`,
+          `Facebook link ${res.status}`,
       ),
     };
   }
@@ -57,9 +129,8 @@ async function uploadUnpublishedPhoto(
 }
 
 /**
- * Organic Page multi-photo post (carrusel / vitrina style).
- * True Ads carousel needs Marketing API later — this ships a swipeable photo pack + links.
- * When Page is connected, always uses Graph API — never the Facebook sharer dialog.
+ * Publish Ads / Carrusel / Vitrina to the Page.
+ * Carrusel + Vitrina = Alibaba-style child_attachments (tap image → product link).
  */
 export async function publishFacebookPromo(
   supabase: SupabaseClient,
@@ -83,19 +154,57 @@ export async function publishFacebookPromo(
       imageUrl: String(c.imageUrl || "").trim(),
       linkUrl: String(c.linkUrl || "").trim(),
     }))
-    .filter((c) => c.imageUrl && /^https?:\/\//i.test(c.imageUrl));
+    .filter(
+      (c) =>
+        c.imageUrl &&
+        /^https?:\/\//i.test(c.imageUrl) &&
+        c.linkUrl &&
+        /^https?:\/\//i.test(c.linkUrl),
+    );
+
+  const creds = await loadFacebookPageCredentials(supabase, opts.userId);
 
   if (opts.format === "ads") {
     const first = cards[0];
     if (!first?.linkUrl) {
       return { ok: false, error: "Elegí al menos un producto con link." };
     }
-    return shareAffiliateToFacebook(supabase, {
-      userId: opts.userId,
-      url: first.linkUrl,
-      message: opts.message,
-      imageUrl: first.imageUrl,
+    if (!creds) {
+      return shareAffiliateToFacebook(supabase, {
+        userId: opts.userId,
+        url: first.linkUrl,
+        message: opts.message,
+        imageUrl: first.imageUrl,
+      });
+    }
+    const caption =
+      String(opts.message || "").trim() ||
+      "Oferta verificada · tocá la tarjeta y comprá";
+    const posted = await publishSingleLinkCard({
+      pageId: creds.pageId,
+      accessToken: creds.accessToken,
+      message: caption,
+      card: first,
     });
+    if (!posted.id) {
+      // Fallback: photo + caption (still no URL list spam)
+      return shareAffiliateToFacebook(supabase, {
+        userId: opts.userId,
+        url: first.linkUrl,
+        message: caption,
+        imageUrl: first.imageUrl,
+      });
+    }
+    await markFacebookConnectionMeta(supabase, opts.userId, {
+      lastError: null,
+      lastShareAt: new Date().toISOString(),
+    });
+    return {
+      ok: true,
+      mode: "page_post",
+      postId: posted.id,
+      postUrl: postUrlFromId(posted.id),
+    };
   }
 
   const min = opts.format === "vitrina" ? 3 : 2;
@@ -112,9 +221,7 @@ export async function publishFacebookPromo(
     return { ok: false, error: "Máximo 10 productos por promo." };
   }
 
-  const creds = await loadFacebookPageCredentials(supabase, opts.userId);
   if (!creds) {
-    // Not connected — only then allow manual sharer on first link
     const first = cards[0]!;
     return shareAffiliateToFacebook(supabase, {
       userId: opts.userId,
@@ -124,80 +231,35 @@ export async function publishFacebookPromo(
     });
   }
 
-  const titleLine =
+  // Cover card first for vitrina when provided
+  let ordered = [...cards];
+  const cover = String(opts.coverImageUrl || "").trim();
+  if (opts.format === "vitrina" && cover) {
+    const coverCard = ordered.find((c) => c.imageUrl === cover);
+    if (coverCard) {
+      ordered = [coverCard, ...ordered.filter((c) => c.id !== coverCard.id)];
+    }
+  }
+
+  const titleBit =
     opts.format === "vitrina" && opts.collectionTitle
-      ? `${opts.collectionTitle.trim()}\n\n`
+      ? `${opts.collectionTitle.trim()} · `
       : "";
-
-  const catalogLines = cards
-    .map((c, i) => {
-      const price = c.priceLabel ? ` · ${c.priceLabel}` : "";
-      return `${i + 1}. ${c.title}${price}\n${c.linkUrl}`;
-    })
-    .join("\n\n");
-
-  const message = `${titleLine}${String(opts.message || "").trim()}\n\n${catalogLines}`.trim();
+  const message =
+    `${titleBit}${String(opts.message || "").trim() || "Ofertas verificadas · deslizá y tocá el producto"}`.trim();
 
   try {
-    const mediaIds: string[] = [];
-    const uploadErrors: string[] = [];
-    const cover = String(opts.coverImageUrl || "").trim();
-    if (opts.format === "vitrina" && cover && /^https?:\/\//i.test(cover)) {
-      const coverUp = await uploadUnpublishedPhoto(
-        creds.pageId,
-        creds.accessToken,
-        cover,
-        opts.collectionTitle || "Vitrina",
-      );
-      if (coverUp.id) mediaIds.push(coverUp.id);
-      else if (coverUp.error) uploadErrors.push(coverUp.error);
-    }
-
-    for (const card of cards) {
-      const up = await uploadUnpublishedPhoto(
-        creds.pageId,
-        creds.accessToken,
-        card.imageUrl,
-        card.title,
-      );
-      if (up.id) mediaIds.push(up.id);
-      else if (up.error) uploadErrors.push(up.error);
-    }
-
-    if (mediaIds.length < 2) {
-      // Connected but multi-photo failed — try single photo Ads post, never sharer
-      return shareAffiliateToFacebook(supabase, {
-        userId: opts.userId,
-        url: cards[0]!.linkUrl,
-        message: opts.message,
-        imageUrl: cards[0]!.imageUrl,
-      });
-    }
-
-    const endpoint = new URL(
-      `https://graph.facebook.com/v21.0/${creds.pageId}/feed`,
-    );
-    const res = await fetch(endpoint, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        message,
-        attached_media: mediaIds.map((id) => ({ media_fbid: id })),
-        access_token: creds.accessToken,
-      }),
+    const posted = await publishLinkCarousel({
+      pageId: creds.pageId,
+      accessToken: creds.accessToken,
+      message,
+      cards: ordered,
     });
-    const body = (await res.json().catch(() => null)) as {
-      id?: string;
-      error?: { message?: string; error_user_msg?: string };
-    } | null;
 
-    if (!res.ok || !body?.id) {
-      const err = humanizeFacebookGraphError(
-        body?.error?.error_user_msg ||
-          body?.error?.message ||
-          uploadErrors[0] ||
-          "No se pudo publicar el carrusel. Revisá el token de la Page (pages_manage_posts + pages_read_engagement).",
-      );
+    if (!posted.id) {
+      const err =
+        posted.error ||
+        "No se pudo publicar el carrusel Alibaba. Revisá links e imágenes https.";
       await markFacebookConnectionMeta(supabase, opts.userId, {
         lastError: err,
       });
@@ -212,8 +274,8 @@ export async function publishFacebookPromo(
     return {
       ok: true,
       mode: "page_post",
-      postId: body.id,
-      postUrl: postUrlFromId(body.id),
+      postId: posted.id,
+      postUrl: postUrlFromId(posted.id),
     };
   } catch (err) {
     return {

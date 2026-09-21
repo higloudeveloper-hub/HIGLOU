@@ -390,11 +390,11 @@ export function FacebookAdsStudio() {
     if (next !== "ads") {
       setMessage(
         next === "vitrina"
-          ? "Pensado para vos. Deslizá y descubrí estas ofertas."
-          : "Ofertas verificadas · deslizá y tocá el que te guste.",
+          ? "Deslizá y tocá el producto que te guste."
+          : "Ofertas verificadas · deslizá y tocá el producto.",
       );
     } else {
-      setMessage("Oferta verificada · tocá el link y comprá seguro.");
+      setMessage("Oferta verificada · tocá la tarjeta y comprá.");
     }
   };
 
@@ -507,10 +507,10 @@ export function FacebookAdsStudio() {
       if (body.mode === "page_post") {
         toast.success(
           format === "ads"
-            ? "Publicado en tu Page vía API"
+            ? "Publicado · tarjeta con link"
             : format === "vitrina"
-              ? "Vitrina publicada vía API"
-              : "Carrusel publicado vía API",
+              ? "Vitrina Alibaba publicada"
+              : "Carrusel Alibaba publicado",
         );
         if (body.postUrl) {
           setPostUrl(body.postUrl);
@@ -643,10 +643,10 @@ export function FacebookAdsStudio() {
           </div>
           <p className="mb-3 text-[13px] text-[#707070]">
             {format === "ads"
-              ? "1 producto con link."
+              ? "1 producto · tocá la tarjeta = link."
               : format === "carousel"
-                ? `Carrusel · elegí ${minNeeded} a ${MAX}.`
-                : `Vitrina · elegí ${minNeeded} a ${MAX} + portada.`}
+                ? `Carrusel Alibaba · ${minNeeded}–${MAX} · tocá imagen = link del producto.`
+                : `Vitrina Alibaba · ${minNeeded}–${MAX} + portada · tocá = link.`}
           </p>
 
           <div className="mb-4 flex flex-wrap gap-1 rounded-full border border-[#e5e5e5] bg-white p-1">

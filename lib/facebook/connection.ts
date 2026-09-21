@@ -524,12 +524,40 @@ export async function disconnectFacebook(
   await deleteStoragePayload(db, userId);
 }
 
+async function tokenActsAsPage(
+  pageId: string,
+  accessToken: string,
+): Promise<boolean> {
+  try {
+    const meUrl = new URL("https://graph.facebook.com/v21.0/me");
+    meUrl.searchParams.set("fields", "id");
+    meUrl.searchParams.set("access_token", accessToken);
+    const res = await fetch(meUrl);
+    const body = (await res.json().catch(() => null)) as { id?: string } | null;
+    return (
+      res.ok &&
+      Boolean(body?.id) &&
+      String(body?.id).replace(/\D/g, "") === pageId.replace(/\D/g, "")
+    );
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Load credentials and auto-heal User tokens → Page tokens.
+ * Also falls back to FACEBOOK_BOOTSTRAP_PAGE_TOKEN when needed.
+ */
 export async function loadFacebookPageCredentials(
   supabase: SupabaseClient,
   userId: string,
 ): Promise<{ pageId: string; accessToken: string; pageName: string | null } | null> {
   if (!canEncryptFacebookToken()) return null;
   const db = await dbForFacebook(supabase);
+
+  let pageId: string | null = null;
+  let pageName: string | null = null;
+  let accessToken: string | null = null;
 
   const { data, error } = await db
     .from("facebook_connections")
@@ -539,37 +567,104 @@ export async function loadFacebookPageCredentials(
 
   if (!error) {
     const row = data as Row | null;
-    if (!row?.page_id || !row.access_token_enc || row.revoked_at) {
-      // try storage fallback too
-    } else {
+    if (row?.page_id && row.access_token_enc && !row.revoked_at) {
       try {
-        const accessToken = decryptFacebookToken(row.access_token_enc);
-        if (accessToken) {
-          return {
-            pageId: row.page_id,
-            accessToken,
-            pageName: row.page_name,
-          };
+        const tok = decryptFacebookToken(row.access_token_enc);
+        if (tok) {
+          pageId = row.page_id;
+          pageName = row.page_name;
+          accessToken = tok;
         }
       } catch {
-        // fall through
+        // continue
       }
     }
   }
 
-  const stored = await readStoragePayload(db, userId);
-  if (!stored) return null;
-  try {
-    const accessToken = decryptFacebookToken(stored.accessTokenEnc);
-    if (!accessToken) return null;
-    return {
-      pageId: stored.pageId,
-      accessToken,
-      pageName: stored.pageName,
-    };
-  } catch {
+  if (!accessToken || !pageId) {
+    const stored = await readStoragePayload(db, userId);
+    if (stored) {
+      try {
+        const tok = decryptFacebookToken(stored.accessTokenEnc);
+        if (tok) {
+          pageId = stored.pageId;
+          pageName = stored.pageName;
+          accessToken = tok;
+        }
+      } catch {
+        // continue
+      }
+    }
+  }
+
+  // Bootstrap Page token from Vercel if nothing stored
+  if (!accessToken || !pageId) {
+    const bootId = String(process.env.FACEBOOK_BOOTSTRAP_PAGE_ID || "")
+      .replace(/\D/g, "")
+      .trim();
+    const bootTok = String(process.env.FACEBOOK_BOOTSTRAP_PAGE_TOKEN || "").trim();
+    const bootName =
+      String(process.env.FACEBOOK_BOOTSTRAP_PAGE_NAME || "").trim() || null;
+    if (bootId.length >= 5 && bootTok.length >= 20) {
+      pageId = bootId;
+      pageName = bootName;
+      accessToken = bootTok;
+      await saveFacebookConnection(supabase, {
+        userId,
+        pageId: bootId,
+        pageName: bootName,
+        accessToken: bootTok,
+      });
+      return { pageId: bootId, accessToken: bootTok, pageName: bootName };
+    }
     return null;
   }
+
+  // Heal: stored User token → real Page token
+  if (!(await tokenActsAsPage(pageId, accessToken))) {
+    const resolved = await resolvePageAccessToken(pageId, accessToken);
+    if (resolved.ok) {
+      await saveFacebookConnection(supabase, {
+        userId,
+        pageId: resolved.pageId,
+        pageName: resolved.pageName || pageName,
+        accessToken: resolved.accessToken,
+      });
+      return {
+        pageId: resolved.pageId,
+        accessToken: resolved.accessToken,
+        pageName: resolved.pageName || pageName,
+      };
+    }
+
+    // Last resort: overwrite with bootstrap Page token
+    const bootId = String(process.env.FACEBOOK_BOOTSTRAP_PAGE_ID || "")
+      .replace(/\D/g, "")
+      .trim();
+    const bootTok = String(process.env.FACEBOOK_BOOTSTRAP_PAGE_TOKEN || "").trim();
+    const bootName =
+      String(process.env.FACEBOOK_BOOTSTRAP_PAGE_NAME || "").trim() || null;
+    if (
+      bootId &&
+      bootTok &&
+      bootId === pageId.replace(/\D/g, "") &&
+      (await tokenActsAsPage(bootId, bootTok))
+    ) {
+      await saveFacebookConnection(supabase, {
+        userId,
+        pageId: bootId,
+        pageName: bootName || pageName,
+        accessToken: bootTok,
+      });
+      return {
+        pageId: bootId,
+        accessToken: bootTok,
+        pageName: bootName || pageName,
+      };
+    }
+  }
+
+  return { pageId, accessToken, pageName };
 }
 
 /** Persist last Graph error / share time across table or storage backends. */
@@ -599,8 +694,8 @@ export async function markFacebookConnectionMeta(
 }
 
 /**
- * One-shot overnight bootstrap from Vercel env (FACEBOOK_BOOTSTRAP_PAGE_*).
- * Saves the Page token for the signed-in user when they still have no connection.
+ * Bootstrap / repair from Vercel env (FACEBOOK_BOOTSTRAP_PAGE_*).
+ * Overwrites a bad User-token connection with the real Page token.
  */
 export async function maybeBootstrapFacebookConnection(
   supabase: SupabaseClient,
@@ -626,7 +721,35 @@ export async function maybeBootstrapFacebookConnection(
   if (pageId.length < 5 || accessToken.length < 20) return null;
 
   const current = await getFacebookConnectionPublic(supabase, userId);
-  if (current.connected) return null;
+  if (current.connected && current.pageId) {
+    // If already a real Page token, leave it
+    const creds = await (async () => {
+      const db = await dbForFacebook(supabase);
+      const stored = await readStoragePayload(db, userId);
+      if (stored?.accessTokenEnc) {
+        try {
+          return decryptFacebookToken(stored.accessTokenEnc);
+        } catch {
+          return null;
+        }
+      }
+      const { data } = await db
+        .from("facebook_connections")
+        .select("access_token_enc")
+        .eq("user_id", userId)
+        .maybeSingle();
+      const enc = (data as { access_token_enc?: string } | null)?.access_token_enc;
+      if (!enc) return null;
+      try {
+        return decryptFacebookToken(enc);
+      } catch {
+        return null;
+      }
+    })();
+    if (creds && (await tokenActsAsPage(pageId, creds))) {
+      return null;
+    }
+  }
 
   const saved = await saveFacebookConnection(supabase, {
     userId,

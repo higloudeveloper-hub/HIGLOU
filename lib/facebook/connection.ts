@@ -305,6 +305,93 @@ export async function verifyFacebookPageToken(
   }
 }
 
+/**
+ * Graph Explorer often gives a User token. Publishing needs the Page token
+ * from GET /me/accounts. Exchange automatically when possible.
+ */
+export async function resolvePageAccessToken(
+  pageId: string,
+  accessToken: string,
+): Promise<
+  | { ok: true; pageId: string; pageName: string | null; accessToken: string }
+  | { ok: false; error: string }
+> {
+  const want = pageId.replace(/\D/g, "");
+  const token = accessToken.trim();
+  if (want.length < 5 || token.length < 20) {
+    return { ok: false, error: "Need a valid Facebook Page ID and access token." };
+  }
+
+  // Already a Page token? /me returns the Page.
+  try {
+    const meUrl = new URL("https://graph.facebook.com/v21.0/me");
+    meUrl.searchParams.set("fields", "id,name");
+    meUrl.searchParams.set("access_token", token);
+    const meRes = await fetch(meUrl);
+    const me = (await meRes.json().catch(() => null)) as {
+      id?: string;
+      name?: string;
+      error?: { message?: string };
+    } | null;
+    if (meRes.ok && me?.id && String(me.id).replace(/\D/g, "") === want) {
+      return {
+        ok: true,
+        pageId: want,
+        pageName: me.name || null,
+        accessToken: token,
+      };
+    }
+  } catch {
+    // continue to accounts lookup
+  }
+
+  // User token → exchange via /me/accounts
+  try {
+    const accUrl = new URL("https://graph.facebook.com/v21.0/me/accounts");
+    accUrl.searchParams.set("fields", "id,name,access_token");
+    accUrl.searchParams.set("access_token", token);
+    const accRes = await fetch(accUrl);
+    const acc = (await accRes.json().catch(() => null)) as {
+      data?: Array<{ id?: string; name?: string; access_token?: string }>;
+      error?: { message?: string };
+    } | null;
+    if (!accRes.ok) {
+      return {
+        ok: false,
+        error:
+          acc?.error?.message ||
+          "No se pudo listar Pages. Generá un User token con pages_show_list + pages_manage_posts.",
+      };
+    }
+    const match = (acc?.data || []).find(
+      (p) => String(p.id || "").replace(/\D/g, "") === want,
+    );
+    if (!match?.access_token) {
+      const names = (acc?.data || [])
+        .map((p) => `${p.name || "?"} (${p.id})`)
+        .slice(0, 5)
+        .join(", ");
+      return {
+        ok: false,
+        error: names
+          ? `Page ID ${want} no está en tus Pages. Tenés: ${names}`
+          : `No encontré la Page ${want} en /me/accounts. Revisá que seas admin.`,
+      };
+    }
+    return {
+      ok: true,
+      pageId: want,
+      pageName: match.name || null,
+      accessToken: match.access_token,
+    };
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : "No se pudo resolver el Page token",
+    };
+  }
+}
+
 export async function saveFacebookConnection(
   supabase: SupabaseClient,
   opts: {
@@ -329,18 +416,19 @@ export async function saveFacebookConnection(
   if (pageId.length < 5 || token.length < 20) {
     return {
       ok: false,
-      error: "Need a valid Facebook Page ID and Page access token.",
+      error: "Need a valid Facebook Page ID and access token.",
     };
   }
 
-  const verified = await verifyFacebookPageToken(pageId, token);
-  if (!verified.ok) {
-    return { ok: false, error: verified.error };
+  // User token → Page token via /me/accounts (Graph Explorer default)
+  const resolved = await resolvePageAccessToken(pageId, token);
+  if (!resolved.ok) {
+    return { ok: false, error: resolved.error };
   }
 
   let enc: string;
   try {
-    enc = encryptFacebookToken(token);
+    enc = encryptFacebookToken(resolved.accessToken);
   } catch (err) {
     return {
       ok: false,
@@ -350,7 +438,7 @@ export async function saveFacebookConnection(
 
   const connectedAt = new Date().toISOString();
   const pageName =
-    String(opts.pageName || "").trim() || verified.pageName || null;
+    String(opts.pageName || "").trim() || resolved.pageName || null;
   const db = await dbForFacebook(supabase);
 
   // Prefer dedicated table when it exists
@@ -508,4 +596,43 @@ export async function markFacebookConnectionMeta(
       lastShareAt: patch.lastShareAt ?? null,
     });
   }
+}
+
+/**
+ * One-shot overnight bootstrap from Vercel env (FACEBOOK_BOOTSTRAP_PAGE_*).
+ * Saves the Page token for the signed-in user when they still have no connection.
+ */
+export async function maybeBootstrapFacebookConnection(
+  supabase: SupabaseClient,
+  userId: string,
+  userEmail?: string | null,
+): Promise<FacebookConnectionPublic | null> {
+  const allowEmail = String(process.env.FACEBOOK_BOOTSTRAP_USER_EMAIL || "")
+    .trim()
+    .toLowerCase();
+  if (allowEmail) {
+    const email = String(userEmail || "").trim().toLowerCase();
+    if (!email || email !== allowEmail) return null;
+  }
+
+  const pageId = String(process.env.FACEBOOK_BOOTSTRAP_PAGE_ID || "")
+    .replace(/\D/g, "")
+    .trim();
+  const accessToken = String(
+    process.env.FACEBOOK_BOOTSTRAP_PAGE_TOKEN || "",
+  ).trim();
+  const pageName =
+    String(process.env.FACEBOOK_BOOTSTRAP_PAGE_NAME || "").trim() || null;
+  if (pageId.length < 5 || accessToken.length < 20) return null;
+
+  const current = await getFacebookConnectionPublic(supabase, userId);
+  if (current.connected) return null;
+
+  const saved = await saveFacebookConnection(supabase, {
+    userId,
+    pageId,
+    pageName,
+    accessToken,
+  });
+  return saved.ok ? saved.connection : null;
 }

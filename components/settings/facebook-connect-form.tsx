@@ -22,6 +22,7 @@ export function FacebookConnectForm() {
   const [connection, setConnection] = useState<Connection | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [replacing, setReplacing] = useState(false);
   const [pageId, setPageId] = useState("");
   const [pageName, setPageName] = useState("");
   const [accessToken, setAccessToken] = useState("");
@@ -67,6 +68,7 @@ export function FacebookConnectForm() {
       setAccessToken("");
       setPageId("");
       setPageName("");
+      setReplacing(false);
       toast.success(
         `Page conectada · ${body.connection.pageName || body.connection.pageId}`,
       );
@@ -78,9 +80,23 @@ export function FacebookConnectForm() {
   const disconnect = async () => {
     setBusy(true);
     try {
-      await fetch("/api/facebook/connection", { method: "DELETE" });
-      toast.message("Facebook desconectado");
-      await load();
+      const res = await fetch("/api/facebook/connection", { method: "DELETE" });
+      const body = (await res.json().catch(() => null)) as {
+        connection?: Connection;
+      } | null;
+      setConnection(
+        body?.connection || {
+          connected: false,
+          pageId: null,
+          pageName: null,
+          connectedAt: null,
+          lastError: null,
+          lastShareAt: null,
+          encryptionReady: connection?.encryptionReady ?? true,
+        },
+      );
+      setReplacing(true);
+      toast.message("Facebook desconectado · pegá un token nuevo");
     } finally {
       setBusy(false);
     }
@@ -94,6 +110,8 @@ export function FacebookConnectForm() {
     );
   }
 
+  const showForm = !connection?.connected || replacing;
+
   return (
     <div className="overflow-hidden rounded-[1.5rem] border border-[#e8e8e8] bg-white">
       <div className="flex items-start gap-3 border-b border-[#ebebeb] bg-[linear-gradient(135deg,#1877F2_0%,#0f5fca_100%)] px-5 py-5 text-white">
@@ -105,10 +123,10 @@ export function FacebookConnectForm() {
             Facebook Page
           </h2>
           <p className="mt-1 text-[13px] text-white/85">
-            Pegá Page ID + Page token de Graph. Solo entonces queda On.
+            Higlou convierte solo tu User token en Page token vía /me/accounts.
           </p>
         </div>
-        {connection?.connected ? (
+        {connection?.connected && !replacing ? (
           <span className="rounded-full bg-white/20 px-2.5 py-1 text-[10px] font-bold tracking-wide uppercase">
             On
           </span>
@@ -120,7 +138,7 @@ export function FacebookConnectForm() {
       </div>
 
       <div className="space-y-4 px-5 py-5">
-        {connection?.connected ? (
+        {connection?.connected && !replacing ? (
           <div className="rounded-2xl border border-[#e8e8e8] bg-[#fafafa] px-4 py-3">
             <p className="inline-flex items-center gap-1.5 text-[14px] font-semibold text-[#191919]">
               <CheckCircle2 className="size-4 text-[#3665F3]" />
@@ -142,12 +160,20 @@ export function FacebookConnectForm() {
               >
                 Crear Facebook Ad
               </Link>
-              <Link
-                href="/affiliate"
-                className="inline-flex h-9 items-center rounded-full border border-[#e5e5e5] bg-white px-3.5 text-[12px] font-semibold text-[#191919]"
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={busy}
+                onClick={() => {
+                  setPageId(connection.pageId || "");
+                  setPageName(connection.pageName || "");
+                  setReplacing(true);
+                }}
+                className="h-9 rounded-full"
               >
-                Ver Affiliate
-              </Link>
+                Cambiar token
+              </Button>
               <Button
                 type="button"
                 variant="outline"
@@ -156,19 +182,25 @@ export function FacebookConnectForm() {
                 onClick={() => void disconnect()}
                 className="h-9 rounded-full"
               >
-                <Unlink className="size-3.5" />
+                {busy ? (
+                  <Loader2 className="size-3.5 animate-spin" />
+                ) : (
+                  <Unlink className="size-3.5" />
+                )}
                 Desconectar
               </Button>
             </div>
           </div>
-        ) : (
+        ) : null}
+
+        {showForm ? (
           <>
             <ol className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
               {[
                 "Permisos: pages_manage_posts + pages_read_engagement",
                 "Generar token de acceso",
-                "Usuario o página → Don Baraton Deals",
-                "GET /me → id + token de la derecha",
+                "Podés dejar Token del usuario",
+                "Page ID + pegá el token · Higlou saca el de la Page",
               ].map((step, i) => (
                 <li
                   key={step}
@@ -180,25 +212,9 @@ export function FacebookConnectForm() {
               ))}
             </ol>
 
-            <p className="rounded-2xl border border-[#dbe4ff] bg-[#f3f6ff] px-3.5 py-2.5 text-[12px] text-[#2a4a7a]">
-              Sin <code className="font-mono">pages_manage_posts</code> y{" "}
-              <code className="font-mono">pages_read_engagement</code> Graph
-              responde #200 y no publica.
-            </p>
-
             {connection?.lastError ? (
               <p className="rounded-2xl border border-red-200 bg-red-50 px-3.5 py-2.5 text-[12px] text-red-800">
                 {connection.lastError}
-              </p>
-            ) : null}
-
-            {!connection?.encryptionReady ? (
-              <p className="rounded-2xl border border-amber-200 bg-amber-50 px-3.5 py-2.5 text-[12px] text-amber-900">
-                Operador: set{" "}
-                <code className="font-mono">FACEBOOK_TOKEN_ENCRYPTION_KEY</code>{" "}
-                o reutiliza{" "}
-                <code className="font-mono">EBAY_TOKEN_ENCRYPTION_KEY</code> (≥32
-                chars) en Vercel.
               </p>
             ) : null}
 
@@ -223,37 +239,49 @@ export function FacebookConnectForm() {
               </label>
             </div>
             <label className="block text-[12px] font-semibold text-[#707070]">
-              Page access token
+              Access token (User o Page)
               <textarea
                 value={accessToken}
                 onChange={(e) => setAccessToken(e.target.value)}
-                placeholder="EAAB… (pegá el token completo, sin cortar)"
+                placeholder="EAAB… (si es User token, Higlou lo cambia al de la Page)"
                 rows={3}
                 className="mt-1.5 w-full resize-y rounded-xl border border-[#e5e5e5] bg-white px-3 py-2.5 font-mono text-[12px] leading-relaxed text-[#191919] outline-none focus:border-[#1877F2]"
               />
             </label>
-            <button
-              type="button"
-              disabled={
-                busy ||
-                !pageId.trim() ||
-                accessToken.trim().length < 20 ||
-                connection?.encryptionReady === false
-              }
-              onClick={() => void connect()}
-              className={cn(
-                "inline-flex h-12 items-center gap-2 rounded-full bg-[#1877F2] px-5 text-[14px] font-semibold text-white disabled:opacity-40",
-              )}
-            >
-              {busy ? (
-                <Loader2 className="size-4 animate-spin" />
-              ) : (
-                <FacebookFMark className="size-3.5" />
-              )}
-              Conectar Facebook
-            </button>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                disabled={
+                  busy ||
+                  !pageId.trim() ||
+                  accessToken.trim().length < 20 ||
+                  connection?.encryptionReady === false
+                }
+                onClick={() => void connect()}
+                className={cn(
+                  "inline-flex h-12 items-center gap-2 rounded-full bg-[#1877F2] px-5 text-[14px] font-semibold text-white disabled:opacity-40",
+                )}
+              >
+                {busy ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  <FacebookFMark className="size-3.5" />
+                )}
+                Conectar Facebook
+              </button>
+              {replacing && connection?.connected ? (
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => setReplacing(false)}
+                  className="inline-flex h-12 items-center rounded-full border border-[#e5e5e5] px-4 text-[13px] font-semibold text-[#707070]"
+                >
+                  Cancelar
+                </button>
+              ) : null}
+            </div>
           </>
-        )}
+        ) : null}
       </div>
     </div>
   );

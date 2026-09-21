@@ -26,3 +26,11 @@ describe("humanizeFacebookGraphError", () => {
     expect(msg).toMatch(/Graph Explorer|Settings/i);
   });
 });
+
+describe("resolvePageAccessToken contract", () => {
+  it("is exported from connection module", async () => {
+    const mod = await import("@/lib/facebook/connection");
+    expect(typeof mod.resolvePageAccessToken).toBe("function");
+    expect(typeof mod.maybeBootstrapFacebookConnection).toBe("function");
+  });
+});

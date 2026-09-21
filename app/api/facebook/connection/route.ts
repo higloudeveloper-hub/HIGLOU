@@ -4,6 +4,7 @@ import { requireUser } from "@/lib/auth/require-user";
 import {
   disconnectFacebook,
   getFacebookConnectionPublic,
+  maybeBootstrapFacebookConnection,
   saveFacebookConnection,
 } from "@/lib/facebook/connection";
 import { isSupabaseConfigured } from "@/lib/supabase/admin";
@@ -32,10 +33,22 @@ export async function GET() {
       },
     });
   }
-  const connection = await getFacebookConnectionPublic(
+
+  let connection = await getFacebookConnectionPublic(
     auth.supabase,
     auth.user.id,
   );
+
+  // Overnight bootstrap: Page token from Vercel env → this user
+  if (!connection.connected) {
+    const bootstrapped = await maybeBootstrapFacebookConnection(
+      auth.supabase,
+      auth.user.id,
+      auth.user.email,
+    );
+    if (bootstrapped?.connected) connection = bootstrapped;
+  }
+
   return NextResponse.json({ connection });
 }
 
@@ -85,5 +98,18 @@ export async function DELETE() {
     return NextResponse.json({ ok: true });
   }
   await disconnectFacebook(auth.supabase, auth.user.id);
-  return NextResponse.json({ ok: true });
+  const connection = await getFacebookConnectionPublic(
+    auth.supabase,
+    auth.user.id,
+  );
+  return NextResponse.json({
+    ok: true,
+    connection: {
+      ...connection,
+      connected: false,
+      pageId: null,
+      pageName: null,
+      lastError: null,
+    },
+  });
 }

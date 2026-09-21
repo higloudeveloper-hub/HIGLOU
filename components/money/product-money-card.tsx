@@ -5,12 +5,16 @@ import Link from "next/link";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { toast } from "sonner";
 import {
+  ArrowRight,
   Banknote,
+  Check,
+  Copy,
   ExternalLink,
   Eye,
   GitCompareArrows,
   Link2,
   Loader2,
+  MessageCircle,
   QrCode,
   Scale,
   ShieldCheck,
@@ -179,6 +183,10 @@ export function ProductMoneyCard({
   const [busy, setBusy] = useState<string | null>(null);
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
   const [smartPath, setSmartPath] = useState<string | null>(null);
+  const [affiliateUrl, setAffiliateUrl] = useState<string | null>(null);
+  const [guideOpen, setGuideOpen] = useState(false);
+  const [guideStep, setGuideStep] = useState(0);
+  const [copiedFlash, setCopiedFlash] = useState(false);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<TabId>("ganar");
   const [seedUrls, setSeedUrls] = useState<PlatformUrls | null>(null);
@@ -285,6 +293,25 @@ export function ProductMoneyCard({
     };
   }, [productId, asin, ebayPrice, title, brand, upc, amazonPrice, cost]);
 
+  const absoluteSmart = useCallback((path: string | null | undefined) => {
+    if (!path) return null;
+    if (typeof window === "undefined") return path;
+    return `${window.location.origin}${path}`;
+  }, []);
+
+  const copyText = useCallback(async (text: string, okMsg?: string) => {
+    try {
+      await navigator.clipboard?.writeText(text);
+      setCopiedFlash(true);
+      window.setTimeout(() => setCopiedFlash(false), 1600);
+      toast.success(okMsg || "Link copiado");
+      return true;
+    } catch {
+      toast.message(text);
+      return false;
+    }
+  }, []);
+
   const createAffiliate = useCallback(async () => {
     if (!asin) {
       toast.message("ASIN required for Amazon Affiliate");
@@ -315,16 +342,22 @@ export function ProductMoneyCard({
         toast.error(body.error || "Could not create affiliate link");
         return;
       }
-      setSmartPath(body.smartLink?.path || null);
+      const path = body.smartLink?.path || null;
+      const dest = body.link?.destinationUrl || null;
+      const shareUrl = absoluteSmart(path) || dest;
+      setSmartPath(path);
+      setAffiliateUrl(dest);
       setQrDataUrl(body.qrDataUrl || null);
-      toast.success("Affiliate link created", {
-        description: body.link?.destinationUrl,
-      });
-      body.warnings?.slice(0, 1).forEach((w) => toast.message(w));
+      setGuideOpen(true);
+      setGuideStep(0);
+      setTab("ganar");
+      if (shareUrl) {
+        await copyText(shareUrl, "Link listo · seguí los pasos");
+      }
     } finally {
       setBusy(null);
     }
-  }, [asin, productId]);
+  }, [asin, productId, absoluteSmart, copyText]);
 
   const watchProduct = useCallback(async () => {
     if (!productId) {
@@ -433,13 +466,13 @@ export function ProductMoneyCard({
     return (
       <div
         className={cn(
-          "flex min-h-[180px] items-center justify-center overflow-hidden rounded-xl border border-[#1a1f1c]/10 bg-[#141814]",
+          "flex min-h-[160px] items-center justify-center overflow-hidden rounded-2xl border border-[#e5e5e5] bg-white",
           className,
         )}
       >
         <div className="flex flex-col items-center gap-2">
           <Loader2 className="size-5 animate-spin text-[#3665F3]" />
-          <p className="text-[11px] tracking-[0.18em] text-white/50 uppercase">
+          <p className="text-[11px] tracking-[0.14em] text-[#8a8a8a] uppercase">
             Analizando money paths…
           </p>
         </div>
@@ -635,39 +668,14 @@ export function ProductMoneyCard({
                       type="button"
                       disabled={!flags.affiliateEngine || busy === "affiliate"}
                       onClick={() => void createAffiliate()}
-                      className="inline-flex h-12 items-center gap-2 rounded-xl bg-[#191919] px-5 text-[13px] font-semibold text-white hover:bg-[#2a2a2a] disabled:opacity-40"
+                      className="inline-flex h-12 items-center gap-2 rounded-xl bg-[#3665F3] px-5 text-[13px] font-semibold text-white hover:bg-[#2f5ae0] disabled:opacity-40"
                     >
                       {busy === "affiliate" ? (
                         <Loader2 className="size-4 animate-spin" />
                       ) : (
-                        <Banknote className="size-4 text-white/80" />
+                        <Banknote className="size-4 text-white/85" />
                       )}
-                      Crear affiliate
-                    </button>
-                    <button
-                      type="button"
-                      disabled={!flags.smartLinks || busy === "affiliate"}
-                      onClick={() => void createAffiliate()}
-                      className="inline-flex h-12 items-center gap-2 rounded-xl border border-[#e5e5e5] bg-white px-4 text-[13px] font-semibold text-[#191919] hover:border-[#191919] disabled:opacity-40"
-                    >
-                      <Link2 className="size-4" />
-                      Smart link
-                    </button>
-                    <button
-                      type="button"
-                      disabled={!qrDataUrl && !smartPath}
-                      onClick={() => {
-                        if (qrDataUrl) {
-                          const w = window.open("");
-                          w?.document.write(
-                            `<img alt="QR" src="${qrDataUrl}" /><p>${smartPath || ""}</p>`,
-                          );
-                        } else toast.message("Crea un Smart Link primero");
-                      }}
-                      className="inline-flex h-12 items-center gap-2 rounded-xl border border-[#e5e5e5] bg-white px-4 text-[13px] font-semibold text-[#191919] hover:border-[#191919] disabled:opacity-40"
-                    >
-                      <QrCode className="size-4" />
-                      QR
+                      {guideOpen ? "Regenerar link" : "Crear affiliate"}
                     </button>
                     <button
                       type="button"
@@ -680,16 +688,7 @@ export function ProductMoneyCard({
                       ) : (
                         <FacebookFMark className="size-3.5" />
                       )}
-                      Facebook ads
-                    </button>
-                    <button
-                      type="button"
-                      disabled={busy === "watch"}
-                      onClick={() => void watchProduct()}
-                      className="inline-flex h-12 items-center gap-2 rounded-xl border border-[#e5e5e5] bg-white px-4 text-[13px] font-semibold text-[#191919] hover:border-[#191919] disabled:opacity-40"
-                    >
-                      <Eye className="size-4" />
-                      Watch
+                      Facebook
                     </button>
                     <Link
                       href="/affiliate"
@@ -699,12 +698,288 @@ export function ProductMoneyCard({
                       Ver affiliate
                     </Link>
                   </div>
-                  {smartPath ? (
+
+                  <AnimatePresence>
+                    {guideOpen && (smartPath || affiliateUrl) ? (
+                      <motion.div
+                        initial={reduce ? false : { opacity: 0, y: 12, scale: 0.98 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={reduce ? undefined : { opacity: 0, y: -8 }}
+                        transition={{ duration: 0.4, ease: EASE }}
+                        className="overflow-hidden rounded-2xl border border-[#3665F3]/25 bg-white shadow-[0_12px_40px_-20px_rgba(54,101,243,0.35)]"
+                      >
+                        <div className="flex items-center justify-between gap-3 border-b border-[#e5e5e5] bg-[#eef2ff] px-4 py-3">
+                          <div className="min-w-0">
+                            <p className="inline-flex items-center gap-1.5 text-[11px] font-semibold tracking-[0.14em] text-[#3665F3] uppercase">
+                              <Check className="size-3.5" />
+                              Affiliate listo
+                            </p>
+                            <p className="mt-0.5 text-[13px] font-medium text-[#191919]">
+                              Seguí estos pasos para cobrar comisión
+                            </p>
+                          </div>
+                          {copiedFlash ? (
+                            <motion.span
+                              initial={{ scale: 0.8, opacity: 0 }}
+                              animate={{ scale: 1, opacity: 1 }}
+                              className="rounded-full bg-[#1f7a4d] px-2.5 py-1 text-[10px] font-bold text-white uppercase"
+                            >
+                              Copiado
+                            </motion.span>
+                          ) : null}
+                        </div>
+
+                        {/* Progress steps */}
+                        <div className="flex gap-1 border-b border-[#e5e5e5] px-4 py-2.5">
+                          {[
+                            "Link",
+                            "Compartir",
+                            "Publicar",
+                            "Seguir",
+                          ].map((label, i) => (
+                            <button
+                              key={label}
+                              type="button"
+                              onClick={() => setGuideStep(i)}
+                              className={cn(
+                                "flex-1 rounded-lg py-2 text-center text-[11px] font-semibold transition",
+                                guideStep === i
+                                  ? "bg-[#3665F3] text-white"
+                                  : guideStep > i
+                                    ? "bg-[#e8f5ee] text-[#1f7a4d]"
+                                    : "bg-[#f7f7f7] text-[#8a8a8a]",
+                              )}
+                            >
+                              {i + 1}. {label}
+                            </button>
+                          ))}
+                        </div>
+
+                        <div className="space-y-4 p-4">
+                          <AnimatePresence mode="wait">
+                            {guideStep === 0 ? (
+                              <motion.div
+                                key="s0"
+                                initial={reduce ? false : { opacity: 0, x: 10 }}
+                                animate={{ opacity: 1, x: 0 }}
+                                exit={{ opacity: 0, x: -8 }}
+                                className="space-y-3"
+                              >
+                                <p className="text-[14px] font-semibold text-[#191919]">
+                                  Tu link de comisión ya está creado
+                                </p>
+                                <p className="text-[13px] leading-relaxed text-[#707070]">
+                                  Higlou generó un Smart Link con tu tag Associates.
+                                  Copialo — es el que vas a compartir.
+                                </p>
+                                <div className="rounded-xl border border-[#e5e5e5] bg-[#f7f7f7] px-3 py-2.5">
+                                  <p className="text-[10px] font-semibold tracking-wide text-[#8a8a8a] uppercase">
+                                    Smart link
+                                  </p>
+                                  <p className="mt-1 break-all text-[13px] font-medium text-[#191919]">
+                                    {absoluteSmart(smartPath) || affiliateUrl}
+                                  </p>
+                                </div>
+                                <div className="flex flex-wrap gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const u = absoluteSmart(smartPath) || affiliateUrl;
+                                      if (u) void copyText(u);
+                                    }}
+                                    className="inline-flex h-11 items-center gap-2 rounded-xl bg-[#191919] px-4 text-[13px] font-semibold text-white"
+                                  >
+                                    <Copy className="size-3.5" />
+                                    Copiar link
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setGuideStep(1)}
+                                    className="inline-flex h-11 items-center gap-2 rounded-xl bg-[#3665F3] px-4 text-[13px] font-semibold text-white"
+                                  >
+                                    Siguiente
+                                    <ArrowRight className="size-3.5" />
+                                  </button>
+                                </div>
+                              </motion.div>
+                            ) : null}
+
+                            {guideStep === 1 ? (
+                              <motion.div
+                                key="s1"
+                                initial={reduce ? false : { opacity: 0, x: 10 }}
+                                animate={{ opacity: 1, x: 0 }}
+                                exit={{ opacity: 0, x: -8 }}
+                                className="space-y-3"
+                              >
+                                <p className="text-[14px] font-semibold text-[#191919]">
+                                  Compartilo donde está tu audiencia
+                                </p>
+                                <p className="text-[13px] leading-relaxed text-[#707070]">
+                                  WhatsApp, stories, bio o grupos. Cada click cuenta
+                                  para tu comisión.
+                                </p>
+                                <div className="grid gap-2 sm:grid-cols-2">
+                                  <a
+                                    href={`https://wa.me/?text=${encodeURIComponent(
+                                      `Oferta verificada${title ? ` · ${title}` : ""}\n${absoluteSmart(smartPath) || affiliateUrl || ""}`,
+                                    )}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    onClick={() => setGuideStep(2)}
+                                    className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-[#25D366] text-[13px] font-semibold text-white"
+                                  >
+                                    <MessageCircle className="size-4" />
+                                    WhatsApp
+                                  </a>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      void shareFacebook();
+                                      setGuideStep(2);
+                                    }}
+                                    className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-[#1877F2] text-[13px] font-semibold text-white"
+                                  >
+                                    <FacebookFMark className="size-3.5" />
+                                    Facebook
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const u = absoluteSmart(smartPath) || affiliateUrl;
+                                      if (u) void copyText(u, "Listo para pegar en bio / stories");
+                                    }}
+                                    className="inline-flex h-12 items-center justify-center gap-2 rounded-xl border border-[#e5e5e5] bg-white text-[13px] font-semibold text-[#191919]"
+                                  >
+                                    <Copy className="size-3.5" />
+                                    Copiar otra vez
+                                  </button>
+                                  {qrDataUrl ? (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        const w = window.open("");
+                                        w?.document.write(
+                                          `<title>QR Affiliate</title><div style="font-family:system-ui;padding:24px;text-align:center"><img alt="QR" src="${qrDataUrl}" style="max-width:240px"/><p>${smartPath || ""}</p></div>`,
+                                        );
+                                      }}
+                                      className="inline-flex h-12 items-center justify-center gap-2 rounded-xl border border-[#e5e5e5] bg-white text-[13px] font-semibold text-[#191919]"
+                                    >
+                                      <QrCode className="size-3.5" />
+                                      Ver QR
+                                    </button>
+                                  ) : null}
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => setGuideStep(2)}
+                                  className="inline-flex h-10 items-center gap-1.5 text-[13px] font-semibold text-[#3665F3]"
+                                >
+                                  Ya lo compartí
+                                  <ArrowRight className="size-3.5" />
+                                </button>
+                              </motion.div>
+                            ) : null}
+
+                            {guideStep === 2 ? (
+                              <motion.div
+                                key="s2"
+                                initial={reduce ? false : { opacity: 0, x: 10 }}
+                                animate={{ opacity: 1, x: 0 }}
+                                exit={{ opacity: 0, x: -8 }}
+                                className="space-y-3"
+                              >
+                                <p className="text-[14px] font-semibold text-[#191919]">
+                                  Publicá como Ads / Carrusel / Vitrina
+                                </p>
+                                <p className="text-[13px] leading-relaxed text-[#707070]">
+                                  En Facebook Ads elegí este producto (o Afiliados)
+                                  y publicá en tu Page. El tráfico vuelve a tu link.
+                                </p>
+                                <div className="flex flex-wrap gap-2">
+                                  <Link
+                                    href="/facebook"
+                                    className="inline-flex h-11 items-center gap-2 rounded-xl bg-[#1877F2] px-4 text-[13px] font-semibold text-white"
+                                  >
+                                    <FacebookFMark className="size-3.5" />
+                                    Abrir Facebook Ads
+                                  </Link>
+                                  <button
+                                    type="button"
+                                    onClick={() => setGuideStep(3)}
+                                    className="inline-flex h-11 items-center gap-2 rounded-xl border border-[#e5e5e5] bg-white px-4 text-[13px] font-semibold text-[#191919]"
+                                  >
+                                    Siguiente
+                                    <ArrowRight className="size-3.5" />
+                                  </button>
+                                </div>
+                              </motion.div>
+                            ) : null}
+
+                            {guideStep === 3 ? (
+                              <motion.div
+                                key="s3"
+                                initial={reduce ? false : { opacity: 0, x: 10 }}
+                                animate={{ opacity: 1, x: 0 }}
+                                exit={{ opacity: 0, x: -8 }}
+                                className="space-y-3"
+                              >
+                                <p className="text-[14px] font-semibold text-[#191919]">
+                                  Seguí clicks y comisiones
+                                </p>
+                                <p className="text-[13px] leading-relaxed text-[#707070]">
+                                  En Affiliate ves links, clicks y stats. Associates
+                                  reporta conversiones cuando Amazon las confirma.
+                                </p>
+                                <ul className="space-y-2 text-[13px] text-[#555]">
+                                  {[
+                                    "Clicks en Smart Link → Affiliate",
+                                    "Compras → Associates Central (reportes)",
+                                    "Re-publicá winners fuertes en Facebook Ads",
+                                  ].map((line) => (
+                                    <li key={line} className="flex gap-2">
+                                      <Check className="mt-0.5 size-3.5 shrink-0 text-[#1f7a4d]" />
+                                      {line}
+                                    </li>
+                                  ))}
+                                </ul>
+                                <div className="flex flex-wrap gap-2">
+                                  <Link
+                                    href="/affiliate"
+                                    className="inline-flex h-11 items-center gap-2 rounded-xl bg-[#3665F3] px-4 text-[13px] font-semibold text-white"
+                                  >
+                                    Ir a Affiliate
+                                    <ExternalLink className="size-3.5 opacity-80" />
+                                  </Link>
+                                  <button
+                                    type="button"
+                                    onClick={() => setGuideOpen(false)}
+                                    className="inline-flex h-11 items-center gap-2 rounded-xl border border-[#e5e5e5] bg-white px-4 text-[13px] font-semibold text-[#191919]"
+                                  >
+                                    Listo
+                                  </button>
+                                </div>
+                              </motion.div>
+                            ) : null}
+                          </AnimatePresence>
+                        </div>
+                      </motion.div>
+                    ) : null}
+                  </AnimatePresence>
+
+                  {!guideOpen && smartPath ? (
                     <p className="rounded-xl border border-dashed border-[#e5e5e5] bg-white px-3.5 py-2.5 text-[12px] text-[#707070]">
                       Smart link:{" "}
-                      <span className="font-semibold text-[#191919]">
-                        {smartPath}
-                      </span>
+                      <button
+                        type="button"
+                        className="font-semibold text-[#3665F3] hover:underline"
+                        onClick={() => {
+                          setGuideOpen(true);
+                          setGuideStep(0);
+                        }}
+                      >
+                        {smartPath} · ver pasos
+                      </button>
                     </p>
                   ) : null}
                   {aff?.message ? (

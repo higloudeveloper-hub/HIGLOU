@@ -112,7 +112,25 @@ export async function GET() {
 
   const links = data || [];
   const ids = links.map((l) => l.id).filter(Boolean);
+  const productIds = [
+    ...new Set(
+      links
+        .map((l) => String((l as { product_id?: string | null }).product_id || "").trim())
+        .filter(Boolean),
+    ),
+  ];
+  const asins = [
+    ...new Set(
+      links
+        .map((l) => String(l.asin || "").trim().toUpperCase())
+        .filter((a) => /^[A-Z0-9]{10}$/.test(a)),
+    ),
+  ];
+
   const smartByAff = new Map<string, string>();
+  const imageByProduct = new Map<string, string>();
+  const imageByAsin = new Map<string, string>();
+
   if (ids.length) {
     const { data: smartRows } = await auth.supabase
       .from("smart_links")
@@ -130,10 +148,57 @@ export async function GET() {
     }
   }
 
+  if (productIds.length) {
+    const { data: images } = await auth.supabase
+      .from("product_images")
+      .select("product_id, public_url, is_primary, sort_order")
+      .in("product_id", productIds)
+      .order("sort_order", { ascending: true });
+    const sorted = [...(images || [])].sort((a, b) => {
+      const primaryA = a.is_primary ? 0 : 1;
+      const primaryB = b.is_primary ? 0 : 1;
+      if (primaryA !== primaryB) return primaryA - primaryB;
+      return Number(a.sort_order ?? 0) - Number(b.sort_order ?? 0);
+    });
+    for (const img of sorted) {
+      const pid = String(img.product_id || "");
+      const url = String(img.public_url || "").replace(/[\r\n\t]+/g, "").trim();
+      if (pid && url && !imageByProduct.has(pid)) imageByProduct.set(pid, url);
+    }
+  }
+
+  if (asins.length) {
+    const { data: ledger } = await auth.supabase
+      .from("opportunity_ledger")
+      .select("asin, payload")
+      .eq("user_id", auth.user.id)
+      .in("asin", asins)
+      .limit(80);
+    for (const row of ledger || []) {
+      const asin = String(row.asin || "").trim().toUpperCase();
+      const payload = (row.payload || {}) as { imageUrl?: string };
+      const photo = String(payload.imageUrl || "").trim();
+      if (asin && /^https?:\/\//i.test(photo) && !imageByAsin.has(asin)) {
+        imageByAsin.set(asin, photo);
+      }
+    }
+  }
+
   return NextResponse.json({
-    links: links.map((link) => ({
-      ...link,
-      smartPath: smartByAff.get(link.id) || null,
-    })),
+    links: links.map((link) => {
+      const productId = String(
+        (link as { product_id?: string | null }).product_id || "",
+      ).trim();
+      const asin = String(link.asin || "").trim().toUpperCase();
+      const imageUrl =
+        (productId && imageByProduct.get(productId)) ||
+        imageByAsin.get(asin) ||
+        null;
+      return {
+        ...link,
+        smartPath: smartByAff.get(link.id) || null,
+        imageUrl,
+      };
+    }),
   });
 }

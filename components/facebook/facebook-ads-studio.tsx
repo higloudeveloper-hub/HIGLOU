@@ -14,6 +14,10 @@ import {
 } from "lucide-react";
 import { FacebookFMark } from "@/components/brand/store-marks";
 import { usePaidActionOptional } from "@/components/credits/paid-action-provider";
+import {
+  amazonAsinImageCandidates,
+  amazonAsinPrimaryImage,
+} from "@/lib/amazon/asin-image";
 import { CREDIT_ACTIONS } from "@/lib/credits/costs";
 import { cn } from "@/lib/utils";
 
@@ -24,6 +28,7 @@ type AffLink = {
   source: string | null;
   click_count: number | null;
   smartPath?: string | null;
+  imageUrl?: string | null;
 };
 
 type ImportedProduct = {
@@ -35,6 +40,7 @@ type ImportedProduct = {
   coverUrl?: string | null;
   photos?: string[];
   ebayListingId?: string | null;
+  status?: string | null;
 };
 
 type MarketDrop = {
@@ -59,6 +65,7 @@ type PickCard = {
   id: string;
   title: string;
   imageUrl: string;
+  imageFallbacks?: string[];
   linkUrl: string;
   priceLabel?: string | null;
   meta?: string;
@@ -90,15 +97,56 @@ function money(n: number | null | undefined) {
   }).format(n);
 }
 
-function Thumb({ url, alt }: { url: string; alt: string }) {
+function Thumb({
+  url,
+  alt,
+  fallbacks = [],
+}: {
+  url: string;
+  alt: string;
+  fallbacks?: string[];
+}) {
+  const [idx, setIdx] = useState(0);
+  const chain = [url, ...fallbacks].filter(
+    (u, i, arr) => Boolean(u) && arr.indexOf(u) === i,
+  );
+  const src = chain[Math.min(idx, Math.max(chain.length - 1, 0))] || "";
+
+  if (!src) {
+    return (
+      <span className="grid size-full place-items-center bg-[#f0f0f0] text-[10px] font-semibold text-[#a8a8a8]">
+        Sin foto
+      </span>
+    );
+  }
+
   return (
     // eslint-disable-next-line @next/next/no-img-element
     <img
-      src={url}
+      key={src}
+      src={src}
       alt={alt}
       className="size-full object-contain bg-white p-1"
+      onError={() => {
+        setIdx((n) => (n + 1 < chain.length ? n + 1 : n));
+      }}
     />
   );
+}
+
+function resolveProductImage(opts: {
+  preferred?: string | null;
+  asin?: string | null;
+  marketByAsin?: Map<string, string>;
+}): { url: string; fallbacks: string[] } {
+  const preferred = String(opts.preferred || "").trim();
+  const asin = String(opts.asin || "").trim().toUpperCase();
+  const market = asin ? opts.marketByAsin?.get(asin) || "" : "";
+  const asinCandidates = amazonAsinImageCandidates(asin);
+  const chain = [preferred, market, ...asinCandidates].filter(
+    (u, i, arr) => Boolean(u) && /^https?:\/\//i.test(u) && arr.indexOf(u) === i,
+  );
+  return { url: chain[0] || "", fallbacks: chain.slice(1) };
 }
 
 export function FacebookAdsStudio() {
@@ -146,11 +194,8 @@ export function FacebookAdsStudio() {
 
       if (prodRes.ok) {
         const body = (await prodRes.json()) as { products?: ImportedProduct[] };
-        setImported(
-          (body.products || []).filter(
-            (p) => p.coverUrl || (p.photos && p.photos.length > 0),
-          ),
-        );
+        // All user listings (eBay / Amazon / drafts) — not only those with photos
+        setImported(body.products || []);
       } else setImported([]);
 
       if (feedRes.ok) {
@@ -186,22 +231,58 @@ export function FacebookAdsStudio() {
     void load();
   }, [load]);
 
+  // Prefer Mis listings when there are no affiliate links yet
+  useEffect(() => {
+    if (loading) return;
+    if (imported.length > 0 && links.length === 0) {
+      setSource("imported");
+    }
+  }, [loading, imported.length, links.length]);
+
+  const marketPhotoByAsin = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const d of drops) {
+      const asin = String(d.asin || "").trim().toUpperCase();
+      const photo = String(d.photo || "").trim();
+      if (asin && photo && !map.has(asin)) map.set(asin, photo);
+    }
+    for (const p of imported) {
+      const asin = String(p.amazonAsin || "").trim().toUpperCase();
+      const photo = String(p.coverUrl || p.photos?.[0] || "").trim();
+      if (asin && photo && !map.has(asin)) map.set(asin, photo);
+    }
+    return map;
+  }, [drops, imported]);
+
   const cards: PickCard[] = useMemo(() => {
     if (source === "affiliate") {
-      return links.map((l) => ({
-        id: `aff:${l.id}`,
-        title: `ASIN ${l.asin}`,
-        imageUrl: `https://images-na.ssl-images-amazon.com/images/P/${l.asin}.01.LZZZZZZZ.jpg`,
-        linkUrl: absoluteUrl(l.smartPath, l.destination_url),
-        meta: l.smartPath || l.source || "affiliate",
-        priceLabel: null,
-      }));
+      return links.map((l) => {
+        const img = resolveProductImage({
+          preferred: l.imageUrl,
+          asin: l.asin,
+          marketByAsin: marketPhotoByAsin,
+        });
+        return {
+          id: `aff:${l.id}`,
+          title: `ASIN ${l.asin}`,
+          imageUrl: img.url || amazonAsinPrimaryImage(l.asin),
+          imageFallbacks: img.fallbacks,
+          linkUrl: absoluteUrl(l.smartPath, l.destination_url),
+          meta: l.smartPath || l.source || "affiliate",
+          priceLabel: null,
+        };
+      });
     }
     if (source === "imported") {
       return imported.map((p) => {
-        const photo = p.coverUrl || p.photos?.[0] || "";
         const asin = String(p.amazonAsin || "").trim();
         const ebayId = String(p.ebayListingId || "").trim();
+        const preferred = p.coverUrl || p.photos?.[0] || "";
+        const img = resolveProductImage({
+          preferred,
+          asin,
+          marketByAsin: marketPhotoByAsin,
+        });
         const linkUrl = ebayId
           ? `https://www.ebay.com/itm/${ebayId}`
           : asin
@@ -209,13 +290,19 @@ export function FacebookAdsStudio() {
             : typeof window !== "undefined"
               ? `${window.location.origin}/listings/${p.id}`
               : `/listings/${p.id}`;
+        const channel = ebayId
+          ? "eBay"
+          : asin
+            ? "Amazon"
+            : "Listing";
         return {
           id: `imp:${p.id}`,
           title: p.title || "Listing",
-          imageUrl: photo,
+          imageUrl: img.url,
+          imageFallbacks: img.fallbacks,
           linkUrl,
           priceLabel: money(p.price),
-          meta: p.brand || (ebayId ? "eBay" : asin ? "Amazon" : "Importado"),
+          meta: p.brand ? `${channel} · ${p.brand}` : channel,
         };
       });
     }
@@ -226,11 +313,12 @@ export function FacebookAdsStudio() {
       id: `mkt:${d.id}`,
       title: d.title,
       imageUrl: d.photo,
+      imageFallbacks: amazonAsinImageCandidates(d.asin),
       linkUrl: d.affiliateUrl || `https://www.amazon.com/dp/${d.asin}`,
       priceLabel: money(d.sell),
       meta: d.asin,
     }));
-  }, [source, links, imported, drops, customCards]);
+  }, [source, links, imported, drops, customCards, marketPhotoByAsin]);
 
   const addCustomCard = () => {
     const title = customDraft.title.trim() || "Promo";
@@ -338,13 +426,20 @@ export function FacebookAdsStudio() {
       const payloadCards = selectedCards.map((c) => ({
         id: c.id,
         title: c.title,
-        imageUrl: c.imageUrl,
+        imageUrl:
+          c.imageUrl ||
+          c.imageFallbacks?.find((u) => /^https?:\/\//i.test(u)) ||
+          "",
         linkUrl: absoluteUrl(
           c.linkUrl.startsWith("/") ? c.linkUrl : null,
           c.linkUrl,
         ),
         priceLabel: c.priceLabel,
       }));
+      if (payloadCards.some((c) => !c.imageUrl)) {
+        toast.error("Falta imagen en algún producto. Probá Mis listings o Market.");
+        return;
+      }
 
       // For market picks without affiliate, create smart link when possible
       if (source === "market" && format === "ads" && selectedCards[0]) {
@@ -549,7 +644,7 @@ export function FacebookAdsStudio() {
             {(
               [
                 { id: "affiliate" as const, label: "Afiliados", count: links.length },
-                { id: "imported" as const, label: "Importados", count: imported.length },
+                { id: "imported" as const, label: "Mis listings", count: imported.length },
                 { id: "market" as const, label: "Market", count: drops.length },
                 { id: "custom" as const, label: "Cualquiera", count: customCards.length },
               ] as const
@@ -637,7 +732,11 @@ export function FacebookAdsStudio() {
                         )}
                       >
                         <span className="relative size-14 shrink-0 overflow-hidden rounded-xl border border-[#eee] bg-white">
-                          <Thumb url={card.imageUrl} alt="" />
+                          <Thumb
+                            url={card.imageUrl}
+                            alt=""
+                            fallbacks={card.imageFallbacks}
+                          />
                           {on ? (
                             <motion.span
                               initial={{ scale: 0.6, opacity: 0 }}
@@ -719,7 +818,11 @@ export function FacebookAdsStudio() {
                     <p className="mb-2 line-clamp-2 text-[13px] text-[#191919]">{message || "…"}</p>
                     <div className="overflow-hidden rounded-xl border border-[#e5e5e5]">
                       <div className="aspect-[1.91/1] bg-white">
-                        <Thumb url={selectedCards[0]!.imageUrl} alt="" />
+                        <Thumb
+                          url={selectedCards[0]!.imageUrl}
+                          alt=""
+                          fallbacks={selectedCards[0]!.imageFallbacks}
+                        />
                       </div>
                       <div className="border-t border-[#e5e5e5] px-3 py-2">
                         <p className="truncate text-[13px] font-semibold text-[#191919]">
@@ -732,12 +835,19 @@ export function FacebookAdsStudio() {
                   <div className="bg-white p-3">
                     <p className="mb-1 text-[13px] font-semibold">{collectionTitle || "Vitrina"}</p>
                     <div className="mb-2 aspect-[4/5] max-h-36 overflow-hidden rounded-xl border border-[#e5e5e5]">
-                      <Thumb url={coverCard?.imageUrl || selectedCards[0]!.imageUrl} alt="" />
+                      <Thumb
+                        url={coverCard?.imageUrl || selectedCards[0]!.imageUrl}
+                        alt=""
+                        fallbacks={
+                          coverCard?.imageFallbacks ||
+                          selectedCards[0]!.imageFallbacks
+                        }
+                      />
                     </div>
                     <div className="flex gap-1.5 overflow-x-auto">
                       {selectedCards.map((c) => (
                         <span key={c.id} className="size-11 shrink-0 overflow-hidden rounded-lg border border-[#e5e5e5]">
-                          <Thumb url={c.imageUrl} alt="" />
+                          <Thumb url={c.imageUrl} alt="" fallbacks={c.imageFallbacks} />
                         </span>
                       ))}
                     </div>
@@ -746,7 +856,9 @@ export function FacebookAdsStudio() {
                   <div className="flex gap-2 overflow-x-auto bg-white p-3">
                     {selectedCards.map((c) => (
                       <div key={c.id} className="w-24 shrink-0 overflow-hidden rounded-xl border border-[#e5e5e5]">
-                        <div className="aspect-square"><Thumb url={c.imageUrl} alt="" /></div>
+                        <div className="aspect-square">
+                          <Thumb url={c.imageUrl} alt="" fallbacks={c.imageFallbacks} />
+                        </div>
                         <p className="truncate px-1.5 py-1 text-[10px] font-semibold">{c.title}</p>
                       </div>
                     ))}
@@ -782,7 +894,7 @@ export function FacebookAdsStudio() {
                           : "border-[#e5e5e5]",
                       )}
                     >
-                      <Thumb url={c.imageUrl} alt="" />
+                      <Thumb url={c.imageUrl} alt="" fallbacks={c.imageFallbacks} />
                     </button>
                   ))}
                 </div>
@@ -833,12 +945,32 @@ export function FacebookAdsStudio() {
 function EmptySource({ source }: { source: SourceTab }) {
   const copy =
     source === "affiliate"
-      ? { title: "Sin afiliados", body: "Creá un link desde Market → Ganar.", href: "/market", cta: "Market" }
+      ? {
+          title: "Sin afiliados",
+          body: "Creá un link desde Market → Ganar.",
+          href: "/market",
+          cta: "Market",
+        }
       : source === "imported"
-        ? { title: "Sin importados", body: "Importá desde Find Winners.", href: "/listings", cta: "Listings" }
+        ? {
+            title: "Sin listings",
+            body: "Importá a eBay/Amazon desde Find Winners o Listings. Acá podés publicarlos en Facebook.",
+            href: "/listings",
+            cta: "Listings",
+          }
         : source === "custom"
-          ? { title: "Nada todavía", body: "Pegá un link + imagen arriba.", href: "/facebook", cta: "" }
-          : { title: "Market vacío", body: "Escaneá Find Winners primero.", href: "/winners", cta: "Find Winners" };
+          ? {
+              title: "Pegá cualquier link",
+              body: "Título + URL + imagen https.",
+              href: "#",
+              cta: "",
+            }
+          : {
+              title: "Market vacío",
+              body: "Escaneá Find Winners para llenar el floor.",
+              href: "/winners",
+              cta: "Find Winners",
+            };
   return (
     <div className="rounded-2xl border border-dashed border-[#ddd] bg-white px-6 py-12 text-center">
       <p className="text-[18px] font-semibold text-[#191919]">{copy.title}</p>

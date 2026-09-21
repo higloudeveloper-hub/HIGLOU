@@ -1,11 +1,18 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireUser } from "@/lib/auth/require-user";
-import { amazonAsinPrimaryImage } from "@/lib/amazon/asin-image";
 import { createAffiliateLink } from "@/lib/monetization/affiliate/links";
 import { getMonetizationFlags, isMoneyEngineEnabled } from "@/lib/monetization/flags";
 import { createSmartLink } from "@/lib/monetization/smart-links";
 import { buildQrSvg, qrSvgToDataUrl } from "@/lib/monetization/qr";
+import {
+  getCachedKeepaProduct,
+  setCachedKeepaProduct,
+  takeCachedKeepaProducts,
+} from "@/lib/keepa/cache";
+import { keepaGet } from "@/lib/keepa/client";
+import { isKeepaConfigured } from "@/lib/keepa/config";
+import { parseKeepaProduct } from "@/lib/keepa/parse";
 
 export const runtime = "nodejs";
 
@@ -210,6 +217,56 @@ export async function GET() {
     }
   }
 
+  // Keepa fill for ASINs still missing a real I/ image or title
+  const needKeepa = asins.filter(
+    (asin) => !imageByAsin.has(asin) || !titleByAsin.has(asin),
+  );
+  if (needKeepa.length) {
+    const { hits, missing } = takeCachedKeepaProducts(needKeepa);
+    for (const snap of hits) {
+      const asin = snap.asin.toUpperCase();
+      if (snap.imageUrl && !imageByAsin.has(asin)) {
+        imageByAsin.set(asin, snap.imageUrl);
+      }
+      if (snap.title && !titleByAsin.has(asin)) {
+        titleByAsin.set(asin, snap.title);
+      }
+    }
+    if (missing.length && isKeepaConfigured()) {
+      try {
+        const json = await keepaGet("product", {
+          asin: missing.slice(0, 12).join(","),
+          stats: 0,
+        });
+        for (const row of json.products || []) {
+          const snap = parseKeepaProduct(row);
+          if (!snap?.asin) continue;
+          setCachedKeepaProduct(snap);
+          const asin = snap.asin.toUpperCase();
+          if (snap.imageUrl && !imageByAsin.has(asin)) {
+            imageByAsin.set(asin, snap.imageUrl);
+          }
+          if (snap.title && !titleByAsin.has(asin)) {
+            titleByAsin.set(asin, snap.title);
+          }
+        }
+      } catch {
+        // Keepa optional — client still has ASIN image fallbacks
+      }
+    }
+    // Also seed from any still-cached singles
+    for (const asin of missing) {
+      const snap = getCachedKeepaProduct(asin);
+      if (!snap) continue;
+      if (snap.imageUrl && !imageByAsin.has(asin)) {
+        imageByAsin.set(asin, snap.imageUrl);
+      }
+      if (snap.title && !titleByAsin.has(asin)) {
+        titleByAsin.set(asin, snap.title);
+      }
+    }
+  }
+
   return NextResponse.json({
     links: links.map((link) => {
       const productId = String(
@@ -219,7 +276,6 @@ export async function GET() {
       const imageUrl =
         (productId && imageByProduct.get(productId)) ||
         imageByAsin.get(asin) ||
-        (asin ? amazonAsinPrimaryImage(asin) : null) ||
         null;
       const title =
         (productId && titleByAsin.get(`product:${productId}`)) ||

@@ -59,12 +59,7 @@ export function MarketDetailPanel({
   const pricing = item ? marketTilePricing(item) : null;
   const amazonHref =
     item?.affiliateUrl || item?.platformUrls?.amazon || null;
-  const playColor =
-    play?.play === "sell_amazon"
-      ? "text-[#8a6a10]"
-      : play?.play === "source_supply"
-        ? "text-[#2a4a7a]"
-        : "text-[#1f7a4d]";
+  const playColor = "text-[#3665F3]";
 
   const comps = item
     ? [
@@ -163,7 +158,7 @@ export function MarketDetailPanel({
                 <button
                   type="button"
                   onClick={onClose}
-                  className="inline-flex size-9 items-center justify-center rounded-full bg-[#f4f2ed] text-[#6b6560] hover:bg-[#ebe7e0] hover:text-[#141414]"
+                  className="inline-flex size-9 items-center justify-center rounded-full bg-[#f5f5f5] text-[#707070] hover:bg-[#ebebeb] hover:text-[#191919]"
                 >
                   <X className="size-4" />
                 </button>
@@ -172,7 +167,7 @@ export function MarketDetailPanel({
 
             <div className="flex-1 space-y-4 overflow-y-auto px-5 py-4">
               <div className="flex gap-4">
-                <div className="relative size-28 shrink-0 overflow-hidden rounded-xl bg-[#f4f2ed]">
+                <div className="relative size-28 shrink-0 overflow-hidden rounded-xl border border-[#ebebeb] bg-white">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src={item.photo}
@@ -181,14 +176,14 @@ export function MarketDetailPanel({
                   />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <h2 className="text-[16px] leading-snug font-semibold text-[#141414]">
+                  <h2 className="text-[16px] leading-snug font-semibold text-[#191919]">
                     {item.title}
                   </h2>
-                  <p className="mt-1 text-[12px] text-[#8a847c]">
+                  <p className="mt-1 text-[12px] text-[#8a8a8a]">
                     {[item.name, item.asin, item.ships].filter(Boolean).join(" · ")}
                   </p>
                   {item.blurb ? (
-                    <p className="mt-2 line-clamp-3 text-[12px] leading-relaxed text-[#6b6560]">
+                    <p className="mt-2 line-clamp-3 text-[12px] leading-relaxed text-[#707070]">
                       {item.blurb}
                     </p>
                   ) : null}
@@ -196,26 +191,26 @@ export function MarketDetailPanel({
               </div>
 
               {/* Comparisons */}
-              <section className="overflow-hidden rounded-2xl border border-[#ebe7e0]">
-                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#efeae2] bg-[#faf9f6] px-3.5 py-2.5">
-                  <p className="text-[11px] font-semibold tracking-[0.12em] text-[#6b6560] uppercase">
+              <section className="overflow-hidden rounded-xl border border-[#e8e8e8]">
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#ebebeb] bg-[#fafafa] px-3.5 py-2.5">
+                  <p className="text-[11px] font-semibold tracking-[0.12em] text-[#8a8a8a] uppercase">
                     Comparar precios
                   </p>
                   <PlatformOpenLinks size="sm" urls={item.platformUrls} />
                 </div>
-                <div className="grid grid-cols-2 gap-px bg-[#efeae2]">
+                <div className="grid grid-cols-2 gap-px bg-[#ebebeb]">
                   {comps.map((c) => {
                     const cell = (
                       <>
-                        <p className="text-[10px] font-semibold tracking-wide text-[#8a847c] uppercase">
+                        <p className="text-[10px] font-semibold tracking-wide text-[#a0a0a0] uppercase">
                           {c.label}
                           {c.role ? ` · ${c.role}` : ""}
                         </p>
-                        <p className="mt-1 font-display text-[22px] leading-none tabular-nums">
+                        <p className="mt-1 text-[20px] leading-none font-semibold tabular-nums text-[#191919]">
                           {money(c.price)}
                         </p>
                         {c.href ? (
-                          <p className="mt-2 inline-flex items-center gap-1 text-[10px] font-semibold text-[#2162a1]">
+                          <p className="mt-2 inline-flex items-center gap-1 text-[10px] font-semibold text-[#3665F3]">
                             Abrir
                             <ExternalLink className="size-2.5" />
                           </p>
@@ -232,7 +227,7 @@ export function MarketDetailPanel({
                         href={c.href}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className={cn(cls, "hover:bg-[#faf9f6]")}
+                        className={cn(cls, "hover:bg-[#fafafa]")}
                       >
                         {cell}
                       </a>
@@ -243,18 +238,18 @@ export function MarketDetailPanel({
                     );
                   })}
                 </div>
-                <div className="border-t border-[#efeae2] px-3.5 py-2.5 text-[12px] text-[#6b6560]">
+                <div className="border-t border-[#ebebeb] px-3.5 py-2.5 text-[12px] text-[#707070]">
                   {pricing.mode === "spread" ? (
                     <>
                       Compra {money(pricing.buy)}
-                      <span className="mx-1.5 text-[#c5bfb5]">→</span>
+                      <span className="mx-1.5 text-[#d0d0d0]">→</span>
                       Venta {money(pricing.sell)}
                       {` · keep ${signed(pricing.keep)}`}
                     </>
                   ) : (
                     <>
                       {pricing.label} {money(pricing.price)}
-                      <span className="mx-1.5 text-[#c5bfb5]">·</span>
+                      <span className="mx-1.5 text-[#d0d0d0]">·</span>
                       {play.action}
                     </>
                   )}
@@ -262,29 +257,20 @@ export function MarketDetailPanel({
               </section>
 
               {/* Trend meter */}
-              <section className="rounded-2xl border border-[#ebe7e0] px-3.5 py-3">
+              <section className="rounded-xl border border-[#e8e8e8] px-3.5 py-3">
                 <div className="mb-1.5 flex items-center justify-between">
-                  <p className="text-[11px] font-semibold tracking-[0.12em] text-[#6b6560] uppercase">
+                  <p className="text-[11px] font-semibold tracking-[0.12em] text-[#8a8a8a] uppercase">
                     Tendencia verificada
                   </p>
-                  <p className="text-[12px] font-semibold text-[#141414]">{trend.label}</p>
+                  <p className="text-[12px] font-semibold text-[#191919]">{trend.label}</p>
                 </div>
-                <div className="h-2 overflow-hidden rounded-full bg-[#efeae2]">
+                <div className="h-1.5 overflow-hidden rounded-full bg-[#f0f0f0]">
                   <div
-                    className={cn(
-                      "h-full rounded-full",
-                      trend.level === "hot"
-                        ? "bg-[#c43c1a]"
-                        : trend.level === "high"
-                          ? "bg-[#1f7a4d]"
-                          : trend.level === "rising"
-                            ? "bg-[#2162a1]"
-                            : "bg-[#a8a29a]",
-                    )}
+                    className="h-full rounded-full bg-[#191919]"
                     style={{ width: `${trend.progress}%` }}
                   />
                 </div>
-                <p className="mt-1.5 text-[11px] text-[#8a847c]">{trend.detail}</p>
+                <p className="mt-1.5 text-[11px] text-[#8a8a8a]">{trend.detail}</p>
               </section>
 
               {/* Money actions — 2 clear clicks */}
@@ -294,7 +280,7 @@ export function MarketDetailPanel({
                     type="button"
                     disabled={busy}
                     onClick={onClaim}
-                    className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-[#141414] text-[13px] font-semibold text-white hover:bg-[#2a2a2a] disabled:opacity-40"
+                    className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-[#191919] text-[13px] font-semibold text-white hover:bg-[#2a2a2a] disabled:opacity-40"
                   >
                     {busy ? (
                       <Loader2 className="size-4 animate-spin" />
@@ -311,7 +297,7 @@ export function MarketDetailPanel({
                     type="button"
                     disabled={affBusy || !item.asin}
                     onClick={onEarn}
-                    className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-[#1f7a4d] text-[13px] font-semibold text-white hover:bg-[#196640] disabled:opacity-40"
+                    className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-[#3665F3] text-[13px] font-semibold text-white hover:bg-[#2f5ae0] disabled:opacity-40"
                   >
                     {affBusy ? (
                       <Loader2 className="size-4 animate-spin" />
@@ -323,7 +309,7 @@ export function MarketDetailPanel({
                       : "Ganar affiliate"}
                   </button>
                 </div>
-                <p className="text-[11px] leading-relaxed text-[#8a847c]">
+                <p className="text-[11px] leading-relaxed text-[#8a8a8a]">
                   {item.affiliateUrl || tagReady
                     ? "Abre Amazon con tu tag y copia el link para compartir. Comisión real vía Associates."
                     : "Configura tu Associate tag en Settings → Money para activar links en cada producto."}
@@ -337,12 +323,12 @@ export function MarketDetailPanel({
                 imageUrl={item.photo || undefined}
                 buyPrice={item.buy}
                 sellPrice={item.sell}
-                className="!border-[#ebe7e0] overflow-hidden rounded-2xl"
+                className="!border-[#e8e8e8] overflow-hidden rounded-xl"
               />
 
               <Link
                 href="/winners"
-                className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-[#ddd7cd] bg-[#faf9f6] px-4 py-3 text-[13px] font-semibold text-[#2162a1] hover:border-[#2162a1]"
+                className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-[#d0d0d0] bg-[#fafafa] px-4 py-3 text-[13px] font-semibold text-[#3665F3] hover:border-[#3665F3]"
               >
                 <Search className="size-4" />
                 Buscar más winners como este

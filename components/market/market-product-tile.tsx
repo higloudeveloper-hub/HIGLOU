@@ -1,7 +1,7 @@
 "use client";
 
 import { motion, useReducedMotion } from "motion/react";
-import { Banknote, ExternalLink, ShieldCheck, Store } from "lucide-react";
+import { BadgeCheck, Banknote, ExternalLink, Store } from "lucide-react";
 import type { MarketDropPublic } from "@/lib/market/from-opportunity";
 import {
   hasArbitrageKeep,
@@ -25,25 +25,7 @@ function signed(n: number) {
   return n >= 0 ? `+${abs}` : `−${abs.replace("-", "")}`;
 }
 
-function trendTone(level: ReturnType<typeof marketTrend>["level"]) {
-  if (level === "hot") return "bg-[#c43c1a] text-white";
-  if (level === "high") return "bg-[#1f7a4d] text-white";
-  if (level === "rising") return "bg-[#2162a1] text-white";
-  return "bg-[#ebe7e0] text-[#5a554e]";
-}
-
-function trendBar(level: ReturnType<typeof marketTrend>["level"]) {
-  if (level === "hot") return "bg-[#c43c1a]";
-  if (level === "high") return "bg-[#1f7a4d]";
-  if (level === "rising") return "bg-[#2162a1]";
-  return "bg-[#a8a29a]";
-}
-
-function playTone(play: ReturnType<typeof marketPlay>["play"]) {
-  if (play === "sell_amazon") return "bg-[#fff3c4]/95 text-[#7a5c00]";
-  if (play === "source_supply") return "bg-[#e8eef8]/95 text-[#2a4a7a]";
-  return "bg-[#e8f5ee]/95 text-[#1a6b45]";
-}
+const EASE = [0.22, 1, 0.36, 1] as const;
 
 export function MarketProductTile({
   item,
@@ -72,6 +54,12 @@ export function MarketProductTile({
   const amazonHref = item.affiliateUrl || item.platformUrls?.amazon || null;
   const hasAffiliate = Boolean(item.affiliateUrl);
   const demand = item.demandScore ?? item.score ?? 0;
+  const scoreValue =
+    showKeep && pricing.mode === "spread"
+      ? signed(pricing.keep)
+      : String(Math.round(demand));
+  const scoreLabel =
+    showKeep && pricing.mode === "spread" ? "Keep" : "Score";
 
   return (
     <motion.article
@@ -81,155 +69,148 @@ export function MarketProductTile({
       transition={{
         duration: 0.35,
         delay: Math.min(index * 0.035, 0.28),
-        ease: [0.22, 1, 0.36, 1],
+        ease: EASE,
       }}
-      whileHover={reduce ? undefined : { y: -3 }}
+      whileHover={
+        reduce
+          ? undefined
+          : {
+              y: -4,
+              transition: { type: "spring", stiffness: 400, damping: 28 },
+            }
+      }
       className={cn(
-        "group relative flex flex-col overflow-hidden rounded-2xl border bg-white shadow-[0_1px_0_rgba(20,20,20,0.04)] transition-[border-color,box-shadow]",
+        "group relative flex flex-col overflow-hidden rounded-xl border bg-white",
         selected
-          ? "border-[#141414] shadow-[0_8px_28px_rgba(20,20,20,0.08)]"
-          : "border-[#ebe7e0] hover:border-[#cfc9bf] hover:shadow-[0_12px_32px_rgba(20,20,20,0.07)]",
+          ? "border-[#3665F3] shadow-[0_0_0_1px_#3665F3]"
+          : "border-[#e8e8e8] hover:border-[#d0d0d0] hover:shadow-[0_12px_32px_rgba(0,0,0,0.08)]",
       )}
     >
-      <button type="button" onClick={onOpen} className="flex flex-1 flex-col text-left">
-        <div className="relative aspect-[4/3] overflow-hidden bg-[#f4f2ed]">
+      {!reduce ? (
+        <motion.span
+          aria-hidden
+          className="pointer-events-none absolute inset-0 z-[2] bg-gradient-to-br from-white/0 via-white/40 to-white/0 opacity-0 transition-opacity duration-300 group-hover:opacity-100"
+          style={{ mixBlendMode: "overlay" }}
+        />
+      ) : null}
+
+      <button
+        type="button"
+        onClick={onOpen}
+        className="relative z-[1] flex flex-1 flex-col text-left"
+      >
+        {/* Image — pure white, no cream */}
+        <div className="relative aspect-[5/4] overflow-hidden border-b border-[#f0f0f0] bg-white">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={item.photo}
             alt=""
-            className="size-full object-contain p-4 transition duration-500 group-hover:scale-[1.03]"
+            className="size-full object-contain p-5 transition duration-500 group-hover:scale-[1.03]"
             loading="lazy"
           />
-          <div className="absolute top-2.5 left-2.5 flex max-w-[70%] flex-wrap gap-1">
-            <span
-              className={cn(
-                "rounded-full px-2 py-0.5 text-[10px] font-semibold tracking-wide uppercase backdrop-blur-sm",
-                playTone(play.play),
-              )}
-            >
+
+          <div className="absolute top-2.5 left-2.5 flex max-w-[72%] flex-wrap gap-1">
+            <span className="inline-flex items-center gap-1 rounded-md border border-[#e5e5e5] bg-white/95 px-1.5 py-0.5 text-[10px] font-semibold tracking-wide text-[#191919] shadow-sm backdrop-blur-sm">
+              <BadgeCheck className="size-3 text-[#3665F3]" strokeWidth={2.25} />
               {play.badge}
             </span>
           </div>
-          <div className="absolute top-2.5 right-2.5">
-            <span
-              className={cn(
-                "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold tracking-wide uppercase backdrop-blur-sm",
-                trendTone(trend.level),
-              )}
-            >
-              {trend.label}
+
+          {trend.level === "hot" ? (
+            <div className="absolute top-2.5 right-2.5">
+              <span className="rounded-md border border-[#e5e5e5] bg-[#191919] px-1.5 py-0.5 text-[10px] font-semibold tracking-wide text-white uppercase shadow-sm">
+                Hot
+              </span>
+            </div>
+          ) : null}
+
+          {/* Score — compact neutral chip, never green blob */}
+          <div className="absolute right-2.5 bottom-2.5 flex items-baseline gap-1 rounded-md border border-[#e5e5e5] bg-white/95 px-2 py-1 shadow-sm backdrop-blur-sm">
+            <span className="text-[11px] font-medium tracking-wide text-[#8a8a8a] uppercase">
+              {scoreLabel}
             </span>
-          </div>
-          <div
-            className={cn(
-              "absolute right-2.5 bottom-2.5 rounded-xl px-2.5 py-1.5 shadow-sm backdrop-blur-md",
-              showKeep || demand >= 55
-                ? "bg-[#1f7a4d]/95 text-white"
-                : "bg-white/95 text-[#141414]",
-            )}
-          >
-            {showKeep && pricing.mode === "spread" ? (
-              <>
-                <p className="font-display text-[20px] leading-none tabular-nums">
-                  {signed(pricing.keep)}
-                </p>
-                <p className="mt-0.5 text-[9px] font-semibold tracking-wider uppercase opacity-80">
-                  Keep
-                </p>
-              </>
-            ) : (
-              <>
-                <p className="font-display text-[20px] leading-none tabular-nums">
-                  {Math.round(demand)}
-                </p>
-                <p className="mt-0.5 text-[9px] font-semibold tracking-wider uppercase opacity-80">
-                  Score
-                </p>
-              </>
-            )}
+            <span className="text-[13px] font-semibold tabular-nums text-[#191919]">
+              {scoreValue}
+            </span>
           </div>
         </div>
 
-        <div className="flex flex-1 flex-col gap-2.5 px-3.5 pt-3 pb-2.5">
+        <div className="flex flex-1 flex-col gap-2.5 px-3 pt-3 pb-2.5">
           <div>
-            <p className="line-clamp-2 min-h-[2.6em] text-[13px] leading-snug font-medium text-[#1a1a1a]">
+            <p className="line-clamp-2 min-h-[2.5em] text-[13px] leading-snug font-medium text-[#191919]">
               {item.title}
             </p>
-            <p className="mt-1 flex items-center gap-1 truncate text-[11px] text-[#8a847c]">
-              <ShieldCheck className="size-3 shrink-0 text-[#1f7a4d]" />
-              <span className="truncate">
-                {[item.name, item.asin].filter(Boolean).join(" · ")} · analizado
-              </span>
-            </p>
-            <p className="mt-0.5 truncate text-[11px] font-medium text-[#5a554e]">
-              {play.hint}
+            <p className="mt-1 truncate text-[11px] text-[#8a8a8a]">
+              {[item.name, item.asin].filter(Boolean).join(" · ")}
+              {item.asin || item.name ? " · " : ""}
+              analizado
             </p>
           </div>
 
-          {/* Trend progress — verified Keepa velocity */}
+          {/* Trend — thin black bar, no green */}
           <div>
             <div className="mb-1 flex items-center justify-between gap-2">
-              <p className="text-[9px] font-semibold tracking-[0.12em] text-[#8a847c] uppercase">
+              <p className="text-[9px] font-semibold tracking-[0.12em] text-[#8a8a8a] uppercase">
                 Tendencia
               </p>
-              <p className="truncate text-[10px] text-[#6b6560]">{trend.detail}</p>
+              <p className="truncate text-[10px] text-[#707070]">{trend.detail}</p>
             </div>
-            <div className="h-1.5 overflow-hidden rounded-full bg-[#efeae2]">
+            <div className="h-1 overflow-hidden rounded-full bg-[#f0f0f0]">
               <motion.div
-                className={cn("h-full rounded-full", trendBar(trend.level))}
+                className="h-full rounded-full bg-[#191919]"
                 initial={reduce ? false : { width: 0 }}
                 animate={{ width: `${trend.progress}%` }}
                 transition={{
                   duration: 0.7,
                   delay: Math.min(index * 0.04, 0.3),
-                  ease: [0.22, 1, 0.36, 1],
+                  ease: EASE,
                 }}
               />
             </div>
           </div>
 
-          {/* Pricing — never fake Compra = Venta */}
-          <div className="mt-auto border-t border-[#f0ebe3] pt-2.5">
+          {/* Pricing table */}
+          <div className="mt-auto overflow-hidden rounded-lg border border-[#ebebeb]">
             {pricing.mode === "spread" ? (
-              <div className="grid grid-cols-3 gap-1">
-                <div>
-                  <p className="text-[9px] font-semibold tracking-wider text-[#8a847c] uppercase">
+              <div className="grid grid-cols-3 divide-x divide-[#ebebeb] bg-white">
+                <div className="px-2 py-2">
+                  <p className="text-[8px] font-semibold tracking-wide text-[#a0a0a0] uppercase">
                     Compra
                   </p>
-                  <p className="mt-0.5 text-[15px] font-semibold tabular-nums">
+                  <p className="mt-0.5 text-[13px] font-semibold tabular-nums text-[#191919]">
                     {money(pricing.buy)}
                   </p>
                 </div>
-                <div className="text-center">
-                  <p className="text-[9px] font-semibold tracking-wider text-[#8a847c] uppercase">
+                <div className="px-2 py-2 text-center">
+                  <p className="text-[8px] font-semibold tracking-wide text-[#a0a0a0] uppercase">
                     Venta
                   </p>
-                  <p className="mt-0.5 text-[15px] font-semibold tabular-nums">
+                  <p className="mt-0.5 text-[13px] font-semibold tabular-nums text-[#191919]">
                     {money(pricing.sell)}
                   </p>
                 </div>
-                <div className="text-right">
-                  <p className="text-[9px] font-semibold tracking-wider text-[#1f7a4d] uppercase">
+                <div className="px-2 py-2 text-right">
+                  <p className="text-[8px] font-semibold tracking-wide text-[#a0a0a0] uppercase">
                     Keep
                   </p>
-                  <p className="mt-0.5 text-[15px] font-semibold tabular-nums text-[#1f7a4d]">
+                  <p className="mt-0.5 text-[13px] font-semibold tabular-nums text-[#191919]">
                     {signed(pricing.keep)}
                   </p>
                 </div>
               </div>
             ) : (
-              <div className="flex items-end justify-between gap-2">
+              <div className="flex items-end justify-between gap-2 bg-white px-2.5 py-2.5">
                 <div>
-                  <p className="text-[9px] font-semibold tracking-wider text-[#8a847c] uppercase">
+                  <p className="text-[8px] font-semibold tracking-wide text-[#a0a0a0] uppercase">
                     {pricing.label}
                   </p>
-                  <p className="mt-0.5 font-display text-[22px] leading-none tabular-nums">
+                  <p className="mt-0.5 text-[18px] font-semibold leading-none tabular-nums text-[#191919]">
                     {money(pricing.price)}
                   </p>
                 </div>
-                <p className="pb-0.5 text-right text-[10px] leading-snug text-[#8a847c]">
+                <p className="pb-0.5 text-right text-[10px] leading-snug text-[#8a8a8a]">
                   {play.play === "sell_amazon"
-                    ? "Precio Buy Box · listar Amazon"
+                    ? "Buy Box · listar Amazon"
                     : "Precio verificado"}
                 </p>
               </div>
@@ -238,18 +219,18 @@ export function MarketProductTile({
         </div>
       </button>
 
-      <div className="flex items-center gap-1 border-t border-[#f0ebe3] px-2 py-1.5">
+      <div className="relative z-[1] flex items-center gap-0.5 border-t border-[#f0f0f0] px-1.5 py-1">
         {amazonHref ? (
           <a
             href={amazonHref}
             target="_blank"
             rel="noopener noreferrer"
             onClick={(e) => e.stopPropagation()}
-            className="inline-flex h-8 items-center gap-1 rounded-lg px-2 text-[11px] font-semibold text-[#2162a1] hover:bg-[#f0f5fa]"
+            className="inline-flex h-8 items-center gap-1 rounded-md px-2 text-[11px] font-medium text-[#555] hover:bg-[#f5f5f5] hover:text-[#191919]"
             title={hasAffiliate ? "Amazon con tu tag affiliate" : "Abrir Amazon"}
           >
             Amazon
-            <ExternalLink className="size-3 opacity-60" />
+            <ExternalLink className="size-2.5 opacity-50" />
           </a>
         ) : null}
         {item.platformUrls?.ebay && play.play !== "sell_amazon" ? (
@@ -258,10 +239,10 @@ export function MarketProductTile({
             target="_blank"
             rel="noopener noreferrer"
             onClick={(e) => e.stopPropagation()}
-            className="inline-flex h-8 items-center gap-1 rounded-lg px-2 text-[11px] font-semibold text-[#2162a1] hover:bg-[#f0f5fa]"
+            className="inline-flex h-8 items-center gap-1 rounded-md px-2 text-[11px] font-medium text-[#555] hover:bg-[#f5f5f5] hover:text-[#191919]"
           >
             eBay
-            <ExternalLink className="size-3 opacity-60" />
+            <ExternalLink className="size-2.5 opacity-50" />
           </a>
         ) : null}
         {onEarn && item.asin ? (
@@ -272,7 +253,7 @@ export function MarketProductTile({
               e.stopPropagation();
               onEarn();
             }}
-            className="inline-flex h-8 items-center gap-1 rounded-lg px-2 text-[11px] font-semibold text-[#1f7a4d] hover:bg-[#e8f5ee] disabled:opacity-40"
+            className="inline-flex h-8 items-center gap-1 rounded-md px-2 text-[11px] font-medium text-[#555] hover:bg-[#f5f5f5] hover:text-[#191919] disabled:opacity-40"
             title="Abrir + copiar link affiliate"
           >
             <Banknote className="size-3" />
@@ -286,7 +267,7 @@ export function MarketProductTile({
             e.stopPropagation();
             onClaim();
           }}
-          className="ml-auto inline-flex h-8 items-center gap-1 rounded-lg bg-[#f4c928] px-2.5 text-[11px] font-semibold text-[#141414] hover:bg-[#efbf1a] disabled:opacity-40"
+          className="ml-auto inline-flex h-8 items-center gap-1.5 rounded-md bg-[#3665F3] px-2.5 text-[11px] font-semibold text-white hover:bg-[#2f5ae0] disabled:opacity-40"
         >
           <Store className="size-3" />
           {busy ? "…" : play.play === "sell_amazon" ? "Listar" : "Tienda"}

@@ -178,7 +178,10 @@ describe("higlou market + find winners wiring", () => {
       /Vender en Amazon|marketTilePricing/,
     );
     expect(readRepo("components/market/market-product-tile.tsx")).toMatch(
-      /Buy Box Amazon|Tendencia|Vender en Amazon/,
+      /Tendencia|Buy Box|bg-white/,
+    );
+    expect(readRepo("components/market/market-product-tile.tsx")).not.toMatch(
+      /#f4f2ed|#1f7a4d/,
     );
     expect(readRepo("components/market/market-earn-guide.tsx")).toMatch(
       /Ganar|Associate tag|Settings/,

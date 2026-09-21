@@ -140,7 +140,7 @@ export function WinnerProductTile({
               transition={{ delay: 0.12 + index * 0.04, ease: EASE }}
               className="inline-flex items-center gap-1 rounded-md border border-[#e5e5e5] bg-white/95 px-1.5 py-0.5 text-[10px] font-semibold tracking-wide text-[#191919] shadow-sm backdrop-blur-sm"
             >
-              <BadgeCheck className="size-3 text-[#1f7a4d]" strokeWidth={2.25} />
+              <BadgeCheck className="size-3 text-[#3665F3]" strokeWidth={2.25} />
               {item.badge}
             </motion.span>
           </div>

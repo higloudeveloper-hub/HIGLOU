@@ -547,13 +547,13 @@ export function FindWinnersBoard({
         <div className="mx-auto max-w-6xl px-4 py-4 md:px-8">
           <div className="flex flex-wrap items-center gap-3">
             <div className="inline-flex items-center gap-2 rounded-full border border-[#e5e5e5] bg-[#f7f7f7] px-3.5 py-2">
-              <BadgeCheck className="size-4 text-[#1f7a4d]" />
+              <BadgeCheck className="size-4 text-[#3665F3]" />
               <span className="text-[13px] font-semibold text-[#191919]">
                 Verificados por Higlou
               </span>
             </div>
             <div className="inline-flex items-center gap-2 rounded-full border border-[#e5e5e5] bg-[#f7f7f7] px-3.5 py-2">
-              <Flame className="size-4 text-[#ff6b35]" />
+              <Flame className="size-4 text-[#191919]" />
               <span className="text-[13px] font-semibold text-[#191919]">
                 En tendencia
               </span>
@@ -649,7 +649,7 @@ export function FindWinnersBoard({
           <span className="text-[12px] text-[#707070]">
             <strong className="text-[#191919]">{winners.length}</strong>
             {justFound > 0 ? (
-              <span className="ml-1.5 font-semibold text-[#1f7a4d]">
+              <span className="ml-1.5 font-semibold text-[#3665F3]">
                 · {justFound} nuevas
               </span>
             ) : null}

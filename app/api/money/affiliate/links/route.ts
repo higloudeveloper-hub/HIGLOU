@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireUser } from "@/lib/auth/require-user";
+import { amazonAsinPrimaryImage } from "@/lib/amazon/asin-image";
 import { createAffiliateLink } from "@/lib/monetization/affiliate/links";
 import { getMonetizationFlags, isMoneyEngineEnabled } from "@/lib/monetization/flags";
 import { createSmartLink } from "@/lib/monetization/smart-links";
@@ -218,6 +219,7 @@ export async function GET() {
       const imageUrl =
         (productId && imageByProduct.get(productId)) ||
         imageByAsin.get(asin) ||
+        (asin ? amazonAsinPrimaryImage(asin) : null) ||
         null;
       const title =
         (productId && titleByAsin.get(`product:${productId}`)) ||

@@ -114,6 +114,10 @@ function Thumb({
   );
   const src = chain[Math.min(idx, Math.max(chain.length - 1, 0))] || "";
 
+  const advance = () => {
+    setIdx((n) => (n + 1 < chain.length ? n + 1 : n));
+  };
+
   if (!src) {
     return (
       <span className="grid size-full place-items-center bg-[#f0f0f0] text-[10px] font-semibold text-[#a8a8a8]">
@@ -129,8 +133,11 @@ function Thumb({
       src={src}
       alt={alt}
       className="size-full object-contain bg-white p-1"
-      onError={() => {
-        setIdx((n) => (n + 1 < chain.length ? n + 1 : n));
+      onError={advance}
+      onLoad={(e) => {
+        // Amazon often returns a 1×1 transparent GIF with HTTP 200
+        const img = e.currentTarget;
+        if (img.naturalWidth < 8 || img.naturalHeight < 8) advance();
       }}
     />
   );

@@ -29,6 +29,7 @@ type AffLink = {
   click_count: number | null;
   smartPath?: string | null;
   imageUrl?: string | null;
+  title?: string | null;
 };
 
 type ImportedProduct = {
@@ -255,17 +256,39 @@ export function FacebookAdsStudio() {
     return map;
   }, [drops, imported]);
 
+  const titleByAsin = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const d of drops) {
+      const asin = String(d.asin || "").trim().toUpperCase();
+      const title = String(d.title || "").trim();
+      if (asin && title) map.set(asin, title);
+    }
+    for (const p of imported) {
+      const asin = String(p.amazonAsin || "").trim().toUpperCase();
+      const title = String(p.title || "").trim();
+      if (asin && title && !map.has(asin)) map.set(asin, title);
+    }
+    return map;
+  }, [drops, imported]);
+
   const cards: PickCard[] = useMemo(() => {
     if (source === "affiliate") {
       return links.map((l) => {
+        const asin = String(l.asin || "").trim().toUpperCase();
         const img = resolveProductImage({
           preferred: l.imageUrl,
           asin: l.asin,
           marketByAsin: marketPhotoByAsin,
         });
+        const rawTitle =
+          titleByAsin.get(asin) ||
+          String(l.title || "").trim() ||
+          "Oferta verificada";
+        const title = rawTitle.replace(/^ASIN\s+[A-Z0-9]{10}\s*/i, "").trim() ||
+          "Oferta verificada";
         return {
           id: `aff:${l.id}`,
-          title: `ASIN ${l.asin}`,
+          title: title.slice(0, 80),
           imageUrl: img.url || amazonAsinPrimaryImage(l.asin),
           imageFallbacks: img.fallbacks,
           linkUrl: absoluteUrl(l.smartPath, l.destination_url),
@@ -319,7 +342,7 @@ export function FacebookAdsStudio() {
       priceLabel: money(d.sell),
       meta: d.asin,
     }));
-  }, [source, links, imported, drops, customCards, marketPhotoByAsin]);
+  }, [source, links, imported, drops, customCards, marketPhotoByAsin, titleByAsin]);
 
   const addCustomCard = () => {
     const title = customDraft.title.trim() || "Promo";

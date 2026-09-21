@@ -130,6 +130,7 @@ export async function GET() {
   const smartByAff = new Map<string, string>();
   const imageByProduct = new Map<string, string>();
   const imageByAsin = new Map<string, string>();
+  const titleByAsin = new Map<string, string>();
 
   if (ids.length) {
     const { data: smartRows } = await auth.supabase
@@ -165,6 +166,23 @@ export async function GET() {
       const url = String(img.public_url || "").replace(/[\r\n\t]+/g, "").trim();
       if (pid && url && !imageByProduct.has(pid)) imageByProduct.set(pid, url);
     }
+
+    const { data: products } = await auth.supabase
+      .from("products")
+      .select("id, title, amazon_asin")
+      .eq("user_id", auth.user.id)
+      .in("id", productIds);
+    for (const row of products || []) {
+      const pid = String((row as { id?: string }).id || "");
+      const title = String((row as { title?: string }).title || "").trim();
+      const asin = String(
+        (row as { amazon_asin?: string | null }).amazon_asin || "",
+      )
+        .trim()
+        .toUpperCase();
+      if (pid && title) titleByAsin.set(`product:${pid}`, title);
+      if (asin && title && !titleByAsin.has(asin)) titleByAsin.set(asin, title);
+    }
   }
 
   if (asins.length) {
@@ -176,10 +194,17 @@ export async function GET() {
       .limit(80);
     for (const row of ledger || []) {
       const asin = String(row.asin || "").trim().toUpperCase();
-      const payload = (row.payload || {}) as { imageUrl?: string };
+      const payload = (row.payload || {}) as {
+        imageUrl?: string;
+        title?: string;
+      };
       const photo = String(payload.imageUrl || "").trim();
+      const title = String(payload.title || "").trim();
       if (asin && /^https?:\/\//i.test(photo) && !imageByAsin.has(asin)) {
         imageByAsin.set(asin, photo);
+      }
+      if (asin && title && !titleByAsin.has(asin)) {
+        titleByAsin.set(asin, title);
       }
     }
   }
@@ -194,10 +219,15 @@ export async function GET() {
         (productId && imageByProduct.get(productId)) ||
         imageByAsin.get(asin) ||
         null;
+      const title =
+        (productId && titleByAsin.get(`product:${productId}`)) ||
+        titleByAsin.get(asin) ||
+        null;
       return {
         ...link,
         smartPath: smartByAff.get(link.id) || null,
         imageUrl,
+        title,
       };
     }),
   });

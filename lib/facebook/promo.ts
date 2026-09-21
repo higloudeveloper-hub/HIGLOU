@@ -36,12 +36,20 @@ function toChildAttachments(cards: PromoCard[]): ChildAttachment[] {
         /^https?:\/\//i.test(c.linkUrl) && /^https?:\/\//i.test(c.imageUrl),
     )
     .slice(0, 10)
-    .map((c) => ({
-      link: c.linkUrl,
-      name: (c.title || "Oferta").slice(0, 80),
-      description: (c.priceLabel || "Oferta verificada · Higlou").slice(0, 120),
-      picture: c.imageUrl,
-    }));
+    .map((c) => {
+      const cleaned = String(c.title || "")
+        .replace(/^ASIN\s+[A-Z0-9]{10}\b/i, "")
+        .replace(/\bB0[A-Z0-9]{8}\b/gi, "")
+        .replace(/\s{2,}/g, " ")
+        .trim();
+      const name = (cleaned || "Oferta verificada").slice(0, 80);
+      return {
+        link: c.linkUrl,
+        name,
+        description: (c.priceLabel || "Oferta verificada · Higlou").slice(0, 120),
+        picture: c.imageUrl,
+      };
+    });
 }
 
 /**

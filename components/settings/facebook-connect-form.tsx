@@ -49,22 +49,27 @@ export function FacebookConnectForm() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          pageId,
-          pageName: pageName || undefined,
-          accessToken,
+          pageId: pageId.trim(),
+          pageName: pageName.trim() || undefined,
+          accessToken: accessToken.trim(),
         }),
       });
       const body = (await res.json()) as {
         error?: string;
         connection?: Connection;
       };
-      if (!res.ok) {
+      if (!res.ok || !body.connection?.connected) {
+        if (body.connection) setConnection(body.connection);
         toast.error(body.error || "No se pudo conectar Facebook");
         return;
       }
-      setConnection(body.connection || null);
+      setConnection(body.connection);
       setAccessToken("");
-      toast.success("Facebook Page conectada");
+      setPageId("");
+      setPageName("");
+      toast.success(
+        `Page conectada · ${body.connection.pageName || body.connection.pageId}`,
+      );
     } finally {
       setBusy(false);
     }
@@ -83,15 +88,15 @@ export function FacebookConnectForm() {
 
   if (loading) {
     return (
-      <div className="flex h-28 items-center justify-center rounded-3xl border border-[#ebe7e0] bg-white">
-        <Loader2 className="size-4 animate-spin text-[#8a847c]" />
+      <div className="flex h-28 items-center justify-center rounded-3xl border border-[#e8e8e8] bg-white">
+        <Loader2 className="size-4 animate-spin text-[#8a8a8a]" />
       </div>
     );
   }
 
   return (
-    <div className="overflow-hidden rounded-[1.5rem] border border-[#ebe7e0] bg-white">
-      <div className="flex items-start gap-3 border-b border-[#efeae2] bg-[linear-gradient(135deg,#1877F2_0%,#0f5fca_100%)] px-5 py-5 text-white">
+    <div className="overflow-hidden rounded-[1.5rem] border border-[#e8e8e8] bg-white">
+      <div className="flex items-start gap-3 border-b border-[#ebebeb] bg-[linear-gradient(135deg,#1877F2_0%,#0f5fca_100%)] px-5 py-5 text-white">
         <span className="grid size-11 place-items-center rounded-2xl bg-white/15">
           <FacebookFMark className="size-4" />
         </span>
@@ -100,8 +105,7 @@ export function FacebookConnectForm() {
             Facebook Page
           </h2>
           <p className="mt-1 text-[13px] text-white/85">
-            Para todo el público Higlou. Conectá una vez y publicá ofertas con
-            tu link Associates.
+            Pegá Page ID + Page token de Graph. Solo entonces queda On.
           </p>
         </div>
         {connection?.connected ? (
@@ -117,12 +121,12 @@ export function FacebookConnectForm() {
 
       <div className="space-y-4 px-5 py-5">
         {connection?.connected ? (
-          <div className="rounded-2xl border border-[#d8efe3] bg-[#f3faf6] px-4 py-3">
-            <p className="inline-flex items-center gap-1.5 text-[14px] font-semibold text-[#141414]">
-              <CheckCircle2 className="size-4 text-[#1f7a4d]" />
+          <div className="rounded-2xl border border-[#e8e8e8] bg-[#fafafa] px-4 py-3">
+            <p className="inline-flex items-center gap-1.5 text-[14px] font-semibold text-[#191919]">
+              <CheckCircle2 className="size-4 text-[#3665F3]" />
               {connection.pageName || "Facebook Page"}
             </p>
-            <p className="mt-1 text-[12px] text-[#6b6560]">
+            <p className="mt-1 text-[12px] text-[#707070]">
               Page ID {connection.pageId}
               {connection.connectedAt
                 ? ` · desde ${new Date(connection.connectedAt).toLocaleDateString()}`
@@ -140,7 +144,7 @@ export function FacebookConnectForm() {
               </Link>
               <Link
                 href="/affiliate"
-                className="inline-flex h-9 items-center rounded-full border border-[#ddd7cd] bg-white px-3.5 text-[12px] font-semibold text-[#141414]"
+                className="inline-flex h-9 items-center rounded-full border border-[#e5e5e5] bg-white px-3.5 text-[12px] font-semibold text-[#191919]"
               >
                 Ver Affiliate
               </Link>
@@ -161,9 +165,9 @@ export function FacebookConnectForm() {
           <>
             <ol className="grid gap-2 sm:grid-cols-3">
               {[
-                "Graph Explorer → GET /me/accounts",
-                "Copiá el id de tu Page",
-                "Copiá el access_token de esa Page (no el User token)",
+                "Graph → Page “Don Baraton Deals”",
+                "GET /me → copiá el id",
+                "Copiá el token de la derecha (Page)",
               ].map((step, i) => (
                 <li
                   key={step}
@@ -187,43 +191,48 @@ export function FacebookConnectForm() {
                 <code className="font-mono">FACEBOOK_TOKEN_ENCRYPTION_KEY</code>{" "}
                 o reutiliza{" "}
                 <code className="font-mono">EBAY_TOKEN_ENCRYPTION_KEY</code> (≥32
-                chars).
+                chars) en Vercel.
               </p>
             ) : null}
 
             <div className="grid gap-3 sm:grid-cols-2">
-              <label className="block text-[12px] font-semibold text-[#6b6560]">
+              <label className="block text-[12px] font-semibold text-[#707070]">
                 Page ID
                 <input
                   value={pageId}
                   onChange={(e) => setPageId(e.target.value)}
-                  placeholder="123456789012345"
-                  className="mt-1.5 h-11 w-full rounded-xl border border-[#ebe7e0] bg-[#faf9f6] px-3 text-[14px] text-[#141414] outline-none focus:border-[#1877F2] focus:bg-white"
+                  placeholder="1079254478615173"
+                  className="mt-1.5 h-11 w-full rounded-xl border border-[#e5e5e5] bg-white px-3 text-[14px] text-[#191919] outline-none focus:border-[#1877F2]"
                 />
               </label>
-              <label className="block text-[12px] font-semibold text-[#6b6560]">
+              <label className="block text-[12px] font-semibold text-[#707070]">
                 Nombre (opcional)
                 <input
                   value={pageName}
                   onChange={(e) => setPageName(e.target.value)}
-                  placeholder="Mi tienda"
-                  className="mt-1.5 h-11 w-full rounded-xl border border-[#ebe7e0] bg-[#faf9f6] px-3 text-[14px] text-[#141414] outline-none focus:border-[#1877F2] focus:bg-white"
+                  placeholder="Don Baraton Deals"
+                  className="mt-1.5 h-11 w-full rounded-xl border border-[#e5e5e5] bg-white px-3 text-[14px] text-[#191919] outline-none focus:border-[#1877F2]"
                 />
               </label>
             </div>
-            <label className="block text-[12px] font-semibold text-[#6b6560]">
+            <label className="block text-[12px] font-semibold text-[#707070]">
               Page access token
-              <input
-                type="password"
+              <textarea
                 value={accessToken}
                 onChange={(e) => setAccessToken(e.target.value)}
-                placeholder="EAAB…"
-                className="mt-1.5 h-11 w-full rounded-xl border border-[#ebe7e0] bg-[#faf9f6] px-3 font-mono text-[13px] text-[#141414] outline-none focus:border-[#1877F2] focus:bg-white"
+                placeholder="EAAB… (pegá el token completo, sin cortar)"
+                rows={3}
+                className="mt-1.5 w-full resize-y rounded-xl border border-[#e5e5e5] bg-white px-3 py-2.5 font-mono text-[12px] leading-relaxed text-[#191919] outline-none focus:border-[#1877F2]"
               />
             </label>
             <button
               type="button"
-              disabled={busy || !pageId.trim() || !accessToken.trim()}
+              disabled={
+                busy ||
+                !pageId.trim() ||
+                accessToken.trim().length < 20 ||
+                connection?.encryptionReady === false
+              }
               onClick={() => void connect()}
               className={cn(
                 "inline-flex h-12 items-center gap-2 rounded-full bg-[#1877F2] px-5 text-[14px] font-semibold text-white disabled:opacity-40",

@@ -183,22 +183,54 @@ export async function saveFacebookConnection(
     };
   }
 
-  const { error } = await supabase.from("facebook_connections").upsert(
-    {
-      user_id: opts.userId,
-      page_id: pageId,
-      page_name:
-        String(opts.pageName || "").trim() || verified.pageName || null,
-      access_token_enc: enc,
-      connected_at: new Date().toISOString(),
-      revoked_at: null,
-      last_error: null,
-      updated_at: new Date().toISOString(),
-    },
-    { onConflict: "user_id" },
-  );
+  const payload = {
+    user_id: opts.userId,
+    page_id: pageId,
+    page_name: String(opts.pageName || "").trim() || verified.pageName || null,
+    access_token_enc: enc,
+    connected_at: new Date().toISOString(),
+    revoked_at: null,
+    last_error: null,
+    updated_at: new Date().toISOString(),
+  };
+
+  // Prefer service role so RLS upsert footguns never leave "OK" toast + Off badge
+  let writer: SupabaseClient = supabase;
+  try {
+    const { createAdminClient } = await import("@/lib/supabase/admin");
+    writer = createAdminClient();
+  } catch {
+    writer = supabase;
+  }
+
+  const { data, error } = await writer
+    .from("facebook_connections")
+    .upsert(payload, { onConflict: "user_id" })
+    .select(
+      "user_id, page_id, access_token_enc, revoked_at",
+    )
+    .maybeSingle();
 
   if (error) {
+    // Fallback to user-scoped client if admin upsert failed for another reason
+    if (writer !== supabase) {
+      const retry = await supabase
+        .from("facebook_connections")
+        .upsert(payload, { onConflict: "user_id" })
+        .select("user_id, page_id, access_token_enc, revoked_at")
+        .maybeSingle();
+      if (retry.error || !retry.data?.access_token_enc || retry.data.revoked_at) {
+        return {
+          ok: false,
+          error:
+            retry.error?.message?.includes("facebook_connections") ||
+            error.message.includes("facebook_connections")
+              ? "Apply migration 20260920_facebook_connections.sql"
+              : retry.error?.message || error.message,
+        };
+      }
+      return { ok: true };
+    }
     return {
       ok: false,
       error:
@@ -207,6 +239,31 @@ export async function saveFacebookConnection(
           : error.message,
     };
   }
+
+  if (!data?.access_token_enc || data.revoked_at) {
+    return {
+      ok: false,
+      error:
+        "No se pudo guardar la conexión en la base. Probá de nuevo o aplicá la migración facebook_connections.",
+    };
+  }
+
+  // Round-trip decrypt to catch key mismatch before telling the UI "On"
+  try {
+    const roundTrip = decryptFacebookToken(data.access_token_enc);
+    if (!roundTrip) {
+      return {
+        ok: false,
+        error: "Token guardado ilegible — revisá FACEBOOK/EBAY_TOKEN_ENCRYPTION_KEY.",
+      };
+    }
+  } catch {
+    return {
+      ok: false,
+      error: "Token guardado ilegible — revisá FACEBOOK/EBAY_TOKEN_ENCRYPTION_KEY.",
+    };
+  }
+
   return { ok: true };
 }
 

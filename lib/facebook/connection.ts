@@ -25,6 +25,17 @@ type Row = {
   last_share_at: string | null;
 };
 
+type StoredPayload = {
+  pageId: string;
+  pageName: string | null;
+  accessTokenEnc: string;
+  connectedAt: string;
+  lastError: string | null;
+  lastShareAt: string | null;
+};
+
+const SECRETS_BUCKET = "higlou-secrets";
+
 async function dbForFacebook(
   fallback: SupabaseClient,
 ): Promise<SupabaseClient> {
@@ -34,6 +45,16 @@ async function dbForFacebook(
   } catch {
     return fallback;
   }
+}
+
+function isMissingTableError(message: string | null | undefined): boolean {
+  const m = String(message || "").toLowerCase();
+  return (
+    m.includes("facebook_connections") ||
+    m.includes("could not find the table") ||
+    (m.includes("relation") && m.includes("does not exist")) ||
+    m.includes("schema cache")
+  );
 }
 
 function publicFromRow(
@@ -106,12 +127,116 @@ function publicFromRow(
   };
 }
 
+function publicFromStored(
+  stored: StoredPayload | null,
+  encryptionReady: boolean,
+): FacebookConnectionPublic {
+  if (!stored?.pageId || !stored.accessTokenEnc) {
+    return {
+      connected: false,
+      pageId: null,
+      pageName: null,
+      connectedAt: null,
+      lastError: null,
+      lastShareAt: null,
+      encryptionReady,
+    };
+  }
+  return publicFromRow(
+    {
+      page_id: stored.pageId,
+      page_name: stored.pageName,
+      access_token_enc: stored.accessTokenEnc,
+      connected_at: stored.connectedAt,
+      revoked_at: null,
+      last_error: stored.lastError,
+      last_share_at: stored.lastShareAt,
+    },
+    encryptionReady,
+  );
+}
+
+async function ensureSecretsBucket(db: SupabaseClient): Promise<void> {
+  const { data: buckets } = await db.storage.listBuckets();
+  const exists = (buckets || []).some((b) => b.name === SECRETS_BUCKET);
+  if (exists) return;
+  const { error } = await db.storage.createBucket(SECRETS_BUCKET, {
+    public: false,
+    fileSizeLimit: 64 * 1024,
+  });
+  // ignore "already exists"
+  if (error && !/already|exists|duplicate/i.test(error.message)) {
+    throw error;
+  }
+}
+
+function storagePath(userId: string) {
+  return `facebook/${userId}.json`;
+}
+
+async function readStoragePayload(
+  db: SupabaseClient,
+  userId: string,
+): Promise<StoredPayload | null> {
+  try {
+    await ensureSecretsBucket(db);
+    const { data, error } = await db.storage
+      .from(SECRETS_BUCKET)
+      .download(storagePath(userId));
+    if (error || !data) return null;
+    const text = await data.text();
+    const parsed = JSON.parse(text) as StoredPayload;
+    if (!parsed?.pageId || !parsed?.accessTokenEnc) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+async function writeStoragePayload(
+  db: SupabaseClient,
+  userId: string,
+  payload: StoredPayload,
+): Promise<void> {
+  await ensureSecretsBucket(db);
+  const body = JSON.stringify(payload);
+  const { error } = await db.storage
+    .from(SECRETS_BUCKET)
+    .upload(storagePath(userId), body, {
+      contentType: "application/json",
+      upsert: true,
+    });
+  if (error) throw error;
+}
+
+async function deleteStoragePayload(
+  db: SupabaseClient,
+  userId: string,
+): Promise<void> {
+  try {
+    await db.storage.from(SECRETS_BUCKET).remove([storagePath(userId)]);
+  } catch {
+    // ignore
+  }
+}
+
+async function updateStorageMeta(
+  db: SupabaseClient,
+  userId: string,
+  patch: Partial<Pick<StoredPayload, "lastError" | "lastShareAt">>,
+): Promise<void> {
+  const current = await readStoragePayload(db, userId);
+  if (!current) return;
+  await writeStoragePayload(db, userId, { ...current, ...patch });
+}
+
 export async function getFacebookConnectionPublic(
   supabase: SupabaseClient,
   userId: string,
 ): Promise<FacebookConnectionPublic> {
   const encryptionReady = canEncryptFacebookToken();
   const db = await dbForFacebook(supabase);
+
   const { data, error } = await db
     .from("facebook_connections")
     .select(
@@ -120,21 +245,24 @@ export async function getFacebookConnectionPublic(
     .eq("user_id", userId)
     .maybeSingle();
 
-  if (error) {
-    return {
-      connected: false,
-      pageId: null,
-      pageName: null,
-      connectedAt: null,
-      lastError: error.message.includes("facebook_connections")
-        ? "Falta la tabla facebook_connections en Supabase. Aplicá la migración."
-        : error.message,
-      lastShareAt: null,
-      encryptionReady,
-    };
+  if (!error) {
+    return publicFromRow(data as Row | null, encryptionReady);
   }
 
-  return publicFromRow(data as Row | null, encryptionReady);
+  if (isMissingTableError(error.message)) {
+    const stored = await readStoragePayload(db, userId);
+    return publicFromStored(stored, encryptionReady);
+  }
+
+  return {
+    connected: false,
+    pageId: null,
+    pageName: null,
+    connectedAt: null,
+    lastError: error.message,
+    lastShareAt: null,
+    encryptionReady,
+  };
 }
 
 /** Confirm Page ID + Page access token against Graph before storing. */
@@ -150,7 +278,7 @@ export async function verifyFacebookPageToken(
     const body = (await res.json().catch(() => null)) as {
       id?: string;
       name?: string;
-      error?: { message?: string; code?: number };
+      error?: { message?: string };
     } | null;
     if (!res.ok || !body?.id) {
       return {
@@ -223,62 +351,20 @@ export async function saveFacebookConnection(
   const connectedAt = new Date().toISOString();
   const pageName =
     String(opts.pageName || "").trim() || verified.pageName || null;
-  const payload = {
-    user_id: opts.userId,
-    page_id: pageId,
-    page_name: pageName,
-    access_token_enc: enc,
-    connected_at: connectedAt,
-    revoked_at: null as string | null,
-    last_error: null as string | null,
-    updated_at: connectedAt,
-  };
-
   const db = await dbForFacebook(supabase);
 
-  // Clean reconnect: delete then insert so revoked_at / empty token never linger
-  await db.from("facebook_connections").delete().eq("user_id", opts.userId);
+  // Prefer dedicated table when it exists
+  const probe = await db.from("facebook_connections").select("user_id").limit(1);
+  const tableMissing = Boolean(
+    probe.error && isMissingTableError(probe.error.message),
+  );
 
-  const { data, error } = await db
-    .from("facebook_connections")
-    .insert(payload)
-    .select(
-      "page_id, page_name, access_token_enc, connected_at, revoked_at, last_error, last_share_at",
-    )
-    .maybeSingle();
-
-  if (error || !data?.access_token_enc) {
-    // Last resort: upsert if delete+insert blocked
-    const upsert = await db
+  if (!tableMissing && !probe.error) {
+    await db.from("facebook_connections").delete().eq("user_id", opts.userId);
+    const { data, error } = await db
       .from("facebook_connections")
-      .upsert(
-        {
-          ...payload,
-          // Force clear revoke with a sentinel rewrite via update after
-        },
-        { onConflict: "user_id" },
-      )
-      .select(
-        "page_id, page_name, access_token_enc, connected_at, revoked_at, last_error, last_share_at",
-      )
-      .maybeSingle();
-
-    if (upsert.error || !upsert.data?.access_token_enc) {
-      return {
-        ok: false,
-        error:
-          error?.message?.includes("facebook_connections") ||
-          upsert.error?.message?.includes("facebook_connections")
-            ? "Apply migration 20260920_facebook_connections.sql in Supabase"
-            : error?.message ||
-              upsert.error?.message ||
-              "No se pudo guardar la conexión en Supabase.",
-      };
-    }
-
-    await db
-      .from("facebook_connections")
-      .update({
+      .insert({
+        user_id: opts.userId,
         page_id: pageId,
         page_name: pageName,
         access_token_enc: enc,
@@ -287,32 +373,58 @@ export async function saveFacebookConnection(
         last_error: null,
         updated_at: connectedAt,
       })
-      .eq("user_id", opts.userId);
+      .select(
+        "page_id, page_name, access_token_enc, connected_at, revoked_at, last_error, last_share_at",
+      )
+      .maybeSingle();
 
-    const again = await getFacebookConnectionPublic(db, opts.userId);
-    if (!again.connected) {
+    if (!error && data?.access_token_enc) {
+      const connection = publicFromRow(data as Row, true);
+      if (connection.connected) return { ok: true, connection };
+    }
+    // fall through to storage if insert failed oddly
+  }
+
+  // Fallback: private Storage (no SQL migration required)
+  try {
+    await writeStoragePayload(db, opts.userId, {
+      pageId,
+      pageName,
+      accessTokenEnc: enc,
+      connectedAt,
+      lastError: null,
+      lastShareAt: null,
+    });
+    const connection = publicFromStored(
+      {
+        pageId,
+        pageName,
+        accessTokenEnc: enc,
+        connectedAt,
+        lastError: null,
+        lastShareAt: null,
+      },
+      true,
+    );
+    if (!connection.connected) {
       return {
         ok: false,
         error:
-          again.lastError ||
-          "Supabase guardó mal la fila (sigue Off). Revisá RLS / migración facebook_connections.",
-        connection: again,
+          connection.lastError ||
+          "Token guardado pero no legible. Revisá EBAY_TOKEN_ENCRYPTION_KEY.",
+        connection,
       };
     }
-    return { ok: true, connection: again };
-  }
-
-  const connection = publicFromRow(data as Row, true);
-  if (!connection.connected) {
+    return { ok: true, connection };
+  } catch (err) {
     return {
       ok: false,
       error:
-        connection.lastError ||
-        "Token guardado pero no legible. Revisá EBAY_TOKEN_ENCRYPTION_KEY en Vercel.",
-      connection,
+        err instanceof Error
+          ? err.message
+          : "No se pudo guardar la conexión de Facebook.",
     };
   }
-  return { ok: true, connection };
 }
 
 export async function disconnectFacebook(
@@ -321,6 +433,7 @@ export async function disconnectFacebook(
 ): Promise<void> {
   const db = await dbForFacebook(supabase);
   await db.from("facebook_connections").delete().eq("user_id", userId);
+  await deleteStoragePayload(db, userId);
 }
 
 export async function loadFacebookPageCredentials(
@@ -329,22 +442,70 @@ export async function loadFacebookPageCredentials(
 ): Promise<{ pageId: string; accessToken: string; pageName: string | null } | null> {
   if (!canEncryptFacebookToken()) return null;
   const db = await dbForFacebook(supabase);
-  const { data } = await db
+
+  const { data, error } = await db
     .from("facebook_connections")
     .select("page_id, page_name, access_token_enc, revoked_at")
     .eq("user_id", userId)
     .maybeSingle();
-  const row = data as Row | null;
-  if (!row?.page_id || !row.access_token_enc || row.revoked_at) return null;
+
+  if (!error) {
+    const row = data as Row | null;
+    if (!row?.page_id || !row.access_token_enc || row.revoked_at) {
+      // try storage fallback too
+    } else {
+      try {
+        const accessToken = decryptFacebookToken(row.access_token_enc);
+        if (accessToken) {
+          return {
+            pageId: row.page_id,
+            accessToken,
+            pageName: row.page_name,
+          };
+        }
+      } catch {
+        // fall through
+      }
+    }
+  }
+
+  const stored = await readStoragePayload(db, userId);
+  if (!stored) return null;
   try {
-    const accessToken = decryptFacebookToken(row.access_token_enc);
+    const accessToken = decryptFacebookToken(stored.accessTokenEnc);
     if (!accessToken) return null;
     return {
-      pageId: row.page_id,
+      pageId: stored.pageId,
       accessToken,
-      pageName: row.page_name,
+      pageName: stored.pageName,
     };
   } catch {
     return null;
+  }
+}
+
+/** Persist last Graph error / share time across table or storage backends. */
+export async function markFacebookConnectionMeta(
+  supabase: SupabaseClient,
+  userId: string,
+  patch: { lastError?: string | null; lastShareAt?: string | null },
+): Promise<void> {
+  const db = await dbForFacebook(supabase);
+  const tableUpdate: Record<string, unknown> = {
+    updated_at: new Date().toISOString(),
+  };
+  if ("lastError" in patch) tableUpdate.last_error = patch.lastError ?? null;
+  if ("lastShareAt" in patch) tableUpdate.last_share_at = patch.lastShareAt ?? null;
+
+  const { error } = await db
+    .from("facebook_connections")
+    .update(tableUpdate)
+    .eq("user_id", userId);
+
+  if (error && isMissingTableError(error.message)) {
+    await updateStorageMeta(db, userId, {
+      lastError: patch.lastError ?? null,
+      lastShareAt: patch.lastShareAt ?? null,
+    });
   }
 }

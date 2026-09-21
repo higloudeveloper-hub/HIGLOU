@@ -1,6 +1,9 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { humanizeFacebookGraphError } from "@/lib/facebook/config";
-import { loadFacebookPageCredentials } from "@/lib/facebook/connection";
+import {
+  loadFacebookPageCredentials,
+  markFacebookConnectionMeta,
+} from "@/lib/facebook/connection";
 import { shareAffiliateToFacebook } from "@/lib/facebook/share";
 
 export type PromoFormat = "ads" | "carousel" | "vitrina";
@@ -195,24 +198,16 @@ export async function publishFacebookPromo(
           uploadErrors[0] ||
           "No se pudo publicar el carrusel. Revisá el token de la Page (pages_manage_posts + pages_read_engagement).",
       );
-      await supabase
-        .from("facebook_connections")
-        .update({
-          last_error: err,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("user_id", opts.userId);
+      await markFacebookConnectionMeta(supabase, opts.userId, {
+        lastError: err,
+      });
       return { ok: false, error: err };
     }
 
-    await supabase
-      .from("facebook_connections")
-      .update({
-        last_share_at: new Date().toISOString(),
-        last_error: null,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("user_id", opts.userId);
+    await markFacebookConnectionMeta(supabase, opts.userId, {
+      lastError: null,
+      lastShareAt: new Date().toISOString(),
+    });
 
     return {
       ok: true,

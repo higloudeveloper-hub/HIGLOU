@@ -3,7 +3,10 @@ import {
   facebookSharerUrl,
   humanizeFacebookGraphError,
 } from "@/lib/facebook/config";
-import { loadFacebookPageCredentials } from "@/lib/facebook/connection";
+import {
+  loadFacebookPageCredentials,
+  markFacebookConnectionMeta,
+} from "@/lib/facebook/connection";
 
 function postUrlFromId(postId: string): string {
   return postId.includes("_")
@@ -45,24 +48,14 @@ async function markShareError(
   userId: string,
   message: string,
 ) {
-  await supabase
-    .from("facebook_connections")
-    .update({
-      last_error: message,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("user_id", userId);
+  await markFacebookConnectionMeta(supabase, userId, { lastError: message });
 }
 
 async function markShareOk(supabase: SupabaseClient, userId: string) {
-  await supabase
-    .from("facebook_connections")
-    .update({
-      last_share_at: new Date().toISOString(),
-      last_error: null,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("user_id", userId);
+  await markFacebookConnectionMeta(supabase, userId, {
+    lastError: null,
+    lastShareAt: new Date().toISOString(),
+  });
 }
 
 /**

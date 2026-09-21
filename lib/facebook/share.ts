@@ -1,5 +1,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { facebookSharerUrl } from "@/lib/facebook/config";
+import {
+  facebookSharerUrl,
+  humanizeFacebookGraphError,
+} from "@/lib/facebook/config";
 import { loadFacebookPageCredentials } from "@/lib/facebook/connection";
 
 function postUrlFromId(postId: string): string {
@@ -27,10 +30,11 @@ async function graphPost(
   } | null;
   if (!res.ok || !(body?.id || body?.post_id)) {
     return {
-      error:
+      error: humanizeFacebookGraphError(
         body?.error?.error_user_msg ||
-        body?.error?.message ||
-        `Facebook Graph ${res.status}`,
+          body?.error?.message ||
+          `Facebook Graph ${res.status}`,
+      ),
     };
   }
   return { id: body.post_id || body.id };
@@ -135,9 +139,10 @@ export async function shareAffiliateToFacebook(
     });
 
     if (!feed.id) {
-      const err =
+      const err = humanizeFacebookGraphError(
         feed.error ||
-        "No se pudo publicar en la Page. Revisá que el token sea de Page (no User) y tenga pages_manage_posts.";
+          "No se pudo publicar en la Page. Revisá que el token sea de Page (no User) y tenga pages_manage_posts + pages_read_engagement.",
+      );
       await markShareError(supabase, opts.userId, err);
       // Connected → never soft-open Facebook sharer; surface the Graph error
       return { ok: false, error: err };

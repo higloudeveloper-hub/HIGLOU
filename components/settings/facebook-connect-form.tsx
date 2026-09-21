@@ -163,11 +163,12 @@ export function FacebookConnectForm() {
           </div>
         ) : (
           <>
-            <ol className="grid gap-2 sm:grid-cols-3">
+            <ol className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
               {[
-                "Graph → Page “Don Baraton Deals”",
-                "GET /me → copiá el id",
-                "Copiá el token de la derecha (Page)",
+                "Permisos: pages_manage_posts + pages_read_engagement",
+                "Generar token de acceso",
+                "Usuario o página → Don Baraton Deals",
+                "GET /me → id + token de la derecha",
               ].map((step, i) => (
                 <li
                   key={step}
@@ -178,6 +179,12 @@ export function FacebookConnectForm() {
                 </li>
               ))}
             </ol>
+
+            <p className="rounded-2xl border border-[#dbe4ff] bg-[#f3f6ff] px-3.5 py-2.5 text-[12px] text-[#2a4a7a]">
+              Sin <code className="font-mono">pages_manage_posts</code> y{" "}
+              <code className="font-mono">pages_read_engagement</code> Graph
+              responde #200 y no publica.
+            </p>
 
             {connection?.lastError ? (
               <p className="rounded-2xl border border-red-200 bg-red-50 px-3.5 py-2.5 text-[12px] text-red-800">

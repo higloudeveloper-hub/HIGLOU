@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { humanizeFacebookGraphError } from "@/lib/facebook/config";
 import { loadFacebookPageCredentials } from "@/lib/facebook/connection";
 import { shareAffiliateToFacebook } from "@/lib/facebook/share";
 
@@ -42,10 +43,11 @@ async function uploadUnpublishedPhoto(
   if (!res.ok || !body?.id) {
     return {
       id: null,
-      error:
+      error: humanizeFacebookGraphError(
         body?.error?.error_user_msg ||
-        body?.error?.message ||
-        `Facebook photos ${res.status}`,
+          body?.error?.message ||
+          `Facebook photos ${res.status}`,
+      ),
     };
   }
   return { id: body.id };
@@ -187,11 +189,12 @@ export async function publishFacebookPromo(
     } | null;
 
     if (!res.ok || !body?.id) {
-      const err =
+      const err = humanizeFacebookGraphError(
         body?.error?.error_user_msg ||
-        body?.error?.message ||
-        uploadErrors[0] ||
-        "No se pudo publicar el carrusel. Revisá el token de la Page (pages_manage_posts).";
+          body?.error?.message ||
+          uploadErrors[0] ||
+          "No se pudo publicar el carrusel. Revisá el token de la Page (pages_manage_posts + pages_read_engagement).",
+      );
       await supabase
         .from("facebook_connections")
         .update({

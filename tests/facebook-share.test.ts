@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { facebookSharerUrl } from "@/lib/facebook/config";
+import {
+  facebookSharerUrl,
+  humanizeFacebookGraphError,
+} from "@/lib/facebook/config";
 
 describe("facebook sharer url", () => {
   it("builds a Meta sharer dialog for an absolute affiliate link", () => {
@@ -10,5 +13,16 @@ describe("facebook sharer url", () => {
     expect(url).toContain(
       encodeURIComponent("https://higlou.example/go/abcd1234"),
     );
+  });
+});
+
+describe("humanizeFacebookGraphError", () => {
+  it("explains #200 missing page publish permissions", () => {
+    const msg = humanizeFacebookGraphError(
+      "(#200) If posting to a page, requires both pages_read_engagement and pages_manage_posts",
+    );
+    expect(msg).toMatch(/pages_manage_posts/);
+    expect(msg).toMatch(/pages_read_engagement/);
+    expect(msg).toMatch(/Graph Explorer|Settings/i);
   });
 });

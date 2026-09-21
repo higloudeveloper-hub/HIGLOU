@@ -35,7 +35,7 @@ export type WinnerDetailHit = {
   sellLabel: string;
   keep: number | null;
   demand: number | null;
-  showScore: boolean;
+  showDemand: boolean;
   board: OpportunityPriceBoard;
   platformUrls?: PlatformUrls | null;
   cost?: number | null;
@@ -109,7 +109,7 @@ export function WinnerDetailPanel({
               </div>
               <div className="flex items-center gap-2">
                 <div className="text-right">
-                  {hit.showScore ? (
+                  {hit.showDemand ? (
                     <>
                       <p className="text-[18px] font-semibold leading-none tabular-nums">
                         {Math.round(hit.demand ?? 0)}

@@ -226,7 +226,7 @@ describe("higlou market + find winners wiring", () => {
       /Importar listing|Precios verificados/,
     );
     expect(readRepo("components/winners/winner-product-tile.tsx")).toMatch(
-      /Precios Higlou|Score|Keep/,
+      /Precios verificados|Score|Keep/,
     );
     expect(readRepo("lib/opportunity/price-board.ts")).toMatch(
       /buildOpportunityPriceBoard/,

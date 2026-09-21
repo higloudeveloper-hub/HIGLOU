@@ -1,6 +1,10 @@
 import { customAlphabet } from "nanoid";
 import { getMonetizationFlags } from "@/lib/monetization/flags";
 import { logMonetizationEvent } from "@/lib/monetization/observability";
+import {
+  ensureTaggedAmazonDestination,
+  isAmazonProductUrl,
+} from "@/lib/monetization/affiliate/tagged-url";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 const slugId = customAlphabet("abcdefghijklmnopqrstuvwxyz0123456789", 8);
@@ -110,19 +114,41 @@ export async function resolveAndTrackSmartLink(
     return { ok: false, error: "Invalid destination", status: 502 };
   }
 
-  // Increment counters (best-effort)
-  await supabase
-    .from("smart_links")
-    .update({ click_count: (smart.click_count || 0) + 1 })
-    .eq("id", smart.id);
-
+  // Heal Amazon destinations missing/wrong Associate tag before redirect
+  let finalDestination = destinationUrl;
   if (smart.affiliate_link_id) {
     const { data: aff } = await supabase
       .from("affiliate_links")
-      .select("id, click_count, campaign_id, user_id")
+      .select("id, click_count, campaign_id, user_id, asin, associate_tag, destination_url")
       .eq("id", smart.affiliate_link_id)
       .maybeSingle();
     if (aff) {
+      const tag = String(aff.associate_tag || "").trim();
+      const healed =
+        tag && (isAmazonProductUrl(destinationUrl) || aff.asin)
+          ? ensureTaggedAmazonDestination({
+              asin: aff.asin,
+              destinationUrl: aff.destination_url || destinationUrl,
+              associateTag: tag,
+            })
+          : null;
+      if (healed && healed !== destinationUrl) {
+        finalDestination = healed;
+        await supabase
+          .from("smart_links")
+          .update({ destination_url: healed })
+          .eq("id", smart.id);
+        await supabase
+          .from("affiliate_links")
+          .update({ destination_url: healed })
+          .eq("id", aff.id);
+      }
+
+      await supabase
+        .from("smart_links")
+        .update({ click_count: (smart.click_count || 0) + 1 })
+        .eq("id", smart.id);
+
       await supabase
         .from("affiliate_links")
         .update({ click_count: (aff.click_count || 0) + 1 })
@@ -133,10 +159,20 @@ export async function resolveAndTrackSmartLink(
         source: opts?.source || smart.platform || "other",
         campaign_id: aff.campaign_id,
         product_id: smart.product_id,
-        destination_url: destinationUrl,
+        destination_url: finalDestination,
         is_unique: false,
       });
+    } else {
+      await supabase
+        .from("smart_links")
+        .update({ click_count: (smart.click_count || 0) + 1 })
+        .eq("id", smart.id);
     }
+  } else {
+    await supabase
+      .from("smart_links")
+      .update({ click_count: (smart.click_count || 0) + 1 })
+      .eq("id", smart.id);
   }
 
   logMonetizationEvent({
@@ -147,7 +183,7 @@ export async function resolveAndTrackSmartLink(
 
   return {
     ok: true,
-    destinationUrl,
+    destinationUrl: finalDestination,
     linkId: smart.id,
     userId: smart.user_id,
   };

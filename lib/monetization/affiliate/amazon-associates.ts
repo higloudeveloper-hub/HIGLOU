@@ -45,7 +45,7 @@ export const amazonAssociatesProvider: AffiliateProviderAdapter = {
   },
   isConfigured: isAmazonAssociatesConfigured,
   buildProductUrl(opts) {
-    const tag = getAmazonAssociateTag();
+    const tag = getAmazonAssociateTag(opts.associateTag);
     if (!tag) return null;
     return buildAmazonAssociatesUrl({
       asin: opts.asinOrSku,

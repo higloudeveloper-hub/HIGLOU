@@ -5,6 +5,7 @@ import {
   markFacebookConnectionMeta,
 } from "@/lib/facebook/connection";
 import { enrichPromoCardPrices } from "@/lib/facebook/enrich-promo-prices";
+import { ensureFacebookPromoAffiliateTrust } from "@/lib/facebook/ensure-affiliate-trust";
 import { shareAffiliateToFacebook } from "@/lib/facebook/share";
 
 export type PromoFormat = "ads" | "carousel" | "vitrina";
@@ -176,7 +177,17 @@ export async function publishFacebookPromo(
     );
 
   // Live Keepa buy box for Amazon links — never publish arbitrage "sell"
-  const cards = await enrichPromoCardPrices(rawCards);
+  const priced = await enrichPromoCardPrices(rawCards);
+
+  // Fail closed: every Amazon hop must carry Associate tag= (or /go → tagged)
+  const trusted = await ensureFacebookPromoAffiliateTrust(supabase, {
+    userId: opts.userId,
+    cards: priced,
+  });
+  if (!trusted.ok) {
+    return { ok: false, error: trusted.error };
+  }
+  const cards = trusted.cards;
 
   const creds = await loadFacebookPageCredentials(supabase, opts.userId);
 

@@ -33,6 +33,9 @@ type AffLink = {
   title?: string | null;
   /** Live Amazon buy box when Keepa hydrated the link */
   amazonPrice?: number | null;
+  associateTag?: string | null;
+  /** True when destination_url carries Associate tag= */
+  earnsCommission?: boolean;
 };
 
 type ImportedProduct = {
@@ -311,7 +314,12 @@ export function FacebookAdsStudio() {
           imageUrl: img.url || amazonAsinPrimaryImage(l.asin),
           imageFallbacks: img.fallbacks,
           linkUrl,
-          meta: l.smartPath || l.source || "affiliate",
+          meta:
+            l.earnsCommission === false
+              ? "⚠ sin tag= — se reparará al publicar"
+              : l.smartPath
+                ? `Afiliado · /go`
+                : l.source || "affiliate",
           asin: asin || null,
           // Amazon destination only — never invent a price from Market sell
           priceLabel: promoPriceLabelForLink({
@@ -496,6 +504,28 @@ export function FacebookAdsStudio() {
           : "Publicar carrusel en tu Page",
     );
     if (!ok) return;
+
+    // Hard block: paid ads without Associate tag = $0 commission
+    const amazonBound = selectedCards.some((c) => {
+      const asin = c.asin || (c.meta && /^[A-Z0-9]{10}$/i.test(c.meta) ? c.meta : "");
+      if (asin) return true;
+      return /amazon\.|\/dp\/|\/go\//i.test(c.linkUrl);
+    });
+    if (amazonBound && !hasTag) {
+      toast.error(
+        "Sin Associate tag no hay comisión. Pegalo en Affiliate antes de publicar ads.",
+        {
+          action: {
+            label: "Affiliate",
+            onClick: () => {
+              window.location.href = "/affiliate";
+            },
+          },
+        },
+      );
+      return;
+    }
+
     setBusy(true);
     setPostUrl(null);
     try {
@@ -519,10 +549,17 @@ export function FacebookAdsStudio() {
         return;
       }
 
-      // For market picks without affiliate, create smart link when possible
-      if (source === "market" && format === "ads" && selectedCards[0]) {
-        const asin = selectedCards[0].meta;
-        if (asin && /^[A-Z0-9]{10}$/i.test(asin)) {
+      // Mint/reuse tagged smart links for every Amazon ASIN (ads + carousel + vitrina)
+      for (const card of payloadCards) {
+        const asin = String(card.asin || "").trim().toUpperCase();
+        if (!/^[A-Z0-9]{10}$/.test(asin)) continue;
+        // Already a /go/ smart link — server will heal tag=
+        if (/\/go\/[a-z0-9]+/i.test(card.linkUrl)) continue;
+        // Already a tagged Amazon URL
+        if (/amazon\./i.test(card.linkUrl) && /[?&]tag=/i.test(card.linkUrl)) {
+          continue;
+        }
+        try {
           const created = await fetch("/api/money/affiliate/links", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -538,13 +575,40 @@ export function FacebookAdsStudio() {
             const body = (await created.json()) as {
               smartLink?: { path?: string };
               link?: { destinationUrl?: string };
+              error?: string;
             };
             const url = body.smartLink?.path
               ? `${window.location.origin}${body.smartLink.path}`
               : body.link?.destinationUrl;
-            if (url && payloadCards[0]) payloadCards[0].linkUrl = url;
+            if (url) card.linkUrl = url;
+          } else {
+            const body = (await created.json().catch(() => null)) as {
+              error?: string;
+            } | null;
+            toast.error(
+              body?.error ||
+                "No se pudo crear el link de afiliado con tag=. Abortando.",
+            );
+            return;
           }
+        } catch {
+          toast.error("Error creando link de afiliado. No se publicó.");
+          return;
         }
+      }
+
+      // Final client guard: never send bare Amazon /dp without tag=
+      const untagged = payloadCards.filter(
+        (c) =>
+          /amazon\./i.test(c.linkUrl) &&
+          /\/(?:dp|gp\/product)\//i.test(c.linkUrl) &&
+          !/[?&]tag=/i.test(c.linkUrl),
+      );
+      if (untagged.length) {
+        toast.error(
+          "Hay links Amazon sin tag= Associates. Revisá Affiliate y reintentá.",
+        );
+        return;
       }
 
       const res = await fetch("/api/facebook/promo", {
@@ -645,15 +709,27 @@ export function FacebookAdsStudio() {
           ) : null}
           {!fb?.connected && !hasTag ? <span>·</span> : null}
           {!hasTag ? (
-            <Link href="/affiliate" className="font-medium text-[#3665F3] hover:underline">
-              Pegá tu Associate tag
+            <Link href="/affiliate" className="font-medium text-[#b42318] hover:underline">
+              Obligatorio: pegá tu Associate tag (sin tag= no hay comisión en ads)
             </Link>
-          ) : null}
+          ) : (
+            <span className="font-medium text-[#0f7b3a]">
+              Associate tag listo · los posts usan /go → Amazon?tag=
+            </span>
+          )}
           {fb?.lastError ? (
             <span className="w-full font-medium text-[#b42318] sm:w-auto">
               Último error Graph: {fb.lastError}
             </span>
           ) : null}
+        </div>
+      ) : hasTag ? (
+        <div className="flex flex-wrap items-center gap-2 border-b border-[#d8efe0] bg-[#f3faf5] px-4 py-2 text-[12px] text-[#0f7b3a] md:px-5">
+          <span className="font-semibold">Comisión protegida</span>
+          <span>·</span>
+          <span>
+            Cada Amazon se publica con smart link /go → destino Associates con tu tag=
+          </span>
         </div>
       ) : null}
 
@@ -1000,7 +1076,18 @@ export function FacebookAdsStudio() {
 
           <button
             type="button"
-            disabled={busy || selectedCards.length < minNeeded}
+            disabled={
+              busy ||
+              selectedCards.length < minNeeded ||
+              (Boolean(
+                selectedCards.some(
+                  (c) =>
+                    Boolean(c.asin) ||
+                    /amazon\.|\/dp\/|\/go\//i.test(c.linkUrl),
+                ),
+              ) &&
+                !hasTag)
+            }
             onClick={() => void publish()}
             className="mt-5 inline-flex h-12 w-full items-center justify-center gap-2 rounded-full bg-[#1877F2] text-[14px] font-semibold text-white hover:bg-[#166fe5] disabled:opacity-40"
           >

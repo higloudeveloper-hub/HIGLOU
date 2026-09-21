@@ -13,6 +13,7 @@ import {
 import { keepaGet } from "@/lib/keepa/client";
 import { isKeepaConfigured } from "@/lib/keepa/config";
 import { parseKeepaProduct } from "@/lib/keepa/parse";
+import { amazonUrlHasAssociateTag } from "@/lib/monetization/affiliate/tagged-url";
 
 export const runtime = "nodejs";
 
@@ -105,7 +106,7 @@ export async function GET() {
   const { data, error } = await auth.supabase
     .from("affiliate_links")
     .select(
-      "id, tracking_id, asin, destination_url, source, click_count, created_at, product_id, provider_id",
+      "id, tracking_id, asin, destination_url, associate_tag, source, click_count, created_at, product_id, provider_id",
     )
     .eq("user_id", auth.user.id)
     .order("created_at", { ascending: false })
@@ -306,6 +307,16 @@ export async function GET() {
         imageUrl,
         title,
         amazonPrice: priceByAsin.get(asin) ?? null,
+        associateTag:
+          String(
+            (link as { associate_tag?: string | null }).associate_tag || "",
+          ).trim() || null,
+        earnsCommission: amazonUrlHasAssociateTag(
+          String(link.destination_url || ""),
+          String(
+            (link as { associate_tag?: string | null }).associate_tag || "",
+          ).trim() || null,
+        ),
       };
     }),
   });

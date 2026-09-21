@@ -19,6 +19,8 @@ export type AffiliateProviderAdapter = {
   buildProductUrl: (opts: {
     asinOrSku: string;
     campaignId?: string | null;
+    /** Prefer the caller's resolved tag over process.env alone */
+    associateTag?: string | null;
   }) => string | null;
 };
 

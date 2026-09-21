@@ -41,18 +41,21 @@ async function resolveAssociateTag(
   userId: string,
   override?: string | null,
 ): Promise<string> {
-  const direct = getAmazonAssociateTag(override);
-  if (direct) return direct;
+  // Explicit override → Settings → env (never skip the user's Money tag)
+  const fromOverride = String(override || "").trim();
+  if (fromOverride) return fromOverride;
   try {
     const { data } = await supabase
       .from("money_machine_settings")
       .select("associate_tag")
       .eq("user_id", userId)
       .maybeSingle();
-    return getAmazonAssociateTag(data?.associate_tag);
+    const fromSettings = String(data?.associate_tag || "").trim();
+    if (fromSettings) return fromSettings;
   } catch {
-    return "";
+    // fall through to env
   }
+  return getAmazonAssociateTag();
 }
 
 /** Settings tag first, then AMAZON_ASSOCIATE_TAG env. */
@@ -94,10 +97,16 @@ export async function createAffiliateLink(
 
   const provider = getAffiliateProvider(providerId);
   const destinationUrl =
-    provider?.buildProductUrl({ asinOrSku: asin, campaignId: input.campaignId }) ||
-    buildAmazonAssociatesUrl({ asin, associateTag });
-  if (!destinationUrl) {
-    return { ok: false, error: "Could not build destination URL" };
+    provider?.buildProductUrl({
+      asinOrSku: asin,
+      campaignId: input.campaignId,
+      associateTag,
+    }) || buildAmazonAssociatesUrl({ asin, associateTag });
+  if (!destinationUrl || !destinationUrl.includes("tag=")) {
+    return {
+      ok: false,
+      error: "Could not build a tagged Associates destination URL",
+    };
   }
 
   let campaignId = input.campaignId || null;

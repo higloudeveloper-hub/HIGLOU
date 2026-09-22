@@ -269,7 +269,7 @@ export async function getFacebookConnectionPublic(
   const { data, error } = await db
     .from("facebook_connections")
     .select(
-      "page_id, page_name, access_token_enc, connected_at, revoked_at, last_error, last_share_at",
+      "page_id, page_name, access_token_enc, connected_at, revoked_at, last_error, last_share_at, token_expires_at, token_never_expires",
     )
     .eq("user_id", userId)
     .maybeSingle();
@@ -291,6 +291,9 @@ export async function getFacebookConnectionPublic(
     lastError: error.message,
     lastShareAt: null,
     encryptionReady,
+    neverExpires: false,
+    tokenExpiresAt: null,
+    canExtendTokens: canExtendFacebookTokens(),
   };
 }
 

@@ -34,9 +34,10 @@ export async function POST(request: Request) {
       {
         ok: false,
         error:
-          "Don Baratón sync is not configured. Set DON_BARATON_API_URL and DON_BARATON_IMPORT_TOKEN.",
+          "Don Baratón sync desde Higlou está APAGADO (kill switch).",
+        killed: true,
       },
-      { status: 503 },
+      { status: 410 },
     );
   }
 

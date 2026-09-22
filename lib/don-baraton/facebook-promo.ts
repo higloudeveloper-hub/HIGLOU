@@ -62,11 +62,8 @@ export async function fetchDonBaratonPromoCatalog(input?: {
   if (!config.enabled) {
     return {
       status: "skipped",
-      reason: !config.apiUrl
-        ? "DON_BARATON_API_URL not set"
-        : !config.importToken
-          ? "DON_BARATON_IMPORT_TOKEN not set"
-          : "DON_BARATON_SYNC_ENABLED is off",
+      reason:
+        "Don Baratón publish desde Higlou está APAGADO (kill switch). Usá /facebook para afiliados.",
     };
   }
 
@@ -134,7 +131,8 @@ export async function publishDonBaratonPromoCarousel(input: {
   if (!config.enabled) {
     return {
       status: "skipped",
-      reason: "Don Baratón sync is not configured.",
+      reason:
+        "Don Baratón publish desde Higlou está APAGADO (kill switch).",
     };
   }
 

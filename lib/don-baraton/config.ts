@@ -1,36 +1,25 @@
 /**
- * Don Baratón storefront sync (www.donbaraton.shop).
- * Contract: same eBay Seller Hub / Create Drafts CSV as Admin → Importar eBay.
+ * Kill switch: Don Baratón storefront sync + FB promo from Higlou.
+ * Always off — Affiliate Facebook Ads use /api/facebook/* only.
  */
-
 export type DonBaratonConfig = {
   apiUrl: string;
   importToken: string;
   enabled: boolean;
+  publicUrl: string;
 };
 
 export function getDonBaratonConfig(): DonBaratonConfig {
-  const apiUrl = (
-    process.env.DON_BARATON_API_URL ||
-    process.env.DON_BARATON_URL ||
-    process.env.NEXT_PUBLIC_DON_BARATON_URL ||
-    ""
-  )
-    .trim()
-    .replace(/\/$/, "");
-
-  const importToken = (
-    process.env.DON_BARATON_IMPORT_TOKEN ||
-    process.env.DON_BARATON_SYNC_TOKEN ||
-    ""
-  ).trim();
-
-  const flag = (process.env.DON_BARATON_SYNC_ENABLED || "true").trim().toLowerCase();
-  const enabled = flag !== "0" && flag !== "false" && flag !== "off";
-
+  // Hard kill — Higlou no longer drives Don Baratón publish/sync.
+  // Telegram / Don Baratón must use their own stack; we revoke shared FB tokens separately.
   return {
-    apiUrl,
-    importToken,
-    enabled: enabled && Boolean(apiUrl && importToken),
+    apiUrl: "",
+    importToken: "",
+    enabled: false,
+    publicUrl: "",
   };
+}
+
+export function isDonBaratonSyncEnabled(): boolean {
+  return false;
 }

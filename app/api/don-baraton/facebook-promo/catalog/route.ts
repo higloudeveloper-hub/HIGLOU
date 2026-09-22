@@ -21,9 +21,10 @@ export async function GET(request: Request) {
       {
         ok: false,
         error:
-          "Don Baratón sync is not configured. Set DON_BARATON_API_URL and DON_BARATON_IMPORT_TOKEN.",
+          "Don Baratón está desconectado de Higlou. Publicá afiliados desde /facebook.",
+        killed: true,
       },
-      { status: 503 },
+      { status: 410 },
     );
   }
 

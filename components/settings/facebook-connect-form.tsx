@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
-import { CheckCircle2, Loader2, Unlink } from "lucide-react";
+import { CheckCircle2, Loader2, Trash2, Unlink } from "lucide-react";
 import { FacebookFMark } from "@/components/brand/store-marks";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -21,6 +21,12 @@ type Connection = {
   canExtendTokens?: boolean;
 };
 
+type PreviewPost = {
+  id: string;
+  createdTime: string | null;
+  message: string | null;
+};
+
 export function FacebookConnectForm() {
   const [connection, setConnection] = useState<Connection | null>(null);
   const [loading, setLoading] = useState(true);
@@ -29,6 +35,10 @@ export function FacebookConnectForm() {
   const [pageId, setPageId] = useState("");
   const [pageName, setPageName] = useState("");
   const [accessToken, setAccessToken] = useState("");
+  const [cleaning, setCleaning] = useState(false);
+  const [preview, setPreview] = useState<PreviewPost[]>([]);
+  const [confirmText, setConfirmText] = useState("");
+  const [deleteMax, setDeleteMax] = useState<50 | 200 | 500>(50);
 
   const load = async () => {
     try {
@@ -99,9 +109,69 @@ export function FacebookConnectForm() {
         },
       );
       setReplacing(true);
+      setPreview([]);
       toast.message("Facebook desconectado · pegá un token nuevo");
     } finally {
       setBusy(false);
+    }
+  };
+
+  const loadPreview = async () => {
+    try {
+      const res = await fetch("/api/facebook/posts", { cache: "no-store" });
+      const body = (await res.json()) as {
+        error?: string;
+        posts?: PreviewPost[];
+      };
+      if (!res.ok) {
+        toast.error(body.error || "No se pudieron listar posts");
+        return;
+      }
+      setPreview(body.posts || []);
+    } catch {
+      toast.error("Error al listar posts");
+    }
+  };
+
+  const bulkDelete = async () => {
+    if (!connection?.connected) return;
+    if (deleteMax > 50 && confirmText.trim().toUpperCase() !== "BORRAR") {
+      toast.message('Escribí BORRAR para confirmar más de 50 posts');
+      return;
+    }
+    const ok = window.confirm(
+      `¿Borrar los ${deleteMax} posts más recientes de “${connection.pageName || "tu Page"}”? Esto no se puede deshacer.`,
+    );
+    if (!ok) return;
+
+    setCleaning(true);
+    try {
+      const res = await fetch("/api/facebook/posts", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          max: deleteMax,
+          confirm: deleteMax > 50 ? "BORRAR" : undefined,
+        }),
+      });
+      const body = (await res.json()) as {
+        error?: string;
+        message?: string;
+        deleted?: number;
+        remainingHint?: boolean;
+      };
+      if (!res.ok) {
+        toast.error(body.error || "No se pudieron borrar posts");
+        return;
+      }
+      toast.success(body.message || `Borrados: ${body.deleted ?? 0}`);
+      setConfirmText("");
+      await loadPreview();
+      if (body.remainingHint) {
+        toast.message("Quedan más posts — volvé a tocar Limpiar.");
+      }
+    } finally {
+      setCleaning(false);
     }
   };
 
@@ -189,6 +259,16 @@ export function FacebookConnectForm() {
                 type="button"
                 variant="outline"
                 size="sm"
+                disabled={busy || cleaning}
+                onClick={() => void loadPreview()}
+                className="h-9 rounded-full"
+              >
+                Ver posts recientes
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
                 disabled={busy}
                 onClick={() => void disconnect()}
                 className="h-9 rounded-full"
@@ -200,6 +280,79 @@ export function FacebookConnectForm() {
                 )}
                 Desconectar
               </Button>
+            </div>
+          </div>
+        ) : null}
+
+        {connection?.connected && !replacing ? (
+          <div className="rounded-2xl border border-red-200 bg-red-50/60 px-4 py-4">
+            <div className="flex items-start gap-2">
+              <Trash2 className="mt-0.5 size-4 shrink-0 text-[#b42318]" />
+              <div className="min-w-0 flex-1">
+                <p className="text-[14px] font-semibold text-[#191919]">
+                  Limpiar posts de la Page
+                </p>
+                <p className="mt-1 text-[12px] text-[#707070]">
+                  Borra en bloque los posts más recientes (los de Don Baratón /
+                  Telegram viejos). No se puede deshacer.
+                </p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {([50, 200, 500] as const).map((n) => (
+                    <button
+                      key={n}
+                      type="button"
+                      onClick={() => setDeleteMax(n)}
+                      className={cn(
+                        "h-9 rounded-full px-3.5 text-[12px] font-semibold transition",
+                        deleteMax === n
+                          ? "bg-[#191919] text-white"
+                          : "border border-[#e5e5e5] bg-white text-[#707070]",
+                      )}
+                    >
+                      Últimos {n}
+                    </button>
+                  ))}
+                </div>
+                {deleteMax > 50 ? (
+                  <label className="mt-3 block text-[12px] font-semibold text-[#b42318]">
+                    Escribí BORRAR para confirmar
+                    <input
+                      value={confirmText}
+                      onChange={(e) => setConfirmText(e.target.value)}
+                      placeholder="BORRAR"
+                      className="mt-1.5 h-10 w-full max-w-xs rounded-xl border border-red-200 bg-white px-3 text-[14px] text-[#191919] outline-none focus:border-[#b42318]"
+                    />
+                  </label>
+                ) : null}
+                <Button
+                  type="button"
+                  disabled={cleaning}
+                  onClick={() => void bulkDelete()}
+                  className="mt-3 h-10 rounded-full bg-[#b42318] px-4 text-[13px] font-semibold text-white hover:bg-[#912018]"
+                >
+                  {cleaning ? (
+                    <Loader2 className="size-4 animate-spin" />
+                  ) : (
+                    <Trash2 className="size-3.5" />
+                  )}
+                  Borrar últimos {deleteMax}
+                </Button>
+                {preview.length > 0 ? (
+                  <ul className="mt-3 max-h-40 space-y-1.5 overflow-y-auto rounded-xl border border-[#e8e8e8] bg-white p-2">
+                    {preview.map((p) => (
+                      <li
+                        key={p.id}
+                        className="truncate text-[11px] text-[#707070]"
+                      >
+                        {p.createdTime
+                          ? new Date(p.createdTime).toLocaleDateString()
+                          : "—"}{" "}
+                        · {p.message || "(sin texto / solo imagen)"}
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+              </div>
             </div>
           </div>
         ) : null}

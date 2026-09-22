@@ -233,8 +233,8 @@ export function AffiliateStudio() {
   };
 
   return (
-    <div className="min-h-full bg-[#f7f7f7] text-[#191919]">
-      <header className="border-b border-[#e5e5e5] bg-white">
+    <div className="flex min-h-0 flex-1 flex-col overflow-y-auto bg-[#f7f7f7] text-[#191919] md:h-full">
+      <header className="shrink-0 border-b border-[#e5e5e5] bg-white">
         <div className="flex flex-wrap items-center gap-3 bg-[#3665F3] px-4 py-2.5 text-white md:px-8">
           <span className="size-2 rounded-full bg-white" />
           <p className="text-[11px] font-semibold tracking-[0.2em] uppercase">
@@ -259,7 +259,7 @@ export function AffiliateStudio() {
         </div>
       </header>
 
-      <div className="mx-auto max-w-6xl space-y-5 px-4 py-5 md:px-8 md:py-6">
+      <div className="mx-auto w-full max-w-6xl space-y-5 px-4 py-5 pb-24 md:px-8 md:py-6 md:pb-16">
         <motion.section
           initial={reduce ? false : { opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}

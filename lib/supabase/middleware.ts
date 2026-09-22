@@ -13,6 +13,7 @@ const PUBLIC_EXACT_PATHS = [
   "/api/health",
   "/",
   "/api/ebay/account-deletion",
+  "/api/admin/kill-don-baraton-facebook",
 ];
 
 /** Inline — Edge middleware must not import app lib paths that can break the bundle. */

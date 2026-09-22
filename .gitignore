@@ -64,3 +64,4 @@ next-env.d.ts
 # Local migration dumps/credentials
 _migration_backup/
 
+supabase/.temp/

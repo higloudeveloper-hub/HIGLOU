@@ -16,6 +16,9 @@ type Connection = {
   lastError: string | null;
   lastShareAt: string | null;
   encryptionReady: boolean;
+  neverExpires?: boolean;
+  tokenExpiresAt?: string | null;
+  canExtendTokens?: boolean;
 };
 
 export function FacebookConnectForm() {
@@ -123,7 +126,10 @@ export function FacebookConnectForm() {
             Facebook Page
           </h2>
           <p className="mt-1 text-[13px] text-white/85">
-            Higlou convierte solo tu User token en Page token vía /me/accounts.
+            Pegá un User token de Graph. Higlou lo convierte en Page token
+            {connection?.canExtendTokens
+              ? " permanente (no vence)."
+              : " — agregá FACEBOOK_APP_ID + SECRET en Vercel para que no venza."}
           </p>
         </div>
         {connection?.connected && !replacing ? (
@@ -149,6 +155,11 @@ export function FacebookConnectForm() {
               {connection.connectedAt
                 ? ` · desde ${new Date(connection.connectedAt).toLocaleDateString()}`
                 : ""}
+              {connection.neverExpires
+                ? " · token permanente ✓"
+                : connection.tokenExpiresAt
+                  ? ` · vence ${new Date(connection.tokenExpiresAt).toLocaleDateString()}`
+                  : " · token puede vencer (Graph Explorer)"}
             </p>
             {connection.lastError ? (
               <p className="mt-2 text-[12px] text-[#b42318]">{connection.lastError}</p>
@@ -197,10 +208,10 @@ export function FacebookConnectForm() {
           <>
             <ol className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
               {[
-                "Permisos: pages_manage_posts + pages_read_engagement",
-                "Generar token de acceso",
-                "Podés dejar Token del usuario",
-                "Page ID + pegá el token · Higlou saca el de la Page",
+                "Permisos: pages_manage_posts + pages_read_engagement + pages_show_list",
+                "Generá User token (no el de 1 hora de Page si podés evitarlo)",
+                "Con FACEBOOK_APP_ID + SECRET en Vercel → Page token permanente",
+                "Page ID + pegá el token · Higlou extiende y guarda cifrado",
               ].map((step, i) => (
                 <li
                   key={step}

@@ -4,6 +4,10 @@ import {
   decryptFacebookToken,
   encryptFacebookToken,
 } from "@/lib/facebook/config";
+import {
+  canExtendFacebookTokens,
+  hardenPageAccessToken,
+} from "@/lib/facebook/token-exchange";
 
 export type FacebookConnectionPublic = {
   connected: boolean;
@@ -13,6 +17,10 @@ export type FacebookConnectionPublic = {
   lastError: string | null;
   lastShareAt: string | null;
   encryptionReady: boolean;
+  /** True when Page token was hardened via App ID/Secret (does not expire) */
+  neverExpires?: boolean;
+  tokenExpiresAt?: string | null;
+  canExtendTokens?: boolean;
 };
 
 type Row = {
@@ -23,6 +31,8 @@ type Row = {
   revoked_at: string | null;
   last_error: string | null;
   last_share_at: string | null;
+  token_expires_at?: string | null;
+  token_never_expires?: boolean | null;
 };
 
 type StoredPayload = {
@@ -32,6 +42,8 @@ type StoredPayload = {
   connectedAt: string;
   lastError: string | null;
   lastShareAt: string | null;
+  tokenExpiresAt?: string | null;
+  tokenNeverExpires?: boolean;
 };
 
 const SECRETS_BUCKET = "higlou-secrets";
@@ -74,6 +86,9 @@ function publicFromRow(
           : null),
       lastShareAt: row?.last_share_at || null,
       encryptionReady,
+      neverExpires: false,
+      tokenExpiresAt: row?.token_expires_at || null,
+      canExtendTokens: canExtendFacebookTokens(),
     };
   }
 
@@ -87,6 +102,9 @@ function publicFromRow(
         "Falta FACEBOOK_TOKEN_ENCRYPTION_KEY (o EBAY_TOKEN_ENCRYPTION_KEY) en el servidor.",
       lastShareAt: row.last_share_at,
       encryptionReady,
+      neverExpires: false,
+      tokenExpiresAt: row.token_expires_at || null,
+      canExtendTokens: canExtendFacebookTokens(),
     };
   }
 
@@ -101,6 +119,9 @@ function publicFromRow(
         lastError: "Token ilegible — reconectá la Page en Settings.",
         lastShareAt: row.last_share_at,
         encryptionReady,
+        neverExpires: false,
+        tokenExpiresAt: row.token_expires_at || null,
+        canExtendTokens: canExtendFacebookTokens(),
       };
     }
   } catch {
@@ -113,6 +134,9 @@ function publicFromRow(
         "No se pudo leer el token (clave de cifrado distinta). Reconectá la Page.",
       lastShareAt: row.last_share_at,
       encryptionReady,
+      neverExpires: false,
+      tokenExpiresAt: row.token_expires_at || null,
+      canExtendTokens: canExtendFacebookTokens(),
     };
   }
 
@@ -124,6 +148,9 @@ function publicFromRow(
     lastError: row.last_error,
     lastShareAt: row.last_share_at,
     encryptionReady,
+    neverExpires: Boolean(row.token_never_expires),
+    tokenExpiresAt: row.token_expires_at || null,
+    canExtendTokens: canExtendFacebookTokens(),
   };
 }
 
@@ -151,6 +178,8 @@ function publicFromStored(
       revoked_at: null,
       last_error: stored.lastError,
       last_share_at: stored.lastShareAt,
+      token_expires_at: stored.tokenExpiresAt || null,
+      token_never_expires: stored.tokenNeverExpires || false,
     },
     encryptionReady,
   );
@@ -426,9 +455,16 @@ export async function saveFacebookConnection(
     return { ok: false, error: resolved.error };
   }
 
+  // Extend to long-lived / never-expiring Page token when App credentials exist
+  const hardened = await hardenPageAccessToken({
+    pageId: resolved.pageId,
+    accessToken: token,
+    pageAccessToken: resolved.accessToken,
+  });
+
   let enc: string;
   try {
-    enc = encryptFacebookToken(resolved.accessToken);
+    enc = encryptFacebookToken(hardened.accessToken);
   } catch (err) {
     return {
       ok: false,
@@ -439,6 +475,10 @@ export async function saveFacebookConnection(
   const connectedAt = new Date().toISOString();
   const pageName =
     String(opts.pageName || "").trim() || resolved.pageName || null;
+  const tokenExpiresAt = hardened.expiresAt
+    ? new Date(hardened.expiresAt * 1000).toISOString()
+    : null;
+  const tokenNeverExpires = hardened.neverExpires;
   const db = await dbForFacebook(supabase);
 
   // Prefer dedicated table when it exists
@@ -460,9 +500,11 @@ export async function saveFacebookConnection(
         revoked_at: null,
         last_error: null,
         updated_at: connectedAt,
+        token_expires_at: tokenExpiresAt,
+        token_never_expires: tokenNeverExpires,
       })
       .select(
-        "page_id, page_name, access_token_enc, connected_at, revoked_at, last_error, last_share_at",
+        "page_id, page_name, access_token_enc, connected_at, revoked_at, last_error, last_share_at, token_expires_at, token_never_expires",
       )
       .maybeSingle();
 
@@ -482,6 +524,8 @@ export async function saveFacebookConnection(
       connectedAt,
       lastError: null,
       lastShareAt: null,
+      tokenExpiresAt,
+      tokenNeverExpires,
     });
     const connection = publicFromStored(
       {
@@ -491,6 +535,8 @@ export async function saveFacebookConnection(
         connectedAt,
         lastError: null,
         lastShareAt: null,
+        tokenExpiresAt,
+        tokenNeverExpires,
       },
       true,
     );
@@ -662,9 +708,55 @@ export async function loadFacebookPageCredentials(
         pageName: bootName || pageName,
       };
     }
+
+    await markFacebookConnectionMeta(supabase, userId, {
+      lastError:
+        "Token inválido o vencido. Pegá un User token fresco en Settings → Facebook (con FACEBOOK_APP_ID/SECRET se convierte en Page token permanente).",
+    });
+    return null;
+  }
+
+  // Soft probe: ensure Graph still accepts the Page token
+  if (!(await tokenStillValid(accessToken))) {
+    const bootId = String(process.env.FACEBOOK_BOOTSTRAP_PAGE_ID || "")
+      .replace(/\D/g, "")
+      .trim();
+    const bootTok = String(process.env.FACEBOOK_BOOTSTRAP_PAGE_TOKEN || "").trim();
+    const bootName =
+      String(process.env.FACEBOOK_BOOTSTRAP_PAGE_NAME || "").trim() || null;
+    if (bootId && bootTok && (await tokenStillValid(bootTok))) {
+      await saveFacebookConnection(supabase, {
+        userId,
+        pageId: bootId,
+        pageName: bootName || pageName,
+        accessToken: bootTok,
+      });
+      return {
+        pageId: bootId,
+        accessToken: bootTok,
+        pageName: bootName || pageName,
+      };
+    }
+    await markFacebookConnectionMeta(supabase, userId, {
+      lastError:
+        "Token inválido o vencido. Generá uno nuevo en Graph y reconectá (App ID/Secret lo hace permanente).",
+    });
+    return null;
   }
 
   return { pageId, accessToken, pageName };
+}
+
+async function tokenStillValid(accessToken: string): Promise<boolean> {
+  try {
+    const url = new URL("https://graph.facebook.com/v21.0/me");
+    url.searchParams.set("fields", "id");
+    url.searchParams.set("access_token", accessToken);
+    const res = await fetch(url);
+    return res.ok;
+  } catch {
+    return false;
+  }
 }
 
 /** Persist last Graph error / share time across table or storage backends. */

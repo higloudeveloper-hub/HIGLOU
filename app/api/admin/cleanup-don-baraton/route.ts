@@ -107,25 +107,50 @@ export async function POST() {
     else cleared.push(table);
   }
 
+  // Empty don-baraton-images via Storage API (SQL DELETE is blocked by Supabase)
+  let bucketNote = "bucket already gone or empty";
   try {
-    const { data: files } = await admin.storage
+    const { data: root, error: listErr } = await admin.storage
       .from("don-baraton-images")
       .list("", { limit: 100 });
-    if (files?.length) {
-      await admin.storage
-        .from("don-baraton-images")
-        .remove(files.map((f) => f.name));
-      cleared.push(`don-baraton-images/${files.length} files`);
+    if (listErr) {
+      skipped.push(`don-baraton-images: ${listErr.message}`);
+    } else if (root?.length) {
+      const paths: string[] = [];
+      for (const entry of root) {
+        if (entry.id == null && entry.name) {
+          // folder — list one level deep
+          const { data: kids } = await admin.storage
+            .from("don-baraton-images")
+            .list(entry.name, { limit: 100 });
+          for (const kid of kids || []) {
+            paths.push(`${entry.name}/${kid.name}`);
+          }
+        } else if (entry.name) {
+          paths.push(entry.name);
+        }
+      }
+      if (paths.length) {
+        const { error: rmErr } = await admin.storage
+          .from("don-baraton-images")
+          .remove(paths);
+        if (rmErr) skipped.push(`don-baraton-images remove: ${rmErr.message}`);
+        else cleared.push(`don-baraton-images (${paths.length} files)`);
+      }
+      bucketNote = "files cleared via Storage API — delete the empty bucket in Dashboard → Storage if you want";
     }
-  } catch {
-    skipped.push("don-baraton-images");
+  } catch (e) {
+    skipped.push(
+      `don-baraton-images: ${e instanceof Error ? e.message : "error"}`,
+    );
   }
 
   return NextResponse.json({
     ok: true,
     cleared,
     skipped,
+    bucketNote,
     note:
-      "Filas borradas. Para DROP completo de tablas, corré 20260922_drop_don_baraton_legacy.sql en Supabase SQL Editor.",
+      "Filas/tablas: preferí el SQL (solo DROP TABLE). Bucket: usá Storage API o Dashboard — nunca DELETE en storage.objects.",
   });
 }

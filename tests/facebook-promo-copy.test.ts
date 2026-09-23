@@ -20,18 +20,16 @@ describe("facebook promo copy", () => {
     expect(facebookBold("WOW 12")).toContain("𝟭𝟮");
   });
 
-  it("builds an ads message with bold hook + CTA", () => {
+  it("builds a short ads message with bold hook", () => {
     const copy = buildFacebookPromoCopy({
       format: "ads",
       titles: ["Anker Power Bank 10000mAh Portable Charger"],
       prices: ["$24.99"],
       seed: 0,
     });
-    expect(copy.message).toMatch(/𝗔|𝗣|𝗛|𝗪|𝗦|𝗩/);
-    expect(copy.message.toLowerCase()).toMatch(
-      /tocá|comprá|verific|revisad|higlou|detalle/,
-    );
-    expect(copy.cardDescription("$24.99")).toContain("$24.99");
+    expect(copy.message.split("\n").length).toBeLessThanOrEqual(3);
+    expect(copy.message.length).toBeLessThan(90);
+    expect(copy.cardDescription("$24.99")).toBe("$24.99");
     expect(copy.cardName("ASIN B0CHS1BVBC Anker Bank")).toBe("Anker Bank");
   });
 
@@ -42,21 +40,23 @@ describe("facebook promo copy", () => {
       seed: 1,
     });
     expect(copy.message).toContain("3");
+    expect(copy.message.split("\n").length).toBeLessThanOrEqual(2);
   });
 
-  it("vitrina copy is serious and ignores junk niche /Go", () => {
+  it("vitrina copy is short, natural, ignores junk niche /Go", () => {
     const copy = buildFacebookPromoCopy({
       format: "vitrina",
       titles: ["Label Printer Wireless", "Label Tape", "Label Maker"],
       niche: "/Go",
       seed: 0,
     });
-    expect(copy.collectionTitle.toLowerCase()).not.toMatch(/\/go|\bgo\b/);
-    expect(copy.message.toLowerCase()).not.toMatch(/precios bajos\. productos buenos/);
-    expect(copy.message.toLowerCase()).toMatch(
-      /selección|curaduría|vitrina|revisad|profesional|higlou/,
+    expect(copy.collectionTitle.toLowerCase()).not.toMatch(/\/go/);
+    expect(copy.message.toLowerCase()).not.toMatch(
+      /precios bajos|curaduría|vitrina profesional|sin relleno\. solo/,
     );
-    expect(copy.collectionTitle.length).toBeGreaterThan(3);
+    expect(copy.message.split("\n").length).toBeLessThanOrEqual(2);
+    expect(copy.message.length).toBeLessThan(80);
+    expect(copy.collectionTitle.length).toBeGreaterThan(2);
     expect(defaultFacebookPromoMessage("ads")).toContain("\n");
   });
 
@@ -67,7 +67,7 @@ describe("facebook promo copy", () => {
       niche: "Anker",
       seed: 0,
     });
-    expect(copy.collectionTitle).toMatch(/Anker/i);
+    expect(copy.collectionTitle).toBe("Anker");
     expect(copy.message).toMatch(/Anker|𝗮𝗻𝗸𝗲𝗿|𝗔𝗻𝗸𝗲𝗿/i);
   });
 

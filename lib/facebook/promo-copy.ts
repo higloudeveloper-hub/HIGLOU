@@ -1,5 +1,5 @@
 /**
- * Facebook Page copy — natural, serious, professional.
+ * Facebook Page copy — short, natural, professional.
  * Graph API has no markdown bold; we use Mathematical Bold Unicode
  * so key lines render as “negrita” in the feed.
  */
@@ -71,7 +71,7 @@ function cleanNiche(raw?: string | null): string {
   if (/afiliado|affiliate|smart\s*link|higlou/i.test(n) && n.length < 12) {
     return "";
   }
-  return n.slice(0, 40);
+  return n.slice(0, 32);
 }
 
 /** First meaningful noun-ish chunk from a title for copy hooks. */
@@ -110,46 +110,45 @@ export function productHook(title: string): string {
   return hook || clean.slice(0, 32);
 }
 
+/** Max ~2 short lines. Bold hook + one calm line. */
 const ADS_HOOKS = [
   (h: string, p: string) =>
-    `${facebookBold("Precio verificado")}\n${h}${p ? ` · ${p}` : ""}\nRevisado por Higlou. Tocá para ver el detalle.`,
+    `${facebookBold(h)}${p ? `\n${p}` : ""}\nPrecio verificado.`,
   (h: string, p: string) =>
-    `${facebookBold("Selección Higlou")}\n${h}${p ? ` — ${p}` : ""}\nUno de los precios más limpios que vimos hoy.`,
+    `${facebookBold("Hoy")}\n${h}${p ? ` · ${p}` : ""}`,
   (h: string, p: string) =>
-    `${facebookBold("Vale la pena mirarlo")}\n${h}${p ? ` · ${p}` : ""}\nProducto filtrado. Sin ruido. Link directo.`,
+    `${facebookBold(h)}\n${p ? `${p} · ` : ""}Selección Higlou.`,
   (h: string, p: string) =>
-    `${facebookBold("Mejor precio · ahora")}\n${h}${p ? ` a ${p}` : ""}\nCurado por Higlou · comprá con tranquilidad.`,
+    `${facebookBold("Precio limpio")}\n${h}${p ? ` · ${p}` : ""}`,
 ];
 
 const CAROUSEL_HOOKS = [
   (n: number, niche: string) =>
-    `${facebookBold(niche || "Selección Higlou")}\n${n} productos alineados · precio verificado\nDeslizá y compará antes de decidir.`,
+    `${facebookBold(niche || "Selección")}\n${n} opciones · precio verificado.`,
   (n: number, niche: string) =>
-    `${facebookBold("Comparativa limpia")}\n${niche ? `${niche} · ` : ""}${n} opciones revisadas\nHiglou ya filtró. Vos elegís.`,
+    `${facebookBold(niche || "Higlou")}\n${n} productos. Deslizá y elegí.`,
   (n: number, niche: string) =>
-    `${facebookBold("Carrusel profesional")}\n${n} piezas serias${niche ? ` · ${niche}` : ""}\nTocá la tarjeta y revisá el precio.`,
+    `${facebookBold("Compará")}\n${niche ? `${niche} · ` : ""}${n} opciones.`,
 ];
 
 const VITRINA_HOOKS = [
   (niche: string, n: number) =>
-    `${facebookBold(niche ? `Selección · ${niche}` : "Selección Higlou")}\n${n} productos revisados · precio verificado\nUna vitrina seria: compará y elegí con criterio.`,
+    `${facebookBold(niche || "Selección")}\n${n} productos · precio verificado.`,
   (niche: string, n: number) =>
-    `${facebookBold("Curaduría Higlou")}\n${niche ? `${niche} · ` : ""}${n} opciones alineadas\nSin relleno. Solo hallazgos que valen la pena.`,
+    `${facebookBold(niche || "Higlou")}\n${n} opciones. Sin relleno.`,
   (niche: string, n: number) =>
-    `${facebookBold("Vitrina profesional")}\n${n} productos con precio limpio${niche ? ` · ${niche}` : ""}\nTocá el que te sirva y revisá el detalle.`,
+    `${facebookBold("Selección")}\n${niche ? `${niche} · ` : ""}${n} productos.`,
 ];
 
 const VITRINA_TITLES = [
-  "Selección verificada",
-  "Curaduría Higlou",
-  "Hallazgos revisados",
-  "Vitrina profesional",
-  "Selección Higlou",
+  "Selección",
+  "Higlou",
+  "Verificado",
+  "Hoy",
 ];
 
 /**
- * Build Page-ready copy: bold hook + short credible body.
- * Brand idea: Higlou finds lowest prices + best products — without sounding cheap.
+ * Build Page-ready copy: short bold hook + one calm line.
  */
 export function buildFacebookPromoCopy(
   input: PromoCopyInput,
@@ -161,7 +160,7 @@ export function buildFacebookPromoCopy(
   );
   const niche = cleanNiche(input.niche);
   const count = Math.max(titles.length, 1);
-  const firstTitle = titles[0] || niche || "producto verificado";
+  const firstTitle = titles[0] || niche || "producto";
   const hook = productHook(firstTitle);
   const price = prices[0] || "";
 
@@ -173,25 +172,23 @@ export function buildFacebookPromoCopy(
     collectionTitle = "Higlou";
   } else if (input.format === "carousel") {
     message = pick(CAROUSEL_HOOKS, seed)(count, niche);
-    collectionTitle = niche ? `Selección · ${niche}` : "Selección Higlou";
+    collectionTitle = niche || "Selección";
   } else {
     message = pick(VITRINA_HOOKS, seed)(niche, count);
-    collectionTitle = niche
-      ? `${niche} · selección`
-      : pick(VITRINA_TITLES, seed);
+    collectionTitle = niche || pick(VITRINA_TITLES, seed);
   }
 
   return {
     message,
-    collectionTitle: collectionTitle.slice(0, 80),
+    collectionTitle: collectionTitle.slice(0, 60),
     cardDescription: (priceLabel) => {
       const p = String(priceLabel || "").trim();
-      if (p) return `${p} · Precio verificado`.slice(0, 120);
-      return "Precio verificado · Higlou";
+      if (p) return p.slice(0, 40);
+      return "Verificado";
     },
     cardName: (title) => {
-      const cleaned = cleanTitle(title) || "Selección Higlou";
-      return cleaned.slice(0, 80);
+      const cleaned = cleanTitle(title) || "Higlou";
+      return cleaned.slice(0, 60);
     },
   };
 }

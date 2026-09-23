@@ -9,8 +9,10 @@ import {
   LayoutGrid,
   Loader2,
   PanelsTopLeft,
+  RefreshCw,
   Share2,
   Sparkles,
+  Wand2,
 } from "lucide-react";
 import { FacebookFMark } from "@/components/brand/store-marks";
 import { usePaidActionOptional } from "@/components/credits/paid-action-provider";
@@ -20,6 +22,15 @@ import {
 } from "@/lib/amazon/asin-image";
 import { CREDIT_ACTIONS } from "@/lib/credits/costs";
 import { promoPriceLabelForLink } from "@/lib/facebook/destination-price";
+import {
+  buildFacebookPromoCopy,
+  defaultFacebookCollectionTitle,
+  defaultFacebookPromoMessage,
+} from "@/lib/facebook/promo-copy";
+import {
+  suggestPromoPacks,
+  type PromoPackSuggestion,
+} from "@/lib/facebook/promo-groups";
 import { cn } from "@/lib/utils";
 
 type AffLink = {
@@ -187,14 +198,15 @@ export function FacebookAdsStudio() {
   const [source, setSource] = useState<SourceTab>("affiliate");
   const [format, setFormat] = useState<PromoFormat>("ads");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const [message, setMessage] = useState(
-    "Oferta verificada · tocá el link y comprá seguro.",
+  const [message, setMessage] = useState(() => defaultFacebookPromoMessage("ads"));
+  const [collectionTitle, setCollectionTitle] = useState(() =>
+    defaultFacebookCollectionTitle(),
   );
-  const [collectionTitle, setCollectionTitle] = useState("Ofertas Higlou");
   const [coverId, setCoverId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [postUrl, setPostUrl] = useState<string | null>(null);
   const [panel, setPanel] = useState<"elegir" | "publicar">("elegir");
+  const [copySeed, setCopySeed] = useState(1);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -319,9 +331,9 @@ export function FacebookAdsStudio() {
         const rawTitle =
           titleByAsin.get(asin) ||
           String(l.title || "").trim() ||
-          "Oferta verificada";
+          "Selección Higlou";
         const title = rawTitle.replace(/^ASIN\s+[A-Z0-9]{10}\s*/i, "").trim() ||
-          "Oferta verificada";
+          "Selección Higlou";
         const linkUrl = absoluteUrl(l.smartPath, l.destination_url);
         const marketDrop = drops.find(
           (d) => String(d.asin || "").toUpperCase() === asin,
@@ -461,6 +473,63 @@ export function FacebookAdsStudio() {
     [cards, selectedIds],
   );
 
+  const packSuggestions = useMemo(
+    () =>
+      suggestPromoPacks(
+        cards.map((c) => ({
+          id: c.id,
+          title: c.title,
+          priceLabel: c.priceLabel,
+          asin: c.asin,
+          meta: c.meta,
+          brand: c.meta?.includes("·")
+            ? c.meta.split("·")[1]?.trim() || null
+            : null,
+        })),
+        { limit: 4 },
+      ),
+    [cards],
+  );
+
+  const applyCopy = useCallback(
+    (
+      nextFormat: PromoFormat,
+      picks: PickCard[],
+      seed: number,
+      niche?: string | null,
+    ) => {
+      const copy = buildFacebookPromoCopy({
+        format: nextFormat,
+        titles: picks.map((c) => c.title),
+        prices: picks.map((c) => c.priceLabel),
+        niche: niche || null,
+        seed,
+      });
+      setMessage(copy.message);
+      if (nextFormat === "vitrina") setCollectionTitle(copy.collectionTitle);
+    },
+    [],
+  );
+
+  const regenerateCopy = () => {
+    const nextSeed = copySeed + 1;
+    setCopySeed(nextSeed);
+    applyCopy(format, selectedCards, nextSeed);
+    toast.message("Copy regenerado · tono pro Higlou");
+  };
+
+  const applyPack = (pack: PromoPackSuggestion) => {
+    setFormat(pack.format);
+    setSelectedIds(pack.cardIds);
+    setCoverId(pack.cardIds[0] || null);
+    setPanel("publicar");
+    const nextSeed = copySeed + 1;
+    setCopySeed(nextSeed);
+    const picks = cards.filter((c) => pack.cardIds.includes(c.id));
+    applyCopy(pack.format, picks, nextSeed, pack.niche);
+    toast.success(`${pack.label} listo · revisá y publicá`);
+  };
+
   const coverCard =
     selectedCards.find((c) => c.id === coverId) || selectedCards[0] || null;
 
@@ -487,17 +556,13 @@ export function FacebookAdsStudio() {
 
   const switchFormat = (next: PromoFormat) => {
     setFormat(next);
+    const picks =
+      next === "ads" ? selectedCards.slice(0, 1) : selectedCards;
     setSelectedIds((prev) => (next === "ads" ? prev.slice(0, 1) : prev));
     setPostUrl(null);
-    if (next !== "ads") {
-      setMessage(
-        next === "vitrina"
-          ? "Deslizá y tocá el producto que te guste."
-          : "Ofertas verificadas · deslizá y tocá el producto.",
-      );
-    } else {
-      setMessage("Oferta verificada · tocá la tarjeta y comprá.");
-    }
+    const nextSeed = copySeed + 1;
+    setCopySeed(nextSeed);
+    applyCopy(next, picks, nextSeed);
   };
 
   const publish = async () => {
@@ -694,17 +759,21 @@ export function FacebookAdsStudio() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-white md:h-full">
-      <div className="flex shrink-0 flex-wrap items-center gap-3 bg-[#3665F3] px-4 py-2.5 text-white md:px-5">
-        <span className="size-2 rounded-full bg-white" />
+      <div className="flex shrink-0 flex-wrap items-center gap-3 bg-[#191919] px-4 py-2.5 text-white md:px-5">
+        <motion.span
+          className="size-2 rounded-full bg-[#3665F3]"
+          animate={reduce ? undefined : { opacity: [1, 0.4, 1] }}
+          transition={{ duration: 1.6, repeat: Infinity }}
+        />
         <p className="text-[11px] font-semibold tracking-[0.2em] uppercase">
-          Facebook Ads
+          Higlou · Facebook
         </p>
-        <p className="hidden min-w-0 flex-1 truncate text-[13px] text-white/85 sm:block">
-          Elegí fuente · estilo · publicá
+        <p className="hidden min-w-0 flex-1 truncate text-[13px] text-white/80 sm:block">
+          Precios más bajos · productos mejores · copy que convierte
         </p>
         <Link
           href="/settings#facebook-store"
-          className="inline-flex h-9 items-center gap-1.5 rounded-full bg-white/15 px-3 text-[12px] font-semibold text-white hover:bg-white/25"
+          className="inline-flex h-9 items-center gap-1.5 rounded-full bg-white/10 px-3 text-[12px] font-semibold text-white hover:bg-white/20"
         >
           <FacebookFMark className="size-3.5" />
           {fb?.connected ? fb.pageName || "Page OK" : "Conectar Page"}
@@ -814,11 +883,44 @@ export function FacebookAdsStudio() {
           </div>
           <p className="mb-3 text-[13px] text-[#707070]">
             {format === "ads"
-              ? "1 producto · tocá la tarjeta = link."
+              ? "1 producto · post serio con precio verificado."
               : format === "carousel"
-                ? `Carrusel Alibaba · ${minNeeded}–${MAX} · tocá imagen = link del producto.`
-                : `Vitrina Alibaba · ${minNeeded}–${MAX} + portada · tocá = link.`}
+                ? `Carrusel · ${minNeeded}–${MAX} · productos parecidos = más click.`
+                : `Vitrina · ${minNeeded}–${MAX} · curada como una boutique.`}
           </p>
+
+          {packSuggestions.length > 0 ? (
+            <div className="mb-4 rounded-2xl border border-[#e5e5e5] bg-white p-3">
+              <div className="mb-2 flex items-center gap-2">
+                <Wand2 className="size-3.5 text-[#3665F3]" />
+                <p className="text-[12px] font-semibold text-[#191919]">
+                  Packs perfectos · por similitud
+                </p>
+              </div>
+              <div className="flex flex-col gap-1.5">
+                {packSuggestions.map((pack) => (
+                  <button
+                    key={pack.id}
+                    type="button"
+                    onClick={() => applyPack(pack)}
+                    className="flex items-start justify-between gap-3 rounded-xl border border-[#ebebeb] bg-[#fafafa] px-3 py-2.5 text-left transition hover:border-[#3665F3]/40 hover:bg-white"
+                  >
+                    <span className="min-w-0">
+                      <span className="block text-[13px] font-semibold text-[#191919]">
+                        {pack.label}
+                      </span>
+                      <span className="mt-0.5 block text-[11px] text-[#707070]">
+                        {pack.blurb}
+                      </span>
+                    </span>
+                    <span className="shrink-0 rounded-full bg-[#191919] px-2.5 py-1 text-[10px] font-bold tracking-wide text-white uppercase">
+                      Usar
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : null}
 
           <div className="mb-4 flex flex-wrap gap-1 rounded-full border border-[#e5e5e5] bg-white p-1">
             {(
@@ -995,7 +1097,9 @@ export function FacebookAdsStudio() {
                 </div>
                 {format === "ads" ? (
                   <div className="bg-white p-3">
-                    <p className="mb-2 line-clamp-2 text-[13px] text-[#191919]">{message || "…"}</p>
+                    <p className="mb-2 whitespace-pre-line text-[13px] leading-snug text-[#191919]">
+                      {message || "…"}
+                    </p>
                     <div className="overflow-hidden rounded-xl border border-[#e5e5e5]">
                       <div className="aspect-[1.91/1] bg-white">
                         <Thumb
@@ -1008,12 +1112,22 @@ export function FacebookAdsStudio() {
                         <p className="truncate text-[13px] font-semibold text-[#191919]">
                           {selectedCards[0]!.title}
                         </p>
+                        {selectedCards[0]!.priceLabel ? (
+                          <p className="text-[11px] font-semibold text-[#3665F3]">
+                            {selectedCards[0]!.priceLabel} · verificado
+                          </p>
+                        ) : null}
                       </div>
                     </div>
                   </div>
                 ) : format === "vitrina" ? (
                   <div className="bg-white p-3">
-                    <p className="mb-1 text-[13px] font-semibold">{collectionTitle || "Vitrina"}</p>
+                    <p className="mb-1 whitespace-pre-line text-[12px] leading-snug text-[#707070]">
+                      {message}
+                    </p>
+                    <p className="mb-2 text-[14px] font-semibold tracking-tight text-[#191919]">
+                      {collectionTitle || "Vitrina Higlou"}
+                    </p>
                     <div className="mb-2 aspect-[4/5] max-h-36 overflow-hidden rounded-xl border border-[#e5e5e5]">
                       <Thumb
                         url={coverCard?.imageUrl || selectedCards[0]!.imageUrl}
@@ -1026,22 +1140,48 @@ export function FacebookAdsStudio() {
                     </div>
                     <div className="flex gap-1.5 overflow-x-auto">
                       {selectedCards.map((c) => (
-                        <span key={c.id} className="size-11 shrink-0 overflow-hidden rounded-lg border border-[#e5e5e5]">
-                          <Thumb url={c.imageUrl} alt="" fallbacks={c.imageFallbacks} />
+                        <span
+                          key={c.id}
+                          className="size-11 shrink-0 overflow-hidden rounded-lg border border-[#e5e5e5]"
+                        >
+                          <Thumb
+                            url={c.imageUrl}
+                            alt=""
+                            fallbacks={c.imageFallbacks}
+                          />
                         </span>
                       ))}
                     </div>
                   </div>
                 ) : (
-                  <div className="flex gap-2 overflow-x-auto bg-white p-3">
-                    {selectedCards.map((c) => (
-                      <div key={c.id} className="w-24 shrink-0 overflow-hidden rounded-xl border border-[#e5e5e5]">
-                        <div className="aspect-square">
-                          <Thumb url={c.imageUrl} alt="" fallbacks={c.imageFallbacks} />
+                  <div className="bg-white p-3">
+                    <p className="mb-2 whitespace-pre-line text-[12px] leading-snug text-[#191919]">
+                      {message}
+                    </p>
+                    <div className="flex gap-2 overflow-x-auto">
+                      {selectedCards.map((c) => (
+                        <div
+                          key={c.id}
+                          className="w-24 shrink-0 overflow-hidden rounded-xl border border-[#e5e5e5]"
+                        >
+                          <div className="aspect-square">
+                            <Thumb
+                              url={c.imageUrl}
+                              alt=""
+                              fallbacks={c.imageFallbacks}
+                            />
+                          </div>
+                          <p className="truncate px-1.5 py-1 text-[10px] font-semibold">
+                            {c.title}
+                          </p>
+                          {c.priceLabel ? (
+                            <p className="truncate px-1.5 pb-1 text-[9px] font-semibold text-[#3665F3]">
+                              {c.priceLabel}
+                            </p>
+                          ) : null}
                         </div>
-                        <p className="truncate px-1.5 py-1 text-[10px] font-semibold">{c.title}</p>
-                      </div>
-                    ))}
+                      ))}
+                    </div>
                   </div>
                 )}
               </motion.div>
@@ -1082,15 +1222,31 @@ export function FacebookAdsStudio() {
             </div>
           ) : null}
 
-          <label className="mt-4 block text-[12px] font-semibold text-[#707070]">
-            Mensaje
+          <div className="mt-4">
+            <div className="flex items-center justify-between gap-2">
+              <label className="text-[12px] font-semibold text-[#707070]">
+                Mensaje · negrita pro
+              </label>
+              <button
+                type="button"
+                onClick={regenerateCopy}
+                disabled={!selectedCards.length}
+                className="inline-flex h-8 items-center gap-1.5 rounded-full border border-[#e5e5e5] bg-white px-2.5 text-[11px] font-semibold text-[#191919] disabled:opacity-40"
+              >
+                <RefreshCw className="size-3" />
+                Regenerar
+              </button>
+            </div>
             <textarea
               value={message}
               onChange={(e) => setMessage(e.target.value)}
-              rows={3}
-              className="mt-1.5 w-full resize-none rounded-xl border border-[#e5e5e5] px-3 py-2.5 text-[14px] outline-none focus:border-[#3665F3]"
+              rows={4}
+              className="mt-1.5 w-full resize-none rounded-xl border border-[#e5e5e5] px-3 py-2.5 text-[14px] leading-snug outline-none focus:border-[#3665F3]"
             />
-          </label>
+            <p className="mt-1.5 text-[11px] text-[#8a8a8a]">
+              La primera línea va en negrita Unicode · se ve bold en Facebook.
+            </p>
+          </div>
 
           <button
             type="button"

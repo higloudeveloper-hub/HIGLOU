@@ -6,6 +6,10 @@ import {
 } from "@/lib/facebook/connection";
 import { enrichPromoCardPrices } from "@/lib/facebook/enrich-promo-prices";
 import { ensureFacebookPromoAffiliateTrust } from "@/lib/facebook/ensure-affiliate-trust";
+import {
+  buildFacebookPromoCopy,
+  type PromoFormat as CopyFormat,
+} from "@/lib/facebook/promo-copy";
 import { shareAffiliateToFacebook } from "@/lib/facebook/share";
 
 export type PromoFormat = "ads" | "carousel" | "vitrina";
@@ -33,27 +37,22 @@ type ChildAttachment = {
   picture: string;
 };
 
-function toChildAttachments(cards: PromoCard[]): ChildAttachment[] {
+function toChildAttachments(
+  cards: PromoCard[],
+  copy = buildFacebookPromoCopy({ format: "carousel", seed: 0 }),
+): ChildAttachment[] {
   return cards
     .filter(
       (c) =>
         /^https?:\/\//i.test(c.linkUrl) && /^https?:\/\//i.test(c.imageUrl),
     )
     .slice(0, 10)
-    .map((c) => {
-      const cleaned = String(c.title || "")
-        .replace(/^ASIN\s+[A-Z0-9]{10}\b/i, "")
-        .replace(/\bB0[A-Z0-9]{8}\b/gi, "")
-        .replace(/\s{2,}/g, " ")
-        .trim();
-      const name = (cleaned || "Oferta verificada").slice(0, 80);
-      return {
-        link: c.linkUrl,
-        name,
-        description: (c.priceLabel || "Oferta verificada · Higlou").slice(0, 120),
-        picture: c.imageUrl,
-      };
-    });
+    .map((c) => ({
+      link: c.linkUrl,
+      name: copy.cardName(c.title),
+      description: copy.cardDescription(c.priceLabel),
+      picture: c.imageUrl,
+    }));
 }
 
 /**
@@ -65,8 +64,15 @@ async function publishLinkCarousel(opts: {
   accessToken: string;
   message: string;
   cards: PromoCard[];
+  format?: PromoFormat;
 }): Promise<{ id?: string; error?: string }> {
-  const children = toChildAttachments(opts.cards);
+  const copy = buildFacebookPromoCopy({
+    format: (opts.format || "carousel") as CopyFormat,
+    titles: opts.cards.map((c) => c.title),
+    prices: opts.cards.map((c) => c.priceLabel),
+    seed: 0,
+  });
+  const children = toChildAttachments(opts.cards, copy);
   if (children.length < 2) {
     return { error: "Carrusel Alibaba: necesitás al menos 2 productos con imagen + link." };
   }
@@ -206,7 +212,12 @@ export async function publishFacebookPromo(
     }
     const caption =
       String(opts.message || "").trim() ||
-      "Oferta verificada · tocá la tarjeta y comprá";
+      buildFacebookPromoCopy({
+        format: "ads",
+        titles: [first.title],
+        prices: [first.priceLabel],
+        seed: 2,
+      }).message;
     const posted = await publishSingleLinkCard({
       pageId: creds.pageId,
       accessToken: creds.accessToken,
@@ -268,12 +279,20 @@ export async function publishFacebookPromo(
     }
   }
 
+  const fallbackCopy = buildFacebookPromoCopy({
+    format: opts.format,
+    titles: ordered.map((c) => c.title),
+    prices: ordered.map((c) => c.priceLabel),
+    seed: 3,
+  });
   const titleBit =
     opts.format === "vitrina" && opts.collectionTitle
-      ? `${opts.collectionTitle.trim()} · `
-      : "";
+      ? `${opts.collectionTitle.trim()}\n`
+      : opts.format === "vitrina"
+        ? `${fallbackCopy.collectionTitle}\n`
+        : "";
   const message =
-    `${titleBit}${String(opts.message || "").trim() || "Ofertas verificadas · deslizá y tocá el producto"}`.trim();
+    `${titleBit}${String(opts.message || "").trim() || fallbackCopy.message}`.trim();
 
   try {
     const posted = await publishLinkCarousel({
@@ -281,6 +300,7 @@ export async function publishFacebookPromo(
       accessToken: creds.accessToken,
       message,
       cards: ordered,
+      format: opts.format,
     });
 
     if (!posted.id) {

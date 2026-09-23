@@ -319,100 +319,88 @@ export function FacebookAdsStudio() {
     return map;
   }, [drops, imported]);
 
-  const cards: PickCard[] = useMemo(() => {
-    if (source === "affiliate") {
-      return links.map((l) => {
-        const asin = String(l.asin || "").trim().toUpperCase();
-        const img = resolveProductImage({
-          preferred: l.imageUrl,
-          asin: l.asin,
-          marketByAsin: marketPhotoByAsin,
-        });
-        const rawTitle =
-          titleByAsin.get(asin) ||
-          String(l.title || "").trim() ||
-          "Selección Higlou";
-        const title = rawTitle.replace(/^ASIN\s+[A-Z0-9]{10}\s*/i, "").trim() ||
-          "Selección Higlou";
-        const linkUrl = absoluteUrl(l.smartPath, l.destination_url);
-        const marketDrop = drops.find(
-          (d) => String(d.asin || "").toUpperCase() === asin,
-        );
-        return {
-          id: `aff:${l.id}`,
-          title: title.slice(0, 80),
-          imageUrl: img.url || amazonAsinPrimaryImage(l.asin),
-          imageFallbacks: img.fallbacks,
-          linkUrl,
-          meta:
-            l.earnsCommission === false
-              ? "⚠ sin tag= — se reparará al publicar"
-              : l.smartPath
-                ? `Afiliado · /go`
-                : l.source || "affiliate",
-          asin: asin || null,
-          // Amazon destination only — never invent a price from Market sell
-          priceLabel: promoPriceLabelForLink({
-            linkUrl: l.destination_url || linkUrl,
-            amazonPrice: l.amazonPrice ?? marketDrop?.amazonPrice ?? null,
-          }),
-        };
+  const catalog = useMemo(() => {
+    const affiliateCards: PickCard[] = links.map((l) => {
+      const asin = String(l.asin || "").trim().toUpperCase();
+      const img = resolveProductImage({
+        preferred: l.imageUrl,
+        asin: l.asin,
+        marketByAsin: marketPhotoByAsin,
       });
-    }
-    if (source === "imported") {
-      return imported.map((p) => {
-        const asin = String(p.amazonAsin || "").trim();
-        const ebayId = String(p.ebayListingId || "").trim();
-        const preferred = p.coverUrl || p.photos?.[0] || "";
-        const img = resolveProductImage({
-          preferred,
-          asin,
-          marketByAsin: marketPhotoByAsin,
-        });
-        const linkUrl = ebayId
-          ? `https://www.ebay.com/itm/${ebayId}`
-          : asin
-            ? `https://www.amazon.com/dp/${asin}`
-            : typeof window !== "undefined"
-              ? `${window.location.origin}/listings/${p.id}`
-              : `/listings/${p.id}`;
-        const channel = ebayId
-          ? "eBay"
-          : asin
-            ? "Amazon"
-            : "Listing";
-        const marketDrop = asin
-          ? drops.find(
-              (d) =>
-                String(d.asin || "").toUpperCase() === asin.toUpperCase(),
-            )
-          : undefined;
-        // eBay listing → own ask; Amazon → live buy box only (not listing sell)
-        const priceLabel = ebayId
-          ? money(p.price)
-          : promoPriceLabelForLink({
-              linkUrl,
-              amazonPrice: marketDrop?.amazonPrice ?? null,
-            });
-        return {
-          id: `imp:${p.id}`,
-          title: p.title || "Listing",
-          imageUrl: img.url,
-          imageFallbacks: img.fallbacks,
-          linkUrl,
-          priceLabel,
-          asin: asin || null,
-          meta: p.brand ? `${channel} · ${p.brand}` : channel,
-        };
+      const rawTitle =
+        titleByAsin.get(asin) ||
+        String(l.title || "").trim() ||
+        "Selección Higlou";
+      const title =
+        rawTitle.replace(/^ASIN\s+[A-Z0-9]{10}\s*/i, "").trim() ||
+        "Selección Higlou";
+      const linkUrl = absoluteUrl(l.smartPath, l.destination_url);
+      const marketDrop = drops.find(
+        (d) => String(d.asin || "").toUpperCase() === asin,
+      );
+      return {
+        id: `aff:${l.id}`,
+        title: title.slice(0, 80),
+        imageUrl: img.url || amazonAsinPrimaryImage(l.asin),
+        imageFallbacks: img.fallbacks,
+        linkUrl,
+        meta:
+          l.earnsCommission === false
+            ? "⚠ sin tag= — se reparará al publicar"
+            : l.smartPath
+              ? `Afiliado · /go`
+              : l.source || "affiliate",
+        asin: asin || null,
+        priceLabel: promoPriceLabelForLink({
+          linkUrl: l.destination_url || linkUrl,
+          amazonPrice: l.amazonPrice ?? marketDrop?.amazonPrice ?? null,
+        }),
+      };
+    });
+
+    const importedCards: PickCard[] = imported.map((p) => {
+      const asin = String(p.amazonAsin || "").trim();
+      const ebayId = String(p.ebayListingId || "").trim();
+      const preferred = p.coverUrl || p.photos?.[0] || "";
+      const img = resolveProductImage({
+        preferred,
+        asin,
+        marketByAsin: marketPhotoByAsin,
       });
-    }
-    if (source === "custom") {
-      return customCards;
-    }
-    return drops.map((d) => {
-      const linkUrl =
-        d.affiliateUrl || `https://www.amazon.com/dp/${d.asin}`;
-      // Link opens Amazon — use buy box / amazonPrice, never arbitrage sell
+      const linkUrl = ebayId
+        ? `https://www.ebay.com/itm/${ebayId}`
+        : asin
+          ? `https://www.amazon.com/dp/${asin}`
+          : typeof window !== "undefined"
+            ? `${window.location.origin}/listings/${p.id}`
+            : `/listings/${p.id}`;
+      const channel = ebayId ? "eBay" : asin ? "Amazon" : "Listing";
+      const marketDrop = asin
+        ? drops.find(
+            (d) =>
+              String(d.asin || "").toUpperCase() === asin.toUpperCase(),
+          )
+        : undefined;
+      const priceLabel = ebayId
+        ? money(p.price)
+        : promoPriceLabelForLink({
+            linkUrl,
+            amazonPrice: marketDrop?.amazonPrice ?? null,
+          });
+      return {
+        id: `imp:${p.id}`,
+        title: p.title || "Listing",
+        imageUrl: img.url,
+        imageFallbacks: img.fallbacks,
+        linkUrl,
+        priceLabel,
+        asin: asin || null,
+        meta: p.brand ? `${channel} · ${p.brand}` : channel,
+      };
+    });
+
+    const marketCards: PickCard[] = drops.map((d) => {
+      const linkUrl = d.affiliateUrl || `https://www.amazon.com/dp/${d.asin}`;
       const amazonPrice =
         d.amazonPrice ??
         (d.lane === "amazon" ? d.sell : null) ??
@@ -433,7 +421,40 @@ export function FacebookAdsStudio() {
         meta: d.asin,
       };
     });
-  }, [source, links, imported, drops, customCards, marketPhotoByAsin, titleByAsin]);
+
+    const all = [...affiliateCards, ...importedCards, ...marketCards, ...customCards];
+    // Dedupe by ASIN preferring affiliate (tagged) over market
+    const seenAsin = new Set<string>();
+    const deduped: PickCard[] = [];
+    for (const c of all) {
+      const asin = String(c.asin || "").toUpperCase();
+      if (asin && seenAsin.has(asin)) continue;
+      if (asin) seenAsin.add(asin);
+      deduped.push(c);
+    }
+
+    return {
+      affiliate: affiliateCards,
+      imported: importedCards,
+      market: marketCards,
+      custom: customCards,
+      all: deduped,
+    };
+  }, [
+    links,
+    imported,
+    drops,
+    customCards,
+    marketPhotoByAsin,
+    titleByAsin,
+  ]);
+
+  const cards: PickCard[] = useMemo(() => {
+    if (source === "affiliate") return catalog.affiliate;
+    if (source === "imported") return catalog.imported;
+    if (source === "custom") return catalog.custom;
+    return catalog.market;
+  }, [source, catalog]);
 
   const addCustomCard = () => {
     const title = customDraft.title.trim() || "Promo";
@@ -468,27 +489,39 @@ export function FacebookAdsStudio() {
     toast.success("Agregado a Cualquiera");
   };
 
-  const selectedCards = useMemo(
-    () => cards.filter((c) => selectedIds.includes(c.id)),
-    [cards, selectedIds],
-  );
+  const selectedCards = useMemo(() => {
+    const byId = new Map(catalog.all.map((c) => [c.id, c]));
+    return selectedIds
+      .map((id) => byId.get(id))
+      .filter((c): c is PickCard => Boolean(c));
+  }, [catalog.all, selectedIds]);
 
   const packSuggestions = useMemo(
     () =>
       suggestPromoPacks(
-        cards.map((c) => ({
+        catalog.all.map((c) => ({
           id: c.id,
           title: c.title,
           priceLabel: c.priceLabel,
           asin: c.asin,
           meta: c.meta,
+          imageUrl: c.imageUrl,
           brand: c.meta?.includes("·")
             ? c.meta.split("·")[1]?.trim() || null
             : null,
         })),
-        { limit: 4 },
+        { limit: 6, preferVitrina: true },
       ),
-    [cards],
+    [catalog.all],
+  );
+
+  const readyVitrinas = useMemo(
+    () => packSuggestions.filter((p) => p.format === "vitrina"),
+    [packSuggestions],
+  );
+  const readyCarousels = useMemo(
+    () => packSuggestions.filter((p) => p.format === "carousel"),
+    [packSuggestions],
   );
 
   const applyCopy = useCallback(
@@ -525,9 +558,16 @@ export function FacebookAdsStudio() {
     setPanel("publicar");
     const nextSeed = copySeed + 1;
     setCopySeed(nextSeed);
-    const picks = cards.filter((c) => pack.cardIds.includes(c.id));
+    const byId = new Map(catalog.all.map((c) => [c.id, c]));
+    const picks = pack.cardIds
+      .map((id) => byId.get(id))
+      .filter((c): c is PickCard => Boolean(c));
     applyCopy(pack.format, picks, nextSeed, pack.niche);
-    toast.success(`${pack.label} listo · revisá y publicá`);
+    toast.success(
+      pack.format === "vitrina"
+        ? `Vitrina lista · ${pack.niche} · ${pack.cardIds.length} productos`
+        : `${pack.label} listo · revisá y publicá`,
+    );
   };
 
   const coverCard =
@@ -889,36 +929,120 @@ export function FacebookAdsStudio() {
                 : `Vitrina · ${minNeeded}–${MAX} · curada como una boutique.`}
           </p>
 
-          {packSuggestions.length > 0 ? (
-            <div className="mb-4 rounded-2xl border border-[#e5e5e5] bg-white p-3">
-              <div className="mb-2 flex items-center gap-2">
-                <Wand2 className="size-3.5 text-[#3665F3]" />
-                <p className="text-[12px] font-semibold text-[#191919]">
-                  Packs perfectos · por similitud
-                </p>
-              </div>
-              <div className="flex flex-col gap-1.5">
-                {packSuggestions.map((pack) => (
-                  <button
-                    key={pack.id}
-                    type="button"
-                    onClick={() => applyPack(pack)}
-                    className="flex items-start justify-between gap-3 rounded-xl border border-[#ebebeb] bg-[#fafafa] px-3 py-2.5 text-left transition hover:border-[#3665F3]/40 hover:bg-white"
-                  >
-                    <span className="min-w-0">
-                      <span className="block text-[13px] font-semibold text-[#191919]">
-                        {pack.label}
-                      </span>
-                      <span className="mt-0.5 block text-[11px] text-[#707070]">
-                        {pack.blurb}
-                      </span>
+          {readyVitrinas.length > 0 || readyCarousels.length > 0 ? (
+            <div className="mb-4 space-y-3">
+              {readyVitrinas.length > 0 ? (
+                <div className="rounded-2xl border border-[#191919]/10 bg-white p-3 shadow-[0_1px_0_rgba(0,0,0,0.03)]">
+                  <div className="mb-2.5 flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <LayoutGrid className="size-3.5 text-[#3665F3]" />
+                      <p className="text-[12px] font-semibold text-[#191919]">
+                        Vitrinas ya hechas
+                      </p>
+                    </div>
+                    <span className="text-[10px] font-semibold tracking-wide text-[#8a8a8a] uppercase">
+                      Productos relacionados
                     </span>
-                    <span className="shrink-0 rounded-full bg-[#191919] px-2.5 py-1 text-[10px] font-bold tracking-wide text-white uppercase">
-                      Usar
-                    </span>
-                  </button>
-                ))}
-              </div>
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    {readyVitrinas.map((pack) => (
+                      <button
+                        key={pack.id}
+                        type="button"
+                        onClick={() => applyPack(pack)}
+                        className="group w-full rounded-xl border border-[#ebebeb] bg-[#fafafa] p-2.5 text-left transition hover:border-[#3665F3]/50 hover:bg-white"
+                      >
+                        <div className="mb-2 flex items-start justify-between gap-2">
+                          <span className="min-w-0">
+                            <span className="block text-[13px] font-semibold text-[#191919]">
+                              {pack.label}
+                            </span>
+                            <span className="mt-0.5 block text-[11px] text-[#707070]">
+                              {pack.blurb}
+                            </span>
+                          </span>
+                          <span className="shrink-0 rounded-full bg-[#191919] px-2.5 py-1 text-[10px] font-bold tracking-wide text-white uppercase group-hover:bg-[#3665F3]">
+                            Abrir
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          {(pack.imageUrls.length
+                            ? pack.imageUrls
+                            : pack.cardIds.map(
+                                (id) =>
+                                  catalog.all.find((c) => c.id === id)
+                                    ?.imageUrl || "",
+                              )
+                          )
+                            .filter(Boolean)
+                            .slice(0, 5)
+                            .map((url, i) => (
+                              <span
+                                key={`${pack.id}-img-${i}`}
+                                className="size-11 shrink-0 overflow-hidden rounded-lg border border-[#e5e5e5] bg-white"
+                              >
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img
+                                  src={url}
+                                  alt=""
+                                  className="size-full object-contain p-0.5"
+                                />
+                              </span>
+                            ))}
+                          {pack.cardIds.length > 5 ? (
+                            <span className="text-[11px] font-semibold text-[#8a8a8a]">
+                              +{pack.cardIds.length - 5}
+                            </span>
+                          ) : null}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <div className="rounded-2xl border border-dashed border-[#e5e5e5] bg-white px-3 py-3">
+                  <p className="text-[12px] font-semibold text-[#191919]">
+                    Vitrinas ya hechas
+                  </p>
+                  <p className="mt-1 text-[11px] text-[#8a8a8a]">
+                    Cuando haya 3+ productos relacionados (misma marca o tipo),
+                    Higlou te arma la vitrina sola.
+                  </p>
+                </div>
+              )}
+
+              {readyCarousels.length > 0 ? (
+                <div className="rounded-2xl border border-[#e5e5e5] bg-white p-3">
+                  <div className="mb-2 flex items-center gap-2">
+                    <Wand2 className="size-3.5 text-[#3665F3]" />
+                    <p className="text-[12px] font-semibold text-[#191919]">
+                      Carruseles sugeridos
+                    </p>
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    {readyCarousels.map((pack) => (
+                      <button
+                        key={pack.id}
+                        type="button"
+                        onClick={() => applyPack(pack)}
+                        className="flex items-center justify-between gap-3 rounded-xl border border-[#ebebeb] bg-[#fafafa] px-3 py-2 text-left transition hover:border-[#3665F3]/40 hover:bg-white"
+                      >
+                        <span className="min-w-0">
+                          <span className="block text-[13px] font-semibold text-[#191919]">
+                            {pack.label}
+                          </span>
+                          <span className="mt-0.5 block text-[11px] text-[#707070]">
+                            {pack.blurb}
+                          </span>
+                        </span>
+                        <span className="shrink-0 rounded-full bg-[#191919] px-2.5 py-1 text-[10px] font-bold tracking-wide text-white uppercase">
+                          Usar
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
             </div>
           ) : null}
 

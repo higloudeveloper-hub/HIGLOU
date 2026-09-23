@@ -5,7 +5,10 @@ import {
   facebookBold,
   productHook,
 } from "@/lib/facebook/promo-copy";
-import { suggestPromoPacks } from "@/lib/facebook/promo-groups";
+import {
+  suggestPromoPacks,
+  suggestReadyVitrinas,
+} from "@/lib/facebook/promo-groups";
 
 describe("facebook promo copy", () => {
   it("renders Mathematical Bold for Latin letters", () => {
@@ -21,7 +24,7 @@ describe("facebook promo copy", () => {
       prices: ["$24.99"],
       seed: 0,
     });
-    expect(copy.message).toMatch(/𝗔|𝗣|𝗛|𝗪/); // has bold runes
+    expect(copy.message).toMatch(/𝗔|𝗣|𝗛|𝗪/);
     expect(copy.message.toLowerCase()).toMatch(/tocá|comprá|verific/);
     expect(copy.cardDescription("$24.99")).toContain("$24.99");
     expect(copy.cardName("ASIN B0CHS1BVBC Anker Bank")).toBe("Anker Bank");
@@ -43,57 +46,91 @@ describe("facebook promo copy", () => {
   });
 
   it("productHook pulls meaningful words", () => {
-    expect(productHook("The Best Kitchen Knife Set for Home")).toMatch(/Kitchen/i);
+    expect(productHook("The Best Kitchen Knife Set for Home")).toMatch(
+      /Kitchen/i,
+    );
   });
 });
 
-describe("facebook promo packs by similarity", () => {
+describe("ready-made related vitrinas", () => {
   const catalog = [
     {
       id: "1",
       title: "Anker Power Bank 10000mAh Portable Charger Black",
       brand: "Anker",
       priceLabel: "$24.99",
+      imageUrl: "https://cdn.example.com/1.jpg",
     },
     {
       id: "2",
       title: "Anker Power Bank 20000mAh Fast Charging Portable",
       brand: "Anker",
       priceLabel: "$39.99",
+      imageUrl: "https://cdn.example.com/2.jpg",
     },
     {
       id: "3",
       title: "Anker USB C Cable 6ft Fast Charge",
       brand: "Anker",
       priceLabel: "$12.99",
+      imageUrl: "https://cdn.example.com/3.jpg",
     },
     {
       id: "4",
-      title: "Kitchen Knife Set Stainless Steel Chef",
-      brand: "Generic",
-      priceLabel: "$29.99",
+      title: "Anker Wireless Charger Pad Fast",
+      brand: "Anker",
+      priceLabel: "$19.99",
+      imageUrl: "https://cdn.example.com/4.jpg",
     },
     {
       id: "5",
-      title: "Kitchen Knife Block Set Professional",
+      title: "Kitchen Knife Set Stainless Steel Chef",
       brand: "Generic",
-      priceLabel: "$34.99",
+      priceLabel: "$29.99",
+      imageUrl: "https://cdn.example.com/5.jpg",
     },
     {
       id: "6",
+      title: "Kitchen Knife Block Set Professional",
+      brand: "Generic",
+      priceLabel: "$34.99",
+      imageUrl: "https://cdn.example.com/6.jpg",
+    },
+    {
+      id: "7",
+      title: "Kitchen Knife Sharpener Rod",
+      brand: "Generic",
+      priceLabel: "$14.99",
+      imageUrl: "https://cdn.example.com/7.jpg",
+    },
+    {
+      id: "8",
       title: "Yoga Mat Non Slip Exercise Mat",
       brand: "FitLife",
       priceLabel: "$19.99",
+      imageUrl: "https://cdn.example.com/8.jpg",
     },
   ];
 
-  it("clusters similar products into carousel/vitrina packs", () => {
-    const packs = suggestPromoPacks(catalog, { limit: 4 });
-    expect(packs.length).toBeGreaterThan(0);
-    const anker = packs.find((p) => /anker/i.test(p.label + p.niche));
+  it("builds ready vitrinas with 3+ related products", () => {
+    const vitrinas = suggestReadyVitrinas(catalog, 4);
+    expect(vitrinas.length).toBeGreaterThan(0);
+    expect(vitrinas.every((v) => v.format === "vitrina")).toBe(true);
+    expect(vitrinas.every((v) => v.cardIds.length >= 3)).toBe(true);
+    const anker = vitrinas.find((v) => /anker/i.test(v.label + v.niche));
     expect(anker).toBeTruthy();
-    expect(anker!.cardIds.length).toBeGreaterThanOrEqual(2);
-    expect(["carousel", "vitrina"]).toContain(anker!.format);
+    expect(anker!.cardIds.length).toBeGreaterThanOrEqual(3);
+    expect(anker!.imageUrls.length).toBeGreaterThan(0);
+  });
+
+  it("puts vitrinas before carousels in suggestPromoPacks", () => {
+    const packs = suggestPromoPacks(catalog, { limit: 6, preferVitrina: true });
+    const firstVitrina = packs.findIndex((p) => p.format === "vitrina");
+    const firstCarousel = packs.findIndex((p) => p.format === "carousel");
+    expect(firstVitrina).toBeGreaterThanOrEqual(0);
+    if (firstCarousel >= 0) {
+      expect(firstVitrina).toBeLessThan(firstCarousel);
+    }
   });
 
   it("returns empty when fewer than 2 cards", () => {

@@ -28,6 +28,9 @@ import {
   defaultFacebookPromoMessage,
 } from "@/lib/facebook/promo-copy";
 import {
+  dedupePromoCards,
+  isJunkBrand,
+  productImageKey,
   suggestPromoPacks,
   type PromoPackSuggestion,
 } from "@/lib/facebook/promo-groups";
@@ -423,13 +426,17 @@ export function FacebookAdsStudio() {
     });
 
     const all = [...affiliateCards, ...importedCards, ...marketCards, ...customCards];
-    // Dedupe by ASIN preferring affiliate (tagged) over market
+    // Dedupe by ASIN + identical image — prefer affiliate (tagged) over market
     const seenAsin = new Set<string>();
+    const seenImg = new Set<string>();
     const deduped: PickCard[] = [];
     for (const c of all) {
       const asin = String(c.asin || "").toUpperCase();
       if (asin && seenAsin.has(asin)) continue;
+      const img = productImageKey(c.imageUrl);
+      if (img && seenImg.has(img)) continue;
       if (asin) seenAsin.add(asin);
+      if (img) seenImg.add(img);
       deduped.push(c);
     }
 
@@ -496,24 +503,30 @@ export function FacebookAdsStudio() {
       .filter((c): c is PickCard => Boolean(c));
   }, [catalog.all, selectedIds]);
 
-  const packSuggestions = useMemo(
-    () =>
-      suggestPromoPacks(
-        catalog.all.map((c) => ({
-          id: c.id,
-          title: c.title,
-          priceLabel: c.priceLabel,
-          asin: c.asin,
-          meta: c.meta,
-          imageUrl: c.imageUrl,
-          brand: c.meta?.includes("·")
-            ? c.meta.split("·")[1]?.trim() || null
-            : null,
-        })),
-        { limit: 6, preferVitrina: true },
-      ),
-    [catalog.all],
-  );
+  const packSuggestions = useMemo(() => {
+    const groupCards = catalog.all.map((c) => {
+      const metaBrand = c.meta?.includes("·")
+        ? c.meta.split("·").slice(1).join("·").trim() || null
+        : null;
+      const brand =
+        metaBrand && !isJunkBrand(metaBrand) && !/afiliado|\/go/i.test(c.meta || "")
+          ? metaBrand
+          : null;
+      return {
+        id: c.id,
+        title: c.title,
+        priceLabel: c.priceLabel,
+        asin: c.asin,
+        meta: c.meta,
+        imageUrl: c.imageUrl,
+        brand,
+      };
+    });
+    return suggestPromoPacks(dedupePromoCards(groupCards), {
+      limit: 6,
+      preferVitrina: true,
+    });
+  }, [catalog.all]);
 
   const readyVitrinas = useMemo(
     () => packSuggestions.filter((p) => p.format === "vitrina"),
@@ -552,20 +565,36 @@ export function FacebookAdsStudio() {
   };
 
   const applyPack = (pack: PromoPackSuggestion) => {
+    const byId = new Map(catalog.all.map((c) => [c.id, c]));
+    const seenAsin = new Set<string>();
+    const seenImg = new Set<string>();
+    const uniqueIds: string[] = [];
+    for (const id of pack.cardIds) {
+      const c = byId.get(id);
+      if (!c) continue;
+      const asin = String(c.asin || "").toUpperCase();
+      if (asin && seenAsin.has(asin)) continue;
+      const img = productImageKey(c.imageUrl);
+      if (img && seenImg.has(img)) continue;
+      if (asin) seenAsin.add(asin);
+      if (img) seenImg.add(img);
+      uniqueIds.push(id);
+    }
+    const picks = uniqueIds
+      .map((id) => byId.get(id))
+      .filter((c): c is PickCard => Boolean(c));
+    const niche =
+      pack.niche && !isJunkBrand(pack.niche) ? pack.niche : null;
     setFormat(pack.format);
-    setSelectedIds(pack.cardIds);
-    setCoverId(pack.cardIds[0] || null);
+    setSelectedIds(uniqueIds);
+    setCoverId(uniqueIds[0] || null);
     setPanel("publicar");
     const nextSeed = copySeed + 1;
     setCopySeed(nextSeed);
-    const byId = new Map(catalog.all.map((c) => [c.id, c]));
-    const picks = pack.cardIds
-      .map((id) => byId.get(id))
-      .filter((c): c is PickCard => Boolean(c));
-    applyCopy(pack.format, picks, nextSeed, pack.niche);
+    applyCopy(pack.format, picks, nextSeed, niche);
     toast.success(
       pack.format === "vitrina"
-        ? `Vitrina lista · ${pack.niche} · ${pack.cardIds.length} productos`
+        ? `Vitrina lista · ${niche || "Selección"} · ${uniqueIds.length} productos`
         : `${pack.label} listo · revisá y publicá`,
     );
   };
@@ -653,22 +682,42 @@ export function FacebookAdsStudio() {
     setPostUrl(null);
     try {
       // Ensure absolute https links for affiliate smart paths / listing URLs
-      const payloadCards = selectedCards.map((c) => ({
-        id: c.id,
-        title: c.title,
-        imageUrl:
-          c.imageUrl ||
-          c.imageFallbacks?.find((u) => /^https?:\/\//i.test(u)) ||
-          "",
-        linkUrl: absoluteUrl(
-          c.linkUrl.startsWith("/") ? c.linkUrl : null,
-          c.linkUrl,
-        ),
-        priceLabel: c.priceLabel,
-        asin: c.asin || (c.meta && /^[A-Z0-9]{10}$/i.test(c.meta) ? c.meta : null),
-      }));
+      const seenAsinPub = new Set<string>();
+      const seenImgPub = new Set<string>();
+      const payloadCards = selectedCards
+        .map((c) => ({
+          id: c.id,
+          title: c.title,
+          imageUrl:
+            c.imageUrl ||
+            c.imageFallbacks?.find((u) => /^https?:\/\//i.test(u)) ||
+            "",
+          linkUrl: absoluteUrl(
+            c.linkUrl.startsWith("/") ? c.linkUrl : null,
+            c.linkUrl,
+          ),
+          priceLabel: c.priceLabel,
+          asin:
+            c.asin ||
+            (c.meta && /^[A-Z0-9]{10}$/i.test(c.meta) ? c.meta : null),
+        }))
+        .filter((c) => {
+          const asin = String(c.asin || "").toUpperCase();
+          if (asin && seenAsinPub.has(asin)) return false;
+          const img = productImageKey(c.imageUrl);
+          if (img && seenImgPub.has(img)) return false;
+          if (asin) seenAsinPub.add(asin);
+          if (img) seenImgPub.add(img);
+          return true;
+        });
       if (payloadCards.some((c) => !c.imageUrl)) {
         toast.error("Falta imagen en algún producto. Probá Mis listings o Market.");
+        return;
+      }
+      if (format !== "ads" && payloadCards.length < minNeeded) {
+        toast.error(
+          `Quedaron menos de ${minNeeded} productos únicos. Sacá duplicados y volvé a armar la vitrina.`,
+        );
         return;
       }
 
@@ -966,29 +1015,27 @@ export function FacebookAdsStudio() {
                           </span>
                         </div>
                         <div className="flex items-center gap-1.5">
-                          {(pack.imageUrls.length
-                            ? pack.imageUrls
-                            : pack.cardIds.map(
-                                (id) =>
-                                  catalog.all.find((c) => c.id === id)
-                                    ?.imageUrl || "",
-                              )
-                          )
-                            .filter(Boolean)
-                            .slice(0, 5)
-                            .map((url, i) => (
+                          {pack.cardIds.slice(0, 5).map((id) => {
+                            const card = catalog.all.find((c) => c.id === id);
+                            const url =
+                              card?.imageUrl ||
+                              pack.imageUrls[
+                                pack.cardIds.indexOf(id)
+                              ] ||
+                              "";
+                            return (
                               <span
-                                key={`${pack.id}-img-${i}`}
+                                key={`${pack.id}-${id}`}
                                 className="size-11 shrink-0 overflow-hidden rounded-lg border border-[#e5e5e5] bg-white"
                               >
-                                {/* eslint-disable-next-line @next/next/no-img-element */}
-                                <img
-                                  src={url}
+                                <Thumb
+                                  url={url}
                                   alt=""
-                                  className="size-full object-contain p-0.5"
+                                  fallbacks={card?.imageFallbacks}
                                 />
                               </span>
-                            ))}
+                            );
+                          })}
                           {pack.cardIds.length > 5 ? (
                             <span className="text-[11px] font-semibold text-[#8a8a8a]">
                               +{pack.cardIds.length - 5}
@@ -1027,12 +1074,31 @@ export function FacebookAdsStudio() {
                         onClick={() => applyPack(pack)}
                         className="flex items-center justify-between gap-3 rounded-xl border border-[#ebebeb] bg-[#fafafa] px-3 py-2 text-left transition hover:border-[#3665F3]/40 hover:bg-white"
                       >
-                        <span className="min-w-0">
-                          <span className="block text-[13px] font-semibold text-[#191919]">
-                            {pack.label}
+                        <span className="flex min-w-0 items-center gap-2.5">
+                          <span className="flex shrink-0 items-center -space-x-2">
+                            {pack.cardIds.slice(0, 3).map((id) => {
+                              const card = catalog.all.find((c) => c.id === id);
+                              return (
+                                <span
+                                  key={`${pack.id}-c-${id}`}
+                                  className="size-8 overflow-hidden rounded-md border border-white bg-white shadow-sm"
+                                >
+                                  <Thumb
+                                    url={card?.imageUrl || ""}
+                                    alt=""
+                                    fallbacks={card?.imageFallbacks}
+                                  />
+                                </span>
+                              );
+                            })}
                           </span>
-                          <span className="mt-0.5 block text-[11px] text-[#707070]">
-                            {pack.blurb}
+                          <span className="min-w-0">
+                            <span className="block text-[13px] font-semibold text-[#191919]">
+                              {pack.label}
+                            </span>
+                            <span className="mt-0.5 block text-[11px] text-[#707070]">
+                              {pack.blurb}
+                            </span>
                           </span>
                         </span>
                         <span className="shrink-0 rounded-full bg-[#191919] px-2.5 py-1 text-[10px] font-bold tracking-wide text-white uppercase">

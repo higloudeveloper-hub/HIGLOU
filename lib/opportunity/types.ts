@@ -99,6 +99,16 @@ export type OpportunityProduct = {
   packageLb: number | null;
   avgAmazon90: number | null;
   discount90: number | null;
+  /** Keepa monthlySold when Amazon exposes it */
+  monthlySold?: number | null;
+  /** Amazon 90d OOS % from Keepa */
+  amazonOos90?: number | null;
+  /** % Amazon held Buy Box / 90d */
+  buyBoxAmazonShare90?: number | null;
+  /** Active Keepa one-time coupon % */
+  couponPercent?: number | null;
+  /** Which Keepa pro playbook found this hit */
+  keepaStrategy?: string | null;
   soldVerified: boolean;
   sold30d: number | null;
   sold90d: number | null;

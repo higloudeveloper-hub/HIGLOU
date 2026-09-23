@@ -44,6 +44,17 @@ const bodySchema = z.object({
   /** off = free Amazon path (live loop). full = Keepa finder. enrich = hydrate only. */
   keepaMode: z.enum(["off", "enrich", "full"]).optional(),
   keepaPurpose: z.enum(["live", "manual", "enrich"]).optional().default("manual"),
+  keepaStrategy: z
+    .enum([
+      "velocity",
+      "amazon_oos",
+      "price_drop",
+      "seller_vacuum",
+      "rising_price",
+      "hot_deals",
+    ])
+    .optional()
+    .default("velocity"),
 });
 
 export async function POST(request: Request) {
@@ -129,6 +140,7 @@ export async function POST(request: Request) {
       excludeAsins,
       keepaMode: body.keepaMode,
       keepaPurpose: body.keepaPurpose,
+      keepaStrategy: body.keepaStrategy,
     });
     const winners = sortPlatformWinners(
       (found.products || []).filter((hit) =>

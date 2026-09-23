@@ -66,9 +66,22 @@ describe("buildKeepaFinderSelection", () => {
       mode: "amazon",
       rootCategory: "1055398",
       tone: "open",
+      strategy: "velocity",
     });
     expect(selection.availabilityAmazon).toEqual([-1]);
     expect(selection.current_COUNT_NEW_gte).toBe(2);
+    expect(selection.monthlySold_gte).toBe(50);
+  });
+
+  it("amazon_oos strategy overrides tone availability", () => {
+    const selection = buildKeepaFinderSelection({
+      mode: "amazon_to_ebay",
+      rootCategory: "1055398",
+      tone: "open",
+      strategy: "amazon_oos",
+    });
+    expect(selection.availabilityAmazon).toEqual([-1]);
+    expect(selection.buyBoxIsAmazon).toBe(false);
   });
 
   it("exposes scan roots for general opportunity rotation", () => {

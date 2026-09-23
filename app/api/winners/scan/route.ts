@@ -43,6 +43,17 @@ const bodySchema = z.object({
     .max(80)
     .optional()
     .default([]),
+  keepaStrategy: z
+    .enum([
+      "velocity",
+      "amazon_oos",
+      "price_drop",
+      "seller_vacuum",
+      "rising_price",
+      "hot_deals",
+    ])
+    .optional()
+    .default("velocity"),
 });
 
 export async function POST(request: Request) {
@@ -149,6 +160,7 @@ export async function POST(request: Request) {
       excludeAsins,
       keepaMode: "full",
       keepaPurpose: "manual",
+      keepaStrategy: body.keepaStrategy,
     });
 
     const winners = sortPlatformWinners(
@@ -232,6 +244,7 @@ export async function POST(request: Request) {
       charged: true,
       spent: spent.spent,
       affiliate,
+      keepaStrategy: found.keepaStrategy || body.keepaStrategy,
       sources: {
         ...found.sources,
         retailSearch: withBoards.some((h) =>

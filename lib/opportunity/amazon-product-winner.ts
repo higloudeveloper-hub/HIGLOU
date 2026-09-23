@@ -30,6 +30,10 @@ type KeepaSignals = {
   policyRisk?: string | null;
   returnRisk?: string | null;
   verdict?: string | null;
+  monthlySold?: number | null;
+  amazonOos90?: number | null;
+  buyBoxAmazonShare90?: number | null;
+  couponPercent?: number | null;
 };
 
 function clamp(n: number, min = 0, max = 100) {
@@ -96,7 +100,37 @@ export function amazonProductScore(hit: KeepaSignals): number {
   if ((hit.discount90 ?? 0) >= 0.15) discountBoost = 3;
   else if ((hit.discount90 ?? 0) >= 0.08) discountBoost = 1;
 
-  return clamp(velocity + rankPts + competition + proof + stability + ship + discountBoost);
+  // Pro Keepa signals: monthly sold beats raw drops; Amazon OOS opens OA lanes.
+  let monthlyBoost = 0;
+  const sold = hit.monthlySold ?? 0;
+  if (sold >= 500) monthlyBoost = 8;
+  else if (sold >= 200) monthlyBoost = 6;
+  else if (sold >= 100) monthlyBoost = 4;
+  else if (sold >= 50) monthlyBoost = 2;
+
+  let oosBoost = 0;
+  if (!hit.amazonRetail && (hit.amazonOos90 ?? 0) >= 80) oosBoost = 6;
+  else if (!hit.amazonRetail && (hit.amazonOos90 ?? 0) >= 50) oosBoost = 3;
+  else if ((hit.buyBoxAmazonShare90 ?? 100) <= 20 && !hit.amazonRetail) {
+    oosBoost = 4;
+  }
+
+  let couponBoost = 0;
+  if ((hit.couponPercent ?? 0) >= 15) couponBoost = 2;
+  else if ((hit.couponPercent ?? 0) >= 8) couponBoost = 1;
+
+  return clamp(
+    velocity +
+      rankPts +
+      competition +
+      proof +
+      stability +
+      ship +
+      discountBoost +
+      monthlyBoost +
+      oosBoost +
+      couponBoost,
+  );
 }
 
 function hasUsablePrice(hit: KeepaSignals): boolean {
@@ -179,8 +213,14 @@ export function amazonWinnerBlurb(hit: KeepaSignals): string {
   const rank = hit.avgSalesRank90 ?? hit.salesRank;
   const sellers = hit.sellerCount;
   const parts = ["Keepa verified"];
-  if (drops > 0) parts.push(`${drops} BSR drops / 90d`);
+  if ((hit.monthlySold ?? 0) > 0) {
+    parts.push(`${hit.monthlySold!.toLocaleString("en-US")} sold/mo`);
+  } else if (drops > 0) {
+    parts.push(`${drops} BSR drops / 90d`);
+  }
   if (rank != null) parts.push(`BSR ~${rank.toLocaleString("en-US")}`);
+  if ((hit.amazonOos90 ?? 0) >= 50) parts.push(`Amazon OOS ${hit.amazonOos90}%`);
+  if ((hit.couponPercent ?? 0) > 0) parts.push(`Coupon ${hit.couponPercent}%`);
   if (sellers != null) parts.push(`${sellers} new sellers`);
   return parts.join(" · ");
 }

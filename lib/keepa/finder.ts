@@ -1,7 +1,13 @@
 import { keepaBudgetOk, keepaMaxProductsPerScan } from "@/lib/keepa/budget";
 import { setCachedKeepaProduct, takeCachedKeepaProducts } from "@/lib/keepa/cache";
-import { keepaGet, keepaQuery } from "@/lib/keepa/client";
+import { keepaGet, keepaPost, keepaQuery } from "@/lib/keepa/client";
 import { parseKeepaProduct, type KeepaSnapshot } from "@/lib/keepa/parse";
+import {
+  applyKeepaStrategyFilters,
+  buildKeepaDealSelection,
+  resolveKeepaStrategy,
+  type KeepaStrategyId,
+} from "@/lib/keepa/strategies";
 import { OPPORTUNITY_CATEGORIES } from "@/lib/opportunity/categories";
 
 /** Keepa Product Finder requires perPage ≥ 50 (~11 tokens / page). */
@@ -53,14 +59,23 @@ export function buildKeepaFinderSelection(opts: {
   mode?: "amazon" | "amazon_to_ebay" | "supplier" | string;
   page?: number;
   tone?: KeepaFinderTone;
+  strategy?: KeepaStrategyId | string | null;
 }): Record<string, unknown> {
   const mode = opts.mode || "amazon_to_ebay";
   const tone = opts.tone || "open";
+  const strategy = resolveKeepaStrategy(opts.strategy);
   const perPage = Math.max(
     KEEPA_FINDER_MIN_PER_PAGE,
     Math.min(opts.perPage ?? KEEPA_FINDER_MIN_PER_PAGE, 50),
   );
   const buyOnAmazon = mode === "amazon_to_ebay";
+  // Strategy playbooks own Amazon presence — skip default availability overlays.
+  const strategyOwnsAvailability =
+    strategy === "amazon_oos" ||
+    strategy === "price_drop" ||
+    strategy === "seller_vacuum" ||
+    strategy === "hot_deals" ||
+    strategy === "rising_price";
 
   // Core discovery — fewer hard filters = results. Tighten in enrich pass.
   const selection: Record<string, unknown> = {
@@ -102,7 +117,7 @@ export function buildKeepaFinderSelection(opts: {
   }
 
   // Sell-on-Amazon OA: Amazon absent (classic filter from Keepa tutorials).
-  if (mode === "amazon" || mode === "supplier") {
+  if (!strategyOwnsAvailability && (mode === "amazon" || mode === "supplier")) {
     selection.availabilityAmazon = [-1];
     if (tone !== "wide") {
       selection.current_COUNT_NEW_gte = 2;
@@ -111,7 +126,7 @@ export function buildKeepaFinderSelection(opts: {
   }
 
   // Buy-on-Amazon arbitrage: Amazon preferably in stock so we can source it.
-  if (buyOnAmazon && tone !== "wide") {
+  if (!strategyOwnsAvailability && buyOnAmazon && tone !== "wide") {
     selection.availabilityAmazon = [0];
   }
 
@@ -121,6 +136,21 @@ export function buildKeepaFinderSelection(opts: {
   if (opts.title?.trim() && opts.title.trim().split(/\s+/).length >= 3) {
     selection.title = [opts.title.trim()];
   }
+
+  // Pro playbooks overlay last so they win conflicts with tone defaults.
+  applyKeepaStrategyFilters(selection, strategy, { mode });
+
+  // Wide tone softens strategy floors so we still get results.
+  if (tone === "wide" && strategy !== "velocity") {
+    if (typeof selection.salesRankDrops90_gte === "number") {
+      selection.salesRankDrops90_gte = Math.min(
+        Number(selection.salesRankDrops90_gte),
+        5,
+      );
+    }
+    delete selection.monthlySold_gte;
+  }
+
   return selection;
 }
 
@@ -132,6 +162,7 @@ export async function keepaFindAsins(opts: {
   mode?: "amazon" | "amazon_to_ebay" | "supplier" | string;
   page?: number;
   tone?: KeepaFinderTone;
+  strategy?: KeepaStrategyId | string | null;
 }): Promise<string[]> {
   if (!keepaBudgetOk(12)) return [];
   // Keepa without rootCategory returns a random catalog slice — always require a root.
@@ -139,6 +170,33 @@ export async function keepaFindAsins(opts: {
   const selection = buildKeepaFinderSelection(opts);
   const json = await keepaQuery(selection);
   return [...new Set(asinsFromKeepa(json))].slice(0, 50);
+}
+
+/**
+ * Keepa Browsing Deals — recent price drops (~5 tokens / page).
+ * Used by the hot_deals pro playbook.
+ */
+export async function keepaBrowseDealAsins(opts: {
+  rootCategory?: string;
+  page?: number;
+}): Promise<string[]> {
+  if (!keepaBudgetOk(6)) return [];
+  try {
+    const selection = buildKeepaDealSelection(opts);
+    const json = await keepaPost("deal", {}, selection);
+    const deals = Array.isArray((json as { deals?: unknown }).deals)
+      ? ((json as { deals: Array<{ asin?: string }> }).deals)
+      : [];
+    const asins: string[] = [];
+    for (const row of deals) {
+      if (!row || typeof row !== "object") continue;
+      const asin = String(row.asin || "").toUpperCase();
+      if (/^[A-Z0-9]{10}$/.test(asin)) asins.push(asin);
+    }
+    return [...new Set(asins)].slice(0, 50);
+  } catch {
+    return [];
+  }
 }
 
 function rootsForScan(preferred?: string): string[] {
@@ -156,6 +214,7 @@ function rootsForScan(preferred?: string): string[] {
 /**
  * Real opportunity scan: rotate Keepa root categories until we have ASINs.
  * Never queries without a rootCategory (Keepa's documented requirement for useful results).
+ * Optional `strategy` applies pro Product Finder playbooks (OA OOS, price drop, etc.).
  */
 export async function keepaFindHotWinners(opts: {
   mode?: "amazon" | "amazon_to_ebay" | "supplier" | string;
@@ -164,8 +223,15 @@ export async function keepaFindHotWinners(opts: {
   seed?: number;
   preferGlobal?: boolean;
   maxRoots?: number;
-}): Promise<{ asins: string[]; scope: "global" | "category" | "wide"; rootUsed: string }> {
+  strategy?: KeepaStrategyId | string | null;
+}): Promise<{
+  asins: string[];
+  scope: "global" | "category" | "wide" | "deals";
+  rootUsed: string;
+  strategy: KeepaStrategyId;
+}> {
   const mode = opts.mode || "amazon_to_ebay";
+  const strategy = resolveKeepaStrategy(opts.strategy);
   const page = Math.abs(opts.seed ?? 0) % 3;
   const roots = rootsForScan(opts.rootCategory);
   const start = Math.abs(opts.seed ?? 0) % Math.max(roots.length, 1);
@@ -173,6 +239,24 @@ export async function keepaFindHotWinners(opts: {
     ...roots.slice(start),
     ...roots.slice(0, start),
   ].slice(0, opts.maxRoots ?? (opts.preferGlobal === false ? 2 : 5));
+
+  // Hot deals: prefer Keepa /deal feed first, then Finder discount stack.
+  if (strategy === "hot_deals") {
+    for (const root of ordered.slice(0, 3)) {
+      const dealAsins = await keepaBrowseDealAsins({
+        rootCategory: root,
+        page: Math.abs(opts.seed ?? 0) % 2,
+      });
+      if (dealAsins.length) {
+        return {
+          asins: dealAsins,
+          scope: "deals",
+          rootUsed: root,
+          strategy,
+        };
+      }
+    }
+  }
 
   const tones: KeepaFinderTone[] = ["open", "strict", "wide"];
 
@@ -185,12 +269,14 @@ export async function keepaFindHotWinners(opts: {
           title: opts.title,
           page,
           tone,
+          strategy,
         });
         if (asins.length) {
           return {
             asins,
             scope: opts.rootCategory ? "category" : "global",
             rootUsed: root,
+            strategy,
           };
         }
       } catch {
@@ -198,7 +284,39 @@ export async function keepaFindHotWinners(opts: {
       }
     }
   }
-  return { asins: [], scope: "global", rootUsed: ordered[0] || "" };
+
+  // Strategy too tight → fall back to classic velocity so the board isn't empty.
+  if (strategy !== "velocity") {
+    for (const root of ordered.slice(0, 2)) {
+      try {
+        const asins = await keepaFindAsins({
+          mode,
+          rootCategory: root,
+          title: opts.title,
+          page,
+          tone: "open",
+          strategy: "velocity",
+        });
+        if (asins.length) {
+          return {
+            asins,
+            scope: "wide",
+            rootUsed: root,
+            strategy: "velocity",
+          };
+        }
+      } catch {
+        /* try next */
+      }
+    }
+  }
+
+  return {
+    asins: [],
+    scope: "global",
+    rootUsed: ordered[0] || "",
+    strategy,
+  };
 }
 
 /** Keyword search: ~10 tokens. Use only when finder returned nothing. */

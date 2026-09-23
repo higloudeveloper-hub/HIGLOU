@@ -60,6 +60,14 @@ export type KeepaSnapshot = {
   priceVariation90: number | null;
   rating: number | null;
   reviewCount: number | null;
+  /** Amazon "bought in past month" when Keepa has it */
+  monthlySold: number | null;
+  /** Amazon 90d out-of-stock % (0–100) */
+  amazonOos90: number | null;
+  /** % of time Amazon held Buy Box over 90d */
+  buyBoxAmazonShare90: number | null;
+  /** Active one-time coupon % if present */
+  couponPercent: number | null;
 };
 
 function firstImage(row: Record<string, unknown>): string {
@@ -153,6 +161,38 @@ export function parseKeepaProduct(row: Record<string, unknown>): KeepaSnapshot |
   const reviewCount =
     statsSlot(stats, "current", KEEPA_INDEX.COUNT_REVIEWS) ??
     keepaLastValue(csv[KEEPA_INDEX.COUNT_REVIEWS]);
+
+  const monthlySoldRaw = Number(row.monthlySold ?? stats?.monthlySold ?? 0);
+  const monthlySold =
+    Number.isFinite(monthlySoldRaw) && monthlySoldRaw > 0
+      ? Math.round(monthlySoldRaw)
+      : null;
+
+  const oosRaw = Number(row.outOfStockPercentage90 ?? stats?.outOfStockPercentage90);
+  const amazonOos90 =
+    Number.isFinite(oosRaw) && oosRaw >= 0
+      ? Math.min(100, Math.round(oosRaw))
+      : null;
+
+  const bbAmazonShareRaw = Number(
+    row.buyBoxStatsAmazon90 ?? stats?.buyBoxStatsAmazon90,
+  );
+  const buyBoxAmazonShare90 =
+    Number.isFinite(bbAmazonShareRaw) && bbAmazonShareRaw >= 0
+      ? Math.min(100, Math.round(bbAmazonShareRaw))
+      : null;
+
+  let couponPercent: number | null = null;
+  if (Array.isArray(row.coupon) && row.coupon.length >= 2) {
+    const pct = Number(row.coupon[1]);
+    if (Number.isFinite(pct) && pct > 0) couponPercent = Math.round(pct);
+  } else {
+    const couponRaw = Number(row.couponOneTimePercent ?? 0);
+    if (Number.isFinite(couponRaw) && couponRaw > 0 && couponRaw <= 90) {
+      couponPercent = Math.round(couponRaw);
+    }
+  }
+
   return {
     asin,
     title: String(row.title || "").trim(),
@@ -174,5 +214,9 @@ export function parseKeepaProduct(row: Record<string, unknown>): KeepaSnapshot |
     priceVariation90: variation,
     rating,
     reviewCount,
+    monthlySold,
+    amazonOos90,
+    buyBoxAmazonShare90,
+    couponPercent,
   };
 }

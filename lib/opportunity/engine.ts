@@ -26,6 +26,10 @@ import {
   keepaSearchAsins,
 } from "@/lib/keepa/finder";
 import type { KeepaSnapshot } from "@/lib/keepa/parse";
+import {
+  resolveKeepaStrategy,
+  type KeepaStrategyId,
+} from "@/lib/keepa/strategies";
 import { searchEbayLivePrices } from "@/lib/ebay/live-prices";
 import { withPlatformUrls } from "@/lib/opportunity/platform-links";
 import { opportunitySearchText } from "@/lib/opportunity/categories";
@@ -127,6 +131,11 @@ function emptyProduct(asin: string, mode: OpportunityMode): OpportunityProduct {
     packageLb: null,
     avgAmazon90: null,
     discount90: null,
+    monthlySold: null,
+    amazonOos90: null,
+    buyBoxAmazonShare90: null,
+    couponPercent: null,
+    keepaStrategy: null,
     soldVerified: false,
     sold30d: null,
     sold90d: null,
@@ -147,7 +156,11 @@ function emptyProduct(asin: string, mode: OpportunityMode): OpportunityProduct {
   };
 }
 
-function applyKeepa(hit: OpportunityProduct, snap: KeepaSnapshot): OpportunityProduct {
+function applyKeepa(
+  hit: OpportunityProduct,
+  snap: KeepaSnapshot,
+  strategy?: string | null,
+): OpportunityProduct {
   return {
     ...hit,
     title: snap.title || hit.title,
@@ -169,6 +182,11 @@ function applyKeepa(hit: OpportunityProduct, snap: KeepaSnapshot): OpportunityPr
     avgAmazon90: snap.avgNew90,
     discount90: snap.discount90,
     packageLb: snap.packageLb ?? hit.packageLb,
+    monthlySold: snap.monthlySold ?? hit.monthlySold,
+    amazonOos90: snap.amazonOos90 ?? hit.amazonOos90,
+    buyBoxAmazonShare90: snap.buyBoxAmazonShare90 ?? hit.buyBoxAmazonShare90,
+    couponPercent: snap.couponPercent ?? hit.couponPercent,
+    keepaStrategy: strategy || hit.keepaStrategy,
     keepa: true,
   };
 }
@@ -337,14 +355,18 @@ export async function findOpportunities(opts: {
   /** off = never bill Keepa (live loop). full = finder+hydrate. enrich = hydrate only. */
   keepaMode?: KeepaMode;
   keepaPurpose?: "live" | "manual" | "enrich";
+  /** Pro Keepa Product Finder playbook (velocity, amazon_oos, price_drop, …) */
+  keepaStrategy?: KeepaStrategyId | string | null;
 }): Promise<{
   products: OpportunityProduct[];
   sources: OpportunitySources;
   filteredOut: number;
   queries: string[];
   analyzed: number;
+  keepaStrategy?: KeepaStrategyId;
 }> {
   const mode = opts.mode || "amazon_to_ebay";
+  const keepaStrategy = resolveKeepaStrategy(opts.keepaStrategy);
 
   if (
     mode === "homedepot_to_ebay" ||
@@ -449,6 +471,7 @@ export async function findOpportunities(opts: {
   };
 
   // Keepa opportunity-first scan — global by default, category optional.
+  let strategyUsed: KeepaStrategyId = keepaStrategy;
   if (keepaOn && keepaMode === "full") {
     try {
       const hot = await keepaFindHotWinners({
@@ -457,7 +480,9 @@ export async function findOpportunities(opts: {
         title: query.length >= 8 ? query : undefined,
         seed: opts.seed,
         preferGlobal: globalScan || !keepaRoot,
+        strategy: keepaStrategy,
       });
+      strategyUsed = hot.strategy;
       for (const id of hot.asins) takeHit({ asin: id });
       // Paid /search only if finder returned nothing and user typed a product.
       if (!hot.asins.length && query.length >= 8) {
@@ -592,7 +617,7 @@ export async function findOpportunities(opts: {
   const afterKeepa = allowed
     .map((hit) => {
       const snap = keepaMap.get(hit.asin);
-      return snap ? applyKeepa(hit, snap) : hit;
+      return snap ? applyKeepa(hit, snap, strategyUsed) : hit;
     })
     .filter((hit) => {
       const snap = keepaMap.get(hit.asin);
@@ -738,5 +763,6 @@ export async function findOpportunities(opts: {
     filteredOut: Math.max(0, priced.length - ranked.length),
     queries: searchTerms,
     analyzed: priced.length,
+    keepaStrategy: strategyUsed,
   };
 }

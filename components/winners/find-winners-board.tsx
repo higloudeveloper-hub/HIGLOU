@@ -19,6 +19,11 @@ import {
 } from "@/lib/amazon/winner-categories";
 import { amazonProductScore } from "@/lib/opportunity/amazon-product-winner";
 import {
+  KEEPA_STRATEGIES,
+  keepaStrategyMeta,
+  type KeepaStrategyId,
+} from "@/lib/keepa/strategies";
+import {
   loadLocalLedger,
   pushRemoteLedger,
   pullRemoteLedger,
@@ -128,6 +133,8 @@ export function FindWinnersBoard({
   const [categoryId, setCategoryId] = useState("all");
   const [query, setQuery] = useState("");
   const [limit, setLimit] = useState(8);
+  const [keepaStrategy, setKeepaStrategy] =
+    useState<KeepaStrategyId>("velocity");
   const [searching, setSearching] = useState(false);
   const [generalScanning, setGeneralScanning] = useState(false);
   const [importing, setImporting] = useState(false);
@@ -258,6 +265,7 @@ export function FindWinnersBoard({
           mode,
           seed: nextRound - 1,
           excludeAsins: winners.map((hit) => hitKey(hit)).slice(0, 40),
+          keepaStrategy,
         }),
       });
       const body = (await response.json().catch(() => null)) as SearchBody | null;
@@ -320,6 +328,7 @@ export function FindWinnersBoard({
     generalScanning,
     limit,
     mode,
+    keepaStrategy,
     refresh,
     retail,
     round,
@@ -356,6 +365,7 @@ export function FindWinnersBoard({
           excludeAsins: winners.map((hit) => hitKey(hit)).slice(0, 40),
           keepaMode: retail ? "off" : "full",
           keepaPurpose: "manual",
+          keepaStrategy,
         }),
       });
       const body = (await response.json().catch(() => null)) as SearchBody | null;
@@ -402,6 +412,7 @@ export function FindWinnersBoard({
     busy,
     categoryId,
     generalScanning,
+    keepaStrategy,
     limit,
     mode,
     query,
@@ -548,7 +559,19 @@ export function FindWinnersBoard({
       bsrDrops: hit.bsrDrops90 ?? null,
       meta: [
         id.length <= 14 ? id : null,
-        hit.bsrDrops90 != null ? `${hit.bsrDrops90} BSR↓/90d` : null,
+        hit.keepaStrategy
+          ? keepaStrategyMeta(
+              (hit.keepaStrategy as KeepaStrategyId) || "velocity",
+            ).short
+          : null,
+        hit.monthlySold != null
+          ? `${hit.monthlySold.toLocaleString("en-US")}/mo`
+          : hit.bsrDrops90 != null
+            ? `${hit.bsrDrops90} BSR↓/90d`
+            : null,
+        hit.amazonOos90 != null && hit.amazonOos90 >= 50
+          ? `Amazon OOS ${hit.amazonOos90}%`
+          : null,
         hit.keepa ? "Keepa ✓" : null,
         priced >= 2 ? `${priced} plataformas` : null,
       ]
@@ -570,7 +593,7 @@ export function FindWinnersBoard({
             Find winners
           </p>
           <p className="hidden min-w-0 flex-1 truncate text-[13px] text-white/85 sm:block">
-            Tendencias verificadas · precios en cada plataforma
+            Playbooks Keepa de sellers pro · {keepaStrategyMeta(keepaStrategy).short}
           </p>
           <button
             type="button"
@@ -612,7 +635,7 @@ export function FindWinnersBoard({
               </span>
             </div>
             <p className="text-[12px] text-[#707070]">
-              Amazon · eBay · Walmart · Home Depot — precios que Higlou encontró
+              {keepaStrategyMeta(keepaStrategy).blurb}
             </p>
           </div>
         </div>
@@ -620,6 +643,28 @@ export function FindWinnersBoard({
 
       {/* Finder — one clear row */}
       <div className="sticky top-0 z-20 border-b border-[#e5e5e5] bg-white/95 backdrop-blur-md">
+        <div className="mx-auto flex max-w-6xl flex-wrap gap-1.5 px-4 pt-3 md:px-8">
+          {KEEPA_STRATEGIES.map((s) => {
+            const active = keepaStrategy === s.id;
+            return (
+              <button
+                key={s.id}
+                type="button"
+                disabled={locked || scanning}
+                title={s.blurb}
+                onClick={() => setKeepaStrategy(s.id)}
+                className={cn(
+                  "h-8 rounded-full px-3 text-[11px] font-semibold transition disabled:opacity-40",
+                  active
+                    ? "bg-[#191919] text-white"
+                    : "border border-[#e5e5e5] bg-white text-[#707070] hover:border-[#3665F3] hover:text-[#191919]",
+                )}
+              >
+                {s.label}
+              </button>
+            );
+          })}
+        </div>
         <form
           className="mx-auto flex max-w-6xl flex-col gap-2 px-4 py-3 md:flex-row md:items-center md:px-8"
           onSubmit={(e) => {

@@ -47,6 +47,10 @@ function parseLearning(raw: unknown): RonLearning {
     lastKeepaScanAt: o.lastKeepaScanAt || null,
     recentPacks:
       o.recentPacks && typeof o.recentPacks === "object" ? o.recentPacks : {},
+    opsSnapshot:
+      o.opsSnapshot && typeof o.opsSnapshot === "object"
+        ? (o.opsSnapshot as RonLearning["opsSnapshot"])
+        : undefined,
   };
 }
 
@@ -78,6 +82,7 @@ export function toPublicState(
   const postsDate = row?.posts_today_date || null;
   const postsToday =
     postsDate === todayUtc() ? Number(row?.posts_today) || 0 : 0;
+  const learning = parseLearning(row?.learning);
   return {
     enabled: Boolean(row?.enabled),
     mode: row?.mode === "watch" ? "watch" : "auto",
@@ -86,10 +91,11 @@ export function toPublicState(
     lastPostAt: row?.last_post_at || null,
     lastError: row?.last_error || null,
     postsToday,
-    learning: parseLearning(row?.learning),
+    learning,
     activity: parseActivity(row?.activity_log),
     working:
       opts?.working != null ? Boolean(opts.working) : deriveWorking(row),
+    ops: learning.opsSnapshot,
   };
 }
 

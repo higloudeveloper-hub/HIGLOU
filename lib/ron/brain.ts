@@ -26,6 +26,11 @@ import {
   scoreFormat,
   scoreNiche,
 } from "@/lib/ron/learn";
+import {
+  rankCatalogByMoney,
+  scoreCardMoneyOpportunity,
+  scorePackMoneyOpportunity,
+} from "@/lib/ron/marketplace-logic";
 import { ronImagePack } from "@/lib/ron/normalize-hit";
 import type { RonFormat, RonLearning } from "@/lib/ron/types";
 
@@ -234,13 +239,15 @@ function pickBestPack(
       (s, c) => s + scoreAsin(learning, c.asin),
       0,
     );
+    const money = scorePackMoneyOpportunity(cards, learning);
     // Variety: soft-penalize niches we just published (unless learning loves them)
     const nichePenalty = isRecentNiche(learning, pack.niche) ? 8 : 0;
     const score =
       pack.score * 10 +
       scoreFormat(learning, pack.format) * 2 +
       scoreNiche(learning, pack.niche) * 1.5 +
-      asinBoost * 0.4 -
+      asinBoost * 0.4 +
+      money * 0.55 -
       nichePenalty;
     if (!best || score > best.score) best = { pack, cards, score };
   }
@@ -270,30 +277,37 @@ export function decideRonPublish(opts: {
     };
   }
 
+  // Money-first ordering (discount · price band · clicks · platform)
+  const rankedCatalog = rankCatalogByMoney(
+    catalog,
+    opts.learning,
+  ) as RonCandidateCard[];
+
   // Pass 1 — tight related vitrinas/carousels
-  let packs = suggestPromoPacks(catalog, {
+  let packs = suggestPromoPacks(rankedCatalog, {
     limit: 8,
     preferVitrina: true,
     minRelated: 0.48,
     disallowPriceBandFallback: true,
     strict: true,
   });
-  let best = pickBestPack(packs, opts.learning, catalog);
+  let best = pickBestPack(packs, opts.learning, rankedCatalog);
 
   // Pass 2 — same family, slightly softer score so we still get carousels of 2+
   if (!best) {
-    packs = suggestPromoPacks(catalog, {
+    packs = suggestPromoPacks(rankedCatalog, {
       limit: 8,
       preferVitrina: true,
       minRelated: 0.36,
       disallowPriceBandFallback: true,
       strict: true,
     });
-    best = pickBestPack(packs, opts.learning, catalog);
+    best = pickBestPack(packs, opts.learning, rankedCatalog);
   }
 
   if (best && best.cards.length >= 2) {
     const cards = best.cards;
+    const money = scorePackMoneyOpportunity(cards, opts.learning);
     const copy = buildFacebookPromoCopy({
       format: best.pack.format,
       titles: cards.map((c) => c.title),
@@ -314,22 +328,19 @@ export function decideRonPublish(opts: {
           : null,
       coverImageUrl: cards[0]?.imageUrl || null,
       niche: best.pack.niche,
-      reason: `Pack ${best.pack.format} · ${best.pack.niche} · ${cards.length} productos`,
+      reason: `Pack ${best.pack.format} · ${best.pack.niche} · ${cards.length} · score ${money}`,
     };
   }
 
   // No pack → one product with active /go link (never a dead photo post)
-  const ranked = [...catalog].sort(
-    (a, b) =>
-      scoreAsin(opts.learning, b.asin) - scoreAsin(opts.learning, a.asin),
-  );
-  const one = ranked[0]!;
+  const one = rankedCatalog[0]!;
   if (!/^https?:\/\//i.test(one.linkUrl)) {
     return {
       action: "skip",
       reason: "Producto sin link de click · no publico sin enlace activo",
     };
   }
+  const money = scoreCardMoneyOpportunity(one, opts.learning);
   const copy = buildFacebookPromoCopy({
     format: "ads",
     titles: [one.title],
@@ -344,7 +355,7 @@ export function decideRonPublish(opts: {
     cards: [one],
     message: copy.message,
     niche: one.brand || pickProductTitle(one.title),
-    reason: `1 producto con link · ${one.title.slice(0, 40)}`,
+    reason: `1 producto · score ${money} · ${one.title.slice(0, 36)}`,
   };
 }
 

@@ -1,14 +1,28 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { toast } from "sonner";
 import { Loader2, Power, Radar, X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import {
+  buildMoneyHint,
+  buildNextAction,
+  derivePipelineFromStatus,
+  emptyOpsSnapshot,
+  isShoppingPeakWindow,
+} from "@/lib/ron/marketplace-logic";
 import type { RonActivity, RonPublicState } from "@/lib/ron/types";
 
 const EASE = [0.22, 1, 0.36, 1] as const;
+
+const PIPELINE = [
+  { id: "scan", label: "Keepa" },
+  { id: "rank", label: "Rank" },
+  { id: "pack", label: "Pack" },
+  { id: "publish", label: "FB" },
+] as const;
 
 function RedRobot({
   awake,
@@ -175,7 +189,39 @@ const DEFAULT_STATE: RonPublicState = {
   },
   activity: [],
   working: false,
+  ops: emptyOpsSnapshot(),
 };
+
+function kindLabel(kind: RonActivity["kind"]): string {
+  switch (kind) {
+    case "publish":
+      return "POST";
+    case "scan":
+      return "SCAN";
+    case "learn":
+      return "LEARN";
+    case "skip":
+      return "HOLD";
+    case "error":
+      return "ERR";
+    case "wake":
+      return "WAKE";
+    default:
+      return "OPS";
+  }
+}
+
+function timeShort(iso: string): string {
+  try {
+    return new Date(iso).toLocaleTimeString("en-US", {
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    });
+  } catch {
+    return "--:--";
+  }
+}
 
 export function RonAgentFab() {
   const reduce = useReducedMotion();
@@ -207,19 +253,25 @@ export function RonAgentFab() {
         }
       }
     } catch {
-      /* keep last known — robot stays visible */
+      /* keep last known */
     }
   }, [busy]);
 
-  // Adaptive poll: live while working, slow when idle
   useEffect(() => {
     void refresh();
-    const ms = busy || state.working ? 1_800 : state.enabled ? 8_000 : 40_000;
+    const peak = isShoppingPeakWindow();
+    const ms =
+      busy || state.working
+        ? 1_800
+        : state.enabled
+          ? peak
+            ? 2 * 60_000
+            : 4 * 60_000
+          : 45_000;
     const id = window.setInterval(() => void refresh(), ms);
     return () => window.clearInterval(id);
   }, [refresh, busy, state.working, state.enabled]);
 
-  // On enable: kick one cycle so you see RON move immediately
   useEffect(() => {
     if (!state.enabled || !authed || kickedRef.current) return;
     kickedRef.current = true;
@@ -239,7 +291,7 @@ export function RonAgentFab() {
           if (body.state) setState(body.state);
           if (body.published && body.postUrl !== lastPostToastRef.current) {
             lastPostToastRef.current = body.postUrl || "ok";
-            toast.success("RON publicó solo", {
+            toast.success("RON publicó una oportunidad", {
               action: body.postUrl
                 ? {
                     label: "Ver",
@@ -255,11 +307,12 @@ export function RonAgentFab() {
     return () => window.clearTimeout(t);
   }, [state.enabled, authed, refresh]);
 
-  // Heartbeat while on — every 3 min so opportunities don't sit idle
   useEffect(() => {
     if (!state.enabled || !authed) return;
+    const peak = isShoppingPeakWindow();
+    const every = peak ? 2 * 60_000 : 5 * 60_000;
     const id = window.setInterval(() => {
-      setLiveLine("Ciclo automático…");
+      setLiveLine("Ciclo marketplace…");
       void fetch("/api/ron", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -274,7 +327,7 @@ export function RonAgentFab() {
           };
           if (body.state) setState(body.state);
           if (body.published) {
-            toast.success("RON publicó solo", {
+            toast.success("RON publicó una oportunidad", {
               action: body.postUrl
                 ? {
                     label: "Ver",
@@ -289,7 +342,7 @@ export function RonAgentFab() {
           setLiveLine(null);
           void refresh();
         });
-    }, 3 * 60_000);
+    }, every);
     return () => window.clearInterval(id);
   }, [state.enabled, authed, refresh]);
 
@@ -299,7 +352,7 @@ export function RonAgentFab() {
       return;
     }
     setBusy(true);
-    setLiveLine(enabled ? "Encendiendo…" : "Apagando…");
+    setLiveLine(enabled ? "Encendiendo motor…" : "Apagando…");
     try {
       const res = await fetch("/api/ron", {
         method: "POST",
@@ -316,7 +369,7 @@ export function RonAgentFab() {
       }
       if (body.state) setState(body.state);
       toast.message(
-        enabled ? "RON encendido · trabaja solo" : "RON apagado",
+        enabled ? "RON ON · genera dinero solo" : "RON apagado",
       );
       if (enabled) {
         kickedRef.current = false;
@@ -334,7 +387,7 @@ export function RonAgentFab() {
     }
     setBusy(true);
     setOpen(true);
-    setLiveLine("RON en movimiento…");
+    setLiveLine("Escaneando oportunidades…");
     try {
       const res = await fetch("/api/ron", {
         method: "POST",
@@ -354,7 +407,7 @@ export function RonAgentFab() {
         return;
       }
       if (body.published) {
-        toast.success("RON publicó en tu Page", {
+        toast.success("Oportunidad publicada en tu Page", {
           action: body.postUrl
             ? {
                 label: "Ver post",
@@ -363,7 +416,7 @@ export function RonAgentFab() {
             : undefined,
         });
       } else if (!silent) {
-        toast.message(body.skipped || "RON terminó el ciclo");
+        toast.message(body.skipped || "Ciclo terminado · sin publish");
       }
     } finally {
       setBusy(false);
@@ -374,197 +427,268 @@ export function RonAgentFab() {
 
   const awake = state.enabled;
   const working = busy || state.working;
-  const recent: RonActivity[] = state.activity.slice(0, 8);
-  const bubbleText =
-    liveLine ||
-    (working ? state.statusMessage : null) ||
-    (awake && state.statusMessage.startsWith("Listo")
-      ? null
-      : awake
-        ? state.statusMessage
-        : null);
+  const recent = state.activity.slice(0, 7);
+  const peak =
+    state.ops?.peakWindow ??
+    state.learning.opsSnapshot?.peakWindow ??
+    isShoppingPeakWindow();
+  const pipeline = derivePipelineFromStatus(state.statusMessage, working);
+  const ops = useMemo(() => {
+    const base = state.ops || state.learning.opsSnapshot || emptyOpsSnapshot();
+    return {
+      ...base,
+      peakWindow: peak,
+      pipeline: working ? pipeline : base.pipeline || pipeline,
+      moneyHint:
+        liveLine ||
+        base.moneyHint ||
+        buildMoneyHint({
+          postsToday: state.postsToday,
+          clicksSeen: state.learning.clicksSeen,
+          freshAsins: base.freshAsins,
+          peakWindow: peak,
+        }),
+      nextAction:
+        base.nextAction ||
+        buildNextAction({
+          enabled: awake,
+          working,
+          peakWindow: peak,
+          freshAsins: base.freshAsins,
+          lastError: state.lastError,
+        }),
+    };
+  }, [
+    state.ops,
+    state.learning.opsSnapshot,
+    state.postsToday,
+    state.learning.clicksSeen,
+    state.lastError,
+    peak,
+    pipeline,
+    working,
+    awake,
+    liveLine,
+  ]);
+
+  const stageIndex = PIPELINE.findIndex((p) => p.id === ops.pipeline);
 
   return (
     <>
       <div className="fixed right-4 bottom-4 z-[9999] flex flex-col items-end gap-2 md:right-6 md:bottom-6">
         <AnimatePresence>
-          {bubbleText ? (
+          {working || (awake && liveLine) ? (
             <motion.div
-              key={bubbleText}
-              initial={reduce ? false : { opacity: 0, y: 8, scale: 0.94 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: 6, scale: 0.96 }}
-              transition={{ duration: 0.28, ease: EASE }}
-              className="max-w-[220px] rounded-2xl border border-[#7f1d1d]/50 bg-[#1c0909]/95 px-3 py-2 text-[11px] leading-snug text-[#fecaca] shadow-lg backdrop-blur-sm"
+              key={liveLine || state.statusMessage}
+              initial={reduce ? false : { opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 6 }}
+              className="max-w-[200px] border border-[#7f1d1d]/45 bg-[#120606]/95 px-3 py-1.5 text-[10px] tracking-wide text-[#fecaca] shadow-lg backdrop-blur-md"
             >
-              <span className="mb-0.5 block text-[9px] font-semibold tracking-[0.16em] text-[#f87171] uppercase">
-                {working ? "En vivo" : "RON"}
+              <span className="mr-1.5 font-[family-name:var(--font-instrument-serif)] text-[12px] text-[#f87171]">
+                RON
               </span>
-              {bubbleText}
+              {liveLine || "Motor activo"}
             </motion.div>
           ) : null}
         </AnimatePresence>
 
         <motion.button
           type="button"
-          aria-label="RON · agente Higlou"
+          aria-label="RON · money machine"
           onClick={() => setOpen(true)}
-          className="relative size-[4.25rem] rounded-full border-2 border-[#7f1d1d] bg-[#450a0a] p-1.5 shadow-[0_12px_40px_rgba(185,28,28,0.45)]"
+          className="relative size-[4.5rem] overflow-hidden border-2 border-[#9f1239] bg-[#1a0505] p-1.5 shadow-[0_16px_48px_rgba(127,29,29,0.55)]"
+          style={{ borderRadius: "22% 28% 24% 30%" }}
           initial={reduce ? false : { scale: 0.7, opacity: 0 }}
           animate={
             working && !reduce
               ? {
-                  scale: [1, 1.06, 1],
-                  x: [0, -3, 3, -2, 0],
-                  y: [0, -4, 0, -2, 0],
+                  scale: [1, 1.05, 1],
+                  y: [0, -3, 0],
                   opacity: 1,
                 }
-              : { scale: 1, opacity: 1, x: 0, y: 0 }
+              : { scale: 1, opacity: 1, y: 0 }
           }
           transition={
             working
-              ? { duration: 1.1, repeat: Infinity, ease: "easeInOut" }
+              ? { duration: 1.15, repeat: Infinity, ease: "easeInOut" }
               : { duration: 0.35 }
           }
-          whileHover={reduce ? undefined : { scale: 1.06 }}
+          whileHover={reduce ? undefined : { scale: 1.05 }}
           whileTap={{ scale: 0.96 }}
         >
+          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,rgba(248,113,113,0.35),transparent_55%)]" />
           {working ? (
             <motion.span
-              className="pointer-events-none absolute inset-[-6px] rounded-full border-2 border-[#ef4444]/50"
-              animate={{ scale: [1, 1.18, 1], opacity: [0.7, 0.15, 0.7] }}
+              className="pointer-events-none absolute inset-[-5px] border border-[#ef4444]/40"
+              style={{ borderRadius: "22% 28% 24% 30%" }}
+              animate={{ opacity: [0.7, 0.15, 0.7], scale: [1, 1.08, 1] }}
               transition={{ duration: 1.2, repeat: Infinity }}
             />
           ) : null}
           <RedRobot awake={awake} working={working} />
-          {awake ? (
-            <span
-              className={cn(
-                "absolute -top-0.5 -right-0.5 size-3 rounded-full border-2 border-white",
-                working ? "bg-[#fbbf24]" : "bg-[#22c55e]",
-              )}
-            />
-          ) : null}
+          <span
+            className={cn(
+              "absolute top-1 right-1 size-2.5 border border-white/80",
+              working ? "bg-[#fbbf24]" : awake ? "bg-[#22c55e]" : "bg-[#57534e]",
+            )}
+          />
         </motion.button>
       </div>
 
       <AnimatePresence>
         {open ? (
           <motion.div
-            className="fixed inset-0 z-[10000] flex items-end justify-end p-4 md:items-end md:p-6"
+            className="fixed inset-0 z-[10000] flex items-end justify-end p-3 sm:p-5"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
           >
             <button
               type="button"
-              className="absolute inset-0 bg-black/35"
+              className="absolute inset-0 bg-[#0a0404]/70 backdrop-blur-[2px]"
               aria-label="Cerrar"
               onClick={() => setOpen(false)}
             />
             <motion.aside
               role="dialog"
-              aria-label="RON agente"
-              initial={reduce ? false : { y: 24, opacity: 0, scale: 0.96 }}
-              animate={{ y: 0, opacity: 1, scale: 1 }}
-              exit={{ y: 16, opacity: 0, scale: 0.96 }}
-              transition={{ duration: 0.35, ease: EASE }}
-              className="relative z-10 flex max-h-[min(86dvh,620px)] w-full max-w-sm flex-col overflow-hidden rounded-3xl border border-[#7f1d1d]/40 bg-[#1c0909] text-white shadow-2xl"
+              aria-label="RON money machine"
+              initial={reduce ? false : { y: 28, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ y: 20, opacity: 0 }}
+              transition={{ duration: 0.38, ease: EASE }}
+              className="relative z-10 flex max-h-[min(90dvh,680px)] w-full max-w-[420px] flex-col overflow-hidden border border-[#7f1d1d]/50 bg-[#0c0404] text-white shadow-[0_24px_80px_rgba(0,0,0,0.65)]"
             >
-              <div className="flex items-start gap-3 border-b border-white/10 px-4 py-3.5">
-                <motion.div
-                  className="size-14 shrink-0 overflow-hidden rounded-2xl bg-[#450a0a] p-1"
-                  animate={
-                    working && !reduce
-                      ? { rotate: [-4, 4, -4], y: [0, -2, 0] }
-                      : { rotate: 0, y: 0 }
-                  }
-                  transition={{ duration: 0.9, repeat: Infinity }}
-                >
-                  <RedRobot awake={awake} working={working} />
-                </motion.div>
-                <div className="min-w-0 flex-1">
-                  <p className="text-[11px] font-semibold tracking-[0.18em] text-[#fca5a5] uppercase">
-                    Agente Higlou
-                  </p>
-                  <h2 className="text-[18px] font-semibold tracking-tight">
-                    RON
-                    {working ? (
-                      <span className="ml-2 inline-flex items-center gap-1 text-[11px] font-semibold tracking-wide text-[#fbbf24] uppercase">
-                        <span className="size-1.5 animate-pulse rounded-full bg-[#fbbf24]" />
-                        trabajando
-                      </span>
-                    ) : null}
-                  </h2>
-                  <p className="mt-0.5 text-[12px] leading-snug text-white/65">
-                    {state.statusMessage}
-                  </p>
+              {/* Hero brand plane */}
+              <div className="relative overflow-hidden border-b border-[#7f1d1d]/35">
+                <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,rgba(220,38,38,0.35),transparent_55%),linear-gradient(160deg,#1a0606_0%,#0c0404_55%,#140808_100%)]" />
+                <div className="absolute inset-0 opacity-[0.07] [background-image:repeating-linear-gradient(0deg,transparent,transparent_11px,rgba(255,255,255,0.35)_12px)]" />
+                <div className="relative flex items-start gap-3 px-4 pt-4 pb-3">
+                  <motion.div
+                    className="size-[4.25rem] shrink-0 overflow-hidden border border-[#9f1239]/60 bg-[#2a0a0a] p-1"
+                    animate={
+                      working && !reduce
+                        ? { y: [0, -3, 0] }
+                        : { y: 0 }
+                    }
+                    transition={{ duration: 1.1, repeat: Infinity }}
+                  >
+                    <RedRobot awake={awake} working={working} />
+                  </motion.div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[10px] font-semibold tracking-[0.22em] text-[#f87171] uppercase">
+                      Money machine
+                    </p>
+                    <h2 className="font-[family-name:var(--font-instrument-serif)] text-[34px] leading-none tracking-tight text-[#fecaca]">
+                      RON
+                    </h2>
+                    <p className="mt-1.5 text-[12px] leading-snug text-white/70">
+                      {ops.moneyHint}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setOpen(false)}
+                    className="border border-white/10 p-1.5 text-white/55 hover:bg-white/5 hover:text-white"
+                    aria-label="Cerrar panel"
+                  >
+                    <X className="size-4" />
+                  </button>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setOpen(false)}
-                  className="rounded-full p-1.5 text-white/60 hover:bg-white/10 hover:text-white"
-                  aria-label="Cerrar panel"
-                >
-                  <X className="size-4" />
-                </button>
+
+                {/* Pipeline */}
+                <div className="relative grid grid-cols-4 gap-1 px-4 pb-3">
+                  {PIPELINE.map((step, i) => {
+                    const active =
+                      working && (stageIndex === i || (stageIndex < 0 && i === 0));
+                    const done = stageIndex > i;
+                    return (
+                      <div
+                        key={step.id}
+                        className={cn(
+                          "border px-1.5 py-1.5 text-center text-[9px] font-semibold tracking-[0.14em] uppercase",
+                          active
+                            ? "border-[#f87171] bg-[#7f1d1d]/50 text-[#fecaca]"
+                            : done
+                              ? "border-[#14532d]/60 bg-[#14532d]/25 text-[#86efac]"
+                              : "border-white/10 bg-black/20 text-white/40",
+                        )}
+                      >
+                        {step.label}
+                        {active ? (
+                          <span className="mt-0.5 block size-1 mx-auto animate-pulse rounded-full bg-[#fbbf24]" />
+                        ) : null}
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
 
               <div className="space-y-3 overflow-y-auto px-4 py-3">
-                <p className="text-[13px] leading-relaxed text-white/75">
-                  Prefiere vitrinas/carruseles relacionados. Si no hay pack,
-                  publica 1 producto con link activo (tocá → Amazon). Nunca la
-                  misma vitrina dos veces.
-                </p>
-
-                <div className="grid grid-cols-3 gap-2 text-center">
-                  <div className="rounded-2xl bg-white/5 px-2 py-2">
-                    <p className="text-[10px] font-semibold tracking-wide text-[#fca5a5] uppercase">
-                      Hoy
-                    </p>
-                    <p className="text-[16px] font-semibold">
-                      {state.postsToday}
-                    </p>
-                  </div>
-                  <div className="rounded-2xl bg-white/5 px-2 py-2">
-                    <p className="text-[10px] font-semibold tracking-wide text-[#fca5a5] uppercase">
-                      Clicks
-                    </p>
-                    <p className="text-[16px] font-semibold">
-                      {state.learning.clicksSeen}
-                    </p>
-                  </div>
-                  <div className="rounded-2xl bg-white/5 px-2 py-2">
-                    <p className="text-[10px] font-semibold tracking-wide text-[#fca5a5] uppercase">
-                      Ciclos
-                    </p>
-                    <p className="text-[16px] font-semibold">
-                      {state.learning.cycles}
-                    </p>
-                  </div>
+                {/* KPIs */}
+                <div className="grid grid-cols-4 gap-1.5">
+                  {[
+                    { k: "Posts", v: state.postsToday },
+                    { k: "Clicks", v: state.learning.clicksSeen },
+                    { k: "Fresh", v: ops.freshAsins },
+                    { k: "Score", v: ops.lastMoneyScore || "—" },
+                  ].map((m) => (
+                    <div
+                      key={m.k}
+                      className="border border-white/10 bg-black/25 px-1.5 py-2 text-center"
+                    >
+                      <p className="text-[9px] font-semibold tracking-[0.16em] text-[#f87171] uppercase">
+                        {m.k}
+                      </p>
+                      <p className="font-[family-name:var(--font-instrument-serif)] text-[20px] leading-none text-[#fecaca]">
+                        {m.v}
+                      </p>
+                    </div>
+                  ))}
                 </div>
+
+                <div className="flex items-center justify-between gap-2 border border-white/10 bg-black/30 px-3 py-2">
+                  <div>
+                    <p className="text-[9px] font-semibold tracking-[0.16em] text-[#f87171] uppercase">
+                      Ventana US
+                    </p>
+                    <p className="text-[13px] font-semibold text-white">
+                      {peak ? "PICO · publicar" : "Off-peak · deals fuertes"}
+                    </p>
+                  </div>
+                  <span
+                    className={cn(
+                      "size-2.5",
+                      peak ? "bg-[#22c55e]" : "bg-[#a8a29e]",
+                    )}
+                  />
+                </div>
+
+                <p className="border-l-2 border-[#dc2626] pl-3 text-[12px] leading-relaxed text-white/75">
+                  {ops.nextAction}
+                </p>
 
                 <button
                   type="button"
                   disabled={busy}
                   onClick={() => void toggle(!awake)}
                   className={cn(
-                    "flex h-12 w-full items-center justify-between rounded-2xl px-4 text-left transition",
+                    "flex h-12 w-full items-center justify-between px-4 text-left transition",
                     awake
                       ? "bg-[#dc2626] text-white"
-                      : "bg-white/10 text-white hover:bg-white/15",
+                      : "border border-white/15 bg-white/5 text-white hover:bg-white/10",
                   )}
                 >
                   <span>
-                    <span className="block text-[10px] font-semibold tracking-[0.14em] uppercase opacity-70">
-                      Estado
+                    <span className="block text-[9px] font-semibold tracking-[0.16em] uppercase opacity-70">
+                      Autopilot
                     </span>
                     <span className="block text-[14px] font-semibold">
                       {awake
                         ? working
-                          ? "EN MOVIMIENTO"
-                          : "ENCENDIDO · trabaja solo"
-                        : "APAGADO"}
+                          ? "EJECUTANDO"
+                          : "ON · trabaja solo"
+                        : "OFF"}
                     </span>
                   </span>
                   {busy ? (
@@ -578,88 +702,85 @@ export function RonAgentFab() {
                   type="button"
                   disabled={busy}
                   onClick={() => void runNow(false)}
-                  className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-2xl border border-white/15 bg-white/5 text-[13px] font-semibold text-white disabled:opacity-40"
+                  className="inline-flex h-11 w-full items-center justify-center gap-2 border border-[#9f1239]/50 bg-[#2a0a0a] text-[13px] font-semibold text-[#fecaca] disabled:opacity-40"
                 >
                   {busy ? (
                     <Loader2 className="size-4 animate-spin" />
                   ) : (
                     <Radar className="size-4" />
                   )}
-                  {working ? "Trabajando…" : "Trabajar ahora"}
+                  {working ? "Ciclo en curso…" : "Forzar ciclo ahora"}
                 </button>
 
                 <div className="flex flex-wrap gap-2 text-[11px]">
                   <Link
                     href="/facebook"
-                    className="rounded-full border border-white/15 px-3 py-1.5 font-medium text-[#fca5a5] hover:bg-white/5"
+                    className="border border-white/15 px-3 py-1.5 font-medium text-[#fca5a5] hover:bg-white/5"
                     onClick={() => setOpen(false)}
                   >
                     Facebook studio
                   </Link>
                   <Link
                     href="/settings#facebook-store"
-                    className="rounded-full border border-white/15 px-3 py-1.5 font-medium text-[#fca5a5] hover:bg-white/5"
+                    className="border border-white/15 px-3 py-1.5 font-medium text-[#fca5a5] hover:bg-white/5"
                     onClick={() => setOpen(false)}
                   >
-                    Conectar Page
+                    Page token
                   </Link>
                 </div>
 
-                {recent.length ? (
-                  <div>
-                    <p className="mb-1.5 text-[10px] font-semibold tracking-[0.16em] text-[#fca5a5] uppercase">
-                      Actividad en vivo
-                    </p>
-                    <ul className="space-y-1.5">
-                      <AnimatePresence initial={false}>
-                        {recent.map((a, i) => (
-                          <motion.li
-                            key={`${a.at}-${i}-${a.message.slice(0, 24)}`}
-                            initial={
-                              reduce ? false : { opacity: 0, x: 8 }
-                            }
-                            animate={{ opacity: 1, x: 0 }}
+                <div>
+                  <p className="mb-1.5 text-[9px] font-semibold tracking-[0.18em] text-[#f87171] uppercase">
+                    Ops log
+                  </p>
+                  {recent.length ? (
+                    <ul className="divide-y divide-white/10 border border-white/10">
+                      {recent.map((a, i) => (
+                        <li
+                          key={`${a.at}-${i}-${a.message.slice(0, 20)}`}
+                          className="flex gap-2 px-2.5 py-2 text-[11px] leading-snug"
+                        >
+                          <span className="w-10 shrink-0 tabular-nums text-white/40">
+                            {timeShort(a.at)}
+                          </span>
+                          <span
                             className={cn(
-                              "rounded-xl px-3 py-2 text-[12px] leading-snug",
+                              "w-11 shrink-0 font-semibold tracking-wide",
                               a.kind === "publish"
-                                ? "bg-[#14532d]/50 text-[#bbf7d0]"
+                                ? "text-[#86efac]"
                                 : a.kind === "error"
-                                  ? "bg-[#7f1d1d]/40 text-[#fecaca]"
-                                  : "bg-white/5 text-white/80",
+                                  ? "text-[#fca5a5]"
+                                  : "text-[#f87171]",
                             )}
                           >
-                            <span className="mr-1.5 font-semibold text-[#fca5a5]">
-                              {a.kind}
-                            </span>
+                            {kindLabel(a.kind)}
+                          </span>
+                          <span className="min-w-0 flex-1 text-white/80">
                             {a.message}
                             {a.postUrl ? (
                               <a
                                 href={a.postUrl}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="mt-1.5 inline-flex items-center gap-1 rounded-lg bg-[#1d4ed8]/40 px-2.5 py-1 text-[11px] font-semibold text-[#bfdbfe] hover:bg-[#1d4ed8]/60"
+                                className="mt-1 block font-semibold text-[#93c5fd] hover:underline"
                               >
                                 Ver publicación →
                               </a>
-                            ) : a.kind === "publish" ? (
-                              <span className="mt-1 block text-[11px] text-white/45">
-                                Sin link de post · revisá la Page en Facebook
-                              </span>
                             ) : null}
-                          </motion.li>
-                        ))}
-                      </AnimatePresence>
+                          </span>
+                        </li>
+                      ))}
                     </ul>
-                  </div>
-                ) : (
-                  <p className="rounded-xl bg-white/5 px-3 py-2 text-[12px] text-white/55">
-                    Encendé a RON o tocá “Trabajar ahora” para ver el ciclo en
-                    vivo.
-                  </p>
-                )}
+                  ) : (
+                    <p className="border border-dashed border-white/15 px-3 py-3 text-[12px] text-white/45">
+                      Encendé el autopilot. RON escanea Keepa, rankea ROI y
+                      publica solo.
+                    </p>
+                  )}
+                </div>
 
                 {state.lastError ? (
-                  <p className="rounded-xl border border-[#fca5a5]/30 bg-[#7f1d1d]/40 px-3 py-2 text-[12px] text-[#fecaca]">
+                  <p className="border border-[#fca5a5]/35 bg-[#7f1d1d]/35 px-3 py-2 text-[12px] text-[#fecaca]">
                     {state.lastError}
                   </p>
                 ) : null}

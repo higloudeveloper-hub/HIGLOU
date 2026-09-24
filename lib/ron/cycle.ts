@@ -25,6 +25,14 @@ import {
 } from "@/lib/ron/learn";
 import { maybeRunRonKeepaScan } from "@/lib/ron/keepa-scan";
 import {
+  buildMoneyHint,
+  buildNextAction,
+  isShoppingPeakWindow,
+  scoreCardMoneyOpportunity,
+  scorePackMoneyOpportunity,
+  shouldHoldForPeak,
+} from "@/lib/ron/marketplace-logic";
+import {
   appendRonActivity,
   loadRonState,
   saveRonPrefs,
@@ -618,17 +626,65 @@ export async function runRonCycle(
     return finish({ ok: true, state, skipped: msg });
   }
 
+  const moneyScore =
+    publishDecision.cards.length >= 2
+      ? scorePackMoneyOpportunity(publishDecision.cards, learning)
+      : scoreCardMoneyOpportunity(publishDecision.cards[0]!, learning);
+
+  // Off-peak: hold weak solo posts for US shopping windows (force bypasses)
+  if (
+    shouldHoldForPeak({
+      force: Boolean(opts.force),
+      format: publishDecision.format,
+      moneyScore,
+    })
+  ) {
+    const msg =
+      "Ventana off-peak US · guardo este deal para el pico (mejor conversión)";
+    learning = {
+      ...learning,
+      opsSnapshot: {
+        freshAsins: freshCatalog.length,
+        catalogAsins: catalog.length,
+        lastMoneyScore: moneyScore,
+        lastFormat: publishDecision.format,
+        pipeline: "wait",
+        peakWindow: false,
+        moneyHint: buildMoneyHint({
+          postsToday: state.postsToday,
+          clicksSeen: learning.clicksSeen,
+          freshAsins: freshCatalog.length,
+          peakWindow: false,
+        }),
+        nextAction: "Esperando pico US (10–14 / 18–22 ET) o un deal más fuerte",
+      },
+    };
+    await appendRonActivity(
+      supabase,
+      userId,
+      {
+        at: new Date().toISOString(),
+        kind: "skip",
+        message: msg,
+        format: publishDecision.format,
+      },
+      { statusMessage: msg, learning, lastError: null, working: false },
+    );
+    state = await loadRonState(supabase, userId);
+    return finish({ ok: true, state, skipped: msg });
+  }
+
   await appendRonActivity(
     supabase,
     userId,
     {
       at: new Date().toISOString(),
       kind: "publish",
-      message: `Publicando ${publishDecision.format} · ${publishDecision.cards.length} productos · ${publishDecision.niche}…`,
+      message: `Publicando ${publishDecision.format} · ${publishDecision.cards.length} · score ${moneyScore} · ${publishDecision.niche}…`,
       format: publishDecision.format,
     },
     {
-      statusMessage: `Trabajando · publicando ${publishDecision.format} en Facebook…`,
+      statusMessage: `Trabajando · publicando ${publishDecision.format} (score ${moneyScore})…`,
       working: true,
       learning,
     },
@@ -702,6 +758,31 @@ export async function runRonCycle(
     asins: packAsins,
     clicksByAsin: clickMap,
   });
+  const peak = isShoppingPeakWindow();
+  learning = {
+    ...learning,
+    opsSnapshot: {
+      freshAsins: Math.max(0, freshCatalog.length - packAsins.length),
+      catalogAsins: catalog.length,
+      lastMoneyScore: moneyScore,
+      lastFormat: publishDecision.format,
+      pipeline: "wait",
+      peakWindow: peak,
+      moneyHint: buildMoneyHint({
+        postsToday: state.postsToday + 1,
+        clicksSeen: learning.clicksSeen,
+        freshAsins: Math.max(0, freshCatalog.length - packAsins.length),
+        peakWindow: peak,
+      }),
+      nextAction: buildNextAction({
+        enabled: true,
+        working: false,
+        peakWindow: peak,
+        freshAsins: Math.max(0, freshCatalog.length - packAsins.length),
+        lastError: null,
+      }),
+    },
+  };
 
   const postUrl =
     published.mode === "page_post"
@@ -709,7 +790,7 @@ export async function runRonCycle(
       : published.mode === "sharer"
         ? published.shareUrl
         : null;
-  const okMsg = `Publicé ${publishDecision.format} · ${publishDecision.cards.length} productos · ${publishDecision.niche}`;
+  const okMsg = `Publicé ${publishDecision.format} · ${publishDecision.cards.length} · score ${moneyScore} · ${publishDecision.niche}`;
   await appendRonActivity(
     supabase,
     userId,

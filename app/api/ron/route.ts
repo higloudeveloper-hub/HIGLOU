@@ -30,7 +30,7 @@ export async function GET() {
       agent: "ron",
       name: "RON",
       blurb:
-        "Robot rojo de Higlou · publica vitrinas, carruseles y posts solo, aprendiendo de Keepa y de tus clicks.",
+        "Money machine · Keepa → rank ROI → pack → Facebook. Trabaja solo mientras dormís.",
       state,
     });
   } catch (err) {

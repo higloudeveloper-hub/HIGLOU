@@ -29,6 +29,7 @@ export async function learnFromAffiliateClicks(
     cycles: learning.cycles + 1,
     lastKeepaScanAt: learning.lastKeepaScanAt || null,
     recentPacks: { ...(learning.recentPacks || {}) },
+    opsSnapshot: learning.opsSnapshot,
   };
 
   const { data: links } = await supabase
@@ -139,6 +140,7 @@ export function rememberPublish(
     cycles: learning.cycles,
     lastKeepaScanAt: learning.lastKeepaScanAt || null,
     recentPacks: { ...(learning.recentPacks || {}) },
+    opsSnapshot: learning.opsSnapshot,
   };
   next.formats[opts.format] = (next.formats[opts.format] || 1) + 0.2;
   const niche = String(opts.niche || "")

@@ -10,6 +10,30 @@ export type RonActivity = {
   postUrl?: string | null;
 };
 
+export type RonPublicState = {
+  enabled: boolean;
+  mode: RonMode;
+  statusMessage: string;
+  lastRunAt: string | null;
+  lastPostAt: string | null;
+  lastError: string | null;
+  postsToday: number;
+  learning: RonLearning;
+  activity: RonActivity[];
+  working: boolean;
+  /** Live marketplace ops snapshot (no extra table) */
+  ops?: {
+    freshAsins: number;
+    catalogAsins: number;
+    lastMoneyScore: number;
+    lastFormat: string | null;
+    pipeline: string;
+    peakWindow: boolean;
+    moneyHint: string;
+    nextAction: string;
+  };
+};
+
 export type RonLearning = {
   /** niche → success score */
   niches: Record<string, number>;
@@ -29,19 +53,17 @@ export type RonLearning = {
    * Used so RON only posts again when there is a *new* opportunity.
    */
   recentPacks?: Record<string, number>;
-};
-
-export type RonPublicState = {
-  enabled: boolean;
-  mode: RonMode;
-  statusMessage: string;
-  lastRunAt: string | null;
-  lastPostAt: string | null;
-  lastError: string | null;
-  postsToday: number;
-  learning: RonLearning;
-  activity: RonActivity[];
-  working: boolean;
+  /** Last marketplace ops snapshot persisted with learning */
+  opsSnapshot?: {
+    freshAsins: number;
+    catalogAsins: number;
+    lastMoneyScore: number;
+    lastFormat: string | null;
+    pipeline: string;
+    peakWindow: boolean;
+    moneyHint: string;
+    nextAction: string;
+  };
 };
 
 export const RON_DEFAULT_LEARNING: RonLearning = {

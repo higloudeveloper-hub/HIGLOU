@@ -3,6 +3,7 @@ import { getMonetizationFlags } from "@/lib/monetization/flags";
 import { logMonetizationEvent } from "@/lib/monetization/observability";
 import {
   ensureTaggedAmazonDestination,
+  extractAsinFromAmazonUrl,
   isAmazonProductUrl,
 } from "@/lib/monetization/affiliate/tagged-url";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -84,7 +85,15 @@ export async function resolveAndTrackSmartLink(
   slug: string,
   opts?: { source?: string | null },
 ): Promise<
-  | { ok: true; destinationUrl: string; linkId: string; userId: string }
+  | {
+      ok: true;
+      destinationUrl: string;
+      linkId: string;
+      userId: string;
+      asin: string | null;
+      title: string | null;
+      productId: string | null;
+    }
   | { ok: false; error: string; status: number }
 > {
   const flags = getMonetizationFlags();
@@ -95,7 +104,7 @@ export async function resolveAndTrackSmartLink(
   const { data: smart, error } = await supabase
     .from("smart_links")
     .select(
-      "id, user_id, affiliate_link_id, product_id, destination_url, platform, click_count",
+      "id, user_id, affiliate_link_id, product_id, destination_url, platform, click_count, label",
     )
     .eq("slug", slug)
     .maybeSingle();
@@ -116,6 +125,7 @@ export async function resolveAndTrackSmartLink(
 
   // Heal Amazon destinations missing/wrong Associate tag before redirect
   let finalDestination = destinationUrl;
+  let asin: string | null = null;
   if (smart.affiliate_link_id) {
     const { data: aff } = await supabase
       .from("affiliate_links")
@@ -123,6 +133,9 @@ export async function resolveAndTrackSmartLink(
       .eq("id", smart.affiliate_link_id)
       .maybeSingle();
     if (aff) {
+      asin = String(aff.asin || "")
+        .trim()
+        .toUpperCase() || null;
       const tag = String(aff.associate_tag || "").trim();
       const healed =
         tag && (isAmazonProductUrl(destinationUrl) || aff.asin)
@@ -175,6 +188,11 @@ export async function resolveAndTrackSmartLink(
       .eq("id", smart.id);
   }
 
+  if (!asin) {
+    const fromDest = extractAsinFromAmazonUrl(finalDestination);
+    if (fromDest) asin = fromDest;
+  }
+
   logMonetizationEvent({
     level: "info",
     event: "smart_link_redirect",
@@ -186,5 +204,8 @@ export async function resolveAndTrackSmartLink(
     destinationUrl: finalDestination,
     linkId: smart.id,
     userId: smart.user_id,
+    asin,
+    title: String(smart.label || "").trim() || null,
+    productId: smart.product_id || null,
   };
 }

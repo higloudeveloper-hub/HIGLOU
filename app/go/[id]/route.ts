@@ -4,19 +4,85 @@ import { resolveAndTrackSmartLink } from "@/lib/monetization/smart-links";
 import { isMoneyEngineEnabled, getMonetizationFlags } from "@/lib/monetization/flags";
 import { logMonetizationEvent } from "@/lib/monetization/observability";
 import {
-  amazonAppBridgeHtml,
+  amazonProductLandingHtml,
   buildAmazonAppDeepLinks,
   isAmazonAppCrawler,
-  isMobileClient,
 } from "@/lib/amazon/app-deep-link";
+import { amazonAsinPrimaryImage } from "@/lib/amazon/asin-image";
 import { isAmazonProductUrl } from "@/lib/monetization/affiliate/tagged-url";
 
 export const runtime = "nodejs";
 
+async function resolveProductVisual(
+  admin: ReturnType<typeof createAdminClient>,
+  opts: {
+    userId: string;
+    productId: string | null;
+    asin: string | null;
+    title: string | null;
+  },
+): Promise<{ title: string | null; imageUrl: string | null; priceLabel: string | null }> {
+  let title = opts.title;
+  let imageUrl: string | null = null;
+  let priceLabel: string | null = null;
+
+  if (opts.productId) {
+    const { data: product } = await admin
+      .from("products")
+      .select("title, cover_url, photos")
+      .eq("id", opts.productId)
+      .eq("user_id", opts.userId)
+      .maybeSingle();
+    if (product) {
+      title = title || String(product.title || "").trim() || null;
+      imageUrl =
+        String(product.cover_url || "").trim() ||
+        (Array.isArray(product.photos) ? String(product.photos[0] || "") : "") ||
+        null;
+    }
+  }
+
+  if (opts.asin) {
+    const { data: ledger } = await admin
+      .from("opportunity_ledger")
+      .select("title, image_url, amazon_price, payload")
+      .eq("user_id", opts.userId)
+      .eq("asin", opts.asin)
+      .order("last_seen_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (ledger) {
+      title = title || String(ledger.title || "").trim() || null;
+      const fromLedger = String(ledger.image_url || "").trim();
+      if (fromLedger && /^https?:\/\//i.test(fromLedger)) imageUrl = imageUrl || fromLedger;
+      const payload = (ledger.payload || {}) as {
+        imageUrl?: string;
+        buyBoxPrice?: number | null;
+        amazonPrice?: number | null;
+      };
+      if (!imageUrl && payload.imageUrl) imageUrl = String(payload.imageUrl);
+      const price =
+        Number(ledger.amazon_price) ||
+        Number(payload.buyBoxPrice) ||
+        Number(payload.amazonPrice) ||
+        0;
+      if (price > 0) {
+        priceLabel = new Intl.NumberFormat("en-US", {
+          style: "currency",
+          currency: "USD",
+        }).format(price);
+      }
+    }
+    if (!imageUrl) imageUrl = amazonAsinPrimaryImage(opts.asin) || null;
+  }
+
+  return { title, imageUrl, priceLabel };
+}
+
 /**
- * Public redirect for Smart Links.
- * On mobile Amazon destinations → open the Amazon app (deep link bridge).
- * Crawlers / desktop → normal 302 to tagged https.
+ * Public smart-link hop.
+ * Amazon (humans): product page first → Comprar/Carrito opens Amazon app.
+ * Crawlers / non-Amazon / ?web=1: plain 302 to tagged destination.
  */
 export async function GET(
   request: Request,
@@ -54,23 +120,36 @@ export async function GET(
 
     const destination = resolved.destinationUrl;
 
-    // Prefer Amazon Shopping app for mobile shoppers (Facebook taps)
+    // Humans tapping Amazon from Facebook: show product, then app on CTA
     if (
       !forceWeb &&
       !isAmazonAppCrawler(ua) &&
-      isMobileClient(ua) &&
       isAmazonProductUrl(destination)
     ) {
       const links = buildAmazonAppDeepLinks(destination);
       if (links) {
-        return new NextResponse(amazonAppBridgeHtml(links), {
-          status: 200,
-          headers: {
-            "Content-Type": "text/html; charset=utf-8",
-            "Cache-Control": "private, no-store",
-            "Referrer-Policy": "no-referrer-when-downgrade",
-          },
+        const visual = await resolveProductVisual(admin, {
+          userId: resolved.userId,
+          productId: resolved.productId,
+          asin: resolved.asin || links.asin,
+          title: resolved.title,
         });
+        return new NextResponse(
+          amazonProductLandingHtml({
+            links,
+            title: visual.title,
+            imageUrl: visual.imageUrl,
+            priceLabel: visual.priceLabel,
+          }),
+          {
+            status: 200,
+            headers: {
+              "Content-Type": "text/html; charset=utf-8",
+              "Cache-Control": "private, no-store",
+              "Referrer-Policy": "no-referrer-when-downgrade",
+            },
+          },
+        );
       }
     }
 

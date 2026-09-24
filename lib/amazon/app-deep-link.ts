@@ -1,9 +1,9 @@
 /**
- * Prefer opening the Amazon shopping app (not mobile Safari/Chrome web)
- * when a shopper taps a Higlou /go smart link from Facebook.
+ * Amazon product landing for Facebook taps.
  *
- * Facebook's in-app browser often ignores Universal Links, so we try
- * Amazon custom URL schemes + Android Intents, then fall back to https.
+ * 1) User sees the product first (no auto “leave Facebook” jump).
+ * 2) Only when they tap Comprar / Carrito we open the Amazon app
+ *    (user gesture → deep link). HTTPS is always the safe fallback.
  */
 
 import { extractAsinFromAmazonUrl } from "@/lib/monetization/affiliate/tagged-url";
@@ -41,7 +41,6 @@ export function amazonHttpsProductUrl(destinationUrl: string): string | null {
     if (!/amazon\.|amzn\./i.test(u.hostname)) return null;
     const asin = extractAsinFromAmazonUrl(raw);
     if (!asin) return raw;
-    // Canonical mobile-friendly product URL (app Universal Links claim this path)
     const host = u.hostname.toLowerCase().includes("amazon.")
       ? u.hostname
       : "www.amazon.com";
@@ -56,11 +55,8 @@ export function amazonHttpsProductUrl(destinationUrl: string): string | null {
 export type AmazonAppDeepLinks = {
   https: string;
   asin: string;
-  /** iOS Amazon Shopping custom scheme */
   iosScheme: string;
-  /** Alternate iOS web-in-app scheme */
   iosWebScheme: string;
-  /** Android Intent → Amazon Shopping package */
   androidIntent: string;
 };
 
@@ -93,36 +89,98 @@ export function buildAmazonAppDeepLinks(
   return { https, asin, iosScheme, iosWebScheme, androidIntent };
 }
 
+function escapeHtml(value: string): string {
+  return String(value || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+export type AmazonProductLandingInput = {
+  links: AmazonAppDeepLinks;
+  title?: string | null;
+  imageUrl?: string | null;
+  priceLabel?: string | null;
+};
+
 /**
- * Tiny bridge page: try Amazon app, then https fallback.
- * Safe for Facebook in-app browsers that block Universal Links.
+ * Product-first landing: show photo + title, then Comprar / Carrito
+ * opens the Amazon app only on tap (no auto leave-Facebook alert).
  */
-export function amazonAppBridgeHtml(links: AmazonAppDeepLinks): string {
+export function amazonProductLandingHtml(input: AmazonProductLandingInput): string {
+  const { links } = input;
+  const title = escapeHtml(
+    String(input.title || "").trim() || "Producto en Amazon",
+  );
+  const price = escapeHtml(String(input.priceLabel || "").trim());
+  const image = String(input.imageUrl || "").trim();
+  const safeImage =
+    image && /^https?:\/\//i.test(image) ? escapeHtml(image) : "";
+
   const https = JSON.stringify(links.https);
   const ios = JSON.stringify(links.iosScheme);
   const iosWeb = JSON.stringify(links.iosWebScheme);
   const android = JSON.stringify(links.androidIntent);
+
   return `<!DOCTYPE html>
 <html lang="es">
 <head>
 <meta charset="utf-8"/>
-<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"/>
 <meta name="robots" content="noindex"/>
-<title>Abriendo Amazon…</title>
+<meta property="og:title" content="${title}"/>
+${safeImage ? `<meta property="og:image" content="${safeImage}"/>` : ""}
+<title>${title}</title>
 <style>
-  body{margin:0;min-height:100dvh;display:grid;place-items:center;font-family:system-ui,sans-serif;background:#fff7ed;color:#1c1917}
-  .card{max-width:20rem;padding:1.5rem;text-align:center}
-  h1{font-size:1.1rem;margin:0 0 .5rem}
-  p{font-size:.9rem;color:#78716c;margin:0 0 1.25rem;line-height:1.4}
-  a{display:inline-flex;align-items:center;justify-content:center;height:2.75rem;padding:0 1.25rem;border-radius:999px;background:#ff9900;color:#111;font-weight:700;text-decoration:none}
+  :root{color-scheme:light}
+  *{box-sizing:border-box}
+  body{margin:0;min-height:100dvh;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:#f4f4f2;color:#191919}
+  .wrap{max-width:28rem;margin:0 auto;min-height:100dvh;display:flex;flex-direction:column;background:#fff}
+  .photo{aspect-ratio:1;background:#fff;display:grid;place-items:center;border-bottom:1px solid #ececec}
+  .photo img{max-width:100%;max-height:100%;object-fit:contain;padding:1rem}
+  .photo .ph{color:#a8a8a8;font-size:.85rem;font-weight:600}
+  .body{padding:1.1rem 1.15rem 1.5rem;flex:1}
+  .brand{font-size:.7rem;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:#8a8a8a;margin:0 0 .35rem}
+  h1{font-size:1.15rem;line-height:1.35;margin:0;font-weight:650}
+  .price{margin-top:.55rem;font-size:1.35rem;font-weight:750;color:#111}
+  .hint{margin:.85rem 0 0;font-size:.82rem;line-height:1.45;color:#707070}
+  .actions{display:grid;gap:.65rem;margin-top:1.25rem}
+  button,.btn{
+    appearance:none;border:0;cursor:pointer;width:100%;height:3rem;border-radius:999px;
+    font-size:.95rem;font-weight:700;display:inline-flex;align-items:center;justify-content:center;
+    text-decoration:none;color:#111;
+  }
+  .buy{background:#ff9900}
+  .buy:active{filter:brightness(.95)}
+  .cart{background:#fff;border:1.5px solid #d5d5d5}
+  .cart:active{background:#f7f7f7}
+  .web{margin-top:.35rem;text-align:center;font-size:.78rem}
+  .web a{color:#3665F3;font-weight:600;text-decoration:none}
 </style>
 </head>
 <body>
-<div class="card">
-  <h1>Abriendo la app de Amazon</h1>
-  <p>Si no se abre sola, tocá el botón.</p>
-  <a id="open" href=${https}>Abrir en Amazon</a>
-</div>
+<main class="wrap">
+  <div class="photo">
+    ${
+      safeImage
+        ? `<img src="${safeImage}" alt="${title}" loading="eager"/>`
+        : `<span class="ph">Producto Amazon</span>`
+    }
+  </div>
+  <div class="body">
+    <p class="brand">Amazon</p>
+    <h1>${title}</h1>
+    ${price ? `<p class="price">${price}</p>` : ""}
+    <p class="hint">Miralo acá. Cuando quieras comprar, tocá un botón y te abrimos la app de Amazon.</p>
+    <div class="actions">
+      <button type="button" class="buy" id="btn-buy">Comprar ahora</button>
+      <button type="button" class="cart" id="btn-cart">Agregar al carrito</button>
+    </div>
+    <p class="web"><a id="web-link" href=${https}>Ver en amazon.com</a></p>
+  </div>
+</main>
 <script>
 (function(){
   var https=${https};
@@ -132,21 +190,36 @@ export function amazonAppBridgeHtml(links: AmazonAppDeepLinks): string {
   var ua=navigator.userAgent||"";
   var isAndroid=/Android/i.test(ua);
   var isIOS=/iPhone|iPad|iPod/i.test(ua);
-  var btn=document.getElementById("open");
-  if(btn) btn.setAttribute("href", https);
-  function tryApp(){
-    if(isAndroid){ location.href=android; return; }
-    if(isIOS){
-      location.href=ios;
-      setTimeout(function(){ location.href=iosWeb; }, 250);
+  var web=document.getElementById("web-link");
+  if(web) web.setAttribute("href", https);
+
+  function openAmazonApp(){
+    // Only on user tap — avoids Facebook “leaving this page” auto-prompt.
+    if(isAndroid){
+      location.href=android;
+      setTimeout(function(){ location.href=https; }, 1600);
       return;
     }
-    location.replace(https);
+    if(isIOS){
+      location.href=ios;
+      setTimeout(function(){ location.href=iosWeb; }, 300);
+      setTimeout(function(){ location.href=https; }, 1600);
+      return;
+    }
+    location.href=https;
   }
-  tryApp();
-  setTimeout(function(){ location.replace(https); }, 1400);
+
+  var buy=document.getElementById("btn-buy");
+  var cart=document.getElementById("btn-cart");
+  if(buy) buy.addEventListener("click", openAmazonApp);
+  if(cart) cart.addEventListener("click", openAmazonApp);
 })();
 </script>
 </body>
 </html>`;
+}
+
+/** @deprecated use amazonProductLandingHtml — kept name for older imports */
+export function amazonAppBridgeHtml(links: AmazonAppDeepLinks): string {
+  return amazonProductLandingHtml({ links });
 }

@@ -65,3 +65,6 @@ next-env.d.ts
 _migration_backup/
 
 supabase/.temp/
+
+test-results/
+.vercel.bak-higlou/

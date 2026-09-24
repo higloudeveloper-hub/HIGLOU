@@ -45,6 +45,7 @@ import {
   RON_SAME_PACK_COOLDOWN_HOURS,
   type RonPublicState,
 } from "@/lib/ron/types";
+import { hasHttpsProductImage } from "@/lib/admin/purge-listings-winners";
 
 function appOrigin(): string {
   const fromEnv = (process.env.NEXT_PUBLIC_APP_URL || "").replace(/\/$/, "");
@@ -91,6 +92,7 @@ async function loadKeepaHits(
       keepa: payload.keepa ?? true,
     });
     if (!merged) continue;
+    if (!hasHttpsProductImage(merged.imageUrl)) continue;
     if (seen.has(merged.asin)) continue;
     seen.add(merged.asin);
     hits.push(merged);
@@ -199,6 +201,22 @@ export async function runRonCycle(
   },
 ): Promise<RonCycleResult> {
   const userId = opts.userId;
+
+  // One-shot wipe of ghost listings / Find Winners (no photos) — then RON starts clean
+  try {
+    const { createAdminClient, isSupabaseConfigured } = await import(
+      "@/lib/supabase/admin"
+    );
+    if (isSupabaseConfigured()) {
+      const { maybeAutoPurgeListingsWinners } = await import(
+        "@/lib/admin/purge-listings-winners"
+      );
+      await maybeAutoPurgeListingsWinners(createAdminClient());
+    }
+  } catch {
+    /* purge optional */
+  }
+
   let state = await loadRonState(supabase, userId);
 
   if (!state.enabled && !opts.force) {

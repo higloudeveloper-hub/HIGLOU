@@ -25,6 +25,18 @@ export async function GET(request: Request) {
   }
 
   const admin = createAdminClient();
+
+  // One-shot: wipe ghost listings + Find Winners before RON works
+  let purge: unknown = null;
+  try {
+    const { maybeAutoPurgeListingsWinners } = await import(
+      "@/lib/admin/purge-listings-winners"
+    );
+    purge = await maybeAutoPurgeListingsWinners(admin);
+  } catch {
+    /* purge optional */
+  }
+
   const userIds = await listEnabledRonUsers(admin);
   const results: Array<{
     userId: string;
@@ -71,6 +83,7 @@ export async function GET(request: Request) {
     scanned: userIds.length,
     ran: results.length,
     results,
+    purge,
   });
 }
 

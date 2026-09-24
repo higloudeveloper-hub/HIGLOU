@@ -429,6 +429,12 @@ async function stashWinnerLedger(
 
   if ((card.keep ?? 0) < 12 && !isPlatformWinner(hit, mode)) return;
 
+  const { amazonAsinPrimaryImage } = await import("@/lib/amazon/asin-image");
+  const imageUrl =
+    String(hit.imageUrl || "").trim() || amazonAsinPrimaryImage(asin);
+  if (!/^https?:\/\//i.test(imageUrl)) return;
+  hit.imageUrl = imageUrl;
+
   try {
     if (!isSupabaseConfigured()) return;
     const admin = createAdminClient();
@@ -439,12 +445,12 @@ async function stashWinnerLedger(
         asin: hit.asin,
         title: hit.title,
         brand: hit.brand,
-        image_url: hit.imageUrl,
+        image_url: imageUrl,
         amazon_price: hit.amazonPrice,
         ebay_price: hit.ebayPrice,
         net_profit: card.keep,
         score: hit.score,
-        payload: hit,
+        payload: { ...hit, imageUrl },
         last_seen_at: new Date().toISOString(),
       },
       { onConflict: "user_id,mode,asin" },

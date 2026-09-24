@@ -11,6 +11,21 @@ export async function GET() {
   const auth = await requireUser();
   if (!auth.ok) return auth.response;
 
+  // One-shot: wipe ghost listings / Find Winners without photos
+  try {
+    const { createAdminClient, isSupabaseConfigured } = await import(
+      "@/lib/supabase/admin"
+    );
+    if (isSupabaseConfigured()) {
+      const { maybeAutoPurgeListingsWinners } = await import(
+        "@/lib/admin/purge-listings-winners"
+      );
+      await maybeAutoPurgeListingsWinners(createAdminClient());
+    }
+  } catch {
+    /* purge optional */
+  }
+
   const { data, error } = await auth.supabase
     .from("products")
     .select("*")
@@ -44,7 +59,7 @@ export async function GET() {
     for (const img of sorted) {
       const productId = String(img.product_id);
       const url = String(img.public_url ?? "").replace(/[\r\n\t]+/g, "").trim();
-      if (!url) continue;
+      if (!url || !/^https?:\/\//i.test(url)) continue;
       const list = photosByProduct.get(productId) ?? [];
       if (list.length < 6) {
         list.push(url);
@@ -53,8 +68,11 @@ export async function GET() {
       if (!coverByProduct.has(productId)) coverByProduct.set(productId, url);
     }
 
+    // Autonomy: never surface listings without a real photo
+    const withPhotos = rows.filter((row) => coverByProduct.has(String(row.id)));
+
     return NextResponse.json({
-      products: rows.map((row) => {
+      products: withPhotos.map((row) => {
         const product = mapProductRow(row);
         const photos = photosByProduct.get(String(row.id)) ?? [];
         return {
@@ -69,16 +87,7 @@ export async function GET() {
   }
 
   return NextResponse.json({
-    products: rows.map((row) => {
-      const product = mapProductRow(row);
-      return {
-        ...product,
-        coverUrl: coverByProduct.get(String(row.id)) ?? null,
-        photos: [] as string[],
-        photoCount: 0,
-        ebayListingId: String(row.ebay_listing_id || "").trim() || null,
-      };
-    }),
+    products: [] as unknown[],
   });
 }
 

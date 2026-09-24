@@ -69,22 +69,36 @@ async function persistLedger(
   if (!hits.length || !isSupabaseConfigured()) return;
   try {
     const admin = createAdminClient();
-    const rows = hits.slice(0, 32).map((hit) => ({
-      user_id: userId,
-      mode: hit.mode || "amazon",
-      asin: String(hit.asin || "")
-        .trim()
-        .toUpperCase(),
-      title: hit.title || "",
-      brand: hit.brand || "",
-      image_url: hit.imageUrl || "",
-      amazon_price: hit.amazonPrice ?? hit.buyBoxPrice,
-      ebay_price: hit.ebayPrice,
-      net_profit: hit.netProfit,
-      score: hit.score,
-      payload: hit,
-      last_seen_at: new Date().toISOString(),
-    }));
+    const { amazonAsinPrimaryImage } = await import("@/lib/amazon/asin-image");
+    const rows = hits
+      .slice(0, 40)
+      .map((hit) => {
+        const asin = String(hit.asin || "")
+          .trim()
+          .toUpperCase();
+        if (!/^[A-Z0-9]{10}$/.test(asin)) return null;
+        const imageUrl =
+          String(hit.imageUrl || "").trim() || amazonAsinPrimaryImage(asin);
+        if (!/^https?:\/\//i.test(imageUrl)) return null;
+        return {
+          user_id: userId,
+          mode: hit.mode || "amazon",
+          asin,
+          title: hit.title || "",
+          brand: hit.brand || "",
+          image_url: imageUrl,
+          amazon_price: hit.amazonPrice ?? hit.buyBoxPrice,
+          ebay_price: hit.ebayPrice,
+          net_profit: hit.netProfit,
+          score: hit.score,
+          payload: { ...hit, asin, imageUrl },
+          last_seen_at: new Date().toISOString(),
+        };
+      })
+      .filter(
+        (row): row is NonNullable<typeof row> => row != null,
+      );
+    if (!rows.length) return;
     await admin.from("opportunity_ledger").upsert(rows, {
       onConflict: "user_id,mode,asin",
     });

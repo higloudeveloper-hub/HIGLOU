@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/auth/require-user";
+import { hasHttpsProductImage } from "@/lib/admin/purge-listings-winners";
 import { mergeMarketFeed } from "@/lib/market/from-opportunity";
 import { resolveUserAssociateTag } from "@/lib/monetization/affiliate/links";
 import { isPlatformWinner } from "@/lib/opportunity/platform-winner";
@@ -12,9 +13,18 @@ async function loadLedgerHits(userId: string): Promise<OpportunityProduct[]> {
   if (!isSupabaseConfigured()) return [];
   try {
     const admin = createAdminClient();
+    // One-shot: clear ghost Find Winners / listings without photos
+    try {
+      const { maybeAutoPurgeListingsWinners } = await import(
+        "@/lib/admin/purge-listings-winners"
+      );
+      await maybeAutoPurgeListingsWinners(admin);
+    } catch {
+      /* purge optional */
+    }
     const { data, error } = await admin
       .from("opportunity_ledger")
-      .select("asin, payload, net_profit, mode")
+      .select("asin, payload, net_profit, mode, image_url")
       .eq("user_id", userId)
       .order("last_seen_at", { ascending: false })
       .limit(120);
@@ -28,10 +38,15 @@ async function loadLedgerHits(userId: string): Promise<OpportunityProduct[]> {
       if (!/^[A-Z0-9]{10}$/.test(asin) || seen.has(asin)) continue;
       const payload = (row.payload || {}) as OpportunityProduct;
       const mode = (row.mode || payload.mode || "amazon_to_ebay") as OpportunityMode;
+      const imageUrl = String(
+        payload.imageUrl || row.image_url || "",
+      ).trim();
+      if (!hasHttpsProductImage(imageUrl)) continue;
       const hit: OpportunityProduct = {
         ...payload,
         asin,
         mode,
+        imageUrl,
         netProfit:
           payload.netProfit ??
           (row.net_profit != null ? Number(row.net_profit) : null),

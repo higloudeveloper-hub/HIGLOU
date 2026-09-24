@@ -10,9 +10,6 @@ import { createAdminClient, isSupabaseConfigured } from "@/lib/supabase/admin";
 export const runtime = "nodejs";
 export const maxDuration = 120;
 
-/** One-shot deploy bootstrap — stops working after historyPurgeVersion is stamped. */
-const BOOTSTRAP_PURGE_SECRET = "higlou-purge-lw-20260924-k9m2";
-
 function isOwner(email: string | null | undefined): boolean {
   const allow = String(process.env.HIGLOU_OWNER_EMAILS || "")
     .split(",")
@@ -28,25 +25,23 @@ function isOwner(email: string | null | undefined): boolean {
   return Boolean(mine && allow.includes(mine));
 }
 
-function bootstrapToken(request: Request): string {
+function bearerOrQuerySecret(request: Request): string {
   const auth = request.headers.get("authorization") || "";
   const token = auth.replace(/^Bearer\s+/i, "").trim();
   const urlToken = new URL(request.url).searchParams.get("secret") || "";
   return token || urlToken;
 }
 
-function isBootstrapAuth(request: Request): boolean {
-  const token = bootstrapToken(request);
+function isCronAuth(request: Request): boolean {
+  const token = bearerOrQuerySecret(request);
   if (!token) return false;
   const cron = process.env.CRON_SECRET || process.env.RON_CRON_SECRET || "";
-  if (cron && token === cron) return true;
-  return token === BOOTSTRAP_PURGE_SECRET;
+  return Boolean(cron && token === cron);
 }
 
 /**
- * Owner-only or one-shot bootstrap: wipe Find Winners ledger + listing products.
+ * Owner-only or cron: wipe Find Winners ledger + listing products.
  * POST { confirm: "PURGE_LISTINGS_AND_WINNERS" }
- * Bootstrap: Authorization: Bearer <token> (idempotent after version stamp)
  */
 export async function POST(request: Request) {
   if (!isSupabaseConfigured()) {
@@ -55,11 +50,11 @@ export async function POST(request: Request) {
 
   const admin = createAdminClient();
 
-  if (isBootstrapAuth(request)) {
+  if (isCronAuth(request)) {
     const result = await maybeAutoPurgeListingsWinners(admin);
     return NextResponse.json({
       ...result,
-      via: "bootstrap",
+      via: "cron",
       version: LISTINGS_WINNERS_PURGE_VERSION,
     });
   }
@@ -88,20 +83,4 @@ export async function POST(request: Request) {
 
   const result = await purgeListingsAndFindWinners(admin);
   return NextResponse.json(result);
-}
-
-export async function GET(request: Request) {
-  if (!isBootstrapAuth(request)) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-  if (!isSupabaseConfigured()) {
-    return NextResponse.json({ error: "Supabase required" }, { status: 503 });
-  }
-  const admin = createAdminClient();
-  const result = await maybeAutoPurgeListingsWinners(admin);
-  return NextResponse.json({
-    ...result,
-    via: "bootstrap",
-    version: LISTINGS_WINNERS_PURGE_VERSION,
-  });
 }

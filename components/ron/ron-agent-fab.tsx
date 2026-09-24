@@ -162,6 +162,14 @@ const DEFAULT_STATE: RonPublicState = {
     niches: {},
     formats: { ads: 1, carousel: 1.2, vitrina: 1.4 },
     asins: {},
+    strategies: {
+      velocity: 1.2,
+      amazon_oos: 1.1,
+      price_drop: 1.15,
+      seller_vacuum: 1.05,
+      rising_price: 1,
+      hot_deals: 1.25,
+    },
     clicksSeen: 0,
     cycles: 0,
   },
@@ -504,9 +512,10 @@ export function RonAgentFab() {
 
               <div className="space-y-3 overflow-y-auto px-4 py-3">
                 <p className="text-[13px] leading-relaxed text-white/75">
-                  Trabaja solo: lee Keepa, crea links de afiliado y publica
-                  vitrinas / carruseles / posts en tu Page cuando hay una
-                  oportunidad nueva.
+                  En cada escaneo general corre las 6 modalidades Keepa
+                  (velocity, Amazon OOS, price drop, seller vacuum, rising
+                  price, hot deals), interpreta el consenso y publica solo lo
+                  exacto.
                 </p>
 
                 <div className="grid grid-cols-3 gap-2 text-center">

@@ -10,36 +10,56 @@ import {
 } from "@/lib/opportunity/platform-winner";
 import type { OpportunityProduct } from "@/lib/opportunity/types";
 import { ensureAffiliateLinksFromKeepaWinners } from "@/lib/monetization/affiliate/from-keepa-winners";
-import { KEEPA_STRATEGY_IDS, type KeepaStrategyId } from "@/lib/keepa/strategies";
+import {
+  KEEPA_STRATEGY_IDS,
+  type KeepaStrategyId,
+} from "@/lib/keepa/strategies";
+import {
+  mergeRonKeepaStrategyHits,
+  pickRonKeepaDecisions,
+  summarizeStrategyCounts,
+} from "@/lib/ron/keepa-rank";
 import type { RonLearning } from "@/lib/ron/types";
-import { RON_KEEPA_SCAN_MIN_MINUTES } from "@/lib/ron/types";
+import { RON_DEFAULT_LEARNING, RON_KEEPA_SCAN_MIN_MINUTES } from "@/lib/ron/types";
 
 export type RonKeepaScanResult = {
   ran: boolean;
   winners: OpportunityProduct[];
   analyzed: number;
-  strategy: KeepaStrategyId;
+  /** Primary strategy label for UI — always "general" when multi ran */
+  strategy: KeepaStrategyId | "general";
+  strategiesRun: KeepaStrategyId[];
+  strategyHits: Partial<Record<KeepaStrategyId, number>>;
   affiliateCreated: number;
   reason?: string;
   charged: boolean;
   learning: RonLearning;
 };
 
-function pickStrategy(learning: RonLearning, seed: number): KeepaStrategyId {
-  // Rotate strategies so RON learns different Keepa angles over time
-  const preferred = ["velocity", "hot_deals", "price_drop", "rising_price"] as const;
-  const idx = Math.abs((learning.cycles || 0) + seed) % preferred.length;
-  const id = preferred[idx]!;
-  return (KEEPA_STRATEGY_IDS as readonly string[]).includes(id)
-    ? id
-    : "velocity";
-}
-
 function minutesSince(iso: string | null | undefined): number {
   if (!iso) return Number.POSITIVE_INFINITY;
   const t = new Date(iso).getTime();
   if (!Number.isFinite(t)) return Number.POSITIVE_INFINITY;
   return (Date.now() - t) / 60_000;
+}
+
+function reinforceStrategies(
+  learning: RonLearning,
+  winners: OpportunityProduct[],
+): RonLearning {
+  const next: RonLearning = {
+    ...learning,
+    strategies: {
+      ...RON_DEFAULT_LEARNING.strategies,
+      ...(learning.strategies || {}),
+    },
+  };
+  for (const hit of winners) {
+    const id = String(hit.keepaStrategy || "").trim();
+    if (!(KEEPA_STRATEGY_IDS as readonly string[]).includes(id)) continue;
+    next.strategies![id] = (next.strategies![id] || 1) + 0.2;
+  }
+  return next;
 }
 
 async function persistLedger(
@@ -49,7 +69,7 @@ async function persistLedger(
   if (!hits.length || !isSupabaseConfigured()) return;
   try {
     const admin = createAdminClient();
-    const rows = hits.slice(0, 24).map((hit) => ({
+    const rows = hits.slice(0, 32).map((hit) => ({
       user_id: userId,
       mode: hit.mode || "amazon",
       asin: String(hit.asin || "")
@@ -74,8 +94,9 @@ async function persistLedger(
 }
 
 /**
- * Live Keepa scan for RON — max once per hour (unless force).
- * Spends winners_scan credits only when winners come back.
+ * RON general Keepa scan — runs ALL modalities in one pass,
+ * merges consensus, ranks exact decisions, then affiliates.
+ * Max once per hour (unless force). One winners_scan charge for the whole pass.
  */
 export async function maybeRunRonKeepaScan(
   supabase: SupabaseClient,
@@ -86,39 +107,49 @@ export async function maybeRunRonKeepaScan(
     pageOrigin?: string;
   },
 ): Promise<RonKeepaScanResult> {
-  const learning = { ...opts.learning };
+  const learning = {
+    ...opts.learning,
+    strategies: {
+      ...RON_DEFAULT_LEARNING.strategies,
+      ...(opts.learning.strategies || {}),
+    },
+  };
   const since = minutesSince(learning.lastKeepaScanAt);
   if (!opts.force && since < RON_KEEPA_SCAN_MIN_MINUTES) {
     return {
       ran: false,
       winners: [],
       analyzed: 0,
-      strategy: "velocity",
+      strategy: "general",
+      strategiesRun: [],
+      strategyHits: {},
       affiliateCreated: 0,
       charged: false,
-      reason: `Keepa ok · próximo scan en ${Math.ceil(RON_KEEPA_SCAN_MIN_MINUTES - since)} min`,
+      reason: `Keepa ok · próximo escaneo general en ${Math.ceil(RON_KEEPA_SCAN_MIN_MINUTES - since)} min`,
       learning,
     };
   }
 
-  const strategy = pickStrategy(learning, Date.now());
+  const strategiesRun = [...KEEPA_STRATEGY_IDS];
   const spent = await spendCredits({
     userId: opts.userId,
     action: "winners_scan",
-    reason: "RON Keepa scan",
-    meta: { agent: "ron", strategy },
+    reason: "RON Keepa escaneo general (todas las modalidades)",
+    meta: { agent: "ron", strategy: "general", modalities: strategiesRun },
   });
   if (!spent.ok) {
     return {
       ran: false,
       winners: [],
       analyzed: 0,
-      strategy,
+      strategy: "general",
+      strategiesRun: [],
+      strategyHits: {},
       affiliateCreated: 0,
       charged: false,
       reason:
         spent.code === "insufficient"
-          ? "Sin créditos para scan Keepa"
+          ? "Sin créditos para escaneo general Keepa"
           : spent.error || "No se pudo cobrar el scan",
       learning,
     };
@@ -131,7 +162,7 @@ export async function maybeRunRonKeepaScan(
       action: "winners_scan",
       amount: spent.spent,
       reason: why,
-      meta: { agent: "ron", strategy },
+      meta: { agent: "ron", strategy: "general" },
     });
   };
 
@@ -145,101 +176,160 @@ export async function maybeRunRonKeepaScan(
       .map((row) => String(row.amazon_asin || "").trim().toUpperCase())
       .filter((id) => /^[A-Z0-9]{10}$/.test(id));
 
-    const found = await findAmazonWinners({
-      query: "",
-      category: "",
-      categoryId: "all",
-      keepaRoot: "",
-      limit: 8,
-      pageOrigin: opts.pageOrigin || "https://higlou.vercel.app",
-      amazonToken: tokens.amazonToken,
-      marketplaceId: tokens.marketplaceId,
-      sellingPartnerId: tokens.sellingPartnerId,
-      ebayToken: tokens.ebayToken,
-      mode: "amazon",
-      onlySellable: false,
-      seed: learning.cycles || 0,
-      excludeAsins,
-      keepaMode: "full",
-      keepaPurpose: "live",
-      keepaStrategy: strategy,
-    });
+    const pageOrigin = opts.pageOrigin || "https://higlou.vercel.app";
+    const byStrategy: Partial<Record<KeepaStrategyId, OpportunityProduct[]>> =
+      {};
+    const strategyHits: Partial<Record<KeepaStrategyId, number>> = {};
+    let analyzed = 0;
 
-    const winners = sortPlatformWinners(
-      (found.products || []).filter((hit) => isPlatformWinner(hit, "amazon")),
-    ).slice(0, 8);
+    // Parallel modalities — one general scan interprets everything
+    const settled = await Promise.allSettled(
+      strategiesRun.map(async (strategy) => {
+        const found = await findAmazonWinners({
+          query: "",
+          category: "",
+          categoryId: "all",
+          keepaRoot: "",
+          limit: 5,
+          pageOrigin,
+          amazonToken: tokens.amazonToken,
+          marketplaceId: tokens.marketplaceId,
+          sellingPartnerId: tokens.sellingPartnerId,
+          ebayToken: tokens.ebayToken,
+          mode: "amazon",
+          onlySellable: false,
+          seed: (learning.cycles || 0) + strategiesRun.indexOf(strategy),
+          excludeAsins,
+          keepaMode: "full",
+          keepaPurpose: "live",
+          keepaStrategy: strategy,
+        });
+        const winners = sortPlatformWinners(
+          (found.products || []).filter((hit) =>
+            isPlatformWinner(hit, "amazon"),
+          ),
+        )
+          .slice(0, 5)
+          .map((hit) => ({
+            ...hit,
+            keepa: true,
+            keepaStrategy: strategy,
+          }));
+        return {
+          strategy,
+          winners,
+          analyzed: found.analyzed || winners.length,
+        };
+      }),
+    );
+
+    for (const result of settled) {
+      if (result.status !== "fulfilled") continue;
+      const { strategy, winners, analyzed: n } = result.value;
+      byStrategy[strategy] = winners;
+      strategyHits[strategy] = winners.length;
+      analyzed += n;
+    }
 
     learning.lastKeepaScanAt = new Date().toISOString();
 
-    if (!winners.length) {
-      await refund("RON empty Keepa scan refund");
+    const merged = mergeRonKeepaStrategyHits(byStrategy, learning);
+    const decisions = pickRonKeepaDecisions(merged, 12);
+
+    if (!decisions.length) {
+      await refund("RON empty Keepa general scan refund");
       return {
         ran: true,
         winners: [],
-        analyzed: found.analyzed || 0,
-        strategy,
+        analyzed,
+        strategy: "general",
+        strategiesRun,
+        strategyHits,
         affiliateCreated: 0,
         charged: false,
-        reason: "Keepa sin winners esta hora · no cobré",
+        reason: `Escaneo general · ${summarizeStrategyCounts(byStrategy)} · sin winners · no cobré`,
         learning,
       };
     }
 
-    const withBoards = await attachOpportunityBoards(winners, {
+    const withBoards = await attachOpportunityBoards(decisions, {
       amazonToken: tokens.amazonToken,
       marketplaceId: tokens.marketplaceId,
       ebayToken: tokens.ebayToken,
       deep: false,
     });
 
-    if (!withBoards.length) {
+    const finalHits = (withBoards.length ? withBoards : decisions).map(
+      (hit) => {
+        const asin = String(hit.asin || "")
+          .trim()
+          .toUpperCase();
+        const ranked = decisions.find((d) => d.asin === asin);
+        return {
+          ...hit,
+          keepa: true,
+          keepaStrategy: ranked?.keepaStrategy || hit.keepaStrategy || null,
+        };
+      },
+    );
+
+    if (!finalHits.length) {
       await refund("RON empty board refund");
       return {
         ran: true,
         winners: [],
-        analyzed: found.analyzed || 0,
-        strategy,
+        analyzed,
+        strategy: "general",
+        strategiesRun,
+        strategyHits,
         affiliateCreated: 0,
         charged: false,
-        reason: "Keepa sin board listo · no cobré",
+        reason: "Escaneo general sin board listo · no cobré",
         learning,
       };
     }
 
-    await persistLedger(opts.userId, withBoards);
+    await persistLedger(opts.userId, finalHits);
 
     const aff = await ensureAffiliateLinksFromKeepaWinners(supabase, {
       userId: opts.userId,
-      hits: withBoards,
+      hits: finalHits,
       source: "ron_keepa",
-      campaignName: "RON Keepa → Facebook",
-      limit: 8,
+      campaignName: "RON Keepa general → Facebook",
+      limit: 16,
     });
+
+    const nextLearning = reinforceStrategies(learning, finalHits);
+    const multi = decisions.filter((d) => d.ronStrategies.length >= 2).length;
 
     return {
       ran: true,
-      winners: withBoards,
-      analyzed: found.analyzed || withBoards.length,
-      strategy,
+      winners: finalHits,
+      analyzed,
+      strategy: "general",
+      strategiesRun,
+      strategyHits,
       affiliateCreated: aff.created,
       charged: true,
-      reason: `Keepa ${strategy}: ${withBoards.length} trends · ${aff.created} links nuevos`,
-      learning,
+      reason: `Escaneo general · ${strategiesRun.length} modalidades · ${summarizeStrategyCounts(byStrategy)} · ${finalHits.length} decisiones (${multi} multi-señal) · ${aff.created} links`,
+      learning: nextLearning,
     };
   } catch (err) {
-    await refund("RON Keepa scan failed refund");
+    await refund("RON Keepa general scan failed refund");
     learning.lastKeepaScanAt = new Date().toISOString();
     return {
       ran: true,
       winners: [],
       analyzed: 0,
-      strategy,
+      strategy: "general",
+      strategiesRun,
+      strategyHits: {},
       affiliateCreated: 0,
       charged: false,
       reason:
         err instanceof Error
-          ? `Keepa falló: ${err.message}`
-          : "Keepa scan falló",
+          ? `Keepa general falló: ${err.message}`
+          : "Keepa escaneo general falló",
       learning,
     };
   }

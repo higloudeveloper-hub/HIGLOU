@@ -38,6 +38,10 @@ function parseLearning(raw: unknown): RonLearning {
         ? { ...RON_DEFAULT_LEARNING.formats, ...o.formats }
         : { ...RON_DEFAULT_LEARNING.formats },
     asins: o.asins && typeof o.asins === "object" ? o.asins : {},
+    strategies:
+      o.strategies && typeof o.strategies === "object"
+        ? { ...RON_DEFAULT_LEARNING.strategies, ...o.strategies }
+        : { ...RON_DEFAULT_LEARNING.strategies },
     clicksSeen: Number(o.clicksSeen) || 0,
     cycles: Number(o.cycles) || 0,
     lastKeepaScanAt: o.lastKeepaScanAt || null,

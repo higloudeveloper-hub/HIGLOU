@@ -6,7 +6,7 @@ import { loadRonState, saveRonPrefs } from "@/lib/ron/memory";
 import { isSupabaseConfigured } from "@/lib/supabase/admin";
 
 export const runtime = "nodejs";
-export const maxDuration = 90;
+export const maxDuration = 120;
 
 const patchSchema = z.object({
   enabled: z.boolean().optional(),
@@ -53,6 +53,14 @@ export async function GET() {
             niches: {},
             formats: { ads: 1, carousel: 1.2, vitrina: 1.4 },
             asins: {},
+            strategies: {
+              velocity: 1.2,
+              amazon_oos: 1.1,
+              price_drop: 1.15,
+              seller_vacuum: 1.05,
+              rising_price: 1,
+              hot_deals: 1.25,
+            },
             clicksSeen: 0,
             cycles: 0,
           },

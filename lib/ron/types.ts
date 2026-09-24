@@ -17,6 +17,8 @@ export type RonLearning = {
   formats: Record<string, number>;
   /** asin → times published / click boost */
   asins: Record<string, number>;
+  /** Keepa modality → success score (velocity, hot_deals, …) */
+  strategies: Record<string, number>;
   /** total observed affiliate clicks attributed after posts */
   clicksSeen: number;
   cycles: number;
@@ -46,6 +48,14 @@ export const RON_DEFAULT_LEARNING: RonLearning = {
   niches: {},
   formats: { ads: 1, carousel: 1.2, vitrina: 1.4 },
   asins: {},
+  strategies: {
+    velocity: 1.2,
+    amazon_oos: 1.1,
+    price_drop: 1.15,
+    seller_vacuum: 1.05,
+    rising_price: 1,
+    hot_deals: 1.25,
+  },
   clicksSeen: 0,
   cycles: 0,
   lastKeepaScanAt: null,

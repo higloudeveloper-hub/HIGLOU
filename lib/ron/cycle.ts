@@ -282,12 +282,12 @@ export async function runRonCycle(
       at: new Date().toISOString(),
       kind: "scan",
       message: shouldForceScan
-        ? "Escaneando Keepa en vivo…"
+        ? "Escaneo general Keepa · 6 modalidades…"
         : `Ledger: ${ledgerHits.length} oportunidades · Keepa si toca`,
     },
     {
       statusMessage: shouldForceScan
-        ? "Trabajando · Keepa en vivo…"
+        ? "Trabajando · escaneo general Keepa…"
         : "Trabajando · revisando ledger Keepa…",
       working: true,
     },
@@ -306,12 +306,12 @@ export async function runRonCycle(
     {
       at: new Date().toISOString(),
       kind: "scan",
-      message: keepa.reason || (keepa.ran ? "Keepa listo" : "Keepa en espera"),
+      message: keepa.reason || (keepa.ran ? "Escaneo general listo" : "Keepa en espera"),
     },
     {
       learning,
       statusMessage: keepa.ran
-        ? `Trabajando · Keepa: ${keepa.winners.length} trends`
+        ? `Trabajando · ${keepa.winners.length} decisiones Keepa`
         : keepa.reason || "Trabajando · usando ledger Keepa…",
       working: true,
     },

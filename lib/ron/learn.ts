@@ -15,6 +15,10 @@ export async function learnFromAffiliateClicks(
     niches: { ...learning.niches },
     formats: { ...RON_DEFAULT_LEARNING.formats, ...learning.formats },
     asins: { ...learning.asins },
+    strategies: {
+      ...RON_DEFAULT_LEARNING.strategies,
+      ...(learning.strategies || {}),
+    },
     clicksSeen: learning.clicksSeen,
     cycles: learning.cycles + 1,
     lastKeepaScanAt: learning.lastKeepaScanAt || null,
@@ -78,6 +82,10 @@ export function rememberPublish(
     niches: { ...learning.niches },
     formats: { ...learning.formats },
     asins: { ...learning.asins },
+    strategies: {
+      ...RON_DEFAULT_LEARNING.strategies,
+      ...(learning.strategies || {}),
+    },
     clicksSeen: learning.clicksSeen,
     cycles: learning.cycles,
     lastKeepaScanAt: learning.lastKeepaScanAt || null,

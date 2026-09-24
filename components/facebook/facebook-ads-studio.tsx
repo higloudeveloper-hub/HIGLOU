@@ -972,10 +972,10 @@ export function FacebookAdsStudio() {
           </div>
           <p className="mb-3 text-[13px] text-[#707070]">
             {format === "ads"
-              ? "1 producto · post serio con precio verificado."
+              ? "1 producto · tarjeta limpia: título + precio."
               : format === "carousel"
-                ? `Carrusel · ${minNeeded}–${MAX} · productos parecidos = más click.`
-                : `Vitrina · ${minNeeded}–${MAX} · curada como una boutique.`}
+                ? `Carrusel · ${minNeeded}–${MAX} · TOP DEALS · swipe to shop.`
+                : `Vitrina · ${minNeeded}–${MAX} · selección editorial.`}
           </p>
 
           {readyVitrinas.length > 0 || readyCarousels.length > 0 ? (

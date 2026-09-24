@@ -1,6 +1,7 @@
 import type { OpportunityProduct } from "@/lib/opportunity/types";
 import {
   dedupePromoCards,
+  isCoherentPromoPack,
   suggestPromoPacks,
   type PromoGroupCard,
   type PromoPackSuggestion,
@@ -194,13 +195,19 @@ function pickBestPack(
   packs: PromoPackSuggestion[],
   learning: RonLearning,
   catalog: RonCandidateCard[],
-): { pack: PromoPackSuggestion; score: number } | null {
-  let best: { pack: PromoPackSuggestion; score: number } | null = null;
+): { pack: PromoPackSuggestion; cards: RonCandidateCard[]; score: number } | null {
+  let best: {
+    pack: PromoPackSuggestion;
+    cards: RonCandidateCard[];
+    score: number;
+  } | null = null;
   for (const pack of packs) {
     const cards = pack.cardIds
       .map((id) => catalog.find((c) => c.id === id))
       .filter((c): c is RonCandidateCard => Boolean(c));
-    if (!cards.length) continue;
+    if (cards.length < (pack.format === "vitrina" ? 3 : 2)) continue;
+    // Final gate: every pair must be the same product family
+    if (!isCoherentPromoPack(cards)) continue;
     const asinBoost = cards.reduce(
       (s, c) => s + scoreAsin(learning, c.asin),
       0,
@@ -213,7 +220,7 @@ function pickBestPack(
       scoreNiche(learning, pack.niche) * 1.5 +
       asinBoost * 0.4 -
       nichePenalty;
-    if (!best || score > best.score) best = { pack, score };
+    if (!best || score > best.score) best = { pack, cards, score };
   }
   return best;
 }
@@ -244,15 +251,14 @@ export function decideRonPublish(opts: {
   const packs = suggestPromoPacks(catalog, {
     limit: 8,
     preferVitrina: true,
-    minRelated: 0.36,
+    minRelated: 0.48,
     disallowPriceBandFallback: true,
+    strict: true,
   });
   const best = pickBestPack(packs, opts.learning, catalog);
 
   if (best) {
-    const cards = best.pack.cardIds
-      .map((id) => catalog.find((c) => c.id === id))
-      .filter((c): c is RonCandidateCard => Boolean(c));
+    const cards = best.cards;
     const copy = buildFacebookPromoCopy({
       format: best.pack.format,
       titles: cards.map((c) => c.title),

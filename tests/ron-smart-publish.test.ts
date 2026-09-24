@@ -84,14 +84,56 @@ describe("strict related vitrinas", () => {
     const packs = suggestPromoPacks(cards, {
       limit: 4,
       preferVitrina: true,
-      minRelated: 0.36,
+      minRelated: 0.48,
+      disallowPriceBandFallback: true,
+      strict: true,
+    });
+    expect(packs.length).toBeGreaterThan(0);
+    for (const pack of packs) {
+      const titles = pack.titles.join(" ").toLowerCase();
+      expect(titles).toMatch(/tablet/);
+      expect(titles).not.toMatch(/kidney|supplement|capsule|pill/);
+    }
+  });
+
+  it("rejects tablet + capsule even with shared brand chrome", () => {
+    const cards = [
+      {
+        id: "a",
+        title: "Fire HD 10 Tablet Kids Edition",
+        brand: "Generic",
+        priceLabel: "$79.99",
+        asin: "B0TABAAA01",
+        imageUrl: "https://cdn.example.com/a.jpg",
+      },
+      {
+        id: "b",
+        title: "Vitamin D3 Softgel Capsules 5000IU",
+        brand: "Generic",
+        priceLabel: "$19.99",
+        asin: "B0PILLBB01",
+        imageUrl: "https://cdn.example.com/b.jpg",
+      },
+      {
+        id: "c",
+        title: "Multivitamin Gummies for Adults",
+        brand: "Generic",
+        priceLabel: "$22.00",
+        asin: "B0PILLBB02",
+        imageUrl: "https://cdn.example.com/c.jpg",
+      },
+    ];
+    const packs = suggestPromoPacks(cards, {
+      limit: 4,
+      preferVitrina: true,
+      strict: true,
       disallowPriceBandFallback: true,
     });
     for (const pack of packs) {
-      const titles = pack.titles.join(" ").toLowerCase();
-      if (/tablet/.test(titles)) {
-        expect(titles).not.toMatch(/kidney|supplement|capsule|pill/);
-      }
+      const blob = pack.titles.join(" ").toLowerCase();
+      const hasTab = /tablet/.test(blob);
+      const hasSupp = /vitamin|softgel|gummies|capsule/.test(blob);
+      expect(hasTab && hasSupp).toBe(false);
     }
   });
 });

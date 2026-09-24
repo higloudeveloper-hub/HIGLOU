@@ -209,6 +209,176 @@ export function dedupePromoCards(cards: PromoGroupCard[]): PromoGroupCard[] {
   return out;
 }
 
+/**
+ * Product family anchors — two products must share a family (or ≥2
+ * content tokens) to count as related. Brand alone is never enough
+ * (Anker cable ≠ Anker toothbrush).
+ */
+const PRODUCT_FAMILIES: Record<string, string[]> = {
+  tablet: ["tablet", "tableta", "ipad"],
+  phone: ["phone", "iphone", "smartphone", "celular", "galaxy"],
+  laptop: ["laptop", "notebook", "chromebook", "macbook"],
+  charger: [
+    "charger",
+    "charging",
+    "cargador",
+    "powerbank",
+    "bank",
+    "usb",
+    "cable",
+    "adapter",
+    "wallwart",
+  ],
+  headphone: [
+    "headphone",
+    "earbuds",
+    "earbud",
+    "earphone",
+    "auricular",
+    "headset",
+    "buds",
+  ],
+  speaker: ["speaker", "bluetooth", "soundbar", "altavoz"],
+  camera: ["camera", "webcam", "gopro", "lens", "camara"],
+  watch: ["watch", "smartwatch", "fitnessband", "reloj"],
+  kitchen: [
+    "knife",
+    "blender",
+    "cookware",
+    "kitchen",
+    "pan",
+    "pot",
+    "utensil",
+    "cuchillo",
+  ],
+  supplement: [
+    "supplement",
+    "capsule",
+    "capsules",
+    "vitamin",
+    "vitamins",
+    "pill",
+    "pills",
+    "softgel",
+    "gummy",
+    "gummies",
+    "powder",
+    "probiotic",
+    "collagen",
+    "omega",
+    "multivitamin",
+    "suplemento",
+    "pastilla",
+    "pastillas",
+  ],
+  beauty: [
+    "serum",
+    "moisturizer",
+    "skincare",
+    "cream",
+    "shampoo",
+    "conditioner",
+    "makeup",
+    "cosmetic",
+    "toothbrush",
+    "toothpaste",
+    "razor",
+  ],
+  toy: ["toy", "toys", "lego", "puzzle", "juguete", "juguetes"],
+  pet: ["dog", "cat", "pet", "perro", "gato", "mascota"],
+  tool: ["drill", "screwdriver", "wrench", "hammer", "tool", "tools"],
+  light: ["lamp", "bulb", "flashlight", "led", "lighting", "luz"],
+  bag: ["backpack", "luggage", "suitcase", "bag", "tote", "mochila"],
+  shoe: ["shoe", "shoes", "sneaker", "sneakers", "boot", "boots", "zapato"],
+  printer: ["printer", "ink", "toner", "labelmaker", "label"],
+  monitor: ["monitor", "display", "screen"],
+  mouse: ["mouse", "keyboard", "teclado", "keypad"],
+};
+
+function familyOfTitle(title: string): Set<string> {
+  const toks = new Set(tokens(title));
+  const joined = toks;
+  // also match compound powerbank etc already tokenized
+  const families = new Set<string>();
+  for (const [family, keys] of Object.entries(PRODUCT_FAMILIES)) {
+    for (const key of keys) {
+      if (joined.has(key)) {
+        families.add(family);
+        break;
+      }
+      // multi-word keys collapsed
+      if (key.includes(" ") && title.toLowerCase().includes(key)) {
+        families.add(family);
+        break;
+      }
+    }
+  }
+  return families;
+}
+
+/** Shared product families between two titles (tablet∩tablet, not tablet∩pill). */
+export function sharedProductFamilies(
+  a: PromoGroupCard,
+  b: PromoGroupCard,
+): string[] {
+  const fa = familyOfTitle(a.title);
+  const fb = familyOfTitle(b.title);
+  return [...fa].filter((f) => fb.has(f));
+}
+
+/**
+ * Hard relatedness gate for RON / strict packs.
+ * Same brand alone is NOT enough. Need shared family or ≥2 title tokens.
+ * Different known families (tablet vs supplement) always fail.
+ */
+export function productsAreStrictlyRelated(
+  a: PromoGroupCard,
+  b: PromoGroupCard,
+): boolean {
+  const aa = asinOf(a);
+  const bb = asinOf(b);
+  if (aa && bb && aa === bb) return false;
+  const ia = productImageKey(a.imageUrl);
+  const ib = productImageKey(b.imageUrl);
+  if (ia && ib && ia === ib) return false;
+
+  const fa = familyOfTitle(a.title);
+  const fb = familyOfTitle(b.title);
+  const families = [...fa].filter((f) => fb.has(f));
+  if (families.length >= 1) return true;
+  // Known family clash → never related (tablet ≠ pill, even with shared brand)
+  if (fa.size > 0 && fb.size > 0) return false;
+
+  const ta = new Set(tokens(a.title).slice(0, 12));
+  const tb = new Set(tokens(b.title).slice(0, 12));
+  const shared = [...ta].filter((t) => tb.has(t));
+  // Require 2+ meaningful tokens when no family match
+  if (shared.length >= 2) return true;
+
+  return false;
+}
+
+/** Every pair in the pack must pass the strict gate. */
+export function isCoherentPromoPack(cards: PromoGroupCard[]): boolean {
+  if (cards.length < 2) return true;
+  for (let i = 0; i < cards.length; i++) {
+    for (let j = i + 1; j < cards.length; j++) {
+      if (!productsAreStrictlyRelated(cards[i]!, cards[j]!)) return false;
+    }
+  }
+  // Also: whole pack should share one family when any card has a family
+  const familySets = cards.map((c) => familyOfTitle(c.title));
+  const withFamily = familySets.filter((s) => s.size > 0);
+  if (withFamily.length >= 2) {
+    let inter = new Set(withFamily[0]);
+    for (const s of withFamily.slice(1)) {
+      inter = new Set([...inter].filter((f) => s.has(f)));
+    }
+    if (inter.size === 0) return false;
+  }
+  return true;
+}
+
 /** Relatedness of two products (0–1). Soft thresholds so real catalogs cluster. */
 export function productRelatedness(
   a: PromoGroupCard,
@@ -231,13 +401,31 @@ export function productRelatedness(
   if (shared.length >= 2) s += 0.22;
   else if (shared.length === 1) s += 0.12;
 
+  const families = sharedProductFamilies(a, b);
+  if (families.length >= 1) s += 0.35;
+  else {
+    // Different known families → hard clash (tablet vs supplement)
+    const fa = familyOfTitle(a.title);
+    const fb = familyOfTitle(b.title);
+    if (fa.size && fb.size) return Math.min(s, 0.08);
+  }
+
   const ba = brandOf(a);
   const bbBrand = brandOf(b);
-  if (ba && bbBrand && ba === bbBrand && !isJunkBrand(ba)) s += 0.28;
+  // Brand only helps when already family/token related — never alone
+  if (
+    ba &&
+    bbBrand &&
+    ba === bbBrand &&
+    !isJunkBrand(ba) &&
+    (families.length >= 1 || shared.length >= 1)
+  ) {
+    s += 0.18;
+  }
 
   const pa = priceBand(a.priceLabel);
   const pb = priceBand(b.priceLabel);
-  if (pa != null && pb != null && Math.abs(pa - pb) <= 1) s += 0.1;
+  if (pa != null && pb != null && Math.abs(pa - pb) <= 1) s += 0.08;
 
   return Math.min(1, s);
 }
@@ -279,9 +467,18 @@ function packFromCluster(
   cluster: PromoGroupCard[],
   format: "carousel" | "vitrina",
   score: number,
+  opts?: { strict?: boolean },
 ): PromoPackSuggestion | null {
   // Hard uniqueness inside the pack
-  const unique = dedupePromoCards(cluster);
+  let unique = dedupePromoCards(cluster);
+  if (opts?.strict) {
+    // Trim until coherent — drop weakest outliers from the end
+    while (unique.length >= (format === "vitrina" ? 3 : 2)) {
+      if (isCoherentPromoPack(unique)) break;
+      unique = unique.slice(0, -1);
+    }
+    if (!isCoherentPromoPack(unique)) return null;
+  }
   const sized =
     format === "vitrina"
       ? unique.slice(0, Math.min(8, Math.max(3, unique.length)))
@@ -289,6 +486,7 @@ function packFromCluster(
 
   if (format === "vitrina" && sized.length < 3) return null;
   if (format === "carousel" && sized.length < 2) return null;
+  if (opts?.strict && !isCoherentPromoPack(sized)) return null;
 
   const niche = nicheLabel(sized);
   // Never ship chrome niches like "/Go"
@@ -325,6 +523,7 @@ function growCluster(
   used: Set<string>,
   minScore: number,
   maxSize: number,
+  opts?: { strict?: boolean },
 ): PromoGroupCard[] {
   const cluster: PromoGroupCard[] = [seed];
   const ids = new Set([seed.id]);
@@ -341,6 +540,13 @@ function growCluster(
       if (asin && asins.has(asin)) continue;
       const img = productImageKey(c.imageUrl);
       if (img && images.has(img)) continue;
+      if (opts?.strict && !productsAreStrictlyRelated(seed, c)) continue;
+      if (
+        opts?.strict &&
+        !cluster.every((m) => productsAreStrictlyRelated(m, c))
+      ) {
+        continue;
+      }
       const s =
         cluster.reduce((sum, m) => sum + productRelatedness(m, c), 0) /
         cluster.length;
@@ -366,10 +572,15 @@ export function suggestPromoPacks(
   opts?: {
     limit?: number;
     preferVitrina?: boolean;
-    /** Minimum pairwise relatedness (default 0.22; RON uses ~0.36) */
+    /** Minimum pairwise relatedness (default 0.22; RON uses ~0.48) */
     minRelated?: number;
     /** Skip price-band-only packs (tablets + pills). Default false for studio. */
     disallowPriceBandFallback?: boolean;
+    /**
+     * RON mode: every pair must share a product family or ≥2 title tokens.
+     * Brand / price alone never groups products.
+     */
+    strict?: boolean;
   },
 ): PromoPackSuggestion[] {
   const pool = dedupePromoCards(cards);
@@ -379,15 +590,23 @@ export function suggestPromoPacks(
   const limit = Math.min(Math.max(opts?.limit ?? 6, 1), 8);
   const used = new Set<string>();
   const suggestions: PromoPackSuggestion[] = [];
-  const minRelated = Math.max(0.18, Math.min(0.55, opts?.minRelated ?? 0.22));
-  const disallowPriceBand = Boolean(opts?.disallowPriceBandFallback);
+  const strict = Boolean(opts?.strict);
+  const minRelated = Math.max(
+    0.18,
+    Math.min(0.55, opts?.minRelated ?? (strict ? 0.48 : 0.22)),
+  );
+  const disallowPriceBand =
+    Boolean(opts?.disallowPriceBandFallback) || strict;
+  const growOpts = strict ? { strict: true as const } : undefined;
 
   // Rank seeds by how many neighbors they have (dense relatedness hubs).
   const hubs = pool
     .map((c) => {
-      const neighbors = pool.filter(
-        (o) => o.id !== c.id && productRelatedness(c, o) >= minRelated,
-      ).length;
+      const neighbors = pool.filter((o) => {
+        if (o.id === c.id) return false;
+        if (strict && !productsAreStrictlyRelated(c, o)) return false;
+        return productRelatedness(c, o) >= minRelated;
+      }).length;
       return { c, neighbors };
     })
     .sort((a, b) => b.neighbors - a.neighbors);
@@ -397,12 +616,25 @@ export function suggestPromoPacks(
     for (const hub of hubs) {
       if (suggestions.length >= limit) break;
       if (used.has(hub.c.id)) continue;
-      const cluster = growCluster(hub.c, pool, used, minRelated, 8);
+      const cluster = growCluster(
+        hub.c,
+        pool,
+        used,
+        minRelated,
+        8,
+        growOpts,
+      );
       if (cluster.length < 3) continue;
+      if (strict && !isCoherentPromoPack(cluster)) continue;
       // Hard gate: average relatedness must clear the bar (no mixed junk packs)
       const avg = clusterAvgRelatedness(cluster);
       if (avg < minRelated) continue;
-      const pack = packFromCluster(cluster, "vitrina", Math.max(avg, minRelated));
+      const pack = packFromCluster(
+        cluster,
+        "vitrina",
+        Math.max(avg, minRelated),
+        growOpts,
+      );
       if (!pack) continue;
       for (const c of cluster.slice(0, pack.cardIds.length)) used.add(c.id);
       suggestions.push(pack);
@@ -413,13 +645,26 @@ export function suggestPromoPacks(
   for (const hub of hubs) {
     if (suggestions.length >= limit) break;
     if (used.has(hub.c.id)) continue;
-    const cluster = growCluster(hub.c, pool, used, minRelated, 5);
+    const cluster = growCluster(
+      hub.c,
+      pool,
+      used,
+      minRelated,
+      5,
+      growOpts,
+    );
     if (cluster.length < 2) continue;
+    if (strict && !isCoherentPromoPack(cluster)) continue;
     const format: "carousel" | "vitrina" =
       preferVitrina && cluster.length >= 3 ? "vitrina" : "carousel";
     const avg = clusterAvgRelatedness(cluster);
     if (avg < minRelated * 0.9) continue;
-    const pack = packFromCluster(cluster, format, Math.max(avg, minRelated * 0.9));
+    const pack = packFromCluster(
+      cluster,
+      format,
+      Math.max(avg, minRelated * 0.9),
+      growOpts,
+    );
     if (!pack) continue;
     for (const c of cluster.slice(0, pack.cardIds.length)) used.add(c.id);
     suggestions.push(pack);
@@ -461,9 +706,16 @@ export function suggestPromoPacks(
       ...s,
       cardIds: [...new Set(s.cardIds)],
     }))
-    .filter((s) =>
-      s.format === "vitrina" ? s.cardIds.length >= 3 : s.cardIds.length >= 2,
-    )
+    .filter((s) => {
+      if (s.format === "vitrina" ? s.cardIds.length < 3 : s.cardIds.length < 2) {
+        return false;
+      }
+      if (!strict) return true;
+      const packCards = s.cardIds
+        .map((id) => pool.find((c) => c.id === id))
+        .filter((c): c is PromoGroupCard => Boolean(c));
+      return isCoherentPromoPack(packCards);
+    })
     .sort((a, b) => {
       if (a.format !== b.format) return a.format === "vitrina" ? -1 : 1;
       return b.score - a.score;

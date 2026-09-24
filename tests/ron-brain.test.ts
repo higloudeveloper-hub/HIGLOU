@@ -210,6 +210,48 @@ describe("RON brain", () => {
     expect(decision.action).toBe("publish");
   });
 
+  it("never packs a tablet with a supplement — falls back to ads or tablet-only", () => {
+    const hits = [
+      hit("B0TABMIX01", "Kids Tablet 10 inch Android", "Yosa"),
+      hit("B0TABMIX02", "Kids Tablet 8 inch WiFi", "Yosa"),
+      hit("B0PILLMX01", "Kidney Support Supplement Capsules", "AminAvast"),
+      hit("B0PILLMX02", "Vitamin D3 Softgel Pills 5000IU", "NatureMade"),
+    ];
+    const map = new Map(
+      hits.map((h) => [
+        h.asin,
+        {
+          linkUrl: `https://higlou.vercel.app/go/${h.asin.slice(-4)}`,
+          imageUrl: h.imageUrl,
+          title: h.title,
+        },
+      ]),
+    );
+    const catalog = buildRonCatalog({
+      hits,
+      affiliateByAsin: map,
+      appOrigin: "https://higlou.vercel.app",
+    });
+    const decision = decideRonPublish({
+      catalog,
+      learning: RON_DEFAULT_LEARNING,
+      seed: 42,
+    });
+    expect(decision.action).toBe("publish");
+    if (decision.action === "publish") {
+      const blob = decision.cards.map((c) => c.title).join(" ").toLowerCase();
+      const hasTab = /tablet/.test(blob);
+      const hasPill = /kidney|supplement|capsule|vitamin|softgel|pill/.test(
+        blob,
+      );
+      expect(hasTab && hasPill).toBe(false);
+      if (decision.cards.length >= 2) {
+        // Multi-card packs must be same family
+        expect(hasTab || hasPill).toBe(true);
+      }
+    }
+  });
+
   it("skip reason does not send the user to Find Winners", () => {
     const decision = decideRonPublish({
       catalog: [],

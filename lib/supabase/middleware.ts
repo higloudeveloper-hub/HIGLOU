@@ -8,6 +8,7 @@ const PUBLIC_PATH_PREFIXES = [
   "/welcome",
   "/hd-capture",
   "/go",
+  "/compare",
 ];
 const PUBLIC_EXACT_PATHS = [
   "/api/health",
@@ -16,6 +17,7 @@ const PUBLIC_EXACT_PATHS = [
   "/api/admin/kill-don-baraton-facebook",
   "/api/admin/purge-listings-winners",
   "/api/cron/ron",
+  "/api/compare",
 ];
 
 /** Inline — Edge middleware must not import app lib paths that can break the bundle. */

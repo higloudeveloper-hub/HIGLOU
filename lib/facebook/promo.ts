@@ -160,10 +160,9 @@ async function publishLinkCarousel(opts: {
 }
 
 /**
- * Single product: tappable link card on the Page.
- * Caption = marketing text only. Link attachment = /go (or Amazon) URL.
- * Never set picture/name/description — Graph ignores them and often drops
- * the clickable preview. Facebook scrapes /go OG instead.
+ * Single product: tappable card with a real photo.
+ * Prefer child_attachments + rehosted picture so Facebook never scrapes
+ * a blank ads-system /go OG card. Clean {link}-only is last resort.
  */
 async function publishSingleLinkCard(opts: {
   pageId: string;
@@ -191,7 +190,77 @@ async function publishSingleLinkCard(opts: {
     `https://graph.facebook.com/v21.0/${opts.pageId}/feed`,
   );
 
-  // 1) Clean link post — Facebook builds the card from OG (/go crawler page)
+  const name = copy.cardName(opts.card.title);
+  const description = copy.cardDescription(
+    opts.card.priceLabel,
+    opts.card.discountPercent,
+    opts.card.sourcePlatform,
+  );
+  const picture = String(opts.card.imageUrl || "").trim();
+  const hasPicture = /^https?:\/\//i.test(picture);
+
+  // 1) Primary: child_attachments with hosted picture (same as carousel)
+  //    — Graph scrapes our CDN, not Amazon widgets.
+  if (hasPicture) {
+    const child: Record<string, string> = {
+      link,
+      name: name || "Deal",
+      description: description || "Shop now",
+      picture,
+    };
+    const multi = await fetch(endpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        message: caption,
+        link,
+        child_attachments: [child, { ...child }],
+        access_token: opts.accessToken,
+      }),
+    });
+    const multiBody = (await multi.json().catch(() => null)) as {
+      id?: string;
+      error?: { message?: string; error_user_msg?: string };
+    } | null;
+    if (multi.ok && multiBody?.id) {
+      return { id: multiBody.id };
+    }
+
+    // 2) Photo post with link in caption (Graph owns the binary)
+    const photoEndpoint = new URL(
+      `https://graph.facebook.com/v21.0/${opts.pageId}/photos`,
+    );
+    const photo = await fetch(photoEndpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        url: picture,
+        caption: `${caption}\n\n${link}`,
+        published: true,
+        access_token: opts.accessToken,
+      }),
+    });
+    const photoBody = (await photo.json().catch(() => null)) as {
+      id?: string;
+      post_id?: string;
+      error?: { message?: string; error_user_msg?: string };
+    } | null;
+    if (photo.ok && (photoBody?.post_id || photoBody?.id)) {
+      return { id: photoBody.post_id || photoBody.id };
+    }
+
+    return {
+      error: humanizeFacebookGraphError(
+        multiBody?.error?.error_user_msg ||
+          multiBody?.error?.message ||
+          photoBody?.error?.error_user_msg ||
+          photoBody?.error?.message ||
+          `Facebook link ${multi.status}`,
+      ),
+    };
+  }
+
+  // 3) No picture available — clean link post (OG only; may gray out)
   const primary = await fetch(endpoint, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -209,46 +278,11 @@ async function publishSingleLinkCard(opts: {
     return { id: primaryBody.id };
   }
 
-  // 2) Fallback: child_attachments (same API as carousel) — guaranteed tap target
-  const name = copy.cardName(opts.card.title);
-  const description = copy.cardDescription(
-    opts.card.priceLabel,
-    opts.card.discountPercent,
-    opts.card.sourcePlatform,
-  );
-  const picture = String(opts.card.imageUrl || "").trim();
-  const child: Record<string, string> = {
-    link,
-    name: name || "Deal",
-    description: description || "Shop now",
-  };
-  if (/^https?:\/\//i.test(picture)) child.picture = picture;
-
-  const multi = await fetch(endpoint, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      message: caption,
-      link,
-      child_attachments: [child, { ...child }],
-      access_token: opts.accessToken,
-    }),
-  });
-  const multiBody = (await multi.json().catch(() => null)) as {
-    id?: string;
-    error?: { message?: string; error_user_msg?: string };
-  } | null;
-  if (multi.ok && multiBody?.id) {
-    return { id: multiBody.id };
-  }
-
   return {
     error: humanizeFacebookGraphError(
-      multiBody?.error?.error_user_msg ||
-        multiBody?.error?.message ||
-        primaryBody?.error?.error_user_msg ||
+      primaryBody?.error?.error_user_msg ||
         primaryBody?.error?.message ||
-        `Facebook link ${multi.status || primary.status}`,
+        `Facebook link ${primary.status}`,
     ),
   };
 }
@@ -347,7 +381,34 @@ export async function publishFacebookPromo(
       );
 
     const hosted = await rehostPromoImagesForFacebook([first], opts.userId);
-    const card = hosted.ok ? hosted.cards[0]! : first;
+    if (!hosted.ok) {
+      await markFacebookConnectionMeta(supabase, opts.userId, {
+        lastError: hosted.error,
+      });
+      return {
+        ok: false,
+        error:
+          hosted.error ||
+          "No se pudo preparar la foto para Facebook. Sin imagen real no publicamos (evita el cuadro gris).",
+      };
+    }
+    const card = hosted.cards[0]!;
+
+    // Persist rehosted CDN URL onto the /go smart link so OG scrapes work too
+    try {
+      const slug = String(card.linkUrl || "").match(
+        /\/go\/([a-z0-9_-]+)/i,
+      )?.[1];
+      if (slug && /^https?:\/\//i.test(card.imageUrl)) {
+        await supabase
+          .from("smart_links")
+          .update({ og_image_url: card.imageUrl })
+          .eq("user_id", opts.userId)
+          .eq("slug", slug.toLowerCase());
+      }
+    } catch {
+      /* column may not exist yet — publish still has child_attachments picture */
+    }
 
     const posted = await publishSingleLinkCard({
       pageId: creds.pageId,
@@ -407,6 +468,21 @@ export async function publishFacebookPromo(
       lastError: hosted.error,
     });
     return { ok: false, error: hosted.error };
+  }
+
+  // Stamp /go OG images for each card so scrapers also get real photos
+  try {
+    for (const c of hosted.cards) {
+      const slug = String(c.linkUrl || "").match(/\/go\/([a-z0-9_-]+)/i)?.[1];
+      if (!slug || !/^https?:\/\//i.test(c.imageUrl)) continue;
+      await supabase
+        .from("smart_links")
+        .update({ og_image_url: c.imageUrl })
+        .eq("user_id", opts.userId)
+        .eq("slug", slug.toLowerCase());
+    }
+  } catch {
+    /* optional until migration applied */
   }
 
   // Cover card first for vitrina when provided

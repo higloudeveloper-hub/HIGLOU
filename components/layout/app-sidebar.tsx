@@ -10,6 +10,7 @@ import {
   Images,
   LogOut,
   Plug,
+  Scale,
   Search,
   Settings,
   Share2,
@@ -53,6 +54,13 @@ const WORKSPACE_NAV_TOP: NavItem[] = [
     hint: "Opportunities",
     icon: Search,
     match: (path) => path === "/winners" || path.startsWith("/winners/"),
+  },
+  {
+    href: "/compare",
+    label: "Compare",
+    hint: "Más barato que Amazon",
+    icon: Scale,
+    match: (path) => path === "/compare" || path.startsWith("/compare/"),
   },
 ];
 

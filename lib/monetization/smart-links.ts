@@ -231,13 +231,24 @@ export async function peekSmartLink(
     return { ok: false, error: "Smart Links are disabled", status: 404 };
   }
 
-  const { data: smart, error } = await supabase
+  let { data: smart, error } = await supabase
     .from("smart_links")
     .select(
-      "id, affiliate_link_id, product_id, destination_url, label",
+      "id, affiliate_link_id, product_id, destination_url, label, og_image_url",
     )
     .eq("slug", slug)
     .maybeSingle();
+
+  // Migration may not be applied yet — fall back without og_image_url
+  if (error) {
+    const retry = await supabase
+      .from("smart_links")
+      .select("id, affiliate_link_id, product_id, destination_url, label")
+      .eq("slug", slug)
+      .maybeSingle();
+    smart = retry.data as typeof smart;
+    error = retry.error;
+  }
 
   if (error || !smart) {
     return { ok: false, error: "Link not found", status: 404 };
@@ -285,6 +296,12 @@ export async function peekSmartLink(
     const url = String(img?.public_url || "").trim();
     if (/^https?:\/\//i.test(url)) imageUrl = url;
   }
+
+  // Rehosted Facebook CDN wins over listing photos
+  const ogStored = String(
+    (smart as { og_image_url?: string | null }).og_image_url || "",
+  ).trim();
+  if (/^https?:\/\//i.test(ogStored)) imageUrl = ogStored;
 
   if (!destinationUrl || !/^https:\/\//i.test(destinationUrl)) {
     return { ok: false, error: "Invalid destination", status: 502 };

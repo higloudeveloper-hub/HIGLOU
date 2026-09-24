@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { amazonAsinPrimaryImage } from "@/lib/amazon/asin-image";
+import { amazonAsinImageCandidates } from "@/lib/amazon/asin-image";
+import { isWeakFacebookPictureUrl } from "@/lib/facebook/promo-media";
 import { createAdminClient, isSupabaseConfigured } from "@/lib/supabase/admin";
 import {
   peekSmartLink,
@@ -23,6 +24,26 @@ function escapeHtml(s: string): string {
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
+}
+
+/** Never hand Facebook ads-system / 1×1 P-ASIN stubs as og:image. */
+function facebookSafeOgImage(
+  preferred: string | null | undefined,
+  asin: string | null | undefined,
+): string {
+  const direct = String(preferred || "").trim();
+  if (/^https?:\/\//i.test(direct) && !isWeakFacebookPictureUrl(direct)) {
+    return direct;
+  }
+  const id = String(asin || "")
+    .trim()
+    .toUpperCase();
+  if (!/^[A-Z0-9]{10}$/.test(id)) return "";
+  const strong = amazonAsinImageCandidates(id).find(
+    (u) => !isWeakFacebookPictureUrl(u),
+  );
+  // Prefer nothing over a gray-card stub — child_attachments carry the photo
+  return strong || "";
 }
 
 /**
@@ -69,12 +90,7 @@ export async function GET(
         rawTitle && !isJunkPromoTitle(rawTitle) ? rawTitle : null,
         peeked.asin ? `Deal ${peeked.asin}` : "Deal",
       );
-      const image =
-        (peeked.imageUrl && /^https?:\/\//i.test(peeked.imageUrl)
-          ? peeked.imageUrl
-          : null) ||
-        (peeked.asin ? amazonAsinPrimaryImage(peeked.asin) : "") ||
-        "";
+      const image = facebookSafeOgImage(peeked.imageUrl, peeked.asin);
       const desc = "Toca para ver el producto";
       const html = `<!DOCTYPE html>
 <html lang="en">
@@ -87,6 +103,8 @@ export async function GET(
 <meta property="og:url" content="${escapeHtml(publicUrl)}"/>
 ${image ? `<meta property="og:image" content="${escapeHtml(image)}"/>` : ""}
 ${image ? `<meta property="og:image:secure_url" content="${escapeHtml(image)}"/>` : ""}
+${image ? `<meta property="og:image:width" content="1200"/>` : ""}
+${image ? `<meta property="og:image:height" content="1200"/>` : ""}
 <meta name="twitter:card" content="summary_large_image"/>
 <meta name="twitter:title" content="${escapeHtml(title)}"/>
 <link rel="canonical" href="${escapeHtml(publicUrl)}"/>

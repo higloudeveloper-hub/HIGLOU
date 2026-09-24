@@ -112,26 +112,46 @@ function RedRobot({ awake, working }: { awake: boolean; working: boolean }) {
   );
 }
 
+const DEFAULT_STATE: RonPublicState = {
+  enabled: false,
+  mode: "auto",
+  statusMessage: "Listo para encender",
+  lastRunAt: null,
+  lastPostAt: null,
+  lastError: null,
+  postsToday: 0,
+  learning: {
+    niches: {},
+    formats: { ads: 1, carousel: 1.2, vitrina: 1.4 },
+    asins: {},
+    clicksSeen: 0,
+    cycles: 0,
+  },
+  activity: [],
+  working: false,
+};
+
 export function RonAgentFab() {
   const reduce = useReducedMotion();
   const [open, setOpen] = useState(false);
-  const [state, setState] = useState<RonPublicState | null>(null);
+  const [state, setState] = useState<RonPublicState>(DEFAULT_STATE);
   const [busy, setBusy] = useState(false);
-  const [booted, setBooted] = useState(false);
+  const [authed, setAuthed] = useState(true);
 
   const refresh = useCallback(async () => {
     try {
       const res = await fetch("/api/ron", { cache: "no-store" });
       if (res.status === 401) {
-        setState(null);
+        setAuthed(false);
+        setState(DEFAULT_STATE);
         return;
       }
+      setAuthed(true);
       if (!res.ok) return;
       const body = (await res.json()) as { state?: RonPublicState };
       if (body.state) setState(body.state);
-      setBooted(true);
     } catch {
-      /* offline */
+      /* keep last known / default — robot stays visible */
     }
   }, []);
 
@@ -143,7 +163,7 @@ export function RonAgentFab() {
 
   // While RON is on and the user is in the app, heartbeat a cycle every ~20 min
   useEffect(() => {
-    if (!state?.enabled) return;
+    if (!state.enabled || !authed) return;
     const id = window.setInterval(() => {
       void fetch("/api/ron", {
         method: "POST",
@@ -172,9 +192,13 @@ export function RonAgentFab() {
         .catch(() => undefined);
     }, 20 * 60_000);
     return () => window.clearInterval(id);
-  }, [state?.enabled]);
+  }, [state.enabled, authed]);
 
   const toggle = async (enabled: boolean) => {
+    if (!authed) {
+      toast.message("Iniciá sesión para encender a RON");
+      return;
+    }
     setBusy(true);
     try {
       const res = await fetch("/api/ron", {
@@ -197,7 +221,6 @@ export function RonAgentFab() {
           : "RON apagado",
       );
       if (enabled) {
-        // Kick first cycle
         void runNow(true);
       }
     } finally {
@@ -206,6 +229,10 @@ export function RonAgentFab() {
   };
 
   const runNow = async (silent = false) => {
+    if (!authed) {
+      toast.message("Iniciá sesión para que RON trabaje");
+      return;
+    }
     setBusy(true);
     try {
       const res = await fetch("/api/ron", {
@@ -243,8 +270,7 @@ export function RonAgentFab() {
     }
   };
 
-  if (!booted || state === null) return null;
-
+  // Always visible — never hide the red robot
   const awake = state.enabled;
   const working = busy || state.working;
   const recent: RonActivity[] = state.activity.slice(0, 6);

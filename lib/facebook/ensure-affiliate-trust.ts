@@ -116,11 +116,26 @@ export async function ensureFacebookPromoAffiliateTrust(
   }
 
   if (needsAmazon && (!flags.moneyEngine || !flags.affiliateEngine)) {
-    return {
-      ok: false,
-      error:
-        "Affiliate Engine está apagado en el servidor (MONEY_ENGINE + AFFILIATE_ENGINE). Sin eso no se puede garantizar la comisión.",
-    };
+    // Still allow publish when every Amazon card is already a trusted hop
+    // (/go smart link or amazon.com?tag=). Blocks only minting new rows.
+    const allTrusted = opts.cards.every((c) => {
+      const linkUrl = String(c.linkUrl || "").trim();
+      if (isSmartGoPath(linkUrl)) return true;
+      if (
+        isAmazonProductUrl(linkUrl) &&
+        amazonUrlHasAssociateTag(linkUrl, associateTag)
+      ) {
+        return true;
+      }
+      return false;
+    });
+    if (!allTrusted) {
+      return {
+        ok: false,
+        error:
+          "Affiliate Engine está apagado en el servidor (MONEY_ENGINE + AFFILIATE_ENGINE). Sin eso no se puede garantizar la comisión.",
+      };
+    }
   }
 
   const out: TrustPromoCard[] = [];

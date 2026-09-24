@@ -22,6 +22,9 @@ export type TrustPromoCard = {
   linkUrl: string;
   priceLabel?: string | null;
   asin?: string | null;
+  imageFallbacks?: string[] | null;
+  discountPercent?: number | null;
+  sourcePlatform?: string | null;
 };
 
 function appOrigin(): string {

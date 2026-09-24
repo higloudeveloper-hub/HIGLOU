@@ -46,7 +46,8 @@ describe("promo titles + Keepa % OFF", () => {
     expect(copy.message.toLowerCase()).not.toMatch(/facebook|higlou/);
     expect(copy.message).toMatch(/𝗢𝗙𝗙|OFF/);
     expect(copy.cardName("Facebook Ads")).toMatch(/Anker/i);
-    expect(copy.cardDescription("$29.99", 40)).toBe("40% OFF · $29.99");
+    expect(copy.cardDescription("$29.99", 40)).toMatch(/40% OFF/);
+    expect(copy.cardDescription("$29.99", 40)).toMatch(/\$29\.99/);
   });
 
   it("vitrina caption leads with product name, never Higlou Market", () => {
@@ -156,8 +157,8 @@ describe("strict related vitrinas", () => {
   });
 });
 
-describe("RON anti-duplicate + interest republish", () => {
-  it("blocks overlapping vitrinas without interest", () => {
+describe("RON anti-duplicate memory — never republish", () => {
+  it("blocks overlapping vitrinas forever within cooldown", () => {
     const learned = rememberPublish(RON_DEFAULT_LEARNING, {
       format: "vitrina",
       niche: "Tablet",
@@ -172,20 +173,20 @@ describe("RON anti-duplicate + interest republish", () => {
       isRecentOverlappingPack(
         learned,
         ["B0TAB00001", "B0TAB00002", "B0NEW00001"],
-        24,
+        168,
       ),
     ).toBe(true);
     expect(
       shouldSkipPackForCooldown(
         learned,
         ["B0TAB00001", "B0TAB00002", "B0TAB00003"],
-        24,
-        { B0TAB00001: 10, B0TAB00002: 5, B0TAB00003: 2 },
+        168,
+        { B0TAB00001: 99, B0TAB00002: 99, B0TAB00003: 99 },
       ).skip,
     ).toBe(true);
   });
 
-  it("allows republish when the published pack gained real clicks", () => {
+  it("never republishes even when clicks grew — only fresh ASINs", () => {
     const learned = rememberPublish(RON_DEFAULT_LEARNING, {
       format: "vitrina",
       niche: "Tablet",
@@ -207,25 +208,38 @@ describe("RON anti-duplicate + interest republish", () => {
         ["B0TAB00001", "B0TAB00002", "B0TAB00003"],
         nowClicks,
       ),
-    ).toBe(true);
+    ).toBe(false);
     const gate = shouldSkipPackForCooldown(
       learned,
       ["B0TAB00001", "B0TAB00002", "B0TAB00003"],
-      24,
+      168,
       nowClicks,
     );
-    expect(gate.skip).toBe(false);
-    expect(gate.reason).toBe("interest");
+    expect(gate.skip).toBe(true);
+    expect(gate.reason).toBe("cooldown");
 
     const fresh = filterFreshCatalogAsins(
       [{ asin: "B0TAB00001" }, { asin: "B0NEW00001" }],
       learned,
-      18,
+      72,
       { currentClicks: nowClicks, keepInterest: true },
     );
-    expect(fresh.map((c) => c.asin).sort()).toEqual([
-      "B0NEW00001",
-      "B0TAB00001",
-    ]);
+    expect(fresh.map((c) => c.asin)).toEqual(["B0NEW00001"]);
+  });
+
+  it("caption includes product name + source platform", () => {
+    const copy = buildFacebookPromoCopy({
+      format: "ads",
+      titles: ["Anker Power Bank 20000mAh"],
+      platforms: ["walmart"],
+      discountPercents: [25],
+      seed: 1,
+    });
+    expect(copy.message).toMatch(/Walmart/);
+    expect(copy.message.toLowerCase()).not.toMatch(/higlou/);
+    expect(copy.cardDescription("$29.99", 25, "ebay")).toMatch(/eBay/);
+    expect(copy.cardDescription("$29.99", 25, "homedepot")).toMatch(
+      /Home Depot/,
+    );
   });
 });

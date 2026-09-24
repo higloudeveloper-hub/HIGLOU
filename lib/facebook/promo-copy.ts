@@ -1,9 +1,13 @@
 import { shortenFacebookCardTitle } from "@/lib/facebook/promo-media";
 import { isJunkPromoTitle } from "@/lib/facebook/promo-title";
+import {
+  majorityPlatform,
+  platformDisplayName,
+} from "@/lib/facebook/source-platform";
 
 /**
- * Facebook Page copy — Amazon Deals editorial aesthetic.
- * Product name first. Keepa % OFF when known. Never "Facebook Ads".
+ * Facebook Page copy — product name + source platform.
+ * Never "Facebook Ads" / "Higlou Market".
  */
 
 export type PromoFormat = "ads" | "carousel" | "vitrina";
@@ -16,6 +20,8 @@ export type PromoCopyInput = {
   prices?: Array<string | null | undefined>;
   /** Keepa / coupon off % (5–90) aligned with titles */
   discountPercents?: Array<number | null | undefined>;
+  /** Source platforms aligned with titles (amazon, ebay, walmart, …) */
+  platforms?: Array<string | null | undefined>;
   /** Optional niche / brand hint */
   niche?: string | null;
   /** Seed so regenerate feels fresh */
@@ -27,10 +33,11 @@ export type PromoCopyResult = {
   message: string;
   /** Vitrina collection title */
   collectionTitle: string;
-  /** One-line card description — % OFF + price */
+  /** One-line card description — platform · % OFF · price */
   cardDescription: (
     priceLabel?: string | null,
     discountPercent?: number | null,
+    platform?: string | null,
   ) => string;
   /** Short card name — product title only */
   cardName: (title: string) => string;
@@ -135,8 +142,8 @@ export function productHook(title: string): string {
 }
 
 /**
- * Build Page-ready copy: product name + optional Keepa % OFF + CTA.
- * Cards: product name + (% OFF · price).
+ * Build Page-ready copy: product name + source platform + optional % OFF.
+ * Cards: product name + (Platform · % OFF · price).
  */
 export function buildFacebookPromoCopy(
   input: PromoCopyInput,
@@ -151,13 +158,22 @@ export function buildFacebookPromoCopy(
   const discounts = (input.discountPercents || []).map(normalizeOff);
   const offs = discounts.filter((d): d is number => d != null);
   const off = offs.length ? Math.max(...offs) : null;
+  const platform = majorityPlatform(
+    input.platforms?.length
+      ? input.platforms
+      : [platformDisplayName("amazon")],
+  );
 
   let message: string;
   let collectionTitle: string;
 
+  const nameLine =
+    hook !== "Deal" ? hook : niche || primaryTitle.slice(0, 28) || "Deal";
+
   if (input.format === "ads") {
     message = [
-      facebookBold(hook),
+      facebookBold(nameLine),
+      platform,
       RULE,
       ...(off != null ? [offLine(off)] : []),
       `${facebookBold("SHOP NOW")} →`,
@@ -167,34 +183,27 @@ export function buildFacebookPromoCopy(
       40,
     );
   } else if (input.format === "carousel") {
-    // Always lead with the product name — never campaign chrome
-    const head =
-      hook !== "Deal"
-        ? hook
-        : niche || "Top Deals";
     message = [
-      facebookBold(String(head).slice(0, 28).toUpperCase()),
+      facebookBold(String(nameLine).slice(0, 28).toUpperCase()),
+      platform,
       RULE_SHORT,
       ...(off != null ? [offLine(off)] : []),
       `${facebookBold("SWIPE")} → ${facebookBold("SHOP")}`,
     ].join("\n");
     collectionTitle = shortenFacebookCardTitle(
-      primaryTitle || niche || head,
+      primaryTitle || niche || nameLine,
       40,
     );
   } else {
-    const head =
-      hook !== "Deal"
-        ? hook
-        : niche || "Today's Deals";
     message = [
-      facebookBold(String(head).slice(0, 28).toUpperCase()),
+      facebookBold(String(nameLine).slice(0, 28).toUpperCase()),
+      platform,
       RULE_SHORT,
       ...(off != null ? [offLine(off)] : []),
       `${facebookBold("SWIPE")} → ${facebookBold("SHOP")}`,
     ].join("\n");
     collectionTitle = shortenFacebookCardTitle(
-      primaryTitle || niche || head,
+      primaryTitle || niche || nameLine,
       40,
     );
   }
@@ -205,12 +214,14 @@ export function buildFacebookPromoCopy(
   return {
     message,
     collectionTitle: collectionTitle.slice(0, 60),
-    cardDescription: (priceLabel, discountPercent) => {
+    cardDescription: (priceLabel, discountPercent, cardPlatform) => {
       const pct = normalizeOff(discountPercent) ?? off;
       const price = priceOnly(priceLabel);
-      if (pct != null && price) return `${pct}% OFF · ${price}`;
-      if (pct != null) return `${pct}% OFF`;
-      return price;
+      const plat = platformDisplayName(cardPlatform || platform);
+      const bits = [plat];
+      if (pct != null) bits.push(`${pct}% OFF`);
+      if (price) bits.push(price);
+      return bits.join(" · ");
     },
     cardName: (title) => {
       const t = cleanTitle(title);

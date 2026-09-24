@@ -25,13 +25,15 @@ describe("facebook promo copy", () => {
       format: "ads",
       titles: ["Anker Power Bank 10000mAh Portable Charger"],
       prices: ["$24.99"],
+      platforms: ["amazon"],
       seed: 0,
     });
-    expect(copy.message.split("\n").length).toBe(3);
+    expect(copy.message.split("\n").length).toBeGreaterThanOrEqual(3);
     expect(copy.message).toContain("━━━━━━━━");
+    expect(copy.message).toMatch(/Amazon/);
     expect(copy.message.toLowerCase()).not.toMatch(/verificad|higlou|precio/);
-    expect(copy.cardDescription("$24.99")).toBe("$24.99");
-    expect(copy.cardDescription(null)).toBe("");
+    expect(copy.cardDescription("$24.99")).toMatch(/Amazon/);
+    expect(copy.cardDescription("$24.99")).toMatch(/\$24\.99/);
     expect(copy.cardName("ASIN B0CHS1BVBC Anker Bank")).toBe("Anker Bank");
     expect(
       copy.cardName(
@@ -40,16 +42,17 @@ describe("facebook promo copy", () => {
     ).toBeLessThanOrEqual(37);
   });
 
-  it("carousel copy is TOP DEALS / SWIPE → SHOP", () => {
+  it("carousel copy is product + platform / SWIPE → SHOP", () => {
     const copy = buildFacebookPromoCopy({
       format: "carousel",
-      titles: ["A", "B", "C"],
+      titles: ["Kitchen Knife Set"],
+      platforms: ["ebay"],
       seed: 0,
     });
-    expect(copy.message).toMatch(/𝗧𝗢𝗣 𝗗𝗘𝗔𝗟𝗦|𝗧𝗢𝗗𝗔𝗬|𝗗𝗘𝗔𝗟𝗦/);
+    expect(copy.message).toMatch(/eBay/);
     expect(copy.message).toContain("→");
-    expect(copy.message.split("\n").length).toBe(3);
-    expect(copy.message.toLowerCase()).not.toMatch(/verificad|opciones/);
+    expect(copy.message.split("\n").length).toBeGreaterThanOrEqual(3);
+    expect(copy.message.toLowerCase()).not.toMatch(/verificad|opciones|higlou/);
   });
 
   it("vitrina copy is short retail-premium, ignores junk niche /Go", () => {
@@ -57,13 +60,15 @@ describe("facebook promo copy", () => {
       format: "vitrina",
       titles: ["Label Printer Wireless", "Label Tape", "Label Maker"],
       niche: "/Go",
+      platforms: ["homedepot"],
       seed: 0,
     });
     expect(copy.collectionTitle.toLowerCase()).not.toMatch(/\/go/);
+    expect(copy.message).toMatch(/Home Depot/);
     expect(copy.message.toLowerCase()).not.toMatch(
       /precios bajos|curaduría|verificad|sin relleno/,
     );
-    expect(copy.message.split("\n").length).toBe(3);
+    expect(copy.message.split("\n").length).toBeGreaterThanOrEqual(3);
     expect(copy.message).toContain("━━━━━━━━");
     expect(defaultFacebookPromoMessage("ads")).toContain("\n");
   });

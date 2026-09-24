@@ -16,6 +16,10 @@ import {
   pickProductTitle,
 } from "@/lib/facebook/promo-title";
 import {
+  platformDisplayName,
+  resolveSourcePlatform,
+} from "@/lib/facebook/source-platform";
+import {
   isRecentNiche,
   rememberPublish,
   scoreAsin,
@@ -31,6 +35,8 @@ export type RonCandidateCard = PromoGroupCard & {
   priceLabel?: string | null;
   imageFallbacks?: string[];
   discountPercent?: number | null;
+  /** Where we found it — Amazon / eBay / Walmart / Home Depot */
+  sourcePlatform?: string | null;
 };
 
 export type RonDecision =
@@ -73,6 +79,7 @@ function pushCard(
     priceLabel?: string | null;
     discountPercent?: number | null;
     meta?: string;
+    sourcePlatform?: string | null;
   },
 ) {
   if (seen.has(opts.asin)) return;
@@ -90,6 +97,7 @@ function pushCard(
     meta: opts.meta || opts.brand || opts.asin,
     imageFallbacks: opts.imageFallbacks,
     discountPercent: opts.discountPercent ?? null,
+    sourcePlatform: opts.sourcePlatform || "Amazon",
   });
 }
 
@@ -149,6 +157,12 @@ export function buildRonCatalog(opts: {
         linkUrl: aff.linkUrl,
         amazonPrice: hit?.buyBoxPrice ?? hit?.amazonPrice,
       });
+    const platform = platformDisplayName(
+      resolveSourcePlatform({
+        sourceMarket: hit?.sourceMarket,
+        mode: hit?.mode,
+      }),
+    );
     pushCard(cards, seen, {
       asin,
       title,
@@ -159,6 +173,7 @@ export function buildRonCatalog(opts: {
       priceLabel: price,
       discountPercent: hit ? keepaOffPercent(hit) : null,
       meta: aff.brand || hit?.brand || asin,
+      sourcePlatform: platform,
     });
   }
 
@@ -170,6 +185,12 @@ export function buildRonCatalog(opts: {
     const aff = opts.affiliateByAsin.get(asin);
     if (!aff?.linkUrl) continue;
     const pack = ronImagePack(asin, hit.imageUrl || aff.imageUrl);
+    const platform = platformDisplayName(
+      resolveSourcePlatform({
+        sourceMarket: hit.sourceMarket,
+        mode: hit.mode,
+      }),
+    );
     pushCard(cards, seen, {
       asin,
       title: pickProductTitle(hit.title, hit.ebayTitle, aff.title),
@@ -185,6 +206,7 @@ export function buildRonCatalog(opts: {
         }),
       discountPercent: keepaOffPercent(hit),
       meta: hit.brand || asin,
+      sourcePlatform: platform,
     });
   }
 
@@ -244,7 +266,7 @@ export function decideRonPublish(opts: {
       action: "skip",
       reason:
         opts.emptyReason ||
-        "Sin productos listos (Keepa + afiliado). RON reintenta solo.",
+        "Sin oportunidades nuevas (todo lo listo ya se publicó). RON espera Keepa fresco.",
     };
   }
 
@@ -264,6 +286,7 @@ export function decideRonPublish(opts: {
       titles: cards.map((c) => c.title),
       prices: cards.map((c) => c.priceLabel),
       discountPercents: cards.map((c) => c.discountPercent),
+      platforms: cards.map((c) => c.sourcePlatform),
       niche: best.pack.niche,
       seed: opts.seed ?? Date.now(),
     });
@@ -293,6 +316,7 @@ export function decideRonPublish(opts: {
     titles: [one.title],
     prices: [one.priceLabel],
     discountPercents: [one.discountPercent],
+    platforms: [one.sourcePlatform],
     seed: opts.seed ?? Date.now(),
   });
   return {

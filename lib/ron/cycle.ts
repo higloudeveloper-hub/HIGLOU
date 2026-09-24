@@ -463,18 +463,35 @@ export async function runRonCycle(
 
   const clickMap = await loadAsinClickMap(supabase, userId);
 
-  // Prefer never-posted Keepa opportunities; keep interest winners for republish
+  // Only never-published ASINs — never fall back to the old catalog
   const freshCatalog = filterFreshCatalogAsins(
     catalog,
     learning,
     RON_ASIN_COOLDOWN_HOURS,
-    { currentClicks: clickMap, keepInterest: true },
   );
 
+  if (!freshCatalog.length) {
+    const msg =
+      "Sin oportunidades nuevas · todo el catálogo ya se publicó · espero Keepa fresco";
+    await appendRonActivity(
+      supabase,
+      userId,
+      {
+        at: new Date().toISOString(),
+        kind: "skip",
+        message: msg,
+      },
+      { statusMessage: msg, learning, lastError: null, working: false },
+    );
+    state = await loadRonState(supabase, userId);
+    return finish({ ok: true, state, skipped: msg });
+  }
+
   const decision = decideRonPublish({
-    catalog: freshCatalog.length ? freshCatalog : catalog,
+    catalog: freshCatalog,
     learning,
-    emptyReason,
+    emptyReason:
+      "Sin pack nuevo relacionado · espero más oportunidades Keepa",
   });
   if (decision.action === "skip") {
     await appendRonActivity(
@@ -500,25 +517,19 @@ export async function runRonCycle(
     learning,
     packAsins,
     RON_SAME_PACK_COOLDOWN_HOURS,
-    clickMap,
   );
 
   if (gate.skip) {
-    // Look for a different related pack OR an old pack that earned clicks
-    const altCatalog = filterFreshCatalogAsins(
-      catalog,
-      learning,
-      RON_ASIN_COOLDOWN_HOURS,
-      { currentClicks: clickMap, keepInterest: true },
-    ).filter((c) => {
+    // Look for a different pack using only fresh ASINs (never republish)
+    const altCatalog = freshCatalog.filter((c) => {
       const a = String(c.asin || "").toUpperCase();
       return !packAsins.includes(a);
     });
     const alt = decideRonPublish({
-      catalog: altCatalog.length ? altCatalog : catalog,
+      catalog: altCatalog,
       learning,
       emptyReason:
-        "Buscando otra vitrina real · o una ya publicada con interés de clicks",
+        "Sin vitrina nueva distinta · no republico lo ya publicado",
     });
     if (alt.action === "publish") {
       const altAsins = alt.cards
@@ -528,31 +539,13 @@ export async function runRonCycle(
         learning,
         altAsins,
         RON_SAME_PACK_COOLDOWN_HOURS,
-        clickMap,
       );
       if (!altGate.skip) {
         publishDecision = alt;
         packAsins = altAsins;
-        if (altGate.reason === "interest") {
-          await appendRonActivity(
-            supabase,
-            userId,
-            {
-              at: new Date().toISOString(),
-              kind: "learn",
-              message: `Interés real · republíco vitrina que está convirtiendo (${alt.niche})`,
-              format: alt.format,
-            },
-            {
-              statusMessage: `Trabajando · republicando por clicks · ${alt.niche}`,
-              working: true,
-              learning,
-            },
-          );
-        }
       } else {
         const msg =
-          "Sin vitrina nueva ni packs con interés aún · escaneo general Keepa en el próximo ciclo";
+          "Sin vitrina nueva · memoria bloquea packs ya publicados · próximo ciclo Keepa";
         await appendRonActivity(
           supabase,
           userId,
@@ -583,22 +576,6 @@ export async function runRonCycle(
       state = await loadRonState(supabase, userId);
       return finish({ ok: true, state, skipped: msg });
     }
-  } else if (gate.reason === "interest") {
-    await appendRonActivity(
-      supabase,
-      userId,
-      {
-        at: new Date().toISOString(),
-        kind: "learn",
-        message: `Esta vitrina ya salió y está generando clicks · la refuerzo`,
-        format: publishDecision.format,
-      },
-      {
-        statusMessage: `Trabajando · refuerzo por interés · ${publishDecision.niche}`,
-        working: true,
-        learning,
-      },
-    );
   }
 
   const dry = opts.dryRun || state.mode === "watch";
@@ -670,6 +647,7 @@ export async function runRonCycle(
       asin: c.asin,
       imageFallbacks: c.imageFallbacks,
       discountPercent: c.discountPercent,
+      sourcePlatform: c.sourcePlatform,
     })),
     coverImageUrl: publishDecision.coverImageUrl,
     collectionTitle: publishDecision.collectionTitle,

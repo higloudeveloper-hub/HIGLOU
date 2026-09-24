@@ -69,16 +69,22 @@ export const RON_MAX_POSTS_PER_DAY = 12;
 export const RON_KEEPA_SCAN_MIN_MINUTES = 60;
 
 /** Don't re-publish the exact same pack within this window (hours). */
-export const RON_SAME_PACK_COOLDOWN_HOURS = 24;
+export const RON_SAME_PACK_COOLDOWN_HOURS = 168; // 7 days — never spam same vitrina
 
 /** Don't reuse an ASIN that already went out recently (hours). */
-export const RON_ASIN_COOLDOWN_HOURS = 18;
+export const RON_ASIN_COOLDOWN_HOURS = 72;
 
 /**
- * Min new affiliate clicks on a published pack before RON may republish it
- * (interest signal). Below this, same vitrina stays blocked.
+ * How long to keep publish fingerprints in learning memory (hours).
+ * Longer than ASIN cooldown so RON remembers what already shipped.
  */
-export const RON_REPUBLISH_MIN_CLICK_GAIN = 3;
+export const RON_PACK_MEMORY_HOURS = 336; // 14 days
+
+/**
+ * @deprecated Interest republish disabled — same vitrina never goes out twice.
+ * Kept for type compat; always treat as unreachable.
+ */
+export const RON_REPUBLISH_MIN_CLICK_GAIN = 999;
 
 /** Soft floor: niche cooldown so variety stays high across cycles (hours). */
-export const RON_NICHE_COOLDOWN_HOURS = 8;
+export const RON_NICHE_COOLDOWN_HOURS = 12;

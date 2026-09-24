@@ -32,6 +32,8 @@ export type PromoCard = {
   imageFallbacks?: string[] | null;
   /** Keepa / coupon off percent (5–90) for card description */
   discountPercent?: number | null;
+  /** Amazon / eBay / Walmart / Home Depot */
+  sourcePlatform?: string | null;
 };
 
 function postUrlFromId(postId: string): string {
@@ -74,7 +76,11 @@ function toChildAttachments(
     .map((c) => ({
       link: c.linkUrl,
       name: copy.cardName(c.title),
-      description: copy.cardDescription(c.priceLabel, c.discountPercent),
+      description: copy.cardDescription(
+        c.priceLabel,
+        c.discountPercent,
+        c.sourcePlatform,
+      ),
       picture: c.imageUrl,
     }));
 }
@@ -95,6 +101,7 @@ async function publishLinkCarousel(opts: {
     titles: opts.cards.map((c) => c.title),
     prices: opts.cards.map((c) => c.priceLabel),
     discountPercents: opts.cards.map((c) => c.discountPercent),
+    platforms: opts.cards.map((c) => c.sourcePlatform),
     seed: 0,
   });
   const children = toChildAttachments(opts.cards, copy);
@@ -160,6 +167,7 @@ async function publishSingleLinkCard(opts: {
     titles: [opts.card.title],
     prices: [opts.card.priceLabel],
     discountPercents: [opts.card.discountPercent],
+    platforms: [opts.card.sourcePlatform],
     seed: 1,
   });
   const caption =
@@ -169,6 +177,7 @@ async function publishSingleLinkCard(opts: {
   const description = copy.cardDescription(
     opts.card.priceLabel,
     opts.card.discountPercent,
+    opts.card.sourcePlatform,
   );
 
   const endpoint = new URL(
@@ -281,6 +290,8 @@ export async function publishFacebookPromo(
           format: "ads",
           titles: [first.title],
           prices: [first.priceLabel],
+          discountPercents: [first.discountPercent],
+          platforms: [first.sourcePlatform],
           seed: 2,
         }).message,
       );
@@ -402,10 +413,11 @@ export async function publishFacebookPromo(
     format: opts.format,
     titles: ordered.map((c) => c.title),
     prices: ordered.map((c) => c.priceLabel),
+    discountPercents: ordered.map((c) => c.discountPercent),
+    platforms: ordered.map((c) => c.sourcePlatform),
     seed: 3,
   });
-  // Caption = editorial message only (TOP DEALS…). Never prepend niche
-  // like "Android" — that looked spammy and broke the Amazon Deals look.
+  // Caption = product name + platform. Never chrome niches.
   // Never include raw product URLs in the text — links live on each card.
   const message =
     stripUrlsFromFacebookCaption(opts.message) ||

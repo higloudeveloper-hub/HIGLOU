@@ -3,7 +3,7 @@ import type { RonFormat, RonLearning } from "@/lib/ron/types";
 import {
   RON_DEFAULT_LEARNING,
   RON_NICHE_COOLDOWN_HOURS,
-  RON_REPUBLISH_MIN_CLICK_GAIN,
+  RON_PACK_MEMORY_HOURS,
 } from "@/lib/ron/types";
 
 export type AsinClickMap = Map<string, number>;
@@ -165,7 +165,7 @@ export function rememberPublish(
   if (asins.length) {
     const key = [...asins].sort().join("|");
     next.recentPacks![key] = now;
-    const cutoff = now - 72 * 60 * 60_000;
+    const cutoff = now - RON_PACK_MEMORY_HOURS * 60 * 60_000;
     for (const [k, ts] of Object.entries(next.recentPacks!)) {
       if (k.startsWith("clicksAt:")) continue;
       if (Number(ts) < cutoff) {
@@ -207,18 +207,17 @@ export function isRecentOverlappingPack(
   if (!ids.length) return false;
   if (isRecentSamePack(learning, ids, cooldownHours)) return true;
   const cutoff = Date.now() - cooldownHours * 60 * 60_000;
-  let hit = 0;
+  // Any shared ASIN already published → overlapping (never re-mix old into new)
   for (const id of ids) {
     const ts = Number(learning.recentPacks?.[`asin:${id}`] || 0);
-    if (ts >= cutoff) hit += 1;
+    if (ts >= cutoff) return true;
   }
-  if (ids.length <= 2) return hit >= 1;
-  return hit / ids.length >= 0.5;
+  return false;
 }
 
 /**
  * How many new clicks this pack earned since RON last published those ASINs.
- * Real opportunity signal — only then may we republish the same vitrina.
+ * Kept for analytics — does NOT unlock republish.
  */
 export function packClickGainSincePublish(
   learning: RonLearning,
@@ -244,47 +243,46 @@ export function packClickGainSincePublish(
   return gain;
 }
 
+/** @deprecated Interest never unlocks the same vitrina again. */
 export function packHasInterest(
-  learning: RonLearning,
-  asins: string[],
-  currentClicks: AsinClickMap | Record<string, number>,
-  minGain = RON_REPUBLISH_MIN_CLICK_GAIN,
+  _learning: RonLearning,
+  _asins: string[],
+  _currentClicks: AsinClickMap | Record<string, number>,
+  _minGain?: number,
 ): boolean {
-  return packClickGainSincePublish(learning, asins, currentClicks) >= minGain;
+  return false;
 }
 
 /**
- * Block same/overlapping packs unless they show real click interest.
- * Fresh opportunities always pass.
+ * Block same/overlapping packs always.
+ * Fresh opportunities only — never republish a vitrina already shipped.
  */
 export function shouldSkipPackForCooldown(
   learning: RonLearning,
   asins: string[],
   cooldownHours: number,
-  currentClicks?: AsinClickMap | Record<string, number> | null,
+  _currentClicks?: AsinClickMap | Record<string, number> | null,
 ): { skip: boolean; reason: "fresh" | "cooldown" | "interest" } {
   if (!isRecentOverlappingPack(learning, asins, cooldownHours)) {
     return { skip: false, reason: "fresh" };
   }
-  if (currentClicks && packHasInterest(learning, asins, currentClicks)) {
-    return { skip: false, reason: "interest" };
-  }
   return { skip: true, reason: "cooldown" };
 }
 
+/**
+ * Catalog slice with only never-published (or cooldown-expired) ASINs.
+ * Interest republish is disabled — published ASINs stay out until cooldown ends.
+ */
 export function filterFreshCatalogAsins<T extends { asin?: string | null }>(
   catalog: T[],
   learning: RonLearning,
   cooldownHours: number,
-  opts?: {
+  _opts?: {
     currentClicks?: AsinClickMap | Record<string, number> | null;
-    /** Keep ASINs that already show interest (eligible for republish). */
     keepInterest?: boolean;
   },
 ): T[] {
   const cutoff = Date.now() - cooldownHours * 60 * 60_000;
-  const clicks = opts?.currentClicks || null;
-  const keepInterest = Boolean(opts?.keepInterest);
   return catalog.filter((c) => {
     const id = String(c.asin || "")
       .trim()
@@ -292,9 +290,6 @@ export function filterFreshCatalogAsins<T extends { asin?: string | null }>(
     if (!/^[A-Z0-9]{10}$/.test(id)) return true;
     const ts = Number(learning.recentPacks?.[`asin:${id}`] || 0);
     if (!ts || ts < cutoff) return true;
-    if (keepInterest && clicks && packHasInterest(learning, [id], clicks, 2)) {
-      return true;
-    }
     return false;
   });
 }

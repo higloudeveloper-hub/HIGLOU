@@ -183,7 +183,7 @@ export function buildFacebookPromoCopy(
     message,
     collectionTitle: collectionTitle.slice(0, 60),
     cardDescription: (priceLabel) => priceOnly(priceLabel),
-    cardName: (title) => shortenFacebookCardTitle(title, 40),
+    cardName: (title) => shortenFacebookCardTitle(title, 36),
   };
 }
 

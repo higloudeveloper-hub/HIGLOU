@@ -715,6 +715,9 @@ export function FacebookAdsStudio() {
             ),
             priceLabel: c.priceLabel,
             asin,
+            imageFallbacks: (c.imageFallbacks || [])
+              .filter((u) => /^https?:\/\//i.test(u))
+              .slice(0, 6),
           };
         })
         .filter((c) => {

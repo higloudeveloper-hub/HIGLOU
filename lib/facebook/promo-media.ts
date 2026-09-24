@@ -1,50 +1,76 @@
 import { amazonAsinImageCandidates } from "@/lib/amazon/asin-image";
 
+/** Known-bad for Facebook scrapers: ads widgets + ASIN placeholder GIFs (1×1). */
+export function isWeakFacebookPictureUrl(url: string | null | undefined): boolean {
+  const u = String(url || "").trim();
+  if (!u || !/^https?:\/\//i.test(u)) return true;
+  if (/amazon-adsystem\.com/i.test(u)) return true;
+  // Classic ASIN placeholder often returns transparent 1×1 — blank FB cards
+  if (/\/images\/P\/[A-Z0-9]{10}\./i.test(u)) return true;
+  if (/\/P\/[A-Z0-9]{10}\.(?:01\.)?(?:LZZZZZZZ|MAIN)/i.test(u)) return true;
+  return false;
+}
+
+function pictureScore(url: string): number {
+  const u = String(url || "").trim();
+  if (!/^https?:\/\//i.test(u)) return -1;
+  if (isWeakFacebookPictureUrl(u)) return 5;
+  // Real Amazon product images (I/{id}) — what Facebook scrapes reliably
+  if (/m\.media-amazon\.com\/images\/I\//i.test(u)) return 100;
+  if (/media-amazon\.com\/images\/I\//i.test(u)) return 95;
+  if (/images-na\.ssl-images-amazon\.com\/images\/I\//i.test(u)) return 90;
+  if (/m\.media-amazon\.com\//i.test(u)) return 70;
+  if (/cloudinary|supabase|higlou|vercel/i.test(u)) return 85;
+  return 40;
+}
+
 /**
- * Facebook Graph `picture` often fails on amazon-adsystem widget URLs
- * (blank cards / dropped child_attachments). Prefer direct CDN images.
+ * Pick the best picture URL for Facebook Graph `child_attachments.picture`.
+ * Prefer Keepa / listing CDN `I/` images over ads-system widgets and P/ASIN stubs.
  */
 export function facebookFriendlyPictureUrl(
   imageUrl: string | null | undefined,
   asin?: string | null,
+  fallbacks: Array<string | null | undefined> = [],
 ): string {
-  const raw = String(imageUrl || "").trim();
   const id = String(asin || "")
     .trim()
     .toUpperCase();
   const asinOk = /^[A-Z0-9]{10}$/.test(id);
 
-  const fromAsin = asinOk
-    ? [
-        `https://m.media-amazon.com/images/P/${id}.01._SCLZZZZZZZ_SX500_.jpg`,
-        `https://m.media-amazon.com/images/P/${id}.01._SCLZZZZZZZ_.jpg`,
-        `https://images-na.ssl-images-amazon.com/images/P/${id}.01._SCLZZZZZZZ_.jpg`,
-        `https://images-na.ssl-images-amazon.com/images/P/${id}.01.MAIN._AC_SX500_.jpg`,
-        ...amazonAsinImageCandidates(id),
-      ]
-    : [];
+  const candidates = [
+    imageUrl,
+    ...fallbacks,
+    ...(asinOk
+      ? [
+          // Last-resort ASIN stubs — weak, but better than empty if nothing else
+          ...amazonAsinImageCandidates(id).filter(
+            (u) => !/amazon-adsystem/i.test(u),
+          ),
+        ]
+      : []),
+  ]
+    .map((u) => String(u || "").trim())
+    .filter((u, i, arr) => Boolean(u) && arr.indexOf(u) === i);
 
-  const isAdsWidget = /amazon-adsystem\.com/i.test(raw);
-  const isDirectCdn =
-    /^https?:\/\//i.test(raw) &&
-    /(m\.media-amazon\.com|images-na\.ssl-images-amazon\.com|media-amazon\.com)/i.test(
-      raw,
-    );
+  if (!candidates.length) return "";
 
-  if (isDirectCdn) return raw;
-  if (isAdsWidget && fromAsin[0]) return fromAsin[0]!;
-  if (/^https?:\/\//i.test(raw) && !isAdsWidget) return raw;
-  if (fromAsin[0]) return fromAsin[0]!;
-  return /^https?:\/\//i.test(raw) ? raw : "";
+  const ranked = [...candidates].sort(
+    (a, b) => pictureScore(b) - pictureScore(a),
+  );
+  const best = ranked[0]!;
+  // Prefer a non-weak URL when available
+  const strong = ranked.find((u) => !isWeakFacebookPictureUrl(u));
+  return strong || best;
 }
 
 /**
  * Short product name for FB carousel cards — retail-readable, not a full ASIN dump.
- * ~40 chars at a word boundary.
+ * ~36 chars at a word boundary (FB truncates aggressively on mobile).
  */
 export function shortenFacebookCardTitle(
   title: string,
-  maxChars = 40,
+  maxChars = 36,
 ): string {
   const clean = String(title || "")
     .replace(/^ASIN\s+[A-Z0-9]{10}\b/i, "")

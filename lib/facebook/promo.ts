@@ -26,6 +26,8 @@ export type PromoCard = {
   priceLabel?: string | null;
   /** When link is a smart redirect, still stamp Amazon buy box via ASIN */
   asin?: string | null;
+  /** Extra image candidates (CDN / Keepa / market) for Facebook scrapers */
+  imageFallbacks?: string[] | null;
 };
 
 function postUrlFromId(postId: string): string {
@@ -42,10 +44,14 @@ type ChildAttachment = {
 };
 
 function healPromoCard(card: PromoCard): PromoCard {
-  const picture = facebookFriendlyPictureUrl(card.imageUrl, card.asin);
+  const picture = facebookFriendlyPictureUrl(
+    card.imageUrl,
+    card.asin,
+    card.imageFallbacks || [],
+  );
   return {
     ...card,
-    title: shortenFacebookCardTitle(card.title, 40),
+    title: shortenFacebookCardTitle(card.title, 36),
     imageUrl: picture,
   };
 }
@@ -321,14 +327,10 @@ export async function publishFacebookPromo(
     prices: ordered.map((c) => c.priceLabel),
     seed: 3,
   });
-  const titleBit =
-    opts.format === "vitrina" && opts.collectionTitle
-      ? `${opts.collectionTitle.trim()}\n`
-      : opts.format === "vitrina"
-        ? `${fallbackCopy.collectionTitle}\n`
-        : "";
+  // Caption = editorial message only (TOP DEALS…). Never prepend niche
+  // like "Android" — that looked spammy and broke the Amazon Deals look.
   const message =
-    `${titleBit}${String(opts.message || "").trim() || fallbackCopy.message}`.trim();
+    String(opts.message || "").trim() || fallbackCopy.message;
 
   try {
     const posted = await publishLinkCarousel({

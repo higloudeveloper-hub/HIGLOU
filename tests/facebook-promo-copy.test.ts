@@ -37,7 +37,7 @@ describe("facebook promo copy", () => {
       copy.cardName(
         "YosaToo Kids Tablet 10 inch Android with Case Charger Bundle Extra Long Name",
       ).length,
-    ).toBeLessThanOrEqual(41);
+    ).toBeLessThanOrEqual(37);
   });
 
   it("carousel copy is TOP DEALS / SWIPE → SHOP", () => {

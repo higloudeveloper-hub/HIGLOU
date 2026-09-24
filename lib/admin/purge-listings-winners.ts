@@ -10,6 +10,13 @@ export type PurgeResult = {
   version: string;
 };
 
+export type PurgeSkipResult = {
+  ok: true;
+  skipped: true;
+  version: string;
+  stamped?: number;
+};
+
 async function countRows(
   admin: SupabaseClient,
   table: string,
@@ -153,6 +160,14 @@ export async function purgeListingsAndFindWinners(
 export async function maybeAutoPurgeListingsWinners(
   admin: SupabaseClient,
 ): Promise<PurgeResult | { ok: true; skipped: true; version: string }> {
+  const ledgerCount = await countRows(admin, "opportunity_ledger");
+  const productCount = await countRows(admin, "products");
+  const nicheCount = await countRows(admin, "opportunity_niche_stats");
+  const emptyTables =
+    (ledgerCount ?? 0) === 0 &&
+    (productCount ?? 0) === 0 &&
+    (nicheCount ?? 0) === 0;
+
   const { data: ronRows } = await admin
     .from("ron_agent_state")
     .select("user_id, learning")
@@ -169,7 +184,8 @@ export async function maybeAutoPurgeListingsWinners(
       return learning.historyPurgeVersion === LISTINGS_WINNERS_PURGE_VERSION;
     });
 
-  if (allStamped) {
+  // Already clean (or never had history) — do not keep re-wiping
+  if (emptyTables && (allStamped || rows.length === 0)) {
     return {
       ok: true,
       skipped: true,
@@ -177,17 +193,40 @@ export async function maybeAutoPurgeListingsWinners(
     };
   }
 
-  const ledgerCount = await countRows(admin, "opportunity_ledger");
-  const productCount = await countRows(admin, "products");
-  const emptyTables =
-    (ledgerCount ?? 0) === 0 && (productCount ?? 0) === 0;
-
-  // No RON rows and nothing to wipe — stamp is unnecessary; stay quiet
-  if (rows.length === 0 && emptyTables) {
+  if (allStamped && emptyTables) {
     return {
       ok: true,
       skipped: true,
       version: LISTINGS_WINNERS_PURGE_VERSION,
+    };
+  }
+
+  // Tables empty but RON not stamped yet — stamp only, no wipe needed
+  if (emptyTables && rows.length > 0 && !allStamped) {
+    let reset = 0;
+    for (const row of rows) {
+      const learning = stampLearning(
+        row.learning as Record<string, unknown> | null,
+      );
+      const { error } = await admin
+        .from("ron_agent_state")
+        .update({
+          learning,
+          activity_log: [],
+          status_message: "Historial limpio · listo para trabajar solo",
+          last_error: null,
+          posts_today: 0,
+          is_working: false,
+        })
+        .eq("user_id", row.user_id);
+      if (!error) reset += 1;
+    }
+    return {
+      ok: true,
+      skipped: true,
+      version: LISTINGS_WINNERS_PURGE_VERSION,
+      // @ts-expect-error extra diagnostic for ops
+      stamped: reset,
     };
   }
 

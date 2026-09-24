@@ -9,7 +9,6 @@ import { NewListingButton } from "@/components/brand/new-listing-button";
 import { FacebookFMark } from "@/components/brand/store-marks";
 import { CreditsPill } from "@/components/credits/credits-pill";
 import { PaidActionProvider } from "@/components/credits/paid-action-provider";
-import { RonAgentFab } from "@/components/ron/ron-agent-fab";
 import {
   Sheet,
   SheetContent,
@@ -130,7 +129,6 @@ export function AppShell({
           {children}
         </main>
       </div>
-      <RonAgentFab />
     </div>
     </PaidActionProvider>
   );

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Instrument_Serif, Inter } from "next/font/google";
 import { Toaster } from "@/components/ui/sonner";
+import { RonAgentFab } from "@/components/ron/ron-agent-fab";
 import "./globals.css";
 
 const instrumentSerif = Instrument_Serif({
@@ -35,6 +36,7 @@ export default function RootLayout({
     >
       <body className="min-h-full bg-background font-sans text-foreground">
         {children}
+        <RonAgentFab />
         <Toaster richColors position="top-right" />
       </body>
     </html>

@@ -281,7 +281,7 @@ export function RonAgentFab() {
         type="button"
         aria-label="RON · agente Higlou"
         onClick={() => setOpen(true)}
-        className="fixed right-4 bottom-4 z-[60] size-[4.25rem] rounded-full border-2 border-[#7f1d1d] bg-[#450a0a] p-1.5 shadow-[0_12px_40px_rgba(185,28,28,0.45)] md:right-6 md:bottom-6"
+        className="fixed right-4 bottom-4 z-[9999] size-[4.25rem] rounded-full border-2 border-[#7f1d1d] bg-[#450a0a] p-1.5 shadow-[0_12px_40px_rgba(185,28,28,0.45)] md:right-6 md:bottom-6"
         initial={reduce ? false : { scale: 0.7, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
         whileHover={reduce ? undefined : { scale: 1.06 }}
@@ -296,7 +296,7 @@ export function RonAgentFab() {
       <AnimatePresence>
         {open ? (
           <motion.div
-            className="fixed inset-0 z-[70] flex items-end justify-end p-4 md:items-end md:p-6"
+            className="fixed inset-0 z-[10000] flex items-end justify-end p-4 md:items-end md:p-6"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}

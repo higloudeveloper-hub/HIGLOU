@@ -3,13 +3,20 @@ import { createAdminClient, isSupabaseConfigured } from "@/lib/supabase/admin";
 import { resolveAndTrackSmartLink } from "@/lib/monetization/smart-links";
 import { isMoneyEngineEnabled, getMonetizationFlags } from "@/lib/monetization/flags";
 import { logMonetizationEvent } from "@/lib/monetization/observability";
+import {
+  amazonAppBridgeHtml,
+  buildAmazonAppDeepLinks,
+  isAmazonAppCrawler,
+  isMobileClient,
+} from "@/lib/amazon/app-deep-link";
+import { isAmazonProductUrl } from "@/lib/monetization/affiliate/tagged-url";
 
 export const runtime = "nodejs";
 
 /**
  * Public redirect for Smart Links.
- * Final hop is always the real destination (e.g. Amazon with Associate tag).
- * No cloaking of the destination domain beyond a single analytics redirect.
+ * On mobile Amazon destinations → open the Amazon app (deep link bridge).
+ * Crawlers / desktop → normal 302 to tagged https.
  */
 export async function GET(
   request: Request,
@@ -28,7 +35,10 @@ export async function GET(
     return NextResponse.json({ error: "Storage unavailable" }, { status: 503 });
   }
 
-  const source = new URL(request.url).searchParams.get("src");
+  const url = new URL(request.url);
+  const source = url.searchParams.get("src");
+  const forceWeb = url.searchParams.get("web") === "1";
+  const ua = request.headers.get("user-agent");
 
   try {
     const admin = createAdminClient();
@@ -41,7 +51,30 @@ export async function GET(
         { status: resolved.status },
       );
     }
-    return NextResponse.redirect(resolved.destinationUrl, 302);
+
+    const destination = resolved.destinationUrl;
+
+    // Prefer Amazon Shopping app for mobile shoppers (Facebook taps)
+    if (
+      !forceWeb &&
+      !isAmazonAppCrawler(ua) &&
+      isMobileClient(ua) &&
+      isAmazonProductUrl(destination)
+    ) {
+      const links = buildAmazonAppDeepLinks(destination);
+      if (links) {
+        return new NextResponse(amazonAppBridgeHtml(links), {
+          status: 200,
+          headers: {
+            "Content-Type": "text/html; charset=utf-8",
+            "Cache-Control": "private, no-store",
+            "Referrer-Policy": "no-referrer-when-downgrade",
+          },
+        });
+      }
+    }
+
+    return NextResponse.redirect(destination, 302);
   } catch (error) {
     logMonetizationEvent({
       level: "error",

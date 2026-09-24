@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { stripUrlsFromFacebookCaption } from "@/lib/facebook/caption";
 import { humanizeFacebookGraphError } from "@/lib/facebook/config";
 import {
   loadFacebookPageCredentials,
@@ -142,8 +143,8 @@ async function publishLinkCarousel(opts: {
 }
 
 /**
- * Single product: link share (tappable card). No raw URL dump in the caption.
- * Facebook scrapes the destination for the preview image when we don't own the domain.
+ * Single product: tappable link card. Caption = marketing text only.
+ * The product URL is on the card (tap → buy) — never pasted into the title/body.
  */
 async function publishSingleLinkCard(opts: {
   pageId: string;
@@ -151,22 +152,43 @@ async function publishSingleLinkCard(opts: {
   message: string;
   card: PromoCard;
 }): Promise<{ id?: string; error?: string }> {
+  const copy = buildFacebookPromoCopy({
+    format: "ads",
+    titles: [opts.card.title],
+    prices: [opts.card.priceLabel],
+    seed: 1,
+  });
+  const caption =
+    stripUrlsFromFacebookCaption(opts.message) ||
+    stripUrlsFromFacebookCaption(copy.message);
+  const name = copy.cardName(opts.card.title);
+  const description = copy.cardDescription(opts.card.priceLabel);
+
   const endpoint = new URL(
     `https://graph.facebook.com/v21.0/${opts.pageId}/feed`,
   );
+  const payload: Record<string, unknown> = {
+    message: caption,
+    link: opts.card.linkUrl,
+    access_token: opts.accessToken,
+  };
+  // Help Facebook show our photo/title instead of a blank Amazon scrape
+  if (opts.card.imageUrl && /^https?:\/\//i.test(opts.card.imageUrl)) {
+    payload.picture = opts.card.imageUrl;
+  }
+  if (name) payload.name = name;
+  if (description) payload.description = description;
+
   const res = await fetch(endpoint, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      message: opts.message,
-      link: opts.card.linkUrl,
-      access_token: opts.accessToken,
-    }),
+    body: JSON.stringify(payload),
   });
   const body = (await res.json().catch(() => null)) as {
     id?: string;
     error?: { message?: string; error_user_msg?: string };
   } | null;
+
   if (!res.ok || !body?.id) {
     return {
       error: humanizeFacebookGraphError(
@@ -245,24 +267,30 @@ export async function publishFacebookPromo(
     if (!first?.linkUrl) {
       return { ok: false, error: "Elegí al menos un producto con link." };
     }
+    const caption =
+      stripUrlsFromFacebookCaption(opts.message) ||
+      stripUrlsFromFacebookCaption(
+        buildFacebookPromoCopy({
+          format: "ads",
+          titles: [first.title],
+          prices: [first.priceLabel],
+          seed: 2,
+        }).message,
+      );
+
     if (!creds) {
+      // Manual sharer — still no URL spam in the prefilled text
       return shareAffiliateToFacebook(supabase, {
         userId: opts.userId,
         url: first.linkUrl,
-        message: opts.message,
+        message: caption,
         imageUrl: first.imageUrl,
+        title: first.title,
+        description: first.priceLabel,
       });
     }
-    const caption =
-      String(opts.message || "").trim() ||
-      buildFacebookPromoCopy({
-        format: "ads",
-        titles: [first.title],
-        prices: [first.priceLabel],
-        seed: 2,
-      }).message;
 
-    // Prefer a rehosted image so the Page photo path never goes blank
+    // Prefer a rehosted image so the link card never goes blank
     const hosted = await rehostPromoImagesForFacebook([first], opts.userId);
     const card = hosted.ok ? hosted.cards[0]! : first;
 
@@ -273,13 +301,25 @@ export async function publishFacebookPromo(
       card,
     });
     if (!posted.id) {
-      // Fallback: photo + caption (still no URL list spam)
-      return shareAffiliateToFacebook(supabase, {
+      // Same link-card path via share helper (still no URL in caption)
+      const fallback = await shareAffiliateToFacebook(supabase, {
         userId: opts.userId,
         url: first.linkUrl,
         message: caption,
         imageUrl: card.imageUrl,
+        title: card.title,
+        description: card.priceLabel,
       });
+      if (!fallback.ok) {
+        return {
+          ok: false,
+          error:
+            posted.error ||
+            fallback.error ||
+            "No se pudo publicar el producto con link.",
+        };
+      }
+      return fallback;
     }
     await markFacebookConnectionMeta(supabase, opts.userId, {
       lastError: null,
@@ -359,8 +399,10 @@ export async function publishFacebookPromo(
   });
   // Caption = editorial message only (TOP DEALS…). Never prepend niche
   // like "Android" — that looked spammy and broke the Amazon Deals look.
+  // Never include raw product URLs in the text — links live on each card.
   const message =
-    String(opts.message || "").trim() || fallbackCopy.message;
+    stripUrlsFromFacebookCaption(opts.message) ||
+    stripUrlsFromFacebookCaption(fallbackCopy.message);
 
   try {
     const posted = await publishLinkCarousel({

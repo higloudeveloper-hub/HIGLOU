@@ -911,7 +911,12 @@ export function FacebookAdsStudio() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           format,
-          message,
+          // Never send raw product URLs in the caption — they belong on the card
+          message: message
+            .replace(/https?:\/\/[^\s]+/gi, "")
+            .replace(/^\s*(?:👉|➡️)\s*$/gm, "")
+            .replace(/\n{3,}/g, "\n\n")
+            .trim(),
           cards: payloadCards,
           coverImageUrl:
             format === "vitrina" ? coverCard?.imageUrl || null : null,
@@ -943,7 +948,7 @@ export function FacebookAdsStudio() {
       if (body.mode === "page_post") {
         toast.success(
           format === "ads"
-            ? "Publicado · tarjeta con link"
+            ? "Publicado · tarjeta con link (sin URL en el texto)"
             : format === "vitrina"
               ? "Vitrina Alibaba publicada"
               : "Carrusel Alibaba publicado",
@@ -1067,7 +1072,7 @@ export function FacebookAdsStudio() {
           <div className="mb-4 inline-flex w-full max-w-lg rounded-full border border-[#e5e5e5] bg-white p-1">
             {(
               [
-                { id: "ads" as const, label: "Ads", icon: Share2 },
+                { id: "ads" as const, label: "1 producto", icon: Share2 },
                 { id: "carousel" as const, label: "Carrusel · Pro", icon: PanelsTopLeft },
                 { id: "vitrina" as const, label: "Vitrina · Pro", icon: LayoutGrid },
               ] as const
@@ -1095,7 +1100,7 @@ export function FacebookAdsStudio() {
           </div>
           <p className="mb-3 text-[13px] text-[#707070]">
             {format === "ads"
-              ? "1 producto · tarjeta limpia: título + precio."
+              ? "1 producto · tarjeta con link: al tocar abre el producto. El enlace no va en el texto."
               : format === "carousel"
                 ? `Carrusel · ${minNeeded}–${MAX} · TOP DEALS · swipe to shop.`
                 : `Vitrina · ${minNeeded}–${MAX} · selección editorial.`}
@@ -1404,7 +1409,7 @@ export function FacebookAdsStudio() {
           )}
         >
           <p className="text-[11px] font-semibold tracking-[0.16em] text-[#8a8a8a] uppercase">
-            {format === "ads" ? "Ads" : format === "vitrina" ? "Vitrina" : "Carrusel"}
+            {format === "ads" ? "1 producto" : format === "vitrina" ? "Vitrina" : "Carrusel"}
           </p>
           <p className="mt-1 text-[15px] font-semibold text-[#191919]">
             {selectedCards.length} listo
@@ -1505,8 +1510,15 @@ export function FacebookAdsStudio() {
                             {selectedCards[0]!.priceLabel}
                           </p>
                         ) : null}
+                        <p className="mt-0.5 truncate text-[10px] font-medium text-[#8a8a8a]">
+                          Tocá la tarjeta → producto
+                        </p>
                       </div>
                     </div>
+                    <p className="mt-2 text-[11px] text-[#8a8a8a]">
+                      El link no aparece en el texto de arriba — solo en la
+                      tarjeta.
+                    </p>
                   </div>
                 ) : format === "vitrina" ? (
                   <div className="bg-white p-3">
@@ -1632,7 +1644,9 @@ export function FacebookAdsStudio() {
               className="mt-1.5 w-full resize-none rounded-xl border border-[#e5e5e5] px-3 py-2.5 text-[14px] leading-snug outline-none focus:border-[#3665F3]"
             />
             <p className="mt-1.5 text-[11px] text-[#8a8a8a]">
-              La primera línea va en negrita Unicode · se ve bold en Facebook.
+              {format === "ads"
+                ? "Solo el mensaje. El link del producto va en la tarjeta de abajo — no lo pegues acá."
+                : "La primera línea va en negrita Unicode · se ve bold en Facebook."}
             </p>
           </div>
 
@@ -1650,7 +1664,7 @@ export function FacebookAdsStudio() {
             {busy
               ? "Preparando fotos…"
               : format === "ads"
-                ? "Publicar"
+                ? "Publicar 1 producto"
                 : format === "vitrina"
                   ? "Publicar vitrina completa"
                   : "Publicar carrusel completo"}
@@ -1665,12 +1679,17 @@ export function FacebookAdsStudio() {
             <p className="mt-2 text-center text-[12px] font-medium text-[#b42318]">
               {publishBlockedReason}
             </p>
-          ) : format !== "ads" ? (
+          ) : format === "ads" ? (
+            <p className="mt-2 text-center text-[11px] text-[#8a8a8a]">
+              Sale como tarjeta: al hacer click abre el producto. Sin enlace en
+              el texto.
+            </p>
+          ) : (
             <p className="mt-2 text-center text-[11px] text-[#8a8a8a]">
               Higlou sube cada foto a un CDN propio antes de publicar — así
               Facebook no deja tarjetas en blanco.
             </p>
-          ) : null}
+          )}
 
           {postUrl ? (
             <a

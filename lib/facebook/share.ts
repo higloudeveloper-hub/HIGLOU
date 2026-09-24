@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { stripUrlsFromFacebookCaption } from "@/lib/facebook/caption";
 import {
   facebookSharerUrl,
   humanizeFacebookGraphError,
@@ -62,6 +63,9 @@ async function markShareOk(supabase: SupabaseClient, userId: string) {
  * Share an affiliate / smart link to Facebook.
  * When Page is connected → Graph API only (never open sharer dialog).
  * When not connected → return sharer URL for manual share.
+ *
+ * Prefer a link card (tap → product). Never dump the raw URL into the
+ * caption/title text — that looked spammy and hid the product card.
  */
 export async function shareAffiliateToFacebook(
   supabase: SupabaseClient,
@@ -69,8 +73,12 @@ export async function shareAffiliateToFacebook(
     userId: string;
     url: string;
     message?: string;
-    /** Product image — preferred path (photo + caption) when connected */
+    /** Product image for the link preview card */
     imageUrl?: string | null;
+    /** Short product name on the link card */
+    title?: string | null;
+    /** Price / one-line blurb under the card title */
+    description?: string | null;
   },
 ): Promise<
   | {
@@ -101,18 +109,47 @@ export async function shareAffiliateToFacebook(
   }
 
   const message =
-    String(opts.message || "").trim() ||
-    "Oferta verificada · compra con este link";
-  // Keep destination in caption only for photo posts (image itself is not a link)
-  const caption = `${message}\n\n👉 ${destination}`.trim();
+    stripUrlsFromFacebookCaption(opts.message || "") ||
+    "Oferta verificada · tocá la tarjeta para comprar";
   const imageUrl = String(opts.imageUrl || "").trim();
+  const name = String(opts.title || "").trim().slice(0, 100) || undefined;
+  const description =
+    String(opts.description || "").trim().slice(0, 200) || undefined;
 
   try {
-    // Prefer photo post when we have an image (more reliable than bare link posts)
+    // Link card: caption text + tappable preview (NO raw URL in the text)
+    const feedPayload: Record<string, unknown> = {
+      message,
+      link: destination,
+    };
+    if (imageUrl && /^https?:\/\//i.test(imageUrl)) {
+      feedPayload.picture = imageUrl;
+    }
+    if (name) feedPayload.name = name;
+    if (description) feedPayload.description = description;
+
+    const feed = await graphPost(
+      creds.pageId,
+      creds.accessToken,
+      "feed",
+      feedPayload,
+    );
+
+    if (feed.id) {
+      await markShareOk(supabase, opts.userId);
+      return {
+        ok: true,
+        mode: "page_post",
+        postId: feed.id,
+        postUrl: postUrlFromId(feed.id),
+      };
+    }
+
+    // Last resort: photo only — still never paste the URL into the caption
     if (imageUrl && /^https?:\/\//i.test(imageUrl)) {
       const photo = await graphPost(creds.pageId, creds.accessToken, "photos", {
         url: imageUrl,
-        caption,
+        caption: message,
         published: true,
       });
       if (photo.id) {
@@ -124,31 +161,14 @@ export async function shareAffiliateToFacebook(
           postUrl: postUrlFromId(photo.id),
         };
       }
-      // Fall through to feed if photo upload rejected (e.g. bad image host)
     }
 
-    const feed = await graphPost(creds.pageId, creds.accessToken, "feed", {
-      message: caption,
-      link: destination,
-    });
-
-    if (!feed.id) {
-      const err = humanizeFacebookGraphError(
-        feed.error ||
-          "No se pudo publicar en la Page. Revisá que el token sea de Page (no User) y tenga pages_manage_posts + pages_read_engagement.",
-      );
-      await markShareError(supabase, opts.userId, err);
-      // Connected → never soft-open Facebook sharer; surface the Graph error
-      return { ok: false, error: err };
-    }
-
-    await markShareOk(supabase, opts.userId);
-    return {
-      ok: true,
-      mode: "page_post",
-      postId: feed.id,
-      postUrl: postUrlFromId(feed.id),
-    };
+    const err = humanizeFacebookGraphError(
+      feed.error ||
+        "No se pudo publicar en la Page. Revisá que el token sea de Page (no User) y tenga pages_manage_posts + pages_read_engagement.",
+    );
+    await markShareError(supabase, opts.userId, err);
+    return { ok: false, error: err };
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Facebook share failed";
     await markShareError(supabase, opts.userId, msg);

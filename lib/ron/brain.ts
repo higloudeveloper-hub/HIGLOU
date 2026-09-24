@@ -15,6 +15,7 @@ import {
   pickProductTitle,
 } from "@/lib/facebook/promo-title";
 import {
+  isRecentNiche,
   rememberPublish,
   scoreAsin,
   scoreFormat,
@@ -204,11 +205,14 @@ function pickBestPack(
       (s, c) => s + scoreAsin(learning, c.asin),
       0,
     );
+    // Variety: soft-penalize niches we just published (unless learning loves them)
+    const nichePenalty = isRecentNiche(learning, pack.niche) ? 8 : 0;
     const score =
       pack.score * 10 +
       scoreFormat(learning, pack.format) * 2 +
       scoreNiche(learning, pack.niche) * 1.5 +
-      asinBoost * 0.4;
+      asinBoost * 0.4 -
+      nichePenalty;
     if (!best || score > best.score) best = { pack, score };
   }
   return best;

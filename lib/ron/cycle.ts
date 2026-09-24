@@ -17,7 +17,12 @@ import {
   decideRonPublish,
   rememberPublish,
 } from "@/lib/ron/brain";
-import { isRecentOverlappingPack, filterFreshCatalogAsins, learnFromAffiliateClicks } from "@/lib/ron/learn";
+import {
+  filterFreshCatalogAsins,
+  learnFromAffiliateClicks,
+  loadAsinClickMap,
+  shouldSkipPackForCooldown,
+} from "@/lib/ron/learn";
 import { maybeRunRonKeepaScan } from "@/lib/ron/keepa-scan";
 import {
   appendRonActivity,
@@ -273,8 +278,11 @@ export async function runRonCycle(
 
   // Peek ledger first — if empty, force a Keepa scan even inside the hour window
   let ledgerHits = await loadKeepaHits(supabase, userId);
+  // Manual "trabajar ahora" + empty ledger → full multi-modality Keepa pass
   const shouldForceScan =
-    Boolean(opts.forceScan) || ledgerHits.length === 0;
+    Boolean(opts.forceScan) ||
+    Boolean(opts.force) ||
+    ledgerHits.length === 0;
 
   await appendRonActivity(
     supabase,
@@ -451,10 +459,14 @@ export async function runRonCycle(
     },
   );
 
+  const clickMap = await loadAsinClickMap(supabase, userId);
+
+  // Prefer never-posted Keepa opportunities; keep interest winners for republish
   const freshCatalog = filterFreshCatalogAsins(
     catalog,
     learning,
     RON_ASIN_COOLDOWN_HOURS,
+    { currentClicks: clickMap, keepInterest: true },
   );
 
   const decision = decideRonPublish({
@@ -482,41 +494,79 @@ export async function runRonCycle(
     .map((c) => String(c.asin || "").toUpperCase())
     .filter(Boolean);
 
-  // Never reshuffle the same vitrina — even on "Trabajar ahora"
-  if (
-    isRecentOverlappingPack(
-      learning,
-      packAsins,
-      RON_SAME_PACK_COOLDOWN_HOURS,
-    )
-  ) {
+  const gate = shouldSkipPackForCooldown(
+    learning,
+    packAsins,
+    RON_SAME_PACK_COOLDOWN_HOURS,
+    clickMap,
+  );
+
+  if (gate.skip) {
+    // Look for a different related pack OR an old pack that earned clicks
     const altCatalog = filterFreshCatalogAsins(
       catalog,
       learning,
       RON_ASIN_COOLDOWN_HOURS,
+      { currentClicks: clickMap, keepInterest: true },
     ).filter((c) => {
       const a = String(c.asin || "").toUpperCase();
       return !packAsins.includes(a);
     });
     const alt = decideRonPublish({
-      catalog: altCatalog,
+      catalog: altCatalog.length ? altCatalog : catalog,
       learning,
       emptyReason:
-        "Esa vitrina ya salió · espero productos relacionados nuevos de Keepa",
+        "Buscando otra vitrina real · o una ya publicada con interés de clicks",
     });
-    if (
-      alt.action === "skip" ||
-      (alt.action === "publish" &&
-        isRecentOverlappingPack(
-          learning,
-          alt.cards.map((c) => String(c.asin || "").toUpperCase()),
-          RON_SAME_PACK_COOLDOWN_HOURS,
-        ))
-    ) {
-      const msg =
-        alt.action === "skip"
-          ? alt.reason
-          : "Misma secuencia reciente · RON espera nuevas oportunidades Keepa";
+    if (alt.action === "publish") {
+      const altAsins = alt.cards
+        .map((c) => String(c.asin || "").toUpperCase())
+        .filter(Boolean);
+      const altGate = shouldSkipPackForCooldown(
+        learning,
+        altAsins,
+        RON_SAME_PACK_COOLDOWN_HOURS,
+        clickMap,
+      );
+      if (!altGate.skip) {
+        publishDecision = alt;
+        packAsins = altAsins;
+        if (altGate.reason === "interest") {
+          await appendRonActivity(
+            supabase,
+            userId,
+            {
+              at: new Date().toISOString(),
+              kind: "learn",
+              message: `Interés real · republíco vitrina que está convirtiendo (${alt.niche})`,
+              format: alt.format,
+            },
+            {
+              statusMessage: `Trabajando · republicando por clicks · ${alt.niche}`,
+              working: true,
+              learning,
+            },
+          );
+        }
+      } else {
+        const msg =
+          "Sin vitrina nueva ni packs con interés aún · escaneo general Keepa en el próximo ciclo";
+        await appendRonActivity(
+          supabase,
+          userId,
+          {
+            at: new Date().toISOString(),
+            kind: "skip",
+            message: msg,
+            format: decision.format,
+          },
+          { statusMessage: msg, learning, lastError: null, working: false },
+        );
+        state = await loadRonState(supabase, userId);
+        return finish({ ok: true, state, skipped: msg });
+      }
+    } else {
+      const msg = alt.reason;
       await appendRonActivity(
         supabase,
         userId,
@@ -531,10 +581,22 @@ export async function runRonCycle(
       state = await loadRonState(supabase, userId);
       return finish({ ok: true, state, skipped: msg });
     }
-    publishDecision = alt;
-    packAsins = publishDecision.cards
-      .map((c) => String(c.asin || "").toUpperCase())
-      .filter(Boolean);
+  } else if (gate.reason === "interest") {
+    await appendRonActivity(
+      supabase,
+      userId,
+      {
+        at: new Date().toISOString(),
+        kind: "learn",
+        message: `Esta vitrina ya salió y está generando clicks · la refuerzo`,
+        format: publishDecision.format,
+      },
+      {
+        statusMessage: `Trabajando · refuerzo por interés · ${publishDecision.niche}`,
+        working: true,
+        learning,
+      },
+    );
   }
 
   const dry = opts.dryRun || state.mode === "watch";
@@ -636,6 +698,7 @@ export async function runRonCycle(
     format: publishDecision.format,
     niche: publishDecision.niche,
     asins: packAsins,
+    clicksByAsin: clickMap,
   });
 
   const postUrl =

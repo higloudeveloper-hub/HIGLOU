@@ -1,6 +1,12 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { RonFormat, RonLearning } from "@/lib/ron/types";
-import { RON_DEFAULT_LEARNING } from "@/lib/ron/types";
+import {
+  RON_DEFAULT_LEARNING,
+  RON_NICHE_COOLDOWN_HOURS,
+  RON_REPUBLISH_MIN_CLICK_GAIN,
+} from "@/lib/ron/types";
+
+export type AsinClickMap = Map<string, number>;
 
 /**
  * Reinforce niches / formats / ASINs from affiliate click counts.
@@ -30,7 +36,7 @@ export async function learnFromAffiliateClicks(
     .select("asin, click_count, source")
     .eq("user_id", userId)
     .order("click_count", { ascending: false })
-    .limit(40);
+    .limit(80);
 
   let clicks = 0;
   for (const row of links || []) {
@@ -43,7 +49,6 @@ export async function learnFromAffiliateClicks(
     next.asins[asin] = (next.asins[asin] || 0) + Math.min(count, 20) * 0.15;
   }
 
-  // Soft boost formats that RON already used when clicks are growing
   if (clicks > learning.clicksSeen) {
     const gained = clicks - learning.clicksSeen;
     next.formats.vitrina = (next.formats.vitrina || 1) + gained * 0.05;
@@ -53,6 +58,29 @@ export async function learnFromAffiliateClicks(
   next.clicksSeen = Math.max(clicks, learning.clicksSeen);
 
   return next;
+}
+
+/** Live click counts per ASIN for interest detection. */
+export async function loadAsinClickMap(
+  supabase: SupabaseClient,
+  userId: string,
+): Promise<AsinClickMap> {
+  const map: AsinClickMap = new Map();
+  const { data: links } = await supabase
+    .from("affiliate_links")
+    .select("asin, destination_url, click_count")
+    .eq("user_id", userId)
+    .order("click_count", { ascending: false })
+    .limit(200);
+  for (const row of links || []) {
+    const asin = String(row.asin || "")
+      .trim()
+      .toUpperCase();
+    if (!/^[A-Z0-9]{10}$/.test(asin)) continue;
+    const count = Number(row.click_count) || 0;
+    map.set(asin, Math.max(map.get(asin) || 0, count));
+  }
+  return map;
 }
 
 export function scoreFormat(learning: RonLearning, format: RonFormat): number {
@@ -73,10 +101,31 @@ export function scoreNiche(learning: RonLearning, niche: string): number {
   return 1 + Math.min(2, Number(learning.niches[key]) || 0);
 }
 
-/** After a successful post, remember what RON shipped. */
+/** True if this niche was published recently (variety guard). */
+export function isRecentNiche(
+  learning: RonLearning,
+  niche: string,
+  cooldownHours = RON_NICHE_COOLDOWN_HOURS,
+): boolean {
+  const key = String(niche || "")
+    .trim()
+    .toLowerCase();
+  if (!key) return false;
+  const ts = Number(learning.recentPacks?.[`niche:${key}`] || 0);
+  if (!ts) return false;
+  return Date.now() - ts < cooldownHours * 60 * 60_000;
+}
+
+/** After a successful post, remember what RON shipped + click snapshot. */
 export function rememberPublish(
   learning: RonLearning,
-  opts: { format: RonFormat; niche?: string; asins: string[] },
+  opts: {
+    format: RonFormat;
+    niche?: string;
+    asins: string[];
+    /** Click counts at publish time — used later to detect interest */
+    clicksByAsin?: Record<string, number> | AsinClickMap;
+  },
 ): RonLearning {
   const next: RonLearning = {
     niches: { ...learning.niches },
@@ -95,31 +144,42 @@ export function rememberPublish(
   const niche = String(opts.niche || "")
     .trim()
     .toLowerCase();
-  if (niche) next.niches[niche] = (next.niches[niche] || 0) + 0.35;
+  if (niche) {
+    next.niches[niche] = (next.niches[niche] || 0) + 0.35;
+    next.recentPacks![`niche:${niche}`] = Date.now();
+  }
   const asins: string[] = [];
   const now = Date.now();
+  const clickSrc = opts.clicksByAsin;
   for (const asin of opts.asins) {
     const id = asin.toUpperCase();
-    if (/^[A-Z0-9]{10}$/.test(id)) {
-      next.asins[id] = (next.asins[id] || 0) + 0.25;
-      asins.push(id);
-      // Per-ASIN fingerprint so we don't reshuffle the same vitrina
-      next.recentPacks![`asin:${id}`] = now;
-    }
+    if (!/^[A-Z0-9]{10}$/.test(id)) continue;
+    next.asins[id] = (next.asins[id] || 0) + 0.25;
+    asins.push(id);
+    next.recentPacks![`asin:${id}`] = now;
+    let clicksAt = 0;
+    if (clickSrc instanceof Map) clicksAt = Number(clickSrc.get(id) || 0);
+    else if (clickSrc) clicksAt = Number(clickSrc[id] || 0);
+    next.recentPacks![`clicksAt:${id}`] = clicksAt;
   }
   if (asins.length) {
     const key = [...asins].sort().join("|");
     next.recentPacks![key] = now;
-    // Prune packs older than 72h
     const cutoff = now - 72 * 60 * 60_000;
     for (const [k, ts] of Object.entries(next.recentPacks!)) {
-      if (Number(ts) < cutoff) delete next.recentPacks![k];
+      if (k.startsWith("clicksAt:")) continue;
+      if (Number(ts) < cutoff) {
+        delete next.recentPacks![k];
+        if (k.startsWith("asin:")) {
+          const id = k.slice(5);
+          delete next.recentPacks![`clicksAt:${id}`];
+        }
+      }
     }
   }
   return next;
 }
 
-/** True if this exact ASIN set was published recently (not a new opportunity). */
 export function isRecentSamePack(
   learning: RonLearning,
   asins: string[],
@@ -134,17 +194,15 @@ export function isRecentSamePack(
   return Date.now() - ts < cooldownHours * 60 * 60_000;
 }
 
-/**
- * True when ≥ half the ASINs (or any for packs ≤2) were posted recently.
- * Stops reshuffled “same vitrina” with one product swapped.
- */
 export function isRecentOverlappingPack(
   learning: RonLearning,
   asins: string[],
   cooldownHours: number,
 ): boolean {
   const ids = [
-    ...new Set(asins.map((a) => a.toUpperCase()).filter((a) => /^[A-Z0-9]{10}$/.test(a))),
+    ...new Set(
+      asins.map((a) => a.toUpperCase()).filter((a) => /^[A-Z0-9]{10}$/.test(a)),
+    ),
   ];
   if (!ids.length) return false;
   if (isRecentSamePack(learning, ids, cooldownHours)) return true;
@@ -158,19 +216,85 @@ export function isRecentOverlappingPack(
   return hit / ids.length >= 0.5;
 }
 
-/** Filter catalog down to ASINs that are still fresh to post. */
+/**
+ * How many new clicks this pack earned since RON last published those ASINs.
+ * Real opportunity signal — only then may we republish the same vitrina.
+ */
+export function packClickGainSincePublish(
+  learning: RonLearning,
+  asins: string[],
+  currentClicks: AsinClickMap | Record<string, number>,
+): number {
+  const ids = [
+    ...new Set(
+      asins.map((a) => a.toUpperCase()).filter((a) => /^[A-Z0-9]{10}$/.test(a)),
+    ),
+  ];
+  let gain = 0;
+  for (const id of ids) {
+    const published = Number(learning.recentPacks?.[`asin:${id}`] || 0);
+    if (!published) continue;
+    const at = Number(learning.recentPacks?.[`clicksAt:${id}`] || 0);
+    const now =
+      currentClicks instanceof Map
+        ? Number(currentClicks.get(id) || 0)
+        : Number(currentClicks[id] || 0);
+    gain += Math.max(0, now - at);
+  }
+  return gain;
+}
+
+export function packHasInterest(
+  learning: RonLearning,
+  asins: string[],
+  currentClicks: AsinClickMap | Record<string, number>,
+  minGain = RON_REPUBLISH_MIN_CLICK_GAIN,
+): boolean {
+  return packClickGainSincePublish(learning, asins, currentClicks) >= minGain;
+}
+
+/**
+ * Block same/overlapping packs unless they show real click interest.
+ * Fresh opportunities always pass.
+ */
+export function shouldSkipPackForCooldown(
+  learning: RonLearning,
+  asins: string[],
+  cooldownHours: number,
+  currentClicks?: AsinClickMap | Record<string, number> | null,
+): { skip: boolean; reason: "fresh" | "cooldown" | "interest" } {
+  if (!isRecentOverlappingPack(learning, asins, cooldownHours)) {
+    return { skip: false, reason: "fresh" };
+  }
+  if (currentClicks && packHasInterest(learning, asins, currentClicks)) {
+    return { skip: false, reason: "interest" };
+  }
+  return { skip: true, reason: "cooldown" };
+}
+
 export function filterFreshCatalogAsins<T extends { asin?: string | null }>(
   catalog: T[],
   learning: RonLearning,
   cooldownHours: number,
+  opts?: {
+    currentClicks?: AsinClickMap | Record<string, number> | null;
+    /** Keep ASINs that already show interest (eligible for republish). */
+    keepInterest?: boolean;
+  },
 ): T[] {
   const cutoff = Date.now() - cooldownHours * 60 * 60_000;
+  const clicks = opts?.currentClicks || null;
+  const keepInterest = Boolean(opts?.keepInterest);
   return catalog.filter((c) => {
     const id = String(c.asin || "")
       .trim()
       .toUpperCase();
     if (!/^[A-Z0-9]{10}$/.test(id)) return true;
     const ts = Number(learning.recentPacks?.[`asin:${id}`] || 0);
-    return !ts || ts < cutoff;
+    if (!ts || ts < cutoff) return true;
+    if (keepInterest && clicks && packHasInterest(learning, [id], clicks, 2)) {
+      return true;
+    }
+    return false;
   });
 }

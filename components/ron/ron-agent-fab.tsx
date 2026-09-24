@@ -512,10 +512,9 @@ export function RonAgentFab() {
 
               <div className="space-y-3 overflow-y-auto px-4 py-3">
                 <p className="text-[13px] leading-relaxed text-white/75">
-                  En cada escaneo general corre las 6 modalidades Keepa
-                  (velocity, Amazon OOS, price drop, seller vacuum, rising
-                  price, hot deals), interpreta el consenso y publica solo lo
-                  exacto.
+                  En cada escaneo general activa las 6 modalidades Keepa,
+                  busca oportunidades reales y solo republica una vitrina si
+                  ya está generando clicks — si no, publica variedad nueva.
                 </p>
 
                 <div className="grid grid-cols-3 gap-2 text-center">

@@ -73,3 +73,12 @@ export const RON_SAME_PACK_COOLDOWN_HOURS = 24;
 
 /** Don't reuse an ASIN that already went out recently (hours). */
 export const RON_ASIN_COOLDOWN_HOURS = 18;
+
+/**
+ * Min new affiliate clicks on a published pack before RON may republish it
+ * (interest signal). Below this, same vitrina stays blocked.
+ */
+export const RON_REPUBLISH_MIN_CLICK_GAIN = 3;
+
+/** Soft floor: niche cooldown so variety stays high across cycles (hours). */
+export const RON_NICHE_COOLDOWN_HOURS = 8;

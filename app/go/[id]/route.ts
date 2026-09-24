@@ -29,17 +29,28 @@ async function resolveProductVisual(
   if (opts.productId) {
     const { data: product } = await admin
       .from("products")
-      .select("title, cover_url, photos")
+      .select("title")
       .eq("id", opts.productId)
       .eq("user_id", opts.userId)
       .maybeSingle();
     if (product) {
       title = title || String(product.title || "").trim() || null;
-      imageUrl =
-        String(product.cover_url || "").trim() ||
-        (Array.isArray(product.photos) ? String(product.photos[0] || "") : "") ||
-        null;
     }
+    const { data: images } = await admin
+      .from("product_images")
+      .select("public_url, is_primary, sort_order")
+      .eq("product_id", opts.productId)
+      .eq("user_id", opts.userId)
+      .order("sort_order", { ascending: true })
+      .limit(8);
+    const sorted = [...(images || [])].sort((a, b) => {
+      const pa = a.is_primary ? 0 : 1;
+      const pb = b.is_primary ? 0 : 1;
+      if (pa !== pb) return pa - pb;
+      return Number(a.sort_order ?? 0) - Number(b.sort_order ?? 0);
+    });
+    const first = String(sorted[0]?.public_url || "").trim();
+    if (first && /^https?:\/\//i.test(first)) imageUrl = first;
   }
 
   if (opts.asin) {

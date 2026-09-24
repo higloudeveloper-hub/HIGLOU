@@ -20,6 +20,13 @@ export type RonLearning = {
   /** total observed affiliate clicks attributed after posts */
   clicksSeen: number;
   cycles: number;
+  /** ISO timestamp of last live Keepa scan (max 1/hour) */
+  lastKeepaScanAt?: string | null;
+  /**
+   * Fingerprints of recent publishes (sorted ASINs).
+   * Used so RON only posts again when there is a *new* opportunity.
+   */
+  recentPacks?: Record<string, number>;
 };
 
 export type RonPublicState = {
@@ -41,10 +48,15 @@ export const RON_DEFAULT_LEARNING: RonLearning = {
   asins: {},
   clicksSeen: 0,
   cycles: 0,
+  lastKeepaScanAt: null,
+  recentPacks: {},
 };
 
-/** Max organic posts RON may publish per calendar day (credits + spam safety). */
-export const RON_MAX_POSTS_PER_DAY = 6;
+/** Soft safety for credits — opportunity-driven, not a timer between posts. */
+export const RON_MAX_POSTS_PER_DAY = 12;
 
-/** Minimum minutes between automatic publishes. */
-export const RON_MIN_MINUTES_BETWEEN_POSTS = 90;
+/** Live Keepa scans: at most one per hour. */
+export const RON_KEEPA_SCAN_MIN_MINUTES = 60;
+
+/** Don't re-publish the exact same pack within this window (hours). */
+export const RON_SAME_PACK_COOLDOWN_HOURS = 4;

@@ -17,6 +17,8 @@ export async function learnFromAffiliateClicks(
     asins: { ...learning.asins },
     clicksSeen: learning.clicksSeen,
     cycles: learning.cycles + 1,
+    lastKeepaScanAt: learning.lastKeepaScanAt || null,
+    recentPacks: { ...(learning.recentPacks || {}) },
   };
 
   const { data: links } = await supabase
@@ -78,17 +80,45 @@ export function rememberPublish(
     asins: { ...learning.asins },
     clicksSeen: learning.clicksSeen,
     cycles: learning.cycles,
+    lastKeepaScanAt: learning.lastKeepaScanAt || null,
+    recentPacks: { ...(learning.recentPacks || {}) },
   };
   next.formats[opts.format] = (next.formats[opts.format] || 1) + 0.2;
   const niche = String(opts.niche || "")
     .trim()
     .toLowerCase();
   if (niche) next.niches[niche] = (next.niches[niche] || 0) + 0.35;
+  const asins: string[] = [];
   for (const asin of opts.asins) {
     const id = asin.toUpperCase();
     if (/^[A-Z0-9]{10}$/.test(id)) {
       next.asins[id] = (next.asins[id] || 0) + 0.25;
+      asins.push(id);
+    }
+  }
+  if (asins.length) {
+    const key = [...asins].sort().join("|");
+    next.recentPacks![key] = Date.now();
+    // Prune packs older than 48h
+    const cutoff = Date.now() - 48 * 60 * 60_000;
+    for (const [k, ts] of Object.entries(next.recentPacks!)) {
+      if (Number(ts) < cutoff) delete next.recentPacks![k];
     }
   }
   return next;
+}
+
+/** True if this exact ASIN set was published recently (not a new opportunity). */
+export function isRecentSamePack(
+  learning: RonLearning,
+  asins: string[],
+  cooldownHours: number,
+): boolean {
+  const key = [...asins.map((a) => a.toUpperCase()).filter(Boolean)]
+    .sort()
+    .join("|");
+  if (!key) return false;
+  const ts = Number(learning.recentPacks?.[key] || 0);
+  if (!ts) return false;
+  return Date.now() - ts < cooldownHours * 60 * 60_000;
 }

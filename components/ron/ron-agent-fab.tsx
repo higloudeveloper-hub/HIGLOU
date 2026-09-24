@@ -317,9 +317,9 @@ export function RonAgentFab() {
 
               <div className="space-y-3 overflow-y-auto px-4 py-3">
                 <p className="text-[13px] leading-relaxed text-white/75">
-                  Publica vitrinas, carruseles y posts solo. Aprende de Keepa,
-                  de tus clicks y del movimiento de la plataforma — mientras
-                  trabajás o dormís.
+                  Publica cuando ve oportunidades reales. Escanea Keepa máximo
+                  1 vez por hora para enterarse de tendencias — sin cooldown
+                  de 90 min entre posts.
                 </p>
 
                 <div className="grid grid-cols-3 gap-2 text-center">

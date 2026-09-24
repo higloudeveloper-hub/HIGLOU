@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
+import { isRecentSamePack, rememberPublish } from "@/lib/ron/learn";
+import { RON_DEFAULT_LEARNING } from "@/lib/ron/types";
 import {
   buildRonCatalog,
   decideRonPublish,
 } from "@/lib/ron/brain";
-import { rememberPublish, scoreFormat } from "@/lib/ron/learn";
-import { RON_DEFAULT_LEARNING } from "@/lib/ron/types";
 import type { OpportunityProduct } from "@/lib/opportunity/types";
 
 function hit(
@@ -155,16 +155,15 @@ describe("RON brain", () => {
     }
   });
 
-  it("rememberPublish boosts format and niche weights", () => {
+  it("rememberPublish tracks pack fingerprints for opportunity gating", () => {
     const next = rememberPublish(RON_DEFAULT_LEARNING, {
       format: "vitrina",
       niche: "Anker",
-      asins: ["B0TEST0001"],
+      asins: ["B0TEST0001", "B0TEST0002"],
     });
-    expect(scoreFormat(next, "vitrina")).toBeGreaterThan(
-      scoreFormat(RON_DEFAULT_LEARNING, "vitrina"),
+    expect(isRecentSamePack(next, ["B0TEST0002", "B0TEST0001"], 4)).toBe(
+      true,
     );
-    expect(next.niches.anker).toBeGreaterThan(0);
-    expect(next.asins.B0TEST0001).toBeGreaterThan(0);
+    expect(isRecentSamePack(next, ["B0NEW00001"], 4)).toBe(false);
   });
 });

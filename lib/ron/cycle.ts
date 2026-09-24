@@ -10,7 +10,8 @@ import {
   decideRonPublish,
   rememberPublish,
 } from "@/lib/ron/brain";
-import { learnFromAffiliateClicks } from "@/lib/ron/learn";
+import { isRecentSamePack, learnFromAffiliateClicks } from "@/lib/ron/learn";
+import { maybeRunRonKeepaScan } from "@/lib/ron/keepa-scan";
 import {
   appendRonActivity,
   loadRonState,
@@ -18,7 +19,7 @@ import {
 } from "@/lib/ron/memory";
 import {
   RON_MAX_POSTS_PER_DAY,
-  RON_MIN_MINUTES_BETWEEN_POSTS,
+  RON_SAME_PACK_COOLDOWN_HOURS,
   type RonPublicState,
 } from "@/lib/ron/types";
 
@@ -120,15 +121,17 @@ export type RonCycleResult = {
 };
 
 /**
- * One RON work cycle: learn from Keepa + clicks → decide → publish Facebook.
+ * One RON work cycle:
+ * Learn → Keepa scan (max 1/h) → sync affiliates → publish when there is a NEW opportunity.
+ * No fixed minutes-between-posts timer.
  */
 export async function runRonCycle(
   supabase: SupabaseClient,
   opts: {
     userId: string;
-    /** Force a publish even if cooldown (manual "trabajar ahora") */
+    /** Manual "trabajar ahora" */
     force?: boolean;
-    /** watch mode never publishes */
+    forceScan?: boolean;
     dryRun?: boolean;
   },
 ): Promise<RonCycleResult> {
@@ -145,14 +148,14 @@ export async function runRonCycle(
     {
       at: new Date().toISOString(),
       kind: "wake",
-      message: "RON despertó · escaneando Keepa y la plataforma…",
+      message: "RON despertó · buscando oportunidades…",
     },
-    { statusMessage: "Trabajando · escaneando" },
+    { statusMessage: "Trabajando · oportunidades" },
   );
 
-  // Guardrails
+  // Soft daily credit safety (not a timer between posts)
   if (!opts.force && state.postsToday >= RON_MAX_POSTS_PER_DAY) {
-    const msg = `Límite diario (${RON_MAX_POSTS_PER_DAY} posts). Duermo hasta mañana.`;
+    const msg = `Tope diario ${RON_MAX_POSTS_PER_DAY} posts · mañana sigo`;
     await appendRonActivity(
       supabase,
       userId,
@@ -161,23 +164,6 @@ export async function runRonCycle(
     );
     state = await loadRonState(supabase, userId);
     return { ok: true, state, skipped: msg };
-  }
-
-  if (!opts.force && state.lastPostAt) {
-    const mins =
-      (Date.now() - new Date(state.lastPostAt).getTime()) / 60_000;
-    if (mins < RON_MIN_MINUTES_BETWEEN_POSTS) {
-      const wait = Math.ceil(RON_MIN_MINUTES_BETWEEN_POSTS - mins);
-      const msg = `Cooldown ${wait} min · no spameo tu Page`;
-      await appendRonActivity(
-        supabase,
-        userId,
-        { at: new Date().toISOString(), kind: "skip", message: msg },
-        { statusMessage: msg },
-      );
-      state = await loadRonState(supabase, userId);
-      return { ok: true, state, skipped: msg };
-    }
   }
 
   const creds = await loadFacebookPageCredentials(supabase, userId);
@@ -206,7 +192,6 @@ export async function runRonCycle(
     return { ok: false, state, error: msg };
   }
 
-  // Learn from platform clicks
   let learning = await learnFromAffiliateClicks(
     supabase,
     userId,
@@ -220,11 +205,44 @@ export async function runRonCycle(
       kind: "learn",
       message: `Aprendí de ${learning.clicksSeen} clicks · ciclo #${learning.cycles}`,
     },
-    { learning, statusMessage: "Aprendiendo de Keepa y clicks…" },
+    { learning, statusMessage: "Aprendiendo de clicks…" },
   );
 
-  // Keepa winners → affiliate links
-  const hits = await loadKeepaHits(supabase, userId);
+  // Live Keepa scan — at most once per hour
+  const keepa = await maybeRunRonKeepaScan(supabase, {
+    userId,
+    learning,
+    force: Boolean(opts.forceScan),
+    pageOrigin: appOrigin(),
+  });
+  learning = keepa.learning;
+  await appendRonActivity(
+    supabase,
+    userId,
+    {
+      at: new Date().toISOString(),
+      kind: "scan",
+      message: keepa.reason || (keepa.ran ? "Keepa listo" : "Keepa en espera"),
+    },
+    {
+      learning,
+      statusMessage: keepa.ran
+        ? "Keepa: nuevas tendencias…"
+        : keepa.reason || "Usando ledger Keepa…",
+    },
+  );
+
+  // Merge fresh scan winners + ledger
+  const ledgerHits = await loadKeepaHits(supabase, userId);
+  const byAsin = new Map<string, OpportunityProduct>();
+  for (const h of [...keepa.winners, ...ledgerHits]) {
+    const asin = String(h.asin || "")
+      .trim()
+      .toUpperCase();
+    if (asin && !byAsin.has(asin)) byAsin.set(asin, h);
+  }
+  const hits = [...byAsin.values()];
+
   const synced = await ensureAffiliateLinksFromKeepaWinners(supabase, {
     userId,
     hits,
@@ -239,13 +257,12 @@ export async function runRonCycle(
     {
       at: new Date().toISOString(),
       kind: "scan",
-      message: `Keepa: ${hits.length} winners · ${synced.created} links nuevos · ${synced.reused} listos`,
+      message: `Pool: ${hits.length} winners · ${synced.created} links nuevos · ${synced.reused} listos`,
     },
-    { statusMessage: "Eligiendo vitrina / carrusel…" },
+    { statusMessage: "Eligiendo oportunidad…" },
   );
 
   const affiliateByAsin = await loadAffiliateMap(supabase, userId);
-  // Enrich images from Keepa hits
   for (const hit of hits) {
     const asin = String(hit.asin || "")
       .trim()
@@ -279,6 +296,32 @@ export async function runRonCycle(
     return { ok: true, state, skipped: decision.reason };
   }
 
+  const packAsins = decision.cards
+    .map((c) => String(c.asin || "").toUpperCase())
+    .filter(Boolean);
+
+  // Intelligent: only skip if THIS same opportunity was already posted recently
+  if (
+    !opts.force &&
+    isRecentSamePack(learning, packAsins, RON_SAME_PACK_COOLDOWN_HOURS)
+  ) {
+    const msg =
+      "Misma oportunidad ya publicada · espero trends nuevas de Keepa";
+    await appendRonActivity(
+      supabase,
+      userId,
+      {
+        at: new Date().toISOString(),
+        kind: "skip",
+        message: msg,
+        format: decision.format,
+      },
+      { statusMessage: msg, learning, lastError: null },
+    );
+    state = await loadRonState(supabase, userId);
+    return { ok: true, state, skipped: msg };
+  }
+
   const dry = opts.dryRun || state.mode === "watch";
   if (dry) {
     const msg = `Modo watch · preparé ${decision.format}: ${decision.reason}`;
@@ -297,7 +340,6 @@ export async function runRonCycle(
     return { ok: true, state, skipped: msg };
   }
 
-  // Spend credits then publish
   const spent = await spendCredits({
     userId,
     action: "facebook_share",
@@ -352,9 +394,7 @@ export async function runRonCycle(
   learning = rememberPublish(learning, {
     format: decision.format,
     niche: decision.niche,
-    asins: decision.cards
-      .map((c) => String(c.asin || ""))
-      .filter(Boolean),
+    asins: packAsins,
   });
 
   const postUrl =
@@ -379,7 +419,6 @@ export async function runRonCycle(
     },
   );
 
-  // Keep enabled status fresh
   await saveRonPrefs(supabase, userId, {
     enabled: true,
     statusMessage: `Listo · ${okMsg}`,

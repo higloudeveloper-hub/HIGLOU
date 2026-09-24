@@ -38,6 +38,9 @@ function parseLearning(raw: unknown): RonLearning {
     asins: o.asins && typeof o.asins === "object" ? o.asins : {},
     clicksSeen: Number(o.clicksSeen) || 0,
     cycles: Number(o.cycles) || 0,
+    lastKeepaScanAt: o.lastKeepaScanAt || null,
+    recentPacks:
+      o.recentPacks && typeof o.recentPacks === "object" ? o.recentPacks : {},
   };
 }
 

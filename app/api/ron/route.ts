@@ -96,7 +96,6 @@ export async function POST(request: Request) {
       force: Boolean(parsed.force),
     });
     return NextResponse.json({
-      ok: result.ok,
       agent: "ron",
       ...result,
     });

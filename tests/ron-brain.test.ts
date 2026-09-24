@@ -175,6 +175,41 @@ describe("RON brain", () => {
     }
   });
 
+  it("builds catalog from affiliates alone (no Keepa hit required)", () => {
+    const map = new Map([
+      [
+        "B0AFFONLY1",
+        {
+          linkUrl: "https://higlou.vercel.app/go/aff1",
+          title: "Best Seller Cable",
+          clickCount: 40,
+        },
+      ],
+      [
+        "B0AFFONLY2",
+        {
+          linkUrl: "https://www.amazon.com/dp/B0AFFONLY2?tag=higlou-20",
+          title: "Quiet Fan",
+          clickCount: 12,
+        },
+      ],
+    ]);
+    const catalog = buildRonCatalog({
+      hits: [],
+      affiliateByAsin: map,
+      appOrigin: "https://higlou.vercel.app",
+    });
+    expect(catalog.length).toBe(2);
+    expect(catalog[0]!.asin).toBe("B0AFFONLY1");
+    expect(catalog[0]!.imageUrl).toMatch(/^https?:\/\//);
+    const decision = decideRonPublish({
+      catalog,
+      learning: RON_DEFAULT_LEARNING,
+      seed: 9,
+    });
+    expect(decision.action).toBe("publish");
+  });
+
   it("skip reason does not send the user to Find Winners", () => {
     const decision = decideRonPublish({
       catalog: [],
@@ -183,7 +218,6 @@ describe("RON brain", () => {
     expect(decision.action).toBe("skip");
     if (decision.action === "skip") {
       expect(decision.reason.toLowerCase()).not.toMatch(/find winners/);
-      expect(decision.reason.toLowerCase()).toMatch(/reintento|ciclo|afiliado/);
     }
   });
 

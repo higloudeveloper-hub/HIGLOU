@@ -48,25 +48,91 @@ function moneyLabel(n: number | null | undefined): string | null {
   }).format(n);
 }
 
-/** Build publishable cards from Keepa ledger + affiliate smart links. */
+function absoluteLink(linkUrl: string, appOrigin: string): string {
+  if (linkUrl.startsWith("/")) return `${appOrigin}${linkUrl}`;
+  return linkUrl;
+}
+
+/**
+ * Build publishable cards.
+ * Primary source = affiliate / smart links (already earning clicks).
+ * Keepa ledger enriches title / price / image when present.
+ */
 export function buildRonCatalog(opts: {
   hits: OpportunityProduct[];
   affiliateByAsin: Map<
     string,
-    { linkUrl: string; imageUrl?: string | null; title?: string | null }
+    {
+      linkUrl: string;
+      imageUrl?: string | null;
+      title?: string | null;
+      brand?: string | null;
+      priceLabel?: string | null;
+      clickCount?: number;
+    }
   >;
   appOrigin: string;
 }): RonCandidateCard[] {
-  const cards: RonCandidateCard[] = [];
+  const hitByAsin = new Map<string, OpportunityProduct>();
   for (const hit of opts.hits) {
     const asin = String(hit.asin || "")
       .trim()
       .toUpperCase();
-    if (!/^[A-Z0-9]{10}$/.test(asin)) continue;
+    if (/^[A-Z0-9]{10}$/.test(asin)) hitByAsin.set(asin, hit);
+  }
+
+  const cards: RonCandidateCard[] = [];
+  const seen = new Set<string>();
+
+  // 1) Every affiliate ASIN is publishable — this is what already has clicks
+  const affEntries = [...opts.affiliateByAsin.entries()].sort(
+    (a, b) => (b[1].clickCount || 0) - (a[1].clickCount || 0),
+  );
+  for (const [asinRaw, aff] of affEntries) {
+    const asin = String(asinRaw || "")
+      .trim()
+      .toUpperCase();
+    if (!/^[A-Z0-9]{10}$/.test(asin) || seen.has(asin)) continue;
+    if (!aff?.linkUrl) continue;
+    const hit = hitByAsin.get(asin);
+    const preferred = String(aff.imageUrl || hit?.imageUrl || "").trim();
+    const pack = ronImagePack(asin, preferred);
+    if (!/^https?:\/\//i.test(pack.imageUrl)) continue;
+    const title =
+      String(aff.title || hit?.title || hit?.ebayTitle || "").trim() ||
+      `Deal ${asin}`;
+    const price =
+      aff.priceLabel ||
+      moneyLabel(hit?.buyBoxPrice ?? hit?.amazonPrice) ||
+      promoPriceLabelForLink({
+        linkUrl: aff.linkUrl,
+        amazonPrice: hit?.buyBoxPrice ?? hit?.amazonPrice,
+      });
+    const linkUrl = absoluteLink(aff.linkUrl, opts.appOrigin);
+    if (!/^https?:\/\//i.test(linkUrl)) continue;
+    seen.add(asin);
+    cards.push({
+      id: `ron:${asin}`,
+      title: title.slice(0, 80),
+      brand: aff.brand || hit?.brand || null,
+      asin,
+      imageUrl: pack.imageUrl,
+      linkUrl,
+      priceLabel: price,
+      meta: aff.brand || hit?.brand || asin,
+      imageFallbacks: pack.imageFallbacks,
+    });
+  }
+
+  // 2) Keepa hits that got a freshly minted affiliate this cycle
+  for (const hit of opts.hits) {
+    const asin = String(hit.asin || "")
+      .trim()
+      .toUpperCase();
+    if (!/^[A-Z0-9]{10}$/.test(asin) || seen.has(asin)) continue;
     const aff = opts.affiliateByAsin.get(asin);
     if (!aff?.linkUrl) continue;
-    const preferred = String(aff.imageUrl || hit.imageUrl || "").trim();
-    const pack = ronImagePack(asin, preferred);
+    const pack = ronImagePack(asin, hit.imageUrl || aff.imageUrl);
     if (!/^https?:\/\//i.test(pack.imageUrl)) continue;
     const title =
       String(aff.title || hit.title || hit.ebayTitle || "").trim() ||
@@ -77,11 +143,9 @@ export function buildRonCatalog(opts: {
         linkUrl: aff.linkUrl,
         amazonPrice: hit.buyBoxPrice ?? hit.amazonPrice,
       });
-    let linkUrl = aff.linkUrl;
-    if (linkUrl.startsWith("/")) {
-      linkUrl = `${opts.appOrigin}${linkUrl}`;
-    }
+    const linkUrl = absoluteLink(aff.linkUrl, opts.appOrigin);
     if (!/^https?:\/\//i.test(linkUrl)) continue;
+    seen.add(asin);
     cards.push({
       id: `ron:${asin}`,
       title: title.slice(0, 80),
@@ -94,6 +158,7 @@ export function buildRonCatalog(opts: {
       imageFallbacks: pack.imageFallbacks,
     });
   }
+
   return dedupePromoCards(cards) as RonCandidateCard[];
 }
 
@@ -130,6 +195,7 @@ export function decideRonPublish(opts: {
   catalog: RonCandidateCard[];
   learning: RonLearning;
   seed?: number;
+  emptyReason?: string;
 }): RonDecision {
   const catalog = opts.catalog.filter(
     (c) =>
@@ -139,7 +205,8 @@ export function decideRonPublish(opts: {
     return {
       action: "skip",
       reason:
-        "Aún armando links de afiliado desde Keepa · reintento solo en el próximo ciclo",
+        opts.emptyReason ||
+        "Sin productos listos (Keepa + afiliado). RON reintenta solo.",
     };
   }
 
@@ -172,9 +239,9 @@ export function decideRonPublish(opts: {
     };
   }
 
-  // Single product — pick highest learned ASIN / first strong image
   const ranked = [...catalog].sort(
-    (a, b) => scoreAsin(opts.learning, b.asin) - scoreAsin(opts.learning, a.asin),
+    (a, b) =>
+      scoreAsin(opts.learning, b.asin) - scoreAsin(opts.learning, a.asin),
   );
   const one = ranked[0]!;
   const copy = buildFacebookPromoCopy({

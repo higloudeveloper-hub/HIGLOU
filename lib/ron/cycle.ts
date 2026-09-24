@@ -7,6 +7,10 @@ import {
   keepaAffiliateShareUrl,
 } from "@/lib/monetization/affiliate/from-keepa-winners";
 import { resolveUserAssociateTag } from "@/lib/monetization/affiliate/links";
+import {
+  ensureTaggedAmazonDestination,
+  extractAsinFromAmazonUrl,
+} from "@/lib/monetization/affiliate/tagged-url";
 import type { OpportunityProduct } from "@/lib/opportunity/types";
 import {
   buildRonCatalog,
@@ -80,29 +84,33 @@ async function loadKeepaHits(
   return hits;
 }
 
+type RonAffRow = {
+  linkUrl: string;
+  imageUrl?: string | null;
+  title?: string | null;
+  brand?: string | null;
+  priceLabel?: string | null;
+  clickCount?: number;
+};
+
 async function loadAffiliateMap(
   supabase: SupabaseClient,
   userId: string,
-): Promise<
-  Map<string, { linkUrl: string; imageUrl?: string | null; title?: string | null }>
-> {
-  const map = new Map<
-    string,
-    { linkUrl: string; imageUrl?: string | null; title?: string | null }
-  >();
+): Promise<Map<string, RonAffRow>> {
+  const map = new Map<string, RonAffRow>();
 
   const { data: links } = await supabase
     .from("affiliate_links")
-    .select("id, asin, destination_url")
+    .select("id, asin, destination_url, click_count")
     .eq("user_id", userId)
-    .order("created_at", { ascending: false })
-    .limit(120);
+    .order("click_count", { ascending: false })
+    .limit(200);
 
   const { data: smart } = await supabase
     .from("smart_links")
     .select("slug, affiliate_link_id, label, destination_url")
     .eq("user_id", userId)
-    .limit(120);
+    .limit(200);
 
   const smartByAff = new Map<string, { path: string; label: string }>();
   for (const s of smart || []) {
@@ -116,20 +124,37 @@ async function loadAffiliateMap(
 
   const origin = appOrigin();
   for (const link of links || []) {
-    const asin = String(link.asin || "")
-      .trim()
-      .toUpperCase();
-    if (!asin || map.has(asin)) continue;
+    const dest = String(link.destination_url || "").trim();
+    const asin = (
+      String(link.asin || "").trim().toUpperCase() ||
+      extractAsinFromAmazonUrl(dest) ||
+      ""
+    ).toUpperCase();
+    if (!/^[A-Z0-9]{10}$/.test(asin) || map.has(asin)) continue;
     const sl = smartByAff.get(String(link.id));
-    const linkUrl = sl
-      ? `${origin}${sl.path}`
-      : String(link.destination_url || "");
+    const linkUrl = sl ? `${origin}${sl.path}` : dest;
     if (!/^https?:\/\//i.test(linkUrl)) continue;
     map.set(asin, {
       linkUrl,
       title: sl?.label || null,
+      clickCount: Number(link.click_count) || 0,
     });
   }
+
+  // Orphan smart links (no affiliate_link_id) — still recoverable via destination ASIN
+  for (const s of smart || []) {
+    if (s.affiliate_link_id) continue;
+    const dest = String(s.destination_url || "").trim();
+    const asin = extractAsinFromAmazonUrl(dest);
+    if (!asin || map.has(asin)) continue;
+    const linkUrl = `${origin}/go/${s.slug}`;
+    map.set(asin, {
+      linkUrl,
+      title: String(s.label || "").trim() || null,
+      clickCount: 0,
+    });
+  }
+
   return map;
 }
 
@@ -328,22 +353,23 @@ export async function runRonCycle(
     {
       at: new Date().toISOString(),
       kind: "scan",
-      message: `Pool: ${hits.length} winners · ${synced.created} links nuevos · ${synced.reused} listos${
+      message: `Pool: ${hits.length} Keepa · ${synced.created} links nuevos · ${synced.reused} listos${
         synced.error ? ` · ${synced.error}` : ""
       }`,
     },
     {
       statusMessage: synced.error
         ? `Trabajando · ${synced.error}`
-        : "Trabajando · eligiendo oportunidad…",
+        : "Trabajando · armando catálogo…",
       working: true,
       lastError: synced.error || null,
     },
   );
 
+  // Existing affiliates first (clicks already prove they convert)
   const affiliateByAsin = await loadAffiliateMap(supabase, userId);
 
-  // Immediately merge just-minted links (avoid race / stale read)
+  // Merge just-minted links
   for (const link of synced.links) {
     const asin = String(link.asin || "")
       .trim()
@@ -357,6 +383,27 @@ export async function runRonCycle(
       linkUrl: url,
       imageUrl: prev?.imageUrl || hit?.imageUrl || null,
       title: prev?.title || hit?.title || null,
+      clickCount: prev?.clickCount || 0,
+    });
+  }
+
+  // Fallback: tagged Amazon URL when affiliate engine couldn't mint DB rows
+  for (const hit of hits) {
+    const asin = String(hit.asin || "")
+      .trim()
+      .toUpperCase();
+    if (!asin || affiliateByAsin.has(asin)) continue;
+    const tagged = ensureTaggedAmazonDestination({
+      asin,
+      associateTag: tag,
+    });
+    if (!tagged) continue;
+    affiliateByAsin.set(asin, {
+      linkUrl: tagged,
+      imageUrl: hit.imageUrl || null,
+      title: hit.title || null,
+      brand: hit.brand || null,
+      clickCount: 0,
     });
   }
 
@@ -365,10 +412,10 @@ export async function runRonCycle(
       .trim()
       .toUpperCase();
     const row = affiliateByAsin.get(asin);
-    if (row && !row.imageUrl && hit.imageUrl) {
-      row.imageUrl = hit.imageUrl;
-      row.title = row.title || hit.title;
-    }
+    if (!row) continue;
+    if (!row.imageUrl && hit.imageUrl) row.imageUrl = hit.imageUrl;
+    if (!row.title && hit.title) row.title = hit.title;
+    if (!row.brand && hit.brand) row.brand = hit.brand;
   }
 
   const catalog = buildRonCatalog({
@@ -377,24 +424,37 @@ export async function runRonCycle(
     appOrigin: appOrigin(),
   });
 
+  const emptyReason =
+    catalog.length > 0
+      ? undefined
+      : affiliateByAsin.size === 0 && hits.length === 0
+        ? "Sin Keepa ni links de afiliado aún · esperá el próximo scan"
+        : affiliateByAsin.size === 0
+          ? `Tengo ${hits.length} Keepa pero no pude crear links (revisá Associate tag / Money Engine)`
+          : `Tengo ${affiliateByAsin.size} links pero sin imagen/ASIN usable`;
+
   await appendRonActivity(
     supabase,
     userId,
     {
       at: new Date().toISOString(),
       kind: "scan",
-      message: `Catálogo listo: ${catalog.length} productos publicables`,
+      message: `Catálogo: ${catalog.length} publicables · ${affiliateByAsin.size} afiliados · ${hits.length} Keepa`,
     },
     {
       statusMessage:
         catalog.length > 0
           ? `Trabajando · ${catalog.length} listos para Facebook`
-          : "Trabajando · sin catálogo aún…",
+          : `Trabajando · ${emptyReason}`,
       working: true,
     },
   );
 
-  const decision = decideRonPublish({ catalog, learning });
+  const decision = decideRonPublish({
+    catalog,
+    learning,
+    emptyReason,
+  });
   if (decision.action === "skip") {
     await appendRonActivity(
       supabase,
@@ -410,35 +470,50 @@ export async function runRonCycle(
     return finish({ ok: true, state, skipped: decision.reason });
   }
 
-  const packAsins = decision.cards
+  let publishDecision = decision;
+  let packAsins = publishDecision.cards
     .map((c) => String(c.asin || "").toUpperCase())
     .filter(Boolean);
 
-  // Intelligent: only skip if THIS same opportunity was already posted recently
+  // If this exact pack was already posted, pick another from the catalog
   if (
     !opts.force &&
     isRecentSamePack(learning, packAsins, RON_SAME_PACK_COOLDOWN_HOURS)
   ) {
-    const msg =
-      "Misma oportunidad ya publicada · espero trends nuevas de Keepa";
-    await appendRonActivity(
-      supabase,
-      userId,
-      {
-        at: new Date().toISOString(),
-        kind: "skip",
-        message: msg,
-        format: decision.format,
-      },
-      { statusMessage: msg, learning, lastError: null, working: false },
-    );
-    state = await loadRonState(supabase, userId);
-    return finish({ ok: true, state, skipped: msg });
+    const freshCatalog = catalog.filter((c) => {
+      const a = String(c.asin || "").toUpperCase();
+      return !isRecentSamePack(learning, [a], RON_SAME_PACK_COOLDOWN_HOURS);
+    });
+    const alt = decideRonPublish({
+      catalog: freshCatalog,
+      learning,
+      emptyReason:
+        "Todas las oportunidades recientes ya están publicadas · espero Keepa nuevo",
+    });
+    if (alt.action === "skip") {
+      await appendRonActivity(
+        supabase,
+        userId,
+        {
+          at: new Date().toISOString(),
+          kind: "skip",
+          message: alt.reason,
+          format: decision.format,
+        },
+        { statusMessage: alt.reason, learning, lastError: null, working: false },
+      );
+      state = await loadRonState(supabase, userId);
+      return finish({ ok: true, state, skipped: alt.reason });
+    }
+    publishDecision = alt;
+    packAsins = publishDecision.cards
+      .map((c) => String(c.asin || "").toUpperCase())
+      .filter(Boolean);
   }
 
   const dry = opts.dryRun || state.mode === "watch";
   if (dry) {
-    const msg = `Modo watch · preparé ${decision.format}: ${decision.reason}`;
+    const msg = `Modo watch · preparé ${publishDecision.format}: ${publishDecision.reason}`;
     await appendRonActivity(
       supabase,
       userId,
@@ -446,7 +521,7 @@ export async function runRonCycle(
         at: new Date().toISOString(),
         kind: "skip",
         message: msg,
-        format: decision.format,
+        format: publishDecision.format,
       },
       { statusMessage: msg, learning, working: false },
     );
@@ -460,11 +535,11 @@ export async function runRonCycle(
     {
       at: new Date().toISOString(),
       kind: "publish",
-      message: `Publicando ${decision.format} · ${decision.niche}…`,
-      format: decision.format,
+      message: `Publicando ${publishDecision.format} · ${publishDecision.niche}…`,
+      format: publishDecision.format,
     },
     {
-      statusMessage: `Trabajando · publicando ${decision.format} en Facebook…`,
+      statusMessage: `Trabajando · publicando ${publishDecision.format} en Facebook…`,
       working: true,
       learning,
     },
@@ -473,8 +548,12 @@ export async function runRonCycle(
   const spent = await spendCredits({
     userId,
     action: "facebook_share",
-    reason: `RON ${decision.format}`,
-    meta: { agent: "ron", format: decision.format, niche: decision.niche },
+    reason: `RON ${publishDecision.format}`,
+    meta: {
+      agent: "ron",
+      format: publishDecision.format,
+      niche: publishDecision.niche,
+    },
   });
   if (!spent.ok && spent.code === "insufficient") {
     const msg = "Sin créditos · recargá para que RON siga publicando";
@@ -490,9 +569,9 @@ export async function runRonCycle(
 
   const published = await publishFacebookPromo(supabase, {
     userId,
-    format: decision.format,
-    message: decision.message,
-    cards: decision.cards.map((c) => ({
+    format: publishDecision.format,
+    message: publishDecision.message,
+    cards: publishDecision.cards.map((c) => ({
       id: c.id,
       title: c.title,
       imageUrl: c.imageUrl,
@@ -501,8 +580,8 @@ export async function runRonCycle(
       asin: c.asin,
       imageFallbacks: c.imageFallbacks,
     })),
-    coverImageUrl: decision.coverImageUrl,
-    collectionTitle: decision.collectionTitle,
+    coverImageUrl: publishDecision.coverImageUrl,
+    collectionTitle: publishDecision.collectionTitle,
   });
 
   if (!published.ok) {
@@ -513,7 +592,7 @@ export async function runRonCycle(
         at: new Date().toISOString(),
         kind: "error",
         message: published.error,
-        format: decision.format,
+        format: publishDecision.format,
       },
       {
         statusMessage: published.error,
@@ -527,14 +606,14 @@ export async function runRonCycle(
   }
 
   learning = rememberPublish(learning, {
-    format: decision.format,
-    niche: decision.niche,
+    format: publishDecision.format,
+    niche: publishDecision.niche,
     asins: packAsins,
   });
 
   const postUrl =
     published.mode === "page_post" ? published.postUrl : null;
-  const okMsg = `Publicé ${decision.format} · ${decision.niche}`;
+  const okMsg = `Publicé ${publishDecision.format} · ${publishDecision.niche}`;
   await appendRonActivity(
     supabase,
     userId,
@@ -542,7 +621,7 @@ export async function runRonCycle(
       at: new Date().toISOString(),
       kind: "publish",
       message: okMsg,
-      format: decision.format,
+      format: publishDecision.format,
       postUrl,
     },
     {

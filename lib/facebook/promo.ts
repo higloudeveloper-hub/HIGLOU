@@ -14,6 +14,7 @@ import {
   facebookFriendlyPictureUrl,
   shortenFacebookCardTitle,
 } from "@/lib/facebook/promo-media";
+import { rehostPromoImagesForFacebook } from "@/lib/facebook/rehost-promo-images";
 import { shareAffiliateToFacebook } from "@/lib/facebook/share";
 
 export type PromoFormat = "ads" | "carousel" | "vitrina";
@@ -260,11 +261,16 @@ export async function publishFacebookPromo(
         prices: [first.priceLabel],
         seed: 2,
       }).message;
+
+    // Prefer a rehosted image so the Page photo path never goes blank
+    const hosted = await rehostPromoImagesForFacebook([first], opts.userId);
+    const card = hosted.ok ? hosted.cards[0]! : first;
+
     const posted = await publishSingleLinkCard({
       pageId: creds.pageId,
       accessToken: creds.accessToken,
       message: caption,
-      card: first,
+      card,
     });
     if (!posted.id) {
       // Fallback: photo + caption (still no URL list spam)
@@ -272,7 +278,7 @@ export async function publishFacebookPromo(
         userId: opts.userId,
         url: first.linkUrl,
         message: caption,
-        imageUrl: first.imageUrl,
+        imageUrl: card.imageUrl,
       });
     }
     await markFacebookConnectionMeta(supabase, opts.userId, {
@@ -301,23 +307,47 @@ export async function publishFacebookPromo(
     return { ok: false, error: "Máximo 10 productos por promo." };
   }
 
+  // Never fall back to a single-photo share for multi-card formats —
+  // that is what published "solo 1 foto" instead of the full vitrina.
   if (!creds) {
-    const first = cards[0]!;
-    return shareAffiliateToFacebook(supabase, {
-      userId: opts.userId,
-      url: first.linkUrl || first.imageUrl,
-      message: opts.message,
-      imageUrl: first.imageUrl,
+    return {
+      ok: false,
+      error:
+        "Conectá tu Page de Facebook en Settings para publicar vitrinas y carruseles completos. Sin Page, Facebook solo permite un link suelto.",
+    };
+  }
+
+  // Re-host every picture on our public CDN so Graph scrapes real photos
+  // (Amazon ads-system / P/ASIN stubs often publish as blank cards).
+  const hosted = await rehostPromoImagesForFacebook(cards, opts.userId);
+  if (!hosted.ok) {
+    await markFacebookConnectionMeta(supabase, opts.userId, {
+      lastError: hosted.error,
     });
+    return { ok: false, error: hosted.error };
   }
 
   // Cover card first for vitrina when provided
-  let ordered = [...cards];
+  let ordered = [...hosted.cards];
   const cover = String(opts.coverImageUrl || "").trim();
   if (opts.format === "vitrina" && cover) {
-    const coverCard = ordered.find((c) => c.imageUrl === cover);
-    if (coverCard) {
-      ordered = [coverCard, ...ordered.filter((c) => c.id !== coverCard.id)];
+    // Match by original cover URL OR already-rehosted card id order
+    const coverIdx = cards.findIndex(
+      (c) => c.imageUrl === cover || c.id === cover,
+    );
+    if (coverIdx >= 0) {
+      const coverCard = ordered[coverIdx];
+      if (coverCard) {
+        ordered = [
+          coverCard,
+          ...ordered.filter((c) => c.id !== coverCard.id),
+        ];
+      }
+    } else {
+      const byUrl = ordered.find((c) => c.imageUrl === cover);
+      if (byUrl) {
+        ordered = [byUrl, ...ordered.filter((c) => c.id !== byUrl.id)];
+      }
     }
   }
 
@@ -344,7 +374,7 @@ export async function publishFacebookPromo(
     if (!posted.id) {
       const err =
         posted.error ||
-        "No se pudo publicar el carrusel Alibaba. Revisá links e imágenes https.";
+        "No se pudo publicar el carrusel completo. Revisá links e imágenes https — no publicamos posts a medias.";
       await markFacebookConnectionMeta(supabase, opts.userId, {
         lastError: err,
       });

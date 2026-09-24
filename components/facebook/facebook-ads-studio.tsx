@@ -6,6 +6,8 @@ import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { toast } from "sonner";
 import {
   Check,
+  AlertCircle,
+  ImageOff,
   LayoutGrid,
   Loader2,
   PanelsTopLeft,
@@ -34,6 +36,7 @@ import {
   suggestPromoPacks,
   type PromoPackSuggestion,
 } from "@/lib/facebook/promo-groups";
+import { isWeakFacebookPictureUrl } from "@/lib/facebook/promo-media";
 import { cn } from "@/lib/utils";
 
 type AffLink = {
@@ -604,6 +607,101 @@ export function FacebookAdsStudio() {
 
   const minNeeded = format === "vitrina" ? 3 : format === "carousel" ? 2 : 1;
 
+  const cardsMissingPhoto = useMemo(
+    () =>
+      selectedCards.filter((c) => {
+        const primary = String(c.imageUrl || "").trim();
+        const fallbacks = (c.imageFallbacks || []).filter((u) =>
+          /^https?:\/\//i.test(u),
+        );
+        if (!primary && !fallbacks.length) return true;
+        // Weak primary with no strong fallback → risk of blank FB card
+        if (
+          isWeakFacebookPictureUrl(primary) &&
+          !fallbacks.some((u) => !isWeakFacebookPictureUrl(u))
+        ) {
+          return true;
+        }
+        return false;
+      }),
+    [selectedCards],
+  );
+
+  const publishBlockedReason = useMemo(() => {
+    if (selectedCards.length < minNeeded) {
+      return format === "ads"
+        ? "Elegí un producto"
+        : `Elegí al menos ${minNeeded} productos`;
+    }
+    if ((format === "carousel" || format === "vitrina") && !fb?.connected) {
+      return "Conectá tu Page para publicar la vitrina completa";
+    }
+    if (cardsMissingPhoto.length) {
+      return `${cardsMissingPhoto.length} producto${cardsMissingPhoto.length === 1 ? "" : "s"} sin foto usable`;
+    }
+    const amazonBound = selectedCards.some(
+      (c) =>
+        Boolean(c.asin) || /amazon\.|\/dp\/|\/go\//i.test(c.linkUrl),
+    );
+    if (amazonBound && !hasTag) {
+      return "Falta tu Associate tag";
+    }
+    return null;
+  }, [
+    selectedCards,
+    minNeeded,
+    format,
+    fb?.connected,
+    cardsMissingPhoto.length,
+    hasTag,
+  ]);
+
+  const readiness = useMemo(() => {
+    const items: Array<{ ok: boolean; label: string; href?: string }> = [
+      {
+        ok: Boolean(fb?.connected),
+        label: fb?.connected
+          ? `Page · ${fb.pageName || "conectada"}`
+          : "Page de Facebook",
+        href: "/settings#facebook-store",
+      },
+      {
+        ok: selectedCards.length >= minNeeded,
+        label:
+          format === "ads"
+            ? "1 producto"
+            : `${selectedCards.length}/${minNeeded} productos`,
+      },
+      {
+        ok: cardsMissingPhoto.length === 0 && selectedCards.length > 0,
+        label:
+          cardsMissingPhoto.length === 0
+            ? "Fotos listas"
+            : `${cardsMissingPhoto.length} sin foto`,
+      },
+    ];
+    const amazonBound = selectedCards.some(
+      (c) =>
+        Boolean(c.asin) || /amazon\.|\/dp\/|\/go\//i.test(c.linkUrl),
+    );
+    if (amazonBound || !hasTag) {
+      items.push({
+        ok: hasTag,
+        label: hasTag ? "Associate tag" : "Associate tag",
+        href: "/affiliate",
+      });
+    }
+    return items;
+  }, [
+    fb?.connected,
+    fb?.pageName,
+    selectedCards,
+    minNeeded,
+    format,
+    cardsMissingPhoto.length,
+    hasTag,
+  ]);
+
   const toggle = (id: string) => {
     setSelectedIds((prev) => {
       if (format === "ads") return prev.includes(id) ? [] : [id];
@@ -635,12 +733,8 @@ export function FacebookAdsStudio() {
   };
 
   const publish = async () => {
-    if (selectedCards.length < minNeeded) {
-      toast.message(
-        format === "ads"
-          ? "Elegí un producto"
-          : `Elegí al menos ${minNeeded} productos`,
-      );
+    if (publishBlockedReason) {
+      toast.message(publishBlockedReason);
       return;
     }
     if (format === "carousel" || format === "vitrina") {
@@ -697,14 +791,18 @@ export function FacebookAdsStudio() {
           const cdnFallback = c.imageFallbacks?.find(
             (u) =>
               /^https?:\/\//i.test(u) &&
-              /(m\.media-amazon\.com|images-na\.ssl-images-amazon\.com)/i.test(
+              /(m\.media-amazon\.com\/images\/I\/|images-na\.ssl-images-amazon\.com\/images\/I\/)/i.test(
                 u,
-              ),
+              ) &&
+              !isWeakFacebookPictureUrl(u),
+          );
+          const strongFallback = c.imageFallbacks?.find(
+            (u) => /^https?:\/\//i.test(u) && !isWeakFacebookPictureUrl(u),
           );
           const imageUrl =
-            cdnFallback && /amazon-adsystem\.com/i.test(preferred)
-              ? cdnFallback
-              : preferred;
+            preferred && !isWeakFacebookPictureUrl(preferred)
+              ? preferred
+              : cdnFallback || strongFallback || preferred;
           return {
             id: c.id,
             title: c.title,
@@ -1210,6 +1308,12 @@ export function FacebookAdsStudio() {
               <AnimatePresence initial={false}>
                 {cards.map((card, i) => {
                   const on = selectedIds.includes(card.id);
+                  const photoWeak =
+                    (!card.imageUrl && !(card.imageFallbacks || []).length) ||
+                    (isWeakFacebookPictureUrl(card.imageUrl) &&
+                      !(card.imageFallbacks || []).some(
+                        (u) => !isWeakFacebookPictureUrl(u),
+                      ));
                   return (
                     <motion.li
                       key={card.id}
@@ -1225,7 +1329,9 @@ export function FacebookAdsStudio() {
                           "flex w-full items-center gap-3 rounded-2xl border bg-white p-2.5 text-left transition",
                           on
                             ? "border-[#3665F3] ring-2 ring-[#3665F3]/20"
-                            : "border-[#e5e5e5] hover:border-[#c8c8c8]",
+                            : photoWeak
+                              ? "border-[#f0c9c4]"
+                              : "border-[#e5e5e5] hover:border-[#c8c8c8]",
                         )}
                       >
                         <span className="relative size-14 shrink-0 overflow-hidden rounded-xl border border-[#eee] bg-white">
@@ -1242,6 +1348,10 @@ export function FacebookAdsStudio() {
                             >
                               <Check className="size-4" />
                             </motion.span>
+                          ) : photoWeak ? (
+                            <span className="absolute inset-x-0 bottom-0 bg-[#b42318]/90 py-0.5 text-center text-[8px] font-bold tracking-wide text-white uppercase">
+                              Sin foto
+                            </span>
                           ) : null}
                         </span>
                         <span className="min-w-0 flex-1">
@@ -1249,8 +1359,12 @@ export function FacebookAdsStudio() {
                             {card.title}
                           </span>
                           <span className="mt-0.5 block truncate text-[11px] text-[#8a8a8a]">
-                            {card.meta}
-                            {card.priceLabel ? ` · ${card.priceLabel}` : ""}
+                            {photoWeak
+                              ? "Foto débil · Facebook la deja en blanco"
+                              : card.meta}
+                            {!photoWeak && card.priceLabel
+                              ? ` · ${card.priceLabel}`
+                              : ""}
                           </span>
                         </span>
                         {source === "custom" ? (
@@ -1296,6 +1410,65 @@ export function FacebookAdsStudio() {
             {selectedCards.length} listo
             {format !== "ads" ? ` · min ${minNeeded}` : ""}
           </p>
+
+          <ul className="mt-3 space-y-1.5 rounded-xl border border-[#e5e5e5] bg-[#fafafa] px-3 py-2.5">
+            {readiness.map((item) => (
+              <li
+                key={item.label}
+                className="flex items-center gap-2 text-[12px]"
+              >
+                {item.ok ? (
+                  <Check className="size-3.5 shrink-0 text-[#0f7b3a]" />
+                ) : (
+                  <AlertCircle className="size-3.5 shrink-0 text-[#b42318]" />
+                )}
+                {item.href && !item.ok ? (
+                  <Link
+                    href={item.href}
+                    className="font-medium text-[#3665F3] hover:underline"
+                  >
+                    {item.label}
+                  </Link>
+                ) : (
+                  <span
+                    className={
+                      item.ok
+                        ? "font-medium text-[#191919]"
+                        : "font-medium text-[#b42318]"
+                    }
+                  >
+                    {item.label}
+                  </span>
+                )}
+              </li>
+            ))}
+          </ul>
+
+          {cardsMissingPhoto.length > 0 ? (
+            <div className="mt-3 flex items-start gap-2 rounded-xl border border-[#f0c9c4] bg-[#fff5f4] px-3 py-2.5 text-[12px] text-[#b42318]">
+              <ImageOff className="mt-0.5 size-3.5 shrink-0" />
+              <p>
+                {cardsMissingPhoto.length === 1
+                  ? "1 producto sin foto real — Facebook lo publicaría en blanco."
+                  : `${cardsMissingPhoto.length} productos sin foto real — no publicamos vitrinas a medias.`}{" "}
+                Sacálos o usá Market / Mis listings.
+              </p>
+            </div>
+          ) : null}
+
+          {(format === "carousel" || format === "vitrina") &&
+          !fb?.connected ? (
+            <div className="mt-3 rounded-xl border border-[#f0c9c4] bg-[#fff5f4] px-3 py-2.5 text-[12px] text-[#b42318]">
+              Sin Page conectada, Facebook solo permite 1 link.{" "}
+              <Link
+                href="/settings#facebook-store"
+                className="font-semibold underline"
+              >
+                Conectá tu Page
+              </Link>{" "}
+              para la vitrina completa.
+            </div>
+          ) : null}
 
           <AnimatePresence mode="wait">
             {selectedCards.length > 0 ? (
@@ -1465,28 +1638,39 @@ export function FacebookAdsStudio() {
 
           <button
             type="button"
-            disabled={
-              busy ||
-              selectedCards.length < minNeeded ||
-              (Boolean(
-                selectedCards.some(
-                  (c) =>
-                    Boolean(c.asin) ||
-                    /amazon\.|\/dp\/|\/go\//i.test(c.linkUrl),
-                ),
-              ) &&
-                !hasTag)
-            }
+            disabled={busy || Boolean(publishBlockedReason)}
             onClick={() => void publish()}
             className="mt-5 inline-flex h-12 w-full items-center justify-center gap-2 rounded-full bg-[#1877F2] text-[14px] font-semibold text-white hover:bg-[#166fe5] disabled:opacity-40"
           >
-            {busy ? <Loader2 className="size-4 animate-spin" /> : <FacebookFMark className="size-3.5" />}
-            {format === "ads" ? "Publicar" : format === "vitrina" ? "Publicar vitrina" : "Publicar carrusel"}
-            <span className="ml-1 opacity-80">
-              · {CREDIT_ACTIONS.facebook_share.cost} cr
-              {format !== "ads" ? " · Pro" : ""}
-            </span>
+            {busy ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : (
+              <FacebookFMark className="size-3.5" />
+            )}
+            {busy
+              ? "Preparando fotos…"
+              : format === "ads"
+                ? "Publicar"
+                : format === "vitrina"
+                  ? "Publicar vitrina completa"
+                  : "Publicar carrusel completo"}
+            {!busy ? (
+              <span className="ml-1 opacity-80">
+                · {CREDIT_ACTIONS.facebook_share.cost} cr
+                {format !== "ads" ? " · Pro" : ""}
+              </span>
+            ) : null}
           </button>
+          {publishBlockedReason ? (
+            <p className="mt-2 text-center text-[12px] font-medium text-[#b42318]">
+              {publishBlockedReason}
+            </p>
+          ) : format !== "ads" ? (
+            <p className="mt-2 text-center text-[11px] text-[#8a8a8a]">
+              Higlou sube cada foto a un CDN propio antes de publicar — así
+              Facebook no deja tarjetas en blanco.
+            </p>
+          ) : null}
 
           {postUrl ? (
             <a

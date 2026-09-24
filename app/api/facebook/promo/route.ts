@@ -6,7 +6,7 @@ import { publishFacebookPromo } from "@/lib/facebook/promo";
 import { isSupabaseConfigured } from "@/lib/supabase/admin";
 
 export const runtime = "nodejs";
-export const maxDuration = 60;
+export const maxDuration = 90;
 
 const cardSchema = z.object({
   id: z.string().min(1),

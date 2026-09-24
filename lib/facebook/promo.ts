@@ -30,6 +30,8 @@ export type PromoCard = {
   asin?: string | null;
   /** Extra image candidates (CDN / Keepa / market) for Facebook scrapers */
   imageFallbacks?: string[] | null;
+  /** Keepa / coupon off percent (5–90) for card description */
+  discountPercent?: number | null;
 };
 
 function postUrlFromId(postId: string): string {
@@ -72,7 +74,7 @@ function toChildAttachments(
     .map((c) => ({
       link: c.linkUrl,
       name: copy.cardName(c.title),
-      description: copy.cardDescription(c.priceLabel),
+      description: copy.cardDescription(c.priceLabel, c.discountPercent),
       picture: c.imageUrl,
     }));
 }
@@ -92,6 +94,7 @@ async function publishLinkCarousel(opts: {
     format: (opts.format || "carousel") as CopyFormat,
     titles: opts.cards.map((c) => c.title),
     prices: opts.cards.map((c) => c.priceLabel),
+    discountPercents: opts.cards.map((c) => c.discountPercent),
     seed: 0,
   });
   const children = toChildAttachments(opts.cards, copy);
@@ -156,13 +159,17 @@ async function publishSingleLinkCard(opts: {
     format: "ads",
     titles: [opts.card.title],
     prices: [opts.card.priceLabel],
+    discountPercents: [opts.card.discountPercent],
     seed: 1,
   });
   const caption =
     stripUrlsFromFacebookCaption(opts.message) ||
     stripUrlsFromFacebookCaption(copy.message);
   const name = copy.cardName(opts.card.title);
-  const description = copy.cardDescription(opts.card.priceLabel);
+  const description = copy.cardDescription(
+    opts.card.priceLabel,
+    opts.card.discountPercent,
+  );
 
   const endpoint = new URL(
     `https://graph.facebook.com/v21.0/${opts.pageId}/feed`,

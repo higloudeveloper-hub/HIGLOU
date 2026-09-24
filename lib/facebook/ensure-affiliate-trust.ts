@@ -261,7 +261,7 @@ export async function ensureFacebookPromoAffiliateTrust(
     const created = await createAffiliateLink(supabase, {
       userId: opts.userId,
       asin,
-      campaignName: "Facebook Ads",
+      campaignName: String(card.title || asin).slice(0, 80) || "Affiliate",
       source: "facebook",
       associateTag,
     });

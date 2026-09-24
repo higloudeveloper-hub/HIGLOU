@@ -97,18 +97,21 @@ export function rememberPublish(
     .toLowerCase();
   if (niche) next.niches[niche] = (next.niches[niche] || 0) + 0.35;
   const asins: string[] = [];
+  const now = Date.now();
   for (const asin of opts.asins) {
     const id = asin.toUpperCase();
     if (/^[A-Z0-9]{10}$/.test(id)) {
       next.asins[id] = (next.asins[id] || 0) + 0.25;
       asins.push(id);
+      // Per-ASIN fingerprint so we don't reshuffle the same vitrina
+      next.recentPacks![`asin:${id}`] = now;
     }
   }
   if (asins.length) {
     const key = [...asins].sort().join("|");
-    next.recentPacks![key] = Date.now();
-    // Prune packs older than 48h
-    const cutoff = Date.now() - 48 * 60 * 60_000;
+    next.recentPacks![key] = now;
+    // Prune packs older than 72h
+    const cutoff = now - 72 * 60 * 60_000;
     for (const [k, ts] of Object.entries(next.recentPacks!)) {
       if (Number(ts) < cutoff) delete next.recentPacks![k];
     }
@@ -129,4 +132,45 @@ export function isRecentSamePack(
   const ts = Number(learning.recentPacks?.[key] || 0);
   if (!ts) return false;
   return Date.now() - ts < cooldownHours * 60 * 60_000;
+}
+
+/**
+ * True when ≥ half the ASINs (or any for packs ≤2) were posted recently.
+ * Stops reshuffled “same vitrina” with one product swapped.
+ */
+export function isRecentOverlappingPack(
+  learning: RonLearning,
+  asins: string[],
+  cooldownHours: number,
+): boolean {
+  const ids = [
+    ...new Set(asins.map((a) => a.toUpperCase()).filter((a) => /^[A-Z0-9]{10}$/.test(a))),
+  ];
+  if (!ids.length) return false;
+  if (isRecentSamePack(learning, ids, cooldownHours)) return true;
+  const cutoff = Date.now() - cooldownHours * 60 * 60_000;
+  let hit = 0;
+  for (const id of ids) {
+    const ts = Number(learning.recentPacks?.[`asin:${id}`] || 0);
+    if (ts >= cutoff) hit += 1;
+  }
+  if (ids.length <= 2) return hit >= 1;
+  return hit / ids.length >= 0.5;
+}
+
+/** Filter catalog down to ASINs that are still fresh to post. */
+export function filterFreshCatalogAsins<T extends { asin?: string | null }>(
+  catalog: T[],
+  learning: RonLearning,
+  cooldownHours: number,
+): T[] {
+  const cutoff = Date.now() - cooldownHours * 60 * 60_000;
+  return catalog.filter((c) => {
+    const id = String(c.asin || "")
+      .trim()
+      .toUpperCase();
+    if (!/^[A-Z0-9]{10}$/.test(id)) return true;
+    const ts = Number(learning.recentPacks?.[`asin:${id}`] || 0);
+    return !ts || ts < cutoff;
+  });
 }

@@ -363,7 +363,14 @@ function growCluster(
  */
 export function suggestPromoPacks(
   cards: PromoGroupCard[],
-  opts?: { limit?: number; preferVitrina?: boolean },
+  opts?: {
+    limit?: number;
+    preferVitrina?: boolean;
+    /** Minimum pairwise relatedness (default 0.22; RON uses ~0.36) */
+    minRelated?: number;
+    /** Skip price-band-only packs (tablets + pills). Default false for studio. */
+    disallowPriceBandFallback?: boolean;
+  },
 ): PromoPackSuggestion[] {
   const pool = dedupePromoCards(cards);
   if (pool.length < 2) return [];
@@ -372,8 +379,8 @@ export function suggestPromoPacks(
   const limit = Math.min(Math.max(opts?.limit ?? 6, 1), 8);
   const used = new Set<string>();
   const suggestions: PromoPackSuggestion[] = [];
-  // Require real token/brand overlap — junk "/go" brand must not glue everything
-  const minRelated = 0.22;
+  const minRelated = Math.max(0.18, Math.min(0.55, opts?.minRelated ?? 0.22));
+  const disallowPriceBand = Boolean(opts?.disallowPriceBandFallback);
 
   // Rank seeds by how many neighbors they have (dense relatedness hubs).
   const hubs = pool
@@ -392,20 +399,10 @@ export function suggestPromoPacks(
       if (used.has(hub.c.id)) continue;
       const cluster = growCluster(hub.c, pool, used, minRelated, 8);
       if (cluster.length < 3) continue;
-      const avg =
-        cluster.length <= 1
-          ? 0
-          : cluster.reduce((sum, a, i) => {
-              let local = 0;
-              let n = 0;
-              for (let j = 0; j < cluster.length; j++) {
-                if (i === j) continue;
-                local += productRelatedness(a, cluster[j]!);
-                n += 1;
-              }
-              return sum + (n ? local / n : 0);
-            }, 0) / cluster.length;
-      const pack = packFromCluster(cluster, "vitrina", Math.max(avg, 0.22));
+      // Hard gate: average relatedness must clear the bar (no mixed junk packs)
+      const avg = clusterAvgRelatedness(cluster);
+      if (avg < minRelated) continue;
+      const pack = packFromCluster(cluster, "vitrina", Math.max(avg, minRelated));
       if (!pack) continue;
       for (const c of cluster.slice(0, pack.cardIds.length)) used.add(c.id);
       suggestions.push(pack);
@@ -418,20 +415,19 @@ export function suggestPromoPacks(
     if (used.has(hub.c.id)) continue;
     const cluster = growCluster(hub.c, pool, used, minRelated, 5);
     if (cluster.length < 2) continue;
-    // If we still have 3+, prefer another vitrina
     const format: "carousel" | "vitrina" =
       preferVitrina && cluster.length >= 3 ? "vitrina" : "carousel";
-    const avg =
-      productRelatedness(cluster[0]!, cluster[1]!) *
-      (cluster.length >= 3 ? 1.05 : 1);
-    const pack = packFromCluster(cluster, format, Math.max(avg, 0.18));
+    const avg = clusterAvgRelatedness(cluster);
+    if (avg < minRelated * 0.9) continue;
+    const pack = packFromCluster(cluster, format, Math.max(avg, minRelated * 0.9));
     if (!pack) continue;
     for (const c of cluster.slice(0, pack.cardIds.length)) used.add(c.id);
     suggestions.push(pack);
   }
 
-  // Pass 3 — Fallback: same price band as a “vitrina lista”
+  // Pass 3 — Fallback: same price band (studio only — RON disables this)
   if (
+    !disallowPriceBand &&
     suggestions.filter((s) => s.format === "vitrina").length < 1 &&
     pool.length >= 3
   ) {
@@ -460,7 +456,6 @@ export function suggestPromoPacks(
     }
   }
 
-  // Vitrinas first, then by score — and never return packs with dup card ids
   return suggestions
     .map((s) => ({
       ...s,
@@ -474,6 +469,19 @@ export function suggestPromoPacks(
       return b.score - a.score;
     })
     .slice(0, limit);
+}
+
+function clusterAvgRelatedness(cluster: PromoGroupCard[]): number {
+  if (cluster.length <= 1) return 0;
+  let sum = 0;
+  let n = 0;
+  for (let i = 0; i < cluster.length; i++) {
+    for (let j = i + 1; j < cluster.length; j++) {
+      sum += productRelatedness(cluster[i]!, cluster[j]!);
+      n += 1;
+    }
+  }
+  return n ? sum / n : 0;
 }
 
 /** Only ready-made vitrinas (3+ related products). */

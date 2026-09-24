@@ -1,9 +1,9 @@
 import { shortenFacebookCardTitle } from "@/lib/facebook/promo-media";
+import { isJunkPromoTitle } from "@/lib/facebook/promo-title";
 
 /**
  * Facebook Page copy — Amazon Deals editorial aesthetic.
- * Ultra-short, premium, minimal. Graph has no markdown; we use
- * Mathematical Bold Unicode so hooks read as bold in the feed.
+ * Product name first. Keepa % OFF when known. Never "Facebook Ads".
  */
 
 export type PromoFormat = "ads" | "carousel" | "vitrina";
@@ -14,6 +14,8 @@ export type PromoCopyInput = {
   titles?: string[];
   /** Price labels like "$24.99" */
   prices?: Array<string | null | undefined>;
+  /** Keepa / coupon off % (5–90) aligned with titles */
+  discountPercents?: Array<number | null | undefined>;
   /** Optional niche / brand hint */
   niche?: string | null;
   /** Seed so regenerate feels fresh */
@@ -25,9 +27,12 @@ export type PromoCopyResult = {
   message: string;
   /** Vitrina collection title */
   collectionTitle: string;
-  /** One-line card description for child_attachments — price only */
-  cardDescription: (priceLabel?: string | null) => string;
-  /** Short card name polish — product title only */
+  /** One-line card description — % OFF + price */
+  cardDescription: (
+    priceLabel?: string | null,
+    discountPercent?: number | null,
+  ) => string;
+  /** Short card name — product title only */
   cardName: (title: string) => string;
 };
 
@@ -56,9 +61,8 @@ export function facebookBold(text: string): string {
     .join("");
 }
 
-function pick<T>(items: T[], seed = 0): T {
-  if (!items.length) throw new Error("empty pick");
-  return items[Math.abs(seed) % items.length]!;
+function pickSeed(seed = 0): number {
+  return Math.abs(seed);
 }
 
 function cleanTitle(raw: string): string {
@@ -72,25 +76,37 @@ function cleanTitle(raw: string): string {
 function cleanNiche(raw?: string | null): string {
   const n = String(raw || "").trim();
   if (!n) return "";
+  if (isJunkPromoTitle(n)) return "";
   if (/^\/?go$/i.test(n)) return "";
-  if (/afiliado|affiliate|smart\s*link|higlou/i.test(n) && n.length < 12) {
+  if (
+    /afiliado|affiliate|smart\s*link|higlou|facebook/i.test(n) &&
+    n.length < 18
+  ) {
     return "";
   }
   return n.slice(0, 32);
 }
 
-/** Price only — no "verificado", no Amazon suffix. */
+function normalizeOff(pct?: number | null): number | null {
+  const n = Number(pct);
+  if (!Number.isFinite(n) || n < 5) return null;
+  return Math.min(90, Math.round(n));
+}
+
 function priceOnly(priceLabel?: string | null): string {
   const p = String(priceLabel || "").trim();
   if (!p) return "";
-  // Keep $xx.xx if already a money label; otherwise pass through short label
   return p.slice(0, 24);
+}
+
+function offLine(pct: number): string {
+  return facebookBold(`${pct}% OFF`);
 }
 
 /** First meaningful noun-ish chunk from a title for copy hooks. */
 export function productHook(title: string): string {
   const clean = cleanTitle(title);
-  if (!clean) return "Deal";
+  if (!clean || isJunkPromoTitle(clean)) return "Deal";
   const stop = new Set([
     "the",
     "a",
@@ -123,67 +139,78 @@ export function productHook(title: string): string {
   return hook || clean.slice(0, 32);
 }
 
-/** Single-product deal posts — editorial, not salesy. */
-const ADS_HOOKS = [
-  () =>
-    `${facebookBold("TODAY'S DEAL")}\n${RULE}\n${facebookBold("SHOP NOW")} →`,
-  () =>
-    `${facebookBold("DEAL OF THE DAY")}\n${RULE}\n${facebookBold("SHOP")} →`,
-  () =>
-    `${facebookBold("TODAY")}\n${RULE_SHORT}\n${facebookBold("SHOP NOW")} →`,
-];
-
-/** Carousel / multi — Amazon Deals swipe energy. */
-const CAROUSEL_HOOKS = [
-  () =>
-    `${facebookBold("TOP DEALS")}\n${RULE_SHORT}\n${facebookBold("SWIPE")} → ${facebookBold("SHOP")}`,
-  () =>
-    `${facebookBold("TODAY'S PICKS")}\n${RULE_SHORT}\n${facebookBold("SWIPE")} → ${facebookBold("SHOP")}`,
-  () =>
-    `${facebookBold("DEALS")}\n${RULE_SHORT}\n${facebookBold("SWIPE TO SHOP")} →`,
-];
-
-/** Vitrina / collection — same retail-premium language. */
-const VITRINA_HOOKS = [
-  () =>
-    `${facebookBold("TOP DEALS")}\n${RULE_SHORT}\n${facebookBold("SWIPE")} → ${facebookBold("SHOP")}`,
-  () =>
-    `${facebookBold("CURATED")}\n${RULE_SHORT}\n${facebookBold("SWIPE")} → ${facebookBold("SHOP")}`,
-  () =>
-    `${facebookBold("TODAY'S DEALS")}\n${RULE}\n${facebookBold("SHOP NOW")} →`,
-];
-
-const VITRINA_TITLES = ["Top Deals", "Today's Deals", "Deals", "Picks"];
-
 /**
- * Build Page-ready copy: bold deal line + rule + CTA.
- * Cards: product name + price only.
+ * Build Page-ready copy: product name + optional Keepa % OFF + CTA.
+ * Cards: product name + (% OFF · price).
  */
 export function buildFacebookPromoCopy(
   input: PromoCopyInput,
 ): PromoCopyResult {
-  const seed = input.seed ?? Date.now();
+  const seed = pickSeed(input.seed ?? Date.now());
   const niche = cleanNiche(input.niche);
+  const titles = (input.titles || [])
+    .map((t) => cleanTitle(String(t || "")))
+    .filter((t) => t && !isJunkPromoTitle(t));
+  const primaryTitle = titles[0] || "";
+  const hook = productHook(primaryTitle);
+  const discounts = (input.discountPercents || []).map(normalizeOff);
+  const offs = discounts.filter((d): d is number => d != null);
+  const off = offs.length ? Math.max(...offs) : null;
 
   let message: string;
   let collectionTitle: string;
 
   if (input.format === "ads") {
-    message = pick(ADS_HOOKS, seed)();
-    collectionTitle = "Today's Deal";
+    message = [
+      facebookBold(hook),
+      RULE,
+      ...(off != null ? [offLine(off)] : []),
+      `${facebookBold("SHOP NOW")} →`,
+    ].join("\n");
+    collectionTitle = shortenFacebookCardTitle(
+      primaryTitle || "Today's Deal",
+      40,
+    );
   } else if (input.format === "carousel") {
-    message = pick(CAROUSEL_HOOKS, seed)();
-    collectionTitle = niche || "Top Deals";
+    const head = niche || (hook !== "Deal" ? `${hook}` : "Top Deals");
+    message = [
+      facebookBold(String(head).slice(0, 28).toUpperCase()),
+      RULE_SHORT,
+      ...(off != null ? [offLine(off)] : []),
+      `${facebookBold("SWIPE")} → ${facebookBold("SHOP")}`,
+    ].join("\n");
+    collectionTitle = niche || head.slice(0, 40);
   } else {
-    message = pick(VITRINA_HOOKS, seed)();
-    collectionTitle = niche || pick(VITRINA_TITLES, seed);
+    const head = niche || (hook !== "Deal" ? hook : "Today's Deals");
+    message = [
+      facebookBold(String(head).slice(0, 28).toUpperCase()),
+      RULE_SHORT,
+      ...(off != null ? [offLine(off)] : []),
+      `${facebookBold("SWIPE")} → ${facebookBold("SHOP")}`,
+    ].join("\n");
+    collectionTitle = niche || head.slice(0, 40);
   }
+
+  // seed reserved for future variant rotation
+  void seed;
 
   return {
     message,
     collectionTitle: collectionTitle.slice(0, 60),
-    cardDescription: (priceLabel) => priceOnly(priceLabel),
-    cardName: (title) => shortenFacebookCardTitle(title, 36),
+    cardDescription: (priceLabel, discountPercent) => {
+      const pct = normalizeOff(discountPercent) ?? off;
+      const price = priceOnly(priceLabel);
+      if (pct != null && price) return `${pct}% OFF · ${price}`;
+      if (pct != null) return `${pct}% OFF`;
+      return price;
+    },
+    cardName: (title) => {
+      const t = cleanTitle(title);
+      if (isJunkPromoTitle(t)) {
+        return shortenFacebookCardTitle(primaryTitle || "Deal", 36);
+      }
+      return shortenFacebookCardTitle(t, 36);
+    },
   };
 }
 

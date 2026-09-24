@@ -11,6 +11,10 @@ import {
 } from "@/lib/facebook/promo-copy";
 import { promoPriceLabelForLink } from "@/lib/facebook/destination-price";
 import {
+  keepaOffPercent,
+  pickProductTitle,
+} from "@/lib/facebook/promo-title";
+import {
   rememberPublish,
   scoreAsin,
   scoreFormat,
@@ -24,6 +28,7 @@ export type RonCandidateCard = PromoGroupCard & {
   linkUrl: string;
   priceLabel?: string | null;
   imageFallbacks?: string[];
+  discountPercent?: number | null;
 };
 
 export type RonDecision =
@@ -53,10 +58,43 @@ function absoluteLink(linkUrl: string, appOrigin: string): string {
   return linkUrl;
 }
 
+function pushCard(
+  cards: RonCandidateCard[],
+  seen: Set<string>,
+  opts: {
+    asin: string;
+    title: string;
+    brand?: string | null;
+    imageUrl: string;
+    imageFallbacks: string[];
+    linkUrl: string;
+    priceLabel?: string | null;
+    discountPercent?: number | null;
+    meta?: string;
+  },
+) {
+  if (seen.has(opts.asin)) return;
+  if (!/^https?:\/\//i.test(opts.imageUrl)) return;
+  if (!/^https?:\/\//i.test(opts.linkUrl)) return;
+  seen.add(opts.asin);
+  cards.push({
+    id: `ron:${opts.asin}`,
+    title: pickProductTitle(opts.title).slice(0, 80),
+    brand: opts.brand || null,
+    asin: opts.asin,
+    imageUrl: opts.imageUrl,
+    linkUrl: opts.linkUrl,
+    priceLabel: opts.priceLabel ?? null,
+    meta: opts.meta || opts.brand || opts.asin,
+    imageFallbacks: opts.imageFallbacks,
+    discountPercent: opts.discountPercent ?? null,
+  });
+}
+
 /**
  * Build publishable cards.
  * Primary source = affiliate / smart links (already earning clicks).
- * Keepa ledger enriches title / price / image when present.
+ * Keepa ledger enriches title / price / image / % OFF when present.
  */
 export function buildRonCatalog(opts: {
   hits: OpportunityProduct[];
@@ -84,7 +122,6 @@ export function buildRonCatalog(opts: {
   const cards: RonCandidateCard[] = [];
   const seen = new Set<string>();
 
-  // 1) Every affiliate ASIN is publishable — this is what already has clicks
   const affEntries = [...opts.affiliateByAsin.entries()].sort(
     (a, b) => (b[1].clickCount || 0) - (a[1].clickCount || 0),
   );
@@ -92,15 +129,17 @@ export function buildRonCatalog(opts: {
     const asin = String(asinRaw || "")
       .trim()
       .toUpperCase();
-    if (!/^[A-Z0-9]{10}$/.test(asin) || seen.has(asin)) continue;
+    if (!/^[A-Z0-9]{10}$/.test(asin)) continue;
     if (!aff?.linkUrl) continue;
     const hit = hitByAsin.get(asin);
     const preferred = String(aff.imageUrl || hit?.imageUrl || "").trim();
     const pack = ronImagePack(asin, preferred);
-    if (!/^https?:\/\//i.test(pack.imageUrl)) continue;
-    const title =
-      String(aff.title || hit?.title || hit?.ebayTitle || "").trim() ||
-      `Deal ${asin}`;
+    const title = pickProductTitle(
+      hit?.title,
+      hit?.ebayTitle,
+      aff.title,
+      `Deal ${asin}`,
+    );
     const price =
       aff.priceLabel ||
       moneyLabel(hit?.buyBoxPrice ?? hit?.amazonPrice) ||
@@ -108,23 +147,19 @@ export function buildRonCatalog(opts: {
         linkUrl: aff.linkUrl,
         amazonPrice: hit?.buyBoxPrice ?? hit?.amazonPrice,
       });
-    const linkUrl = absoluteLink(aff.linkUrl, opts.appOrigin);
-    if (!/^https?:\/\//i.test(linkUrl)) continue;
-    seen.add(asin);
-    cards.push({
-      id: `ron:${asin}`,
-      title: title.slice(0, 80),
-      brand: aff.brand || hit?.brand || null,
+    pushCard(cards, seen, {
       asin,
+      title,
+      brand: aff.brand || hit?.brand || null,
       imageUrl: pack.imageUrl,
-      linkUrl,
-      priceLabel: price,
-      meta: aff.brand || hit?.brand || asin,
       imageFallbacks: pack.imageFallbacks,
+      linkUrl: absoluteLink(aff.linkUrl, opts.appOrigin),
+      priceLabel: price,
+      discountPercent: hit ? keepaOffPercent(hit) : null,
+      meta: aff.brand || hit?.brand || asin,
     });
   }
 
-  // 2) Keepa hits that got a freshly minted affiliate this cycle
   for (const hit of opts.hits) {
     const asin = String(hit.asin || "")
       .trim()
@@ -133,29 +168,21 @@ export function buildRonCatalog(opts: {
     const aff = opts.affiliateByAsin.get(asin);
     if (!aff?.linkUrl) continue;
     const pack = ronImagePack(asin, hit.imageUrl || aff.imageUrl);
-    if (!/^https?:\/\//i.test(pack.imageUrl)) continue;
-    const title =
-      String(aff.title || hit.title || hit.ebayTitle || "").trim() ||
-      `Deal ${asin}`;
-    const price =
-      moneyLabel(hit.buyBoxPrice ?? hit.amazonPrice) ||
-      promoPriceLabelForLink({
-        linkUrl: aff.linkUrl,
-        amazonPrice: hit.buyBoxPrice ?? hit.amazonPrice,
-      });
-    const linkUrl = absoluteLink(aff.linkUrl, opts.appOrigin);
-    if (!/^https?:\/\//i.test(linkUrl)) continue;
-    seen.add(asin);
-    cards.push({
-      id: `ron:${asin}`,
-      title: title.slice(0, 80),
-      brand: hit.brand || null,
+    pushCard(cards, seen, {
       asin,
+      title: pickProductTitle(hit.title, hit.ebayTitle, aff.title),
+      brand: hit.brand || null,
       imageUrl: pack.imageUrl,
-      linkUrl,
-      priceLabel: price,
-      meta: hit.brand || asin,
       imageFallbacks: pack.imageFallbacks,
+      linkUrl: absoluteLink(aff.linkUrl, opts.appOrigin),
+      priceLabel:
+        moneyLabel(hit.buyBoxPrice ?? hit.amazonPrice) ||
+        promoPriceLabelForLink({
+          linkUrl: aff.linkUrl,
+          amazonPrice: hit.buyBoxPrice ?? hit.amazonPrice,
+        }),
+      discountPercent: keepaOffPercent(hit),
+      meta: hit.brand || asin,
     });
   }
 
@@ -188,8 +215,8 @@ function pickBestPack(
 }
 
 /**
- * Decide the next Facebook post. Prefers vitrinas/carousels from related
- * Keepa winners; falls back to a single-product ads card.
+ * Decide the next Facebook post.
+ * Strict related packs only — never mix unrelated categories.
  */
 export function decideRonPublish(opts: {
   catalog: RonCandidateCard[];
@@ -210,7 +237,12 @@ export function decideRonPublish(opts: {
     };
   }
 
-  const packs = suggestPromoPacks(catalog, { limit: 8 });
+  const packs = suggestPromoPacks(catalog, {
+    limit: 8,
+    preferVitrina: true,
+    minRelated: 0.36,
+    disallowPriceBandFallback: true,
+  });
   const best = pickBestPack(packs, opts.learning, catalog);
 
   if (best) {
@@ -221,6 +253,7 @@ export function decideRonPublish(opts: {
       format: best.pack.format,
       titles: cards.map((c) => c.title),
       prices: cards.map((c) => c.priceLabel),
+      discountPercents: cards.map((c) => c.discountPercent),
       niche: best.pack.niche,
       seed: opts.seed ?? Date.now(),
     });
@@ -239,6 +272,7 @@ export function decideRonPublish(opts: {
     };
   }
 
+  // No related cluster → single product ads (never a mixed junk vitrina)
   const ranked = [...catalog].sort(
     (a, b) =>
       scoreAsin(opts.learning, b.asin) - scoreAsin(opts.learning, a.asin),
@@ -248,6 +282,7 @@ export function decideRonPublish(opts: {
     format: "ads",
     titles: [one.title],
     prices: [one.priceLabel],
+    discountPercents: [one.discountPercent],
     seed: opts.seed ?? Date.now(),
   });
   return {
@@ -255,7 +290,7 @@ export function decideRonPublish(opts: {
     format: "ads",
     cards: [one],
     message: copy.message,
-    niche: one.brand || "Deal",
+    niche: one.brand || pickProductTitle(one.title),
     reason: `1 producto · ${one.title.slice(0, 40)}`,
   };
 }

@@ -69,4 +69,7 @@ export const RON_MAX_POSTS_PER_DAY = 12;
 export const RON_KEEPA_SCAN_MIN_MINUTES = 60;
 
 /** Don't re-publish the exact same pack within this window (hours). */
-export const RON_SAME_PACK_COOLDOWN_HOURS = 4;
+export const RON_SAME_PACK_COOLDOWN_HOURS = 24;
+
+/** Don't reuse an ASIN that already went out recently (hours). */
+export const RON_ASIN_COOLDOWN_HOURS = 18;

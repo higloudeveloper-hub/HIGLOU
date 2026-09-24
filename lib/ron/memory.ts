@@ -20,6 +20,8 @@ type Row = {
   learning: RonLearning | null;
   activity_log: RonActivity[] | null;
   updated_at: string;
+  /** Optional — present after migration; ignored if missing */
+  is_working?: boolean | null;
 };
 
 function todayUtc(): string {
@@ -51,6 +53,20 @@ function parseActivity(raw: unknown): RonActivity[] {
     .slice(0, 40) as RonActivity[];
 }
 
+/** Live “working” from status + recent run (no migration required). */
+function deriveWorking(row: Partial<Row> | null): boolean {
+  if (row?.is_working === true) return true;
+  if (row?.is_working === false) {
+    // Explicit off — still allow status-based mid-cycle if message says so
+  }
+  const msg = String(row?.status_message || "");
+  if (!/^Trabajando/i.test(msg)) return false;
+  const at = row?.last_run_at || row?.updated_at;
+  if (!at) return true;
+  const age = Date.now() - new Date(at).getTime();
+  return Number.isFinite(age) && age < 3 * 60_000;
+}
+
 export function toPublicState(
   row: Partial<Row> | null,
   opts?: { working?: boolean },
@@ -68,7 +84,8 @@ export function toPublicState(
     postsToday,
     learning: parseLearning(row?.learning),
     activity: parseActivity(row?.activity_log),
-    working: Boolean(opts?.working),
+    working:
+      opts?.working != null ? Boolean(opts.working) : deriveWorking(row),
   };
 }
 
@@ -131,6 +148,34 @@ export async function saveRonPrefs(
   return loadRonState(supabase, userId);
 }
 
+/** Flip live working flag for the floating robot UI. */
+export async function setRonWorking(
+  supabase: SupabaseClient,
+  userId: string,
+  working: boolean,
+  statusMessage?: string,
+): Promise<void> {
+  await ensureRonRow(supabase, userId);
+  const patch: Record<string, unknown> = {
+    user_id: userId,
+    last_run_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  };
+  if (statusMessage) patch.status_message = statusMessage;
+  else if (working) patch.status_message = "Trabajando…";
+  // Best-effort column (migration optional)
+  patch.is_working = working;
+  const { error } = await supabase
+    .from("ron_agent_state")
+    .upsert(patch, { onConflict: "user_id" });
+  if (error && /is_working|schema cache|column/i.test(error.message)) {
+    delete patch.is_working;
+    await supabase.from("ron_agent_state").upsert(patch, {
+      onConflict: "user_id",
+    });
+  }
+}
+
 export async function appendRonActivity(
   supabase: SupabaseClient,
   userId: string,
@@ -142,6 +187,7 @@ export async function appendRonActivity(
     lastPostAt: string;
     learning: RonLearning;
     bumpPost: boolean;
+    working: boolean;
   }>,
 ): Promise<void> {
   const current = await loadRonState(supabase, userId);
@@ -162,10 +208,17 @@ export async function appendRonActivity(
   };
   if (extra?.lastError !== undefined) patch.last_error = extra.lastError;
   if (extra?.lastPostAt) patch.last_post_at = extra.lastPostAt;
+  if (extra?.working != null) patch.is_working = extra.working;
 
-  await supabase.from("ron_agent_state").upsert(patch, {
+  const { error } = await supabase.from("ron_agent_state").upsert(patch, {
     onConflict: "user_id",
   });
+  if (error && /is_working|schema cache|column/i.test(error.message)) {
+    delete patch.is_working;
+    await supabase.from("ron_agent_state").upsert(patch, {
+      onConflict: "user_id",
+    });
+  }
 }
 
 export async function listEnabledRonUsers(

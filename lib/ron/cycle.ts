@@ -2,7 +2,10 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { spendCredits } from "@/lib/credits/wallet";
 import { publishFacebookPromo } from "@/lib/facebook/promo";
 import { loadFacebookPageCredentials } from "@/lib/facebook/connection";
-import { ensureAffiliateLinksFromKeepaWinners } from "@/lib/monetization/affiliate/from-keepa-winners";
+import {
+  ensureAffiliateLinksFromKeepaWinners,
+  keepaAffiliateShareUrl,
+} from "@/lib/monetization/affiliate/from-keepa-winners";
 import { resolveUserAssociateTag } from "@/lib/monetization/affiliate/links";
 import type { OpportunityProduct } from "@/lib/opportunity/types";
 import {
@@ -16,7 +19,9 @@ import {
   appendRonActivity,
   loadRonState,
   saveRonPrefs,
+  setRonWorking,
 } from "@/lib/ron/memory";
+import { normalizeRonHit } from "@/lib/ron/normalize-hit";
 import {
   RON_MAX_POSTS_PER_DAY,
   RON_SAME_PACK_COOLDOWN_HOURS,
@@ -32,28 +37,45 @@ function appOrigin(): string {
   return "https://higlou.vercel.app";
 }
 
+/**
+ * Load Keepa opportunities from the ledger.
+ * Prefer row.asin (always present) over payload-only — payload can be partial.
+ */
 async function loadKeepaHits(
   supabase: SupabaseClient,
   userId: string,
 ): Promise<OpportunityProduct[]> {
   const { data } = await supabase
     .from("opportunity_ledger")
-    .select("asin, payload, title, brand, image_url, net_profit")
+    .select("asin, payload, title, brand, image_url, net_profit, score, mode")
     .eq("user_id", userId)
     .order("net_profit", { ascending: false })
-    .limit(60);
+    .limit(80);
 
   const hits: OpportunityProduct[] = [];
+  const seen = new Set<string>();
+
   for (const row of data || []) {
-    const payload = (row.payload || {}) as OpportunityProduct;
-    if (payload?.asin) {
-      hits.push({
-        ...payload,
-        imageUrl: payload.imageUrl || String(row.image_url || ""),
-        title: payload.title || String(row.title || payload.asin),
-        brand: payload.brand || String(row.brand || ""),
-      });
-    }
+    const payload = (row.payload && typeof row.payload === "object"
+      ? row.payload
+      : {}) as Partial<OpportunityProduct>;
+    const merged = normalizeRonHit({
+      ...payload,
+      asin: payload.asin || row.asin,
+      title: payload.title || row.title || payload.ebayTitle,
+      brand: payload.brand || row.brand,
+      imageUrl: payload.imageUrl || String(row.image_url || ""),
+      image_url: row.image_url,
+      net_profit: row.net_profit,
+      netProfit: payload.netProfit ?? row.net_profit,
+      score: payload.score ?? row.score,
+      mode: payload.mode || (row.mode as OpportunityProduct["mode"]) || "amazon",
+      keepa: payload.keepa ?? true,
+    });
+    if (!merged) continue;
+    if (seen.has(merged.asin)) continue;
+    seen.add(merged.asin);
+    hits.push(merged);
   }
   return hits;
 }
@@ -74,13 +96,13 @@ async function loadAffiliateMap(
     .select("id, asin, destination_url")
     .eq("user_id", userId)
     .order("created_at", { ascending: false })
-    .limit(80);
+    .limit(120);
 
   const { data: smart } = await supabase
     .from("smart_links")
     .select("slug, affiliate_link_id, label, destination_url")
     .eq("user_id", userId)
-    .limit(80);
+    .limit(120);
 
   const smartByAff = new Map<string, { path: string; label: string }>();
   for (const s of smart || []) {
@@ -122,8 +144,8 @@ export type RonCycleResult = {
 
 /**
  * One RON work cycle:
- * Learn → Keepa scan (max 1/h) → sync affiliates → publish when there is a NEW opportunity.
- * No fixed minutes-between-posts timer.
+ * Learn → Keepa scan (max 1/h, forced when empty/manual) → sync affiliates →
+ * publish when there is a NEW opportunity. No fixed minutes-between-posts timer.
  */
 export async function runRonCycle(
   supabase: SupabaseClient,
@@ -142,6 +164,7 @@ export async function runRonCycle(
     return { ok: true, state, skipped: "RON está apagado" };
   }
 
+  await setRonWorking(supabase, userId, true, "Trabajando · despertando…");
   await appendRonActivity(
     supabase,
     userId,
@@ -150,8 +173,22 @@ export async function runRonCycle(
       kind: "wake",
       message: "RON despertó · buscando oportunidades…",
     },
-    { statusMessage: "Trabajando · oportunidades" },
+    { statusMessage: "Trabajando · buscando oportunidades", working: true },
   );
+
+  const finish = async (
+    result: RonCycleResult,
+    workingMsg?: string,
+  ): Promise<RonCycleResult> => {
+    await setRonWorking(
+      supabase,
+      userId,
+      false,
+      workingMsg || result.state.statusMessage,
+    );
+    result.state = await loadRonState(supabase, userId);
+    return result;
+  };
 
   // Soft daily credit safety (not a timer between posts)
   if (!opts.force && state.postsToday >= RON_MAX_POSTS_PER_DAY) {
@@ -160,10 +197,10 @@ export async function runRonCycle(
       supabase,
       userId,
       { at: new Date().toISOString(), kind: "skip", message: msg },
-      { statusMessage: msg, lastError: null },
+      { statusMessage: msg, lastError: null, working: false },
     );
     state = await loadRonState(supabase, userId);
-    return { ok: true, state, skipped: msg };
+    return finish({ ok: true, state, skipped: msg });
   }
 
   const creds = await loadFacebookPageCredentials(supabase, userId);
@@ -173,10 +210,10 @@ export async function runRonCycle(
       supabase,
       userId,
       { at: new Date().toISOString(), kind: "error", message: msg },
-      { statusMessage: msg, lastError: msg },
+      { statusMessage: msg, lastError: msg, working: false },
     );
     state = await loadRonState(supabase, userId);
-    return { ok: false, state, error: msg };
+    return finish({ ok: false, state, error: msg });
   }
 
   const tag = await resolveUserAssociateTag(supabase, userId);
@@ -186,10 +223,10 @@ export async function runRonCycle(
       supabase,
       userId,
       { at: new Date().toISOString(), kind: "error", message: msg },
-      { statusMessage: msg, lastError: msg },
+      { statusMessage: msg, lastError: msg, working: false },
     );
     state = await loadRonState(supabase, userId);
-    return { ok: false, state, error: msg };
+    return finish({ ok: false, state, error: msg });
   }
 
   let learning = await learnFromAffiliateClicks(
@@ -205,14 +242,36 @@ export async function runRonCycle(
       kind: "learn",
       message: `Aprendí de ${learning.clicksSeen} clicks · ciclo #${learning.cycles}`,
     },
-    { learning, statusMessage: "Aprendiendo de clicks…" },
+    { learning, statusMessage: "Trabajando · aprendiendo de clicks…", working: true },
   );
 
-  // Live Keepa scan — at most once per hour
+  // Peek ledger first — if empty, force a Keepa scan even inside the hour window
+  let ledgerHits = await loadKeepaHits(supabase, userId);
+  const shouldForceScan =
+    Boolean(opts.forceScan) || ledgerHits.length === 0;
+
+  await appendRonActivity(
+    supabase,
+    userId,
+    {
+      at: new Date().toISOString(),
+      kind: "scan",
+      message: shouldForceScan
+        ? "Escaneando Keepa en vivo…"
+        : `Ledger: ${ledgerHits.length} oportunidades · Keepa si toca`,
+    },
+    {
+      statusMessage: shouldForceScan
+        ? "Trabajando · Keepa en vivo…"
+        : "Trabajando · revisando ledger Keepa…",
+      working: true,
+    },
+  );
+
   const keepa = await maybeRunRonKeepaScan(supabase, {
     userId,
     learning,
-    force: Boolean(opts.forceScan),
+    force: shouldForceScan,
     pageOrigin: appOrigin(),
   });
   learning = keepa.learning;
@@ -227,28 +286,40 @@ export async function runRonCycle(
     {
       learning,
       statusMessage: keepa.ran
-        ? "Keepa: nuevas tendencias…"
-        : keepa.reason || "Usando ledger Keepa…",
+        ? `Trabajando · Keepa: ${keepa.winners.length} trends`
+        : keepa.reason || "Trabajando · usando ledger Keepa…",
+      working: true,
     },
   );
 
-  // Merge fresh scan winners + ledger
-  const ledgerHits = await loadKeepaHits(supabase, userId);
+  // Fresh ledger after scan (scan persists winners)
+  ledgerHits = await loadKeepaHits(supabase, userId);
+
   const byAsin = new Map<string, OpportunityProduct>();
   for (const h of [...keepa.winners, ...ledgerHits]) {
-    const asin = String(h.asin || "")
-      .trim()
-      .toUpperCase();
-    if (asin && !byAsin.has(asin)) byAsin.set(asin, h);
+    const n = normalizeRonHit(h);
+    if (!n) continue;
+    if (!byAsin.has(n.asin)) byAsin.set(n.asin, n);
   }
   const hits = [...byAsin.values()];
+
+  await appendRonActivity(
+    supabase,
+    userId,
+    {
+      at: new Date().toISOString(),
+      kind: "scan",
+      message: `Sincronizando afiliados · ${hits.length} ASINs`,
+    },
+    { statusMessage: "Trabajando · creando links de afiliado…", working: true },
+  );
 
   const synced = await ensureAffiliateLinksFromKeepaWinners(supabase, {
     userId,
     hits,
     source: "ron",
     campaignName: "RON Agent",
-    limit: 24,
+    limit: 40,
   });
 
   await appendRonActivity(
@@ -257,12 +328,38 @@ export async function runRonCycle(
     {
       at: new Date().toISOString(),
       kind: "scan",
-      message: `Pool: ${hits.length} winners · ${synced.created} links nuevos · ${synced.reused} listos`,
+      message: `Pool: ${hits.length} winners · ${synced.created} links nuevos · ${synced.reused} listos${
+        synced.error ? ` · ${synced.error}` : ""
+      }`,
     },
-    { statusMessage: "Eligiendo oportunidad…" },
+    {
+      statusMessage: synced.error
+        ? `Trabajando · ${synced.error}`
+        : "Trabajando · eligiendo oportunidad…",
+      working: true,
+      lastError: synced.error || null,
+    },
   );
 
   const affiliateByAsin = await loadAffiliateMap(supabase, userId);
+
+  // Immediately merge just-minted links (avoid race / stale read)
+  for (const link of synced.links) {
+    const asin = String(link.asin || "")
+      .trim()
+      .toUpperCase();
+    if (!asin) continue;
+    const url = keepaAffiliateShareUrl(link);
+    if (!/^https?:\/\//i.test(url)) continue;
+    const hit = byAsin.get(asin);
+    const prev = affiliateByAsin.get(asin);
+    affiliateByAsin.set(asin, {
+      linkUrl: url,
+      imageUrl: prev?.imageUrl || hit?.imageUrl || null,
+      title: prev?.title || hit?.title || null,
+    });
+  }
+
   for (const hit of hits) {
     const asin = String(hit.asin || "")
       .trim()
@@ -280,6 +377,23 @@ export async function runRonCycle(
     appOrigin: appOrigin(),
   });
 
+  await appendRonActivity(
+    supabase,
+    userId,
+    {
+      at: new Date().toISOString(),
+      kind: "scan",
+      message: `Catálogo listo: ${catalog.length} productos publicables`,
+    },
+    {
+      statusMessage:
+        catalog.length > 0
+          ? `Trabajando · ${catalog.length} listos para Facebook`
+          : "Trabajando · sin catálogo aún…",
+      working: true,
+    },
+  );
+
   const decision = decideRonPublish({ catalog, learning });
   if (decision.action === "skip") {
     await appendRonActivity(
@@ -290,10 +404,10 @@ export async function runRonCycle(
         kind: "skip",
         message: decision.reason,
       },
-      { statusMessage: decision.reason, learning, lastError: null },
+      { statusMessage: decision.reason, learning, lastError: null, working: false },
     );
     state = await loadRonState(supabase, userId);
-    return { ok: true, state, skipped: decision.reason };
+    return finish({ ok: true, state, skipped: decision.reason });
   }
 
   const packAsins = decision.cards
@@ -316,10 +430,10 @@ export async function runRonCycle(
         message: msg,
         format: decision.format,
       },
-      { statusMessage: msg, learning, lastError: null },
+      { statusMessage: msg, learning, lastError: null, working: false },
     );
     state = await loadRonState(supabase, userId);
-    return { ok: true, state, skipped: msg };
+    return finish({ ok: true, state, skipped: msg });
   }
 
   const dry = opts.dryRun || state.mode === "watch";
@@ -334,11 +448,27 @@ export async function runRonCycle(
         message: msg,
         format: decision.format,
       },
-      { statusMessage: msg, learning },
+      { statusMessage: msg, learning, working: false },
     );
     state = await loadRonState(supabase, userId);
-    return { ok: true, state, skipped: msg };
+    return finish({ ok: true, state, skipped: msg });
   }
+
+  await appendRonActivity(
+    supabase,
+    userId,
+    {
+      at: new Date().toISOString(),
+      kind: "publish",
+      message: `Publicando ${decision.format} · ${decision.niche}…`,
+      format: decision.format,
+    },
+    {
+      statusMessage: `Trabajando · publicando ${decision.format} en Facebook…`,
+      working: true,
+      learning,
+    },
+  );
 
   const spent = await spendCredits({
     userId,
@@ -352,10 +482,10 @@ export async function runRonCycle(
       supabase,
       userId,
       { at: new Date().toISOString(), kind: "error", message: msg },
-      { statusMessage: msg, lastError: msg, learning },
+      { statusMessage: msg, lastError: msg, learning, working: false },
     );
     state = await loadRonState(supabase, userId);
-    return { ok: false, state, error: msg };
+    return finish({ ok: false, state, error: msg });
   }
 
   const published = await publishFacebookPromo(supabase, {
@@ -385,10 +515,15 @@ export async function runRonCycle(
         message: published.error,
         format: decision.format,
       },
-      { statusMessage: published.error, lastError: published.error, learning },
+      {
+        statusMessage: published.error,
+        lastError: published.error,
+        learning,
+        working: false,
+      },
     );
     state = await loadRonState(supabase, userId);
-    return { ok: false, state, error: published.error };
+    return finish({ ok: false, state, error: published.error });
   }
 
   learning = rememberPublish(learning, {
@@ -416,6 +551,7 @@ export async function runRonCycle(
       lastPostAt: new Date().toISOString(),
       learning,
       bumpPost: true,
+      working: false,
     },
   );
 
@@ -425,10 +561,10 @@ export async function runRonCycle(
   });
 
   state = await loadRonState(supabase, userId);
-  return {
+  return finish({
     ok: true,
     state,
     published: true,
     postUrl,
-  };
+  });
 }

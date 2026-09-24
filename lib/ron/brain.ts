@@ -16,6 +16,7 @@ import {
   scoreFormat,
   scoreNiche,
 } from "@/lib/ron/learn";
+import { ronImagePack } from "@/lib/ron/normalize-hit";
 import type { RonFormat, RonLearning } from "@/lib/ron/types";
 
 export type RonCandidateCard = PromoGroupCard & {
@@ -64,9 +65,9 @@ export function buildRonCatalog(opts: {
     if (!/^[A-Z0-9]{10}$/.test(asin)) continue;
     const aff = opts.affiliateByAsin.get(asin);
     if (!aff?.linkUrl) continue;
-    const imageUrl =
-      String(aff.imageUrl || hit.imageUrl || "").trim() || "";
-    if (!/^https?:\/\//i.test(imageUrl)) continue;
+    const preferred = String(aff.imageUrl || hit.imageUrl || "").trim();
+    const pack = ronImagePack(asin, preferred);
+    if (!/^https?:\/\//i.test(pack.imageUrl)) continue;
     const title =
       String(aff.title || hit.title || hit.ebayTitle || "").trim() ||
       `Deal ${asin}`;
@@ -80,16 +81,17 @@ export function buildRonCatalog(opts: {
     if (linkUrl.startsWith("/")) {
       linkUrl = `${opts.appOrigin}${linkUrl}`;
     }
+    if (!/^https?:\/\//i.test(linkUrl)) continue;
     cards.push({
       id: `ron:${asin}`,
       title: title.slice(0, 80),
       brand: hit.brand || null,
       asin,
-      imageUrl,
+      imageUrl: pack.imageUrl,
       linkUrl,
       priceLabel: price,
       meta: hit.brand || asin,
-      imageFallbacks: imageUrl ? [imageUrl] : [],
+      imageFallbacks: pack.imageFallbacks,
     });
   }
   return dedupePromoCards(cards) as RonCandidateCard[];
@@ -137,7 +139,7 @@ export function decideRonPublish(opts: {
     return {
       action: "skip",
       reason:
-        "Sin productos Keepa con link de afiliado listo. Escaneá Find Winners.",
+        "Aún armando links de afiliado desde Keepa · reintento solo en el próximo ciclo",
     };
   }
 

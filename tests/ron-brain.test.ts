@@ -5,18 +5,20 @@ import {
   buildRonCatalog,
   decideRonPublish,
 } from "@/lib/ron/brain";
+import { normalizeRonHit } from "@/lib/ron/normalize-hit";
 import type { OpportunityProduct } from "@/lib/opportunity/types";
 
 function hit(
   asin: string,
   title: string,
   brand: string,
+  imageUrl?: string,
 ): OpportunityProduct {
   return {
     asin,
     title,
     brand,
-    imageUrl: `https://m.media-amazon.com/images/I/${asin}.jpg`,
+    imageUrl: imageUrl ?? `https://m.media-amazon.com/images/I/${asin}.jpg`,
     upc: "",
     salesRank: 1000,
     salesRankLabel: "",
@@ -93,6 +95,24 @@ describe("RON brain", () => {
     expect(catalog[0]!.linkUrl).toContain("/go/");
   });
 
+  it("fills Amazon ASIN image when ledger hit has no image", () => {
+    const hits = [hit("B0NOIMG001", "Gadget Sin Foto", "Solo", "")];
+    const map = new Map([
+      [
+        "B0NOIMG001",
+        { linkUrl: "https://higlou.vercel.app/go/nofoto" },
+      ],
+    ]);
+    const catalog = buildRonCatalog({
+      hits,
+      affiliateByAsin: map,
+      appOrigin: "https://higlou.vercel.app",
+    });
+    expect(catalog).toHaveLength(1);
+    expect(catalog[0]!.imageUrl).toMatch(/^https?:\/\//);
+    expect(catalog[0]!.imageFallbacks?.length).toBeGreaterThan(0);
+  });
+
   it("prefers a multi-card pack when related products exist", () => {
     const hits = [
       hit("B0TEST0001", "Anker Power Bank 20000mAh", "Anker"),
@@ -155,6 +175,18 @@ describe("RON brain", () => {
     }
   });
 
+  it("skip reason does not send the user to Find Winners", () => {
+    const decision = decideRonPublish({
+      catalog: [],
+      learning: RON_DEFAULT_LEARNING,
+    });
+    expect(decision.action).toBe("skip");
+    if (decision.action === "skip") {
+      expect(decision.reason.toLowerCase()).not.toMatch(/find winners/);
+      expect(decision.reason.toLowerCase()).toMatch(/reintento|ciclo|afiliado/);
+    }
+  });
+
   it("rememberPublish tracks pack fingerprints for opportunity gating", () => {
     const next = rememberPublish(RON_DEFAULT_LEARNING, {
       format: "vitrina",
@@ -165,5 +197,18 @@ describe("RON brain", () => {
       true,
     );
     expect(isRecentSamePack(next, ["B0NEW00001"], 4)).toBe(false);
+  });
+
+  it("normalizeRonHit recovers ASIN from ledger columns when payload is thin", () => {
+    const n = normalizeRonHit({
+      asin: "b0ledger01",
+      title: "Ledger Deal",
+      image_url: "",
+      mode: "amazon",
+    });
+    expect(n).not.toBeNull();
+    expect(n!.asin).toBe("B0LEDGER01");
+    expect(n!.keepa).toBe(true);
+    expect(n!.imageUrl).toMatch(/^https?:\/\//);
   });
 });

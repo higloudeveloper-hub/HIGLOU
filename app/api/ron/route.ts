@@ -91,9 +91,19 @@ export async function POST(request: Request) {
   }
 
   if (parsed.run) {
+    // Ensure enabled when manually forcing a cycle with force:true
+    if (parsed.force && parsed.enabled !== false) {
+      await saveRonPrefs(auth.supabase, auth.user.id, {
+        enabled: true,
+        mode: "auto",
+        statusMessage: "Trabajando · ciclo manual…",
+      });
+    }
     const result = await runRonCycle(auth.supabase, {
       userId: auth.user.id,
       force: Boolean(parsed.force),
+      // Cycle auto-forces Keepa only when the ledger is empty
+      forceScan: false,
     });
     return NextResponse.json({
       agent: "ron",

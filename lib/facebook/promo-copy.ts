@@ -1,7 +1,7 @@
 /**
- * Facebook Page copy — short, natural, professional.
- * Graph API has no markdown bold; we use Mathematical Bold Unicode
- * so key lines render as “negrita” in the feed.
+ * Facebook Page copy — Amazon Deals editorial aesthetic.
+ * Ultra-short, premium, minimal. Graph has no markdown; we use
+ * Mathematical Bold Unicode so hooks read as bold in the feed.
  */
 
 export type PromoFormat = "ads" | "carousel" | "vitrina";
@@ -23,9 +23,9 @@ export type PromoCopyResult = {
   message: string;
   /** Vitrina collection title */
   collectionTitle: string;
-  /** One-line card description for child_attachments */
+  /** One-line card description for child_attachments — price only */
   cardDescription: (priceLabel?: string | null) => string;
-  /** Short card name polish */
+  /** Short card name polish — product title only */
   cardName: (title: string) => string;
 };
 
@@ -43,6 +43,9 @@ const BOLD_MAP: Record<string, string> = {};
     BOLD_MAP[String(i)] = [...digits][i]!;
   }
 })();
+
+const RULE = "━━━━━━━━━━━━";
+const RULE_SHORT = "━━━━━━━━━━━";
 
 /** Bold only Latin letters/digits; keep punctuation & accents readable. */
 export function facebookBold(text: string): string {
@@ -74,10 +77,18 @@ function cleanNiche(raw?: string | null): string {
   return n.slice(0, 32);
 }
 
+/** Price only — no "verificado", no Amazon suffix. */
+function priceOnly(priceLabel?: string | null): string {
+  const p = String(priceLabel || "").trim();
+  if (!p) return "";
+  // Keep $xx.xx if already a money label; otherwise pass through short label
+  return p.slice(0, 24);
+}
+
 /** First meaningful noun-ish chunk from a title for copy hooks. */
 export function productHook(title: string): string {
   const clean = cleanTitle(title);
-  if (!clean) return "este producto";
+  if (!clean) return "Deal";
   const stop = new Set([
     "the",
     "a",
@@ -110,84 +121,68 @@ export function productHook(title: string): string {
   return hook || clean.slice(0, 32);
 }
 
-/** Max ~2 short lines. Bold hook + one calm line. */
+/** Single-product deal posts — editorial, not salesy. */
 const ADS_HOOKS = [
-  (h: string, p: string) =>
-    `${facebookBold(h)}${p ? `\n${p}` : ""}\nPrecio verificado.`,
-  (h: string, p: string) =>
-    `${facebookBold("Hoy")}\n${h}${p ? ` · ${p}` : ""}`,
-  (h: string, p: string) =>
-    `${facebookBold(h)}\n${p ? `${p} · ` : ""}Selección Higlou.`,
-  (h: string, p: string) =>
-    `${facebookBold("Precio limpio")}\n${h}${p ? ` · ${p}` : ""}`,
+  () =>
+    `${facebookBold("TODAY'S DEAL")}\n${RULE}\n${facebookBold("SHOP NOW")} →`,
+  () =>
+    `${facebookBold("DEAL OF THE DAY")}\n${RULE}\n${facebookBold("SHOP")} →`,
+  () =>
+    `${facebookBold("TODAY")}\n${RULE_SHORT}\n${facebookBold("SHOP NOW")} →`,
 ];
 
+/** Carousel / multi — Amazon Deals swipe energy. */
 const CAROUSEL_HOOKS = [
-  (n: number, niche: string) =>
-    `${facebookBold(niche || "Selección")}\n${n} opciones · precio verificado.`,
-  (n: number, niche: string) =>
-    `${facebookBold(niche || "Higlou")}\n${n} productos. Deslizá y elegí.`,
-  (n: number, niche: string) =>
-    `${facebookBold("Compará")}\n${niche ? `${niche} · ` : ""}${n} opciones.`,
+  () =>
+    `${facebookBold("TOP DEALS")}\n${RULE_SHORT}\n${facebookBold("SWIPE")} → ${facebookBold("SHOP")}`,
+  () =>
+    `${facebookBold("TODAY'S PICKS")}\n${RULE_SHORT}\n${facebookBold("SWIPE")} → ${facebookBold("SHOP")}`,
+  () =>
+    `${facebookBold("DEALS")}\n${RULE_SHORT}\n${facebookBold("SWIPE TO SHOP")} →`,
 ];
 
+/** Vitrina / collection — same retail-premium language. */
 const VITRINA_HOOKS = [
-  (niche: string, n: number) =>
-    `${facebookBold(niche || "Selección")}\n${n} productos · precio verificado.`,
-  (niche: string, n: number) =>
-    `${facebookBold(niche || "Higlou")}\n${n} opciones. Sin relleno.`,
-  (niche: string, n: number) =>
-    `${facebookBold("Selección")}\n${niche ? `${niche} · ` : ""}${n} productos.`,
+  () =>
+    `${facebookBold("TOP DEALS")}\n${RULE_SHORT}\n${facebookBold("SWIPE")} → ${facebookBold("SHOP")}`,
+  () =>
+    `${facebookBold("CURATED")}\n${RULE_SHORT}\n${facebookBold("SWIPE")} → ${facebookBold("SHOP")}`,
+  () =>
+    `${facebookBold("TODAY'S DEALS")}\n${RULE}\n${facebookBold("SHOP NOW")} →`,
 ];
 
-const VITRINA_TITLES = [
-  "Selección",
-  "Higlou",
-  "Verificado",
-  "Hoy",
-];
+const VITRINA_TITLES = ["Top Deals", "Today's Deals", "Deals", "Picks"];
 
 /**
- * Build Page-ready copy: short bold hook + one calm line.
+ * Build Page-ready copy: bold deal line + rule + CTA.
+ * Cards: product name + price only.
  */
 export function buildFacebookPromoCopy(
   input: PromoCopyInput,
 ): PromoCopyResult {
   const seed = input.seed ?? Date.now();
-  const titles = (input.titles || []).map(cleanTitle).filter(Boolean);
-  const prices = (input.prices || []).filter(
-    (p): p is string => Boolean(p && String(p).trim()),
-  );
   const niche = cleanNiche(input.niche);
-  const count = Math.max(titles.length, 1);
-  const firstTitle = titles[0] || niche || "producto";
-  const hook = productHook(firstTitle);
-  const price = prices[0] || "";
 
   let message: string;
   let collectionTitle: string;
 
   if (input.format === "ads") {
-    message = pick(ADS_HOOKS, seed)(hook, price);
-    collectionTitle = "Higlou";
+    message = pick(ADS_HOOKS, seed)();
+    collectionTitle = "Today's Deal";
   } else if (input.format === "carousel") {
-    message = pick(CAROUSEL_HOOKS, seed)(count, niche);
-    collectionTitle = niche || "Selección";
+    message = pick(CAROUSEL_HOOKS, seed)();
+    collectionTitle = niche || "Top Deals";
   } else {
-    message = pick(VITRINA_HOOKS, seed)(niche, count);
+    message = pick(VITRINA_HOOKS, seed)();
     collectionTitle = niche || pick(VITRINA_TITLES, seed);
   }
 
   return {
     message,
     collectionTitle: collectionTitle.slice(0, 60),
-    cardDescription: (priceLabel) => {
-      const p = String(priceLabel || "").trim();
-      if (p) return p.slice(0, 40);
-      return "Verificado";
-    },
+    cardDescription: (priceLabel) => priceOnly(priceLabel),
     cardName: (title) => {
-      const cleaned = cleanTitle(title) || "Higlou";
+      const cleaned = cleanTitle(title) || "Deal";
       return cleaned.slice(0, 60);
     },
   };

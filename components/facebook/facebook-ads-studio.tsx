@@ -1304,7 +1304,7 @@ export function FacebookAdsStudio() {
                         </p>
                         {selectedCards[0]!.priceLabel ? (
                           <p className="text-[11px] font-semibold text-[#3665F3]">
-                            {selectedCards[0]!.priceLabel} · verificado
+                            {selectedCards[0]!.priceLabel}
                           </p>
                         ) : null}
                       </div>

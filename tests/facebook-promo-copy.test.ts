@@ -20,30 +20,34 @@ describe("facebook promo copy", () => {
     expect(facebookBold("WOW 12")).toContain("𝟭𝟮");
   });
 
-  it("builds a short ads message with bold hook", () => {
+  it("ads copy is Amazon-Deals editorial (no precio verificado)", () => {
     const copy = buildFacebookPromoCopy({
       format: "ads",
       titles: ["Anker Power Bank 10000mAh Portable Charger"],
       prices: ["$24.99"],
       seed: 0,
     });
-    expect(copy.message.split("\n").length).toBeLessThanOrEqual(3);
-    expect(copy.message.length).toBeLessThan(90);
+    expect(copy.message.split("\n").length).toBe(3);
+    expect(copy.message).toContain("━━━━━━━━");
+    expect(copy.message.toLowerCase()).not.toMatch(/verificad|higlou|precio/);
     expect(copy.cardDescription("$24.99")).toBe("$24.99");
+    expect(copy.cardDescription(null)).toBe("");
     expect(copy.cardName("ASIN B0CHS1BVBC Anker Bank")).toBe("Anker Bank");
   });
 
-  it("carousel copy mentions product count", () => {
+  it("carousel copy is TOP DEALS / SWIPE → SHOP", () => {
     const copy = buildFacebookPromoCopy({
       format: "carousel",
       titles: ["A", "B", "C"],
-      seed: 1,
+      seed: 0,
     });
-    expect(copy.message).toContain("3");
-    expect(copy.message.split("\n").length).toBeLessThanOrEqual(2);
+    expect(copy.message).toMatch(/𝗧𝗢𝗣 𝗗𝗘𝗔𝗟𝗦|𝗧𝗢𝗗𝗔𝗬|𝗗𝗘𝗔𝗟𝗦/);
+    expect(copy.message).toContain("→");
+    expect(copy.message.split("\n").length).toBe(3);
+    expect(copy.message.toLowerCase()).not.toMatch(/verificad|opciones/);
   });
 
-  it("vitrina copy is short, natural, ignores junk niche /Go", () => {
+  it("vitrina copy is short retail-premium, ignores junk niche /Go", () => {
     const copy = buildFacebookPromoCopy({
       format: "vitrina",
       titles: ["Label Printer Wireless", "Label Tape", "Label Maker"],
@@ -52,15 +56,14 @@ describe("facebook promo copy", () => {
     });
     expect(copy.collectionTitle.toLowerCase()).not.toMatch(/\/go/);
     expect(copy.message.toLowerCase()).not.toMatch(
-      /precios bajos|curaduría|vitrina profesional|sin relleno\. solo/,
+      /precios bajos|curaduría|verificad|sin relleno/,
     );
-    expect(copy.message.split("\n").length).toBeLessThanOrEqual(2);
-    expect(copy.message.length).toBeLessThan(80);
-    expect(copy.collectionTitle.length).toBeGreaterThan(2);
+    expect(copy.message.split("\n").length).toBe(3);
+    expect(copy.message).toContain("━━━━━━━━");
     expect(defaultFacebookPromoMessage("ads")).toContain("\n");
   });
 
-  it("vitrina uses real niche when provided", () => {
+  it("vitrina uses niche as collection title when provided", () => {
     const copy = buildFacebookPromoCopy({
       format: "vitrina",
       titles: ["A", "B", "C"],
@@ -68,7 +71,6 @@ describe("facebook promo copy", () => {
       seed: 0,
     });
     expect(copy.collectionTitle).toBe("Anker");
-    expect(copy.message).toMatch(/Anker|𝗮𝗻𝗸𝗲𝗿|𝗔𝗻𝗸𝗲𝗿/i);
   });
 
   it("productHook pulls meaningful words", () => {

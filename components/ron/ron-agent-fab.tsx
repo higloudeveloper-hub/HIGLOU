@@ -512,9 +512,9 @@ export function RonAgentFab() {
 
               <div className="space-y-3 overflow-y-auto px-4 py-3">
                 <p className="text-[13px] leading-relaxed text-white/75">
-                  En cada escaneo general activa las 6 modalidades Keepa,
-                  busca oportunidades reales y solo republica una vitrina si
-                  ya está generando clicks — si no, publica variedad nueva.
+                  Escanea las 6 modalidades Keepa y solo publica vitrinas o
+                  carruseles de productos relacionados y nuevos. Nunca un
+                  producto suelto ni la misma vitrina dos veces.
                 </p>
 
                 <div className="grid grid-cols-3 gap-2 text-center">
@@ -637,10 +637,14 @@ export function RonAgentFab() {
                                 href={a.postUrl}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="mt-1 block font-semibold text-[#93c5fd] hover:underline"
+                                className="mt-1.5 inline-flex items-center gap-1 rounded-lg bg-[#1d4ed8]/40 px-2.5 py-1 text-[11px] font-semibold text-[#bfdbfe] hover:bg-[#1d4ed8]/60"
                               >
-                                Ver post
+                                Ver publicación →
                               </a>
+                            ) : a.kind === "publish" ? (
+                              <span className="mt-1 block text-[11px] text-white/45">
+                                Sin link de post · revisá la Page en Facebook
+                              </span>
                             ) : null}
                           </motion.li>
                         ))}

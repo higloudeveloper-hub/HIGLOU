@@ -596,13 +596,32 @@ export async function runRonCycle(
     return finish({ ok: true, state, skipped: msg });
   }
 
+  // Hard gate: never ship a solo card (no tappable multi-product post)
+  if (publishDecision.cards.length < 2) {
+    const msg =
+      "Abortado · RON no publica productos sueltos · espero pack relacionado";
+    await appendRonActivity(
+      supabase,
+      userId,
+      {
+        at: new Date().toISOString(),
+        kind: "skip",
+        message: msg,
+        format: publishDecision.format,
+      },
+      { statusMessage: msg, learning, lastError: null, working: false },
+    );
+    state = await loadRonState(supabase, userId);
+    return finish({ ok: true, state, skipped: msg });
+  }
+
   await appendRonActivity(
     supabase,
     userId,
     {
       at: new Date().toISOString(),
       kind: "publish",
-      message: `Publicando ${publishDecision.format} · ${publishDecision.niche}…`,
+      message: `Publicando ${publishDecision.format} · ${publishDecision.cards.length} productos · ${publishDecision.niche}…`,
       format: publishDecision.format,
     },
     {
@@ -682,8 +701,12 @@ export async function runRonCycle(
   });
 
   const postUrl =
-    published.mode === "page_post" ? published.postUrl : null;
-  const okMsg = `Publicé ${publishDecision.format} · ${publishDecision.niche}`;
+    published.mode === "page_post"
+      ? published.postUrl
+      : published.mode === "sharer"
+        ? published.shareUrl
+        : null;
+  const okMsg = `Publicé ${publishDecision.format} · ${publishDecision.cards.length} productos · ${publishDecision.niche}`;
   await appendRonActivity(
     supabase,
     userId,

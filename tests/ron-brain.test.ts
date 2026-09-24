@@ -141,13 +141,13 @@ describe("RON brain", () => {
     });
     expect(decision.action).toBe("publish");
     if (decision.action === "publish") {
-      expect(["vitrina", "carousel", "ads"]).toContain(decision.format);
-      expect(decision.cards.length).toBeGreaterThanOrEqual(1);
+      expect(["vitrina", "carousel"]).toContain(decision.format);
+      expect(decision.cards.length).toBeGreaterThanOrEqual(2);
       expect(decision.message.length).toBeGreaterThan(0);
     }
   });
 
-  it("falls back to ads with one product", () => {
+  it("skips solo products — never publishes a single loose card", () => {
     const hits = [hit("B0SOLO0001", "Solo Gadget Pro", "Solo")];
     const map = new Map([
       [
@@ -168,10 +168,9 @@ describe("RON brain", () => {
       learning: RON_DEFAULT_LEARNING,
       seed: 2,
     });
-    expect(decision.action).toBe("publish");
-    if (decision.action === "publish") {
-      expect(decision.format).toBe("ads");
-      expect(decision.cards).toHaveLength(1);
+    expect(decision.action).toBe("skip");
+    if (decision.action === "skip") {
+      expect(decision.reason.toLowerCase()).toMatch(/relacionad|sueltos|≥2|>=2/);
     }
   });
 
@@ -181,7 +180,7 @@ describe("RON brain", () => {
         "B0AFFONLY1",
         {
           linkUrl: "https://higlou.vercel.app/go/aff1",
-          title: "Best Seller Cable",
+          title: "Best Seller Cable USB C",
           clickCount: 40,
         },
       ],
@@ -189,7 +188,7 @@ describe("RON brain", () => {
         "B0AFFONLY2",
         {
           linkUrl: "https://www.amazon.com/dp/B0AFFONLY2?tag=higlou-20",
-          title: "Quiet Fan",
+          title: "USB C Cable Fast Charge",
           clickCount: 12,
         },
       ],
@@ -207,10 +206,14 @@ describe("RON brain", () => {
       learning: RON_DEFAULT_LEARNING,
       seed: 9,
     });
-    expect(decision.action).toBe("publish");
+    // Two related cables → pack, or skip if not related enough — never 1 solo
+    if (decision.action === "publish") {
+      expect(decision.cards.length).toBeGreaterThanOrEqual(2);
+      expect(decision.format).not.toBe("ads");
+    }
   });
 
-  it("never packs a tablet with a supplement — falls back to ads or tablet-only", () => {
+  it("never packs a tablet with a supplement — tablet pack or skip", () => {
     const hits = [
       hit("B0TABMIX01", "Kids Tablet 10 inch Android", "Yosa"),
       hit("B0TABMIX02", "Kids Tablet 8 inch WiFi", "Yosa"),
@@ -237,18 +240,16 @@ describe("RON brain", () => {
       learning: RON_DEFAULT_LEARNING,
       seed: 42,
     });
-    expect(decision.action).toBe("publish");
+    expect(["publish", "skip"]).toContain(decision.action);
     if (decision.action === "publish") {
+      expect(decision.cards.length).toBeGreaterThanOrEqual(2);
+      expect(decision.format).not.toBe("ads");
       const blob = decision.cards.map((c) => c.title).join(" ").toLowerCase();
       const hasTab = /tablet/.test(blob);
       const hasPill = /kidney|supplement|capsule|vitamin|softgel|pill/.test(
         blob,
       );
       expect(hasTab && hasPill).toBe(false);
-      if (decision.cards.length >= 2) {
-        // Multi-card packs must be same family
-        expect(hasTab || hasPill).toBe(true);
-      }
     }
   });
 

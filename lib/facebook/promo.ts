@@ -16,7 +16,6 @@ import {
   shortenFacebookCardTitle,
 } from "@/lib/facebook/promo-media";
 import { rehostPromoImagesForFacebook } from "@/lib/facebook/rehost-promo-images";
-import { shareAffiliateToFacebook } from "@/lib/facebook/share";
 
 export type PromoFormat = "ads" | "carousel" | "vitrina";
 
@@ -36,10 +35,18 @@ export type PromoCard = {
   sourcePlatform?: string | null;
 };
 
-function postUrlFromId(postId: string): string {
-  return postId.includes("_")
-    ? `https://www.facebook.com/${postId.replace("_", "/posts/")}`
-    : `https://www.facebook.com/${postId}`;
+function postUrlFromId(postId: string, pageId?: string | null): string {
+  const id = String(postId || "").trim();
+  if (!id) return "https://www.facebook.com/";
+  if (id.includes("_")) {
+    return `https://www.facebook.com/${id.replace("_", "/posts/")}`;
+  }
+  // Photo / object id without page prefix — still openable
+  const page = String(pageId || "").trim();
+  if (page && /^\d+$/.test(id)) {
+    return `https://www.facebook.com/${page}/posts/${id}`;
+  }
+  return `https://www.facebook.com/${id}`;
 }
 
 type ChildAttachment = {
@@ -278,11 +285,25 @@ export async function publishFacebookPromo(
 
   const creds = await loadFacebookPageCredentials(supabase, opts.userId);
 
-  if (opts.format === "ads") {
+  // Multi-card "ads" from studio → real tappable carousel/vitrina (never 1 photo)
+  let format: PromoFormat = opts.format;
+  if (format === "ads" && cards.length >= 2) {
+    format = cards.length >= 3 ? "vitrina" : "carousel";
+  }
+
+  if (format === "ads") {
     const first = cards[0];
     if (!first?.linkUrl) {
       return { ok: false, error: "Elegí al menos un producto con link." };
     }
+    if (!creds) {
+      return {
+        ok: false,
+        error:
+          "Conectá tu Page de Facebook en Settings. Sin Page no hay post con click a la publicación.",
+      };
+    }
+
     const caption =
       stripUrlsFromFacebookCaption(opts.message) ||
       stripUrlsFromFacebookCaption(
@@ -296,19 +317,6 @@ export async function publishFacebookPromo(
         }).message,
       );
 
-    if (!creds) {
-      // Manual sharer — still no URL spam in the prefilled text
-      return shareAffiliateToFacebook(supabase, {
-        userId: opts.userId,
-        url: first.linkUrl,
-        message: caption,
-        imageUrl: first.imageUrl,
-        title: first.title,
-        description: first.priceLabel,
-      });
-    }
-
-    // Prefer a rehosted image so the link card never goes blank
     const hosted = await rehostPromoImagesForFacebook([first], opts.userId);
     const card = hosted.ok ? hosted.cards[0]! : first;
 
@@ -319,25 +327,12 @@ export async function publishFacebookPromo(
       card,
     });
     if (!posted.id) {
-      // Same link-card path via share helper (still no URL in caption)
-      const fallback = await shareAffiliateToFacebook(supabase, {
-        userId: opts.userId,
-        url: first.linkUrl,
-        message: caption,
-        imageUrl: card.imageUrl,
-        title: card.title,
-        description: card.priceLabel,
-      });
-      if (!fallback.ok) {
-        return {
-          ok: false,
-          error:
-            posted.error ||
-            fallback.error ||
-            "No se pudo publicar el producto con link.",
-        };
-      }
-      return fallback;
+      return {
+        ok: false,
+        error:
+          posted.error ||
+          "No se pudo publicar el link con click. Revisá el token de la Page.",
+      };
     }
     await markFacebookConnectionMeta(supabase, opts.userId, {
       lastError: null,
@@ -347,16 +342,16 @@ export async function publishFacebookPromo(
       ok: true,
       mode: "page_post",
       postId: posted.id,
-      postUrl: postUrlFromId(posted.id),
+      postUrl: postUrlFromId(posted.id, creds.pageId),
     };
   }
 
-  const min = opts.format === "vitrina" ? 3 : 2;
+  const min = format === "vitrina" ? 3 : 2;
   if (cards.length < min) {
     return {
       ok: false,
       error:
-        opts.format === "vitrina"
+        format === "vitrina"
           ? "La vitrina necesita al menos 3 productos."
           : "El carrusel necesita al menos 2 productos.",
     };
@@ -388,7 +383,7 @@ export async function publishFacebookPromo(
   // Cover card first for vitrina when provided
   let ordered = [...hosted.cards];
   const cover = String(opts.coverImageUrl || "").trim();
-  if (opts.format === "vitrina" && cover) {
+  if (format === "vitrina" && cover) {
     // Match by original cover URL OR already-rehosted card id order
     const coverIdx = cards.findIndex(
       (c) => c.imageUrl === cover || c.id === cover,
@@ -410,7 +405,7 @@ export async function publishFacebookPromo(
   }
 
   const fallbackCopy = buildFacebookPromoCopy({
-    format: opts.format,
+    format,
     titles: ordered.map((c) => c.title),
     prices: ordered.map((c) => c.priceLabel),
     discountPercents: ordered.map((c) => c.discountPercent),
@@ -429,7 +424,7 @@ export async function publishFacebookPromo(
       accessToken: creds.accessToken,
       message,
       cards: ordered,
-      format: opts.format,
+      format,
     });
 
     if (!posted.id) {
@@ -451,7 +446,7 @@ export async function publishFacebookPromo(
       ok: true,
       mode: "page_post",
       postId: posted.id,
-      postUrl: postUrlFromId(posted.id),
+      postUrl: postUrlFromId(posted.id, creds.pageId),
     };
   } catch (err) {
     return {

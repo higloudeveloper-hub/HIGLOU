@@ -145,27 +145,10 @@ export async function shareAffiliateToFacebook(
       };
     }
 
-    // Last resort: photo only — still never paste the URL into the caption
-    if (imageUrl && /^https?:\/\//i.test(imageUrl)) {
-      const photo = await graphPost(creds.pageId, creds.accessToken, "photos", {
-        url: imageUrl,
-        caption: message,
-        published: true,
-      });
-      if (photo.id) {
-        await markShareOk(supabase, opts.userId);
-        return {
-          ok: true,
-          mode: "page_post",
-          postId: photo.id,
-          postUrl: postUrlFromId(photo.id),
-        };
-      }
-    }
-
+    // Never publish a photo-only post (no product click)
     const err = humanizeFacebookGraphError(
       feed.error ||
-        "No se pudo publicar en la Page. Revisá que el token sea de Page (no User) y tenga pages_manage_posts + pages_read_engagement.",
+        "No se pudo publicar el link en la Page. Revisá que el token sea de Page (no User) y tenga pages_manage_posts + pages_read_engagement.",
     );
     await markShareError(supabase, opts.userId, err);
     return { ok: false, error: err };

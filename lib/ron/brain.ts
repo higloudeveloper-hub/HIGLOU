@@ -249,7 +249,7 @@ function pickBestPack(
 
 /**
  * Decide the next Facebook post.
- * Strict related packs only — never mix unrelated categories.
+ * Multi-card packs only (vitrina ≥3 or carousel ≥2). Never a solo product.
  */
 export function decideRonPublish(opts: {
   catalog: RonCandidateCard[];
@@ -270,16 +270,29 @@ export function decideRonPublish(opts: {
     };
   }
 
-  const packs = suggestPromoPacks(catalog, {
+  // Pass 1 — tight related vitrinas/carousels
+  let packs = suggestPromoPacks(catalog, {
     limit: 8,
     preferVitrina: true,
     minRelated: 0.48,
     disallowPriceBandFallback: true,
     strict: true,
   });
-  const best = pickBestPack(packs, opts.learning, catalog);
+  let best = pickBestPack(packs, opts.learning, catalog);
 
-  if (best) {
+  // Pass 2 — same family, slightly softer score so we still get carousels of 2+
+  if (!best) {
+    packs = suggestPromoPacks(catalog, {
+      limit: 8,
+      preferVitrina: true,
+      minRelated: 0.36,
+      disallowPriceBandFallback: true,
+      strict: true,
+    });
+    best = pickBestPack(packs, opts.learning, catalog);
+  }
+
+  if (best && best.cards.length >= 2) {
     const cards = best.cards;
     const copy = buildFacebookPromoCopy({
       format: best.pack.format,
@@ -301,31 +314,16 @@ export function decideRonPublish(opts: {
           : null,
       coverImageUrl: cards[0]?.imageUrl || null,
       niche: best.pack.niche,
-      reason: `Pack ${best.pack.format} · ${best.pack.niche} (score ${best.score.toFixed(1)})`,
+      reason: `Pack ${best.pack.format} · ${best.pack.niche} · ${cards.length} productos`,
     };
   }
 
-  // No related cluster → single product ads (never a mixed junk vitrina)
-  const ranked = [...catalog].sort(
-    (a, b) =>
-      scoreAsin(opts.learning, b.asin) - scoreAsin(opts.learning, a.asin),
-  );
-  const one = ranked[0]!;
-  const copy = buildFacebookPromoCopy({
-    format: "ads",
-    titles: [one.title],
-    prices: [one.priceLabel],
-    discountPercents: [one.discountPercent],
-    platforms: [one.sourcePlatform],
-    seed: opts.seed ?? Date.now(),
-  });
+  // Never publish a lone product — no clickable multi-card post possible
   return {
-    action: "publish",
-    format: "ads",
-    cards: [one],
-    message: copy.message,
-    niche: one.brand || pickProductTitle(one.title),
-    reason: `1 producto · ${one.title.slice(0, 40)}`,
+    action: "skip",
+    reason:
+      opts.emptyReason ||
+      `Necesito ≥2 productos relacionados (tengo ${catalog.length} frescos sin cluster). No publico sueltos.`,
   };
 }
 

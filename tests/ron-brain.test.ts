@@ -147,7 +147,7 @@ describe("RON brain", () => {
     }
   });
 
-  it("skips solo products — never publishes a single loose card", () => {
+  it("publishes one product with link when no related pack exists", () => {
     const hits = [hit("B0SOLO0001", "Solo Gadget Pro", "Solo")];
     const map = new Map([
       [
@@ -168,9 +168,11 @@ describe("RON brain", () => {
       learning: RON_DEFAULT_LEARNING,
       seed: 2,
     });
-    expect(decision.action).toBe("skip");
-    if (decision.action === "skip") {
-      expect(decision.reason.toLowerCase()).toMatch(/relacionad|sueltos|≥2|>=2/);
+    expect(decision.action).toBe("publish");
+    if (decision.action === "publish") {
+      expect(decision.format).toBe("ads");
+      expect(decision.cards).toHaveLength(1);
+      expect(decision.cards[0]!.linkUrl).toMatch(/^https?:\/\//);
     }
   });
 

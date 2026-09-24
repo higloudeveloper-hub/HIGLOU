@@ -160,8 +160,10 @@ async function publishLinkCarousel(opts: {
 }
 
 /**
- * Single product: tappable link card. Caption = marketing text only.
- * The product URL is on the card (tap → buy) — never pasted into the title/body.
+ * Single product: tappable link card on the Page.
+ * Caption = marketing text only. Link attachment = /go (or Amazon) URL.
+ * Never set picture/name/description — Graph ignores them and often drops
+ * the clickable preview. Facebook scrapes /go OG instead.
  */
 async function publishSingleLinkCard(opts: {
   pageId: string;
@@ -180,48 +182,75 @@ async function publishSingleLinkCard(opts: {
   const caption =
     stripUrlsFromFacebookCaption(opts.message) ||
     stripUrlsFromFacebookCaption(copy.message);
+  const link = String(opts.card.linkUrl || "").trim();
+  if (!/^https?:\/\//i.test(link)) {
+    return { error: "El producto no tiene link https para el click." };
+  }
+
+  const endpoint = new URL(
+    `https://graph.facebook.com/v21.0/${opts.pageId}/feed`,
+  );
+
+  // 1) Clean link post — Facebook builds the card from OG (/go crawler page)
+  const primary = await fetch(endpoint, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      message: caption,
+      link,
+      access_token: opts.accessToken,
+    }),
+  });
+  const primaryBody = (await primary.json().catch(() => null)) as {
+    id?: string;
+    error?: { message?: string; error_user_msg?: string };
+  } | null;
+  if (primary.ok && primaryBody?.id) {
+    return { id: primaryBody.id };
+  }
+
+  // 2) Fallback: child_attachments (same API as carousel) — guaranteed tap target
   const name = copy.cardName(opts.card.title);
   const description = copy.cardDescription(
     opts.card.priceLabel,
     opts.card.discountPercent,
     opts.card.sourcePlatform,
   );
-
-  const endpoint = new URL(
-    `https://graph.facebook.com/v21.0/${opts.pageId}/feed`,
-  );
-  const payload: Record<string, unknown> = {
-    message: caption,
-    link: opts.card.linkUrl,
-    access_token: opts.accessToken,
+  const picture = String(opts.card.imageUrl || "").trim();
+  const child: Record<string, string> = {
+    link,
+    name: name || "Deal",
+    description: description || "Shop now",
   };
-  // Help Facebook show our photo/title instead of a blank Amazon scrape
-  if (opts.card.imageUrl && /^https?:\/\//i.test(opts.card.imageUrl)) {
-    payload.picture = opts.card.imageUrl;
-  }
-  if (name) payload.name = name;
-  if (description) payload.description = description;
+  if (/^https?:\/\//i.test(picture)) child.picture = picture;
 
-  const res = await fetch(endpoint, {
+  const multi = await fetch(endpoint, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
+    body: JSON.stringify({
+      message: caption,
+      link,
+      child_attachments: [child, { ...child }],
+      access_token: opts.accessToken,
+    }),
   });
-  const body = (await res.json().catch(() => null)) as {
+  const multiBody = (await multi.json().catch(() => null)) as {
     id?: string;
     error?: { message?: string; error_user_msg?: string };
   } | null;
-
-  if (!res.ok || !body?.id) {
-    return {
-      error: humanizeFacebookGraphError(
-        body?.error?.error_user_msg ||
-          body?.error?.message ||
-          `Facebook link ${res.status}`,
-      ),
-    };
+  if (multi.ok && multiBody?.id) {
+    return { id: multiBody.id };
   }
-  return { id: body.id };
+
+  return {
+    error: humanizeFacebookGraphError(
+      multiBody?.error?.error_user_msg ||
+        multiBody?.error?.message ||
+        primaryBody?.error?.error_user_msg ||
+        primaryBody?.error?.message ||
+        `Facebook link ${multi.status || primary.status}`,
+    ),
+  };
 }
 
 /**

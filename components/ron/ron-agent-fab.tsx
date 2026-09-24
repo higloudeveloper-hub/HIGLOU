@@ -512,9 +512,9 @@ export function RonAgentFab() {
 
               <div className="space-y-3 overflow-y-auto px-4 py-3">
                 <p className="text-[13px] leading-relaxed text-white/75">
-                  Escanea las 6 modalidades Keepa y solo publica vitrinas o
-                  carruseles de productos relacionados y nuevos. Nunca un
-                  producto suelto ni la misma vitrina dos veces.
+                  Prefiere vitrinas/carruseles relacionados. Si no hay pack,
+                  publica 1 producto con link activo (tocá → Amazon). Nunca la
+                  misma vitrina dos veces.
                 </p>
 
                 <div className="grid grid-cols-3 gap-2 text-center">

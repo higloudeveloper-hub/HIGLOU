@@ -249,7 +249,7 @@ function pickBestPack(
 
 /**
  * Decide the next Facebook post.
- * Multi-card packs only (vitrina ≥3 or carousel ≥2). Never a solo product.
+ * Prefer related packs (2–8). If none, publish one product WITH a live link.
  */
 export function decideRonPublish(opts: {
   catalog: RonCandidateCard[];
@@ -318,12 +318,33 @@ export function decideRonPublish(opts: {
     };
   }
 
-  // Never publish a lone product — no clickable multi-card post possible
+  // No pack → one product with active /go link (never a dead photo post)
+  const ranked = [...catalog].sort(
+    (a, b) =>
+      scoreAsin(opts.learning, b.asin) - scoreAsin(opts.learning, a.asin),
+  );
+  const one = ranked[0]!;
+  if (!/^https?:\/\//i.test(one.linkUrl)) {
+    return {
+      action: "skip",
+      reason: "Producto sin link de click · no publico sin enlace activo",
+    };
+  }
+  const copy = buildFacebookPromoCopy({
+    format: "ads",
+    titles: [one.title],
+    prices: [one.priceLabel],
+    discountPercents: [one.discountPercent],
+    platforms: [one.sourcePlatform],
+    seed: opts.seed ?? Date.now(),
+  });
   return {
-    action: "skip",
-    reason:
-      opts.emptyReason ||
-      `Necesito ≥2 productos relacionados (tengo ${catalog.length} frescos sin cluster). No publico sueltos.`,
+    action: "publish",
+    format: "ads",
+    cards: [one],
+    message: copy.message,
+    niche: one.brand || pickProductTitle(one.title),
+    reason: `1 producto con link · ${one.title.slice(0, 40)}`,
   };
 }
 

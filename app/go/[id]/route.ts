@@ -1,16 +1,34 @@
 import { NextResponse } from "next/server";
+import { amazonAsinPrimaryImage } from "@/lib/amazon/asin-image";
 import { createAdminClient, isSupabaseConfigured } from "@/lib/supabase/admin";
-import { resolveAndTrackSmartLink } from "@/lib/monetization/smart-links";
+import {
+  peekSmartLink,
+  resolveAndTrackSmartLink,
+} from "@/lib/monetization/smart-links";
 import { isMoneyEngineEnabled, getMonetizationFlags } from "@/lib/monetization/flags";
 import { logMonetizationEvent } from "@/lib/monetization/observability";
+import { isJunkPromoTitle, pickProductTitle } from "@/lib/facebook/promo-title";
 
 export const runtime = "nodejs";
 
+function isLinkPreviewCrawler(ua: string): boolean {
+  return /facebookexternalhit|facebot|meta-externalagent|twitterbot|linkedinbot|slackbot|discordbot|whatsapp/i.test(
+    ua,
+  );
+}
+
+function escapeHtml(s: string): string {
+  return String(s || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
 /**
  * Public redirect for Smart Links.
- * Facebook tap → official Amazon product page (tagged Associates URL).
- * No intermediate Higlou landing, no auto app deep-link.
- * Amazon’s own site / app handles “open in app” after the shopper is there.
+ * Humans → 302 to tagged Amazon (official product page).
+ * Facebook crawler → OG HTML so the Page post gets a tappable link card.
  */
 export async function GET(
   request: Request,
@@ -29,10 +47,63 @@ export async function GET(
     return NextResponse.json({ error: "Storage unavailable" }, { status: 503 });
   }
 
+  const ua = request.headers.get("user-agent") || "";
   const source = new URL(request.url).searchParams.get("src");
+  const selfUrl = new URL(request.url);
+  const publicUrl = `${selfUrl.origin}/go/${slug}`;
 
   try {
     const admin = createAdminClient();
+
+    // Facebook / messengers need OG tags to build a clickable preview card
+    if (isLinkPreviewCrawler(ua)) {
+      const peeked = await peekSmartLink(admin, slug);
+      if (!peeked.ok) {
+        return NextResponse.json(
+          { error: peeked.error },
+          { status: peeked.status },
+        );
+      }
+      const rawTitle = peeked.title;
+      const title = pickProductTitle(
+        rawTitle && !isJunkPromoTitle(rawTitle) ? rawTitle : null,
+        peeked.asin ? `Deal ${peeked.asin}` : "Deal",
+      );
+      const image =
+        (peeked.imageUrl && /^https?:\/\//i.test(peeked.imageUrl)
+          ? peeked.imageUrl
+          : null) ||
+        (peeked.asin ? amazonAsinPrimaryImage(peeked.asin) : "") ||
+        "";
+      const desc = "Toca para ver el producto";
+      const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<title>${escapeHtml(title)}</title>
+<meta property="og:type" content="website"/>
+<meta property="og:title" content="${escapeHtml(title)}"/>
+<meta property="og:description" content="${escapeHtml(desc)}"/>
+<meta property="og:url" content="${escapeHtml(publicUrl)}"/>
+${image ? `<meta property="og:image" content="${escapeHtml(image)}"/>` : ""}
+${image ? `<meta property="og:image:secure_url" content="${escapeHtml(image)}"/>` : ""}
+<meta name="twitter:card" content="summary_large_image"/>
+<meta name="twitter:title" content="${escapeHtml(title)}"/>
+<link rel="canonical" href="${escapeHtml(publicUrl)}"/>
+</head>
+<body>
+<a href="${escapeHtml(peeked.destinationUrl)}">${escapeHtml(title)}</a>
+</body>
+</html>`;
+      return new NextResponse(html, {
+        status: 200,
+        headers: {
+          "Content-Type": "text/html; charset=utf-8",
+          "Cache-Control": "public, max-age=300",
+        },
+      });
+    }
+
     const resolved = await resolveAndTrackSmartLink(admin, slug, {
       source,
     });

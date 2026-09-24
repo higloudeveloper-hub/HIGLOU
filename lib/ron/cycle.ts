@@ -596,10 +596,13 @@ export async function runRonCycle(
     return finish({ ok: true, state, skipped: msg });
   }
 
-  // Hard gate: never ship a solo card (no tappable multi-product post)
-  if (publishDecision.cards.length < 2) {
-    const msg =
-      "Abortado · RON no publica productos sueltos · espero pack relacionado";
+  // Solo ads must still carry a live https link (tap → product)
+  if (
+    publishDecision.format === "ads" &&
+    (publishDecision.cards.length < 1 ||
+      !/^https?:\/\//i.test(publishDecision.cards[0]?.linkUrl || ""))
+  ) {
+    const msg = "Abortado · producto sin enlace activo · no publico sin click";
     await appendRonActivity(
       supabase,
       userId,

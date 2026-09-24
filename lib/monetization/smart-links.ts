@@ -209,3 +209,86 @@ export async function resolveAndTrackSmartLink(
     productId: smart.product_id || null,
   };
 }
+
+/**
+ * Peek smart-link destination for Facebook/OG crawlers — no click counting.
+ */
+export async function peekSmartLink(
+  supabase: SupabaseClient,
+  slug: string,
+): Promise<
+  | {
+      ok: true;
+      destinationUrl: string;
+      asin: string | null;
+      title: string | null;
+      imageUrl: string | null;
+    }
+  | { ok: false; error: string; status: number }
+> {
+  const flags = getMonetizationFlags();
+  if (!flags.moneyEngine || !flags.smartLinks) {
+    return { ok: false, error: "Smart Links are disabled", status: 404 };
+  }
+
+  const { data: smart, error } = await supabase
+    .from("smart_links")
+    .select(
+      "id, affiliate_link_id, product_id, destination_url, label",
+    )
+    .eq("slug", slug)
+    .maybeSingle();
+
+  if (error || !smart) {
+    return { ok: false, error: "Link not found", status: 404 };
+  }
+
+  let destinationUrl = String(smart.destination_url || "").trim();
+  let asin: string | null = null;
+  let imageUrl: string | null = null;
+  const title = String(smart.label || "").trim() || null;
+
+  if (smart.affiliate_link_id) {
+    const { data: aff } = await supabase
+      .from("affiliate_links")
+      .select("asin, associate_tag, destination_url")
+      .eq("id", smart.affiliate_link_id)
+      .maybeSingle();
+    if (aff) {
+      asin =
+        String(aff.asin || "")
+          .trim()
+          .toUpperCase() || null;
+      const tag = String(aff.associate_tag || "").trim();
+      const healed =
+        tag && (isAmazonProductUrl(destinationUrl) || aff.asin)
+          ? ensureTaggedAmazonDestination({
+              asin: aff.asin,
+              destinationUrl: aff.destination_url || destinationUrl,
+              associateTag: tag,
+            })
+          : null;
+      if (healed) destinationUrl = healed;
+    }
+  }
+
+  if (!asin) asin = extractAsinFromAmazonUrl(destinationUrl);
+
+  if (smart.product_id) {
+    const { data: img } = await supabase
+      .from("product_images")
+      .select("public_url")
+      .eq("product_id", smart.product_id)
+      .order("is_primary", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    const url = String(img?.public_url || "").trim();
+    if (/^https?:\/\//i.test(url)) imageUrl = url;
+  }
+
+  if (!destinationUrl || !/^https:\/\//i.test(destinationUrl)) {
+    return { ok: false, error: "Invalid destination", status: 502 };
+  }
+
+  return { ok: true, destinationUrl, asin, title, imageUrl };
+}

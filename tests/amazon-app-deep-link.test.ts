@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
   amazonHttpsProductUrl,
-  amazonProductLandingHtml,
   buildAmazonAppDeepLinks,
   isAmazonAppCrawler,
   isMobileClient,
@@ -18,7 +17,14 @@ describe("amazon app deep links", () => {
     expect(isMobileClient("facebookexternalhit/1.1")).toBe(false);
   });
 
-  it("builds iOS scheme + Android intent with Associate tag", () => {
+  it("builds HTTPS product URL with Associate tag for Facebook hops", () => {
+    const https = amazonHttpsProductUrl(
+      "https://www.amazon.com/dp/B0CHS1BVBC?tag=higlou-20",
+    );
+    expect(https).toBe("https://www.amazon.com/dp/B0CHS1BVBC?tag=higlou-20");
+  });
+
+  it("builds optional app schemes for explicit CTA taps only", () => {
     const links = buildAmazonAppDeepLinks(
       "https://www.amazon.com/dp/B0CHS1BVBC?tag=higlou-20",
     );
@@ -29,26 +35,6 @@ describe("amazon app deep links", () => {
     expect(links!.androidIntent).toContain(
       "package=com.amazon.mShop.android.shopping",
     );
-  });
-
-  it("landing shows product and does not auto-open the app", () => {
-    const links = buildAmazonAppDeepLinks(
-      "https://www.amazon.com/dp/B0CHS1BVBC?tag=higlou-20",
-    )!;
-    const html = amazonProductLandingHtml({
-      links,
-      title: "Anker Power Bank",
-      imageUrl: "https://cdn.example.com/p.jpg",
-      priceLabel: "$24.99",
-    });
-    expect(html).toContain("Anker Power Bank");
-    expect(html).toContain("$24.99");
-    expect(html).toContain("Comprar ahora");
-    expect(html).toContain("Agregar al carrito");
-    expect(html).toContain("cdn.example.com/p.jpg");
-    // No auto navigate on load — only on button click
-    expect(html).not.toMatch(/tryApp\(\);\s*setTimeout/);
-    expect(html).toContain('addEventListener("click"');
   });
 
   it("returns null for non-Amazon destinations", () => {

@@ -308,7 +308,7 @@ export function DropMarketStudio() {
         body: JSON.stringify({
           asin: item.asin,
           source: "market",
-          campaignName: "Higlou Market",
+          campaignName: String(item.name || item.asin).slice(0, 80),
           createSmartLink: true,
         }),
       });

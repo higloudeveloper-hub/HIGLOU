@@ -65,7 +65,19 @@ export async function POST(request: Request) {
       userId: auth.user.id,
       affiliateLinkId: created.link.id,
       productId: parsed.productId,
-      label: parsed.campaignName || created.link.asin || "",
+      label: (() => {
+        const name = String(parsed.campaignName || "").trim();
+        // Never store studio chrome as the smart-link label shown on FB
+        if (
+          !name ||
+          /^(higlou(\s+market)?|facebook\s*ads?|ron(\s+agent)?|default|keepa)/i.test(
+            name,
+          )
+        ) {
+          return created.link.asin || "Deal";
+        }
+        return name.slice(0, 160);
+      })(),
       platform: parsed.platform || parsed.source || "manual",
       destinationUrl: created.link.destination_url,
     });

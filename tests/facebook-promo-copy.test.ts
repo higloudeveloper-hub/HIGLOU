@@ -68,14 +68,26 @@ describe("facebook promo copy", () => {
     expect(defaultFacebookPromoMessage("ads")).toContain("\n");
   });
 
-  it("vitrina uses niche as collection title when provided", () => {
+  it("vitrina uses product name as collection title (niche is secondary)", () => {
     const copy = buildFacebookPromoCopy({
       format: "vitrina",
-      titles: ["A", "B", "C"],
+      titles: ["Anker Power Bank 10000mAh"],
       niche: "Anker",
       seed: 0,
     });
-    expect(copy.collectionTitle).toBe("Anker");
+    expect(copy.collectionTitle.toLowerCase()).toMatch(/anker|power|bank/);
+    expect(copy.message.toLowerCase()).not.toMatch(/higlou/);
+  });
+
+  it("never puts Higlou Market in the Facebook caption", () => {
+    const copy = buildFacebookPromoCopy({
+      format: "ads",
+      titles: ["Higlou Market"],
+      niche: "Higlou Market",
+      seed: 0,
+    });
+    expect(copy.message.toLowerCase()).not.toMatch(/higlou/);
+    expect(copy.cardName("Higlou Market")).not.toMatch(/higlou/i);
   });
 
   it("productHook pulls meaningful words", () => {

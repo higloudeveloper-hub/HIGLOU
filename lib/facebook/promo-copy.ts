@@ -78,12 +78,7 @@ function cleanNiche(raw?: string | null): string {
   if (!n) return "";
   if (isJunkPromoTitle(n)) return "";
   if (/^\/?go$/i.test(n)) return "";
-  if (
-    /afiliado|affiliate|smart\s*link|higlou|facebook/i.test(n) &&
-    n.length < 18
-  ) {
-    return "";
-  }
+  if (/higlou|facebook|afiliado|affiliate|market|selecci/i.test(n)) return "";
   return n.slice(0, 32);
 }
 
@@ -172,23 +167,36 @@ export function buildFacebookPromoCopy(
       40,
     );
   } else if (input.format === "carousel") {
-    const head = niche || (hook !== "Deal" ? `${hook}` : "Top Deals");
+    // Always lead with the product name — never campaign chrome
+    const head =
+      hook !== "Deal"
+        ? hook
+        : niche || "Top Deals";
     message = [
       facebookBold(String(head).slice(0, 28).toUpperCase()),
       RULE_SHORT,
       ...(off != null ? [offLine(off)] : []),
       `${facebookBold("SWIPE")} → ${facebookBold("SHOP")}`,
     ].join("\n");
-    collectionTitle = niche || head.slice(0, 40);
+    collectionTitle = shortenFacebookCardTitle(
+      primaryTitle || niche || head,
+      40,
+    );
   } else {
-    const head = niche || (hook !== "Deal" ? hook : "Today's Deals");
+    const head =
+      hook !== "Deal"
+        ? hook
+        : niche || "Today's Deals";
     message = [
       facebookBold(String(head).slice(0, 28).toUpperCase()),
       RULE_SHORT,
       ...(off != null ? [offLine(off)] : []),
       `${facebookBold("SWIPE")} → ${facebookBold("SHOP")}`,
     ].join("\n");
-    collectionTitle = niche || head.slice(0, 40);
+    collectionTitle = shortenFacebookCardTitle(
+      primaryTitle || niche || head,
+      40,
+    );
   }
 
   // seed reserved for future variant rotation

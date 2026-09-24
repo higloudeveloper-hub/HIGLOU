@@ -22,16 +22,22 @@ const JUNK_PROMO_TITLES = [
   /^facebook\s*ads?$/i,
   /^facebook$/i,
   /^ron(\s+agent)?$/i,
-  /^higlou$/i,
+  /^ron\b.*keepa/i,
+  /^higlou(\s+market)?$/i,
+  /^higlou\b/i,
+  /^selecci[oó]n(\s+higlou)?$/i,
+  /^vitrina(\s+higlou)?$/i,
+  /^ofertas?\s+higlou$/i,
   /^affiliate$/i,
   /^afiliado$/i,
-  /^keepa(\s+winners)?$/i,
+  /^keepa(\s+winners)?(\s*→?\s*facebook)?$/i,
   /^default$/i,
   /^smart\s*link$/i,
   /^\/?go$/i,
   /^selecci[oó]n$/i,
   /^deal$/i,
   /^product$/i,
+  /^market$/i,
 ];
 
 export function isJunkPromoTitle(raw: string | null | undefined): boolean {
@@ -40,6 +46,7 @@ export function isJunkPromoTitle(raw: string | null | undefined): boolean {
     .replace(/\s+/g, " ");
   if (!t || t.length < 2) return true;
   if (t.length > 80 && !/[a-z]/i.test(t)) return true;
+  if (/higlou/i.test(t) && t.length <= 40) return true;
   return JUNK_PROMO_TITLES.some((re) => re.test(t));
 }
 

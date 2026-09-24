@@ -142,7 +142,9 @@ async function loadAffiliateMap(
     if (!/^https?:\/\//i.test(linkUrl)) continue;
     map.set(asin, {
       linkUrl,
-      title: sl?.label || null,
+      // Never use smart-link campaign labels ("Higlou Market", "RON Agent")
+      // as the product title — Keepa/ledger fills the real name later.
+      title: null,
       clickCount: Number(link.click_count) || 0,
     });
   }
@@ -156,7 +158,7 @@ async function loadAffiliateMap(
     const linkUrl = `${origin}/go/${s.slug}`;
     map.set(asin, {
       linkUrl,
-      title: String(s.label || "").trim() || null,
+      title: null,
       clickCount: 0,
     });
   }

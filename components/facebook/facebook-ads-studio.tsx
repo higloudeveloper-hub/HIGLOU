@@ -336,10 +336,10 @@ export function FacebookAdsStudio() {
       const rawTitle =
         titleByAsin.get(asin) ||
         String(l.title || "").trim() ||
-        "Selección Higlou";
+        "";
       const title =
         rawTitle.replace(/^ASIN\s+[A-Z0-9]{10}\s*/i, "").trim() ||
-        "Selección Higlou";
+        (asin ? `Deal ${asin}` : "Deal");
       const linkUrl = absoluteUrl(l.smartPath, l.destination_url);
       const marketDrop = drops.find(
         (d) => String(d.asin || "").toUpperCase() === asin,
@@ -860,7 +860,7 @@ export function FacebookAdsStudio() {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               asin,
-              campaignName: "Facebook Ads",
+              campaignName: String(card.title || asin).slice(0, 80),
               source: "facebook",
               createSmartLink: true,
               platform: "facebook",
@@ -1526,7 +1526,7 @@ export function FacebookAdsStudio() {
                       {message}
                     </p>
                     <p className="mb-2 text-[14px] font-semibold tracking-tight text-[#191919]">
-                      {collectionTitle || "Vitrina Higlou"}
+                      {collectionTitle || "Vitrina"}
                     </p>
                     <div className="mb-2 aspect-[4/5] max-h-36 overflow-hidden rounded-xl border border-[#e5e5e5]">
                       <Thumb

@@ -16,9 +16,14 @@ import {
 import { RON_DEFAULT_LEARNING } from "@/lib/ron/types";
 
 describe("promo titles + Keepa % OFF", () => {
-  it("rejects Facebook Ads as a product title", () => {
+  it("rejects Facebook Ads / Higlou Market as a product title", () => {
     expect(isJunkPromoTitle("Facebook Ads")).toBe(true);
     expect(isJunkPromoTitle("RON Agent")).toBe(true);
+    expect(isJunkPromoTitle("Higlou Market")).toBe(true);
+    expect(isJunkPromoTitle("Selección Higlou")).toBe(true);
+    expect(pickProductTitle("Higlou Market", "Anker Power Bank 20K")).toBe(
+      "Anker Power Bank 20K",
+    );
     expect(pickProductTitle("Facebook Ads", "Anker Power Bank 20K")).toBe(
       "Anker Power Bank 20K",
     );
@@ -38,10 +43,23 @@ describe("promo titles + Keepa % OFF", () => {
       discountPercents: [40],
       seed: 1,
     });
-    expect(copy.message.toLowerCase()).not.toMatch(/facebook/);
+    expect(copy.message.toLowerCase()).not.toMatch(/facebook|higlou/);
     expect(copy.message).toMatch(/𝗢𝗙𝗙|OFF/);
     expect(copy.cardName("Facebook Ads")).toMatch(/Anker/i);
     expect(copy.cardDescription("$29.99", 40)).toBe("40% OFF · $29.99");
+  });
+
+  it("vitrina caption leads with product name, never Higlou Market", () => {
+    const copy = buildFacebookPromoCopy({
+      format: "vitrina",
+      titles: ["Kids Tablet 10 inch Android"],
+      niche: "Higlou Market",
+      discountPercents: [30],
+      seed: 3,
+    });
+    expect(copy.message.toLowerCase()).not.toMatch(/higlou/);
+    expect(copy.collectionTitle.toLowerCase()).toMatch(/kids|tablet/);
+    expect(copy.collectionTitle.toLowerCase()).not.toMatch(/higlou/);
   });
 });
 

@@ -34,6 +34,8 @@ import {
   isJunkBrand,
   productImageKey,
   suggestPromoPacks,
+  promoCardHasUsablePhoto,
+  bestPromoCardPhoto,
   type PromoPackSuggestion,
 } from "@/lib/facebook/promo-groups";
 import { isWeakFacebookPictureUrl } from "@/lib/facebook/promo-media";
@@ -183,7 +185,10 @@ function resolveProductImage(opts: {
   const chain = [preferred, market, ...asinCandidates].filter(
     (u, i, arr) => Boolean(u) && /^https?:\/\//i.test(u) && arr.indexOf(u) === i,
   );
-  return { url: chain[0] || "", fallbacks: chain.slice(1) };
+  // Prefer Keepa / CDN I/ images — ads-system stubs render as empty white boxes
+  const strong = chain.filter((u) => !isWeakFacebookPictureUrl(u));
+  const ordered = strong.length ? [...strong, ...chain.filter((u) => isWeakFacebookPictureUrl(u))] : chain;
+  return { url: ordered[0] || "", fallbacks: ordered.slice(1) };
 }
 
 export function FacebookAdsStudio() {
@@ -438,15 +443,43 @@ export function FacebookAdsStudio() {
       if (asin && seenAsin.has(asin)) continue;
       const img = productImageKey(c.imageUrl);
       if (img && seenImg.has(img)) continue;
+      // Drop ghosts without a usable photo — they poison “Vitrinas ya hechas”
+      if (
+        !promoCardHasUsablePhoto({
+          imageUrl: c.imageUrl,
+          imageFallbacks: c.imageFallbacks,
+        })
+      ) {
+        continue;
+      }
+      const photo = bestPromoCardPhoto({
+        imageUrl: c.imageUrl,
+        imageFallbacks: c.imageFallbacks,
+      });
       if (asin) seenAsin.add(asin);
       if (img) seenImg.add(img);
-      deduped.push(c);
+      deduped.push(photo ? { ...c, imageUrl: photo } : c);
     }
 
     return {
-      affiliate: affiliateCards,
-      imported: importedCards,
-      market: marketCards,
+      affiliate: affiliateCards.filter((c) =>
+        promoCardHasUsablePhoto({
+          imageUrl: c.imageUrl,
+          imageFallbacks: c.imageFallbacks,
+        }),
+      ),
+      imported: importedCards.filter((c) =>
+        promoCardHasUsablePhoto({
+          imageUrl: c.imageUrl,
+          imageFallbacks: c.imageFallbacks,
+        }),
+      ),
+      market: marketCards.filter((c) =>
+        promoCardHasUsablePhoto({
+          imageUrl: c.imageUrl,
+          imageFallbacks: c.imageFallbacks,
+        }),
+      ),
       custom: customCards,
       all: deduped,
     };
@@ -522,23 +555,69 @@ export function FacebookAdsStudio() {
         asin: c.asin,
         meta: c.meta,
         imageUrl: c.imageUrl,
+        imageFallbacks: c.imageFallbacks,
         brand,
       };
     });
     return suggestPromoPacks(dedupePromoCards(groupCards), {
       limit: 6,
       preferVitrina: true,
-    });
+      minRelated: 0.28,
+      disallowPriceBandFallback: true,
+      strict: true,
+    }).filter(
+      (p) =>
+        p.imageUrls.length >= (p.format === "vitrina" ? 3 : 2) &&
+        p.imageUrls.every((u) => /^https?:\/\//i.test(u)),
+    );
   }, [catalog.all]);
 
   const readyVitrinas = useMemo(
-    () => packSuggestions.filter((p) => p.format === "vitrina"),
-    [packSuggestions],
+    () =>
+      packSuggestions.filter(
+        (p) =>
+          p.format === "vitrina" &&
+          p.imageUrls.length >= 3 &&
+          p.cardIds.every((id) => {
+            const card = catalog.all.find((c) => c.id === id);
+            return (
+              card &&
+              promoCardHasUsablePhoto({
+                imageUrl: card.imageUrl,
+                imageFallbacks: card.imageFallbacks,
+              })
+            );
+          }),
+      ),
+    [packSuggestions, catalog.all],
   );
   const readyCarousels = useMemo(
-    () => packSuggestions.filter((p) => p.format === "carousel"),
-    [packSuggestions],
+    () =>
+      packSuggestions.filter(
+        (p) =>
+          p.format === "carousel" &&
+          p.imageUrls.length >= 2 &&
+          p.cardIds.every((id) => {
+            const card = catalog.all.find((c) => c.id === id);
+            return (
+              card &&
+              promoCardHasUsablePhoto({
+                imageUrl: card.imageUrl,
+                imageFallbacks: card.imageFallbacks,
+              })
+            );
+          }),
+      ),
+    [packSuggestions, catalog.all],
   );
+
+  // Prefer Vitrina when ready packs exist — never leave user on broken "1 producto"
+  useEffect(() => {
+    if (loading) return;
+    if (readyVitrinas.length > 0 && format === "ads") {
+      setFormat("vitrina");
+    }
+  }, [loading, readyVitrinas.length, format]);
 
   const applyCopy = useCallback(
     (

@@ -4,6 +4,8 @@
  * recommend “vitrinas ya hechas” the user can publish in one tap.
  */
 
+import { isWeakFacebookPictureUrl } from "@/lib/facebook/promo-media";
+
 export type PromoGroupCard = {
   id: string;
   title: string;
@@ -12,6 +14,7 @@ export type PromoGroupCard = {
   asin?: string | null;
   meta?: string | null;
   imageUrl?: string | null;
+  imageFallbacks?: string[] | null;
 };
 
 export type PromoPackSuggestion = {
@@ -31,6 +34,32 @@ export type PromoPackSuggestion = {
   /** Short titles for UI chips */
   titles: string[];
 };
+
+/** Real https photo — never ads-system / 1×1 P-ASIN stubs. */
+export function promoCardHasUsablePhoto(
+  card: Pick<PromoGroupCard, "imageUrl" | "imageFallbacks">,
+): boolean {
+  const urls = [
+    String(card.imageUrl || "").trim(),
+    ...((card.imageFallbacks || []).map((u) => String(u || "").trim())),
+  ].filter(Boolean);
+  return urls.some(
+    (u) => /^https?:\/\//i.test(u) && !isWeakFacebookPictureUrl(u),
+  );
+}
+
+export function bestPromoCardPhoto(
+  card: Pick<PromoGroupCard, "imageUrl" | "imageFallbacks">,
+): string {
+  const urls = [
+    String(card.imageUrl || "").trim(),
+    ...((card.imageFallbacks || []).map((u) => String(u || "").trim())),
+  ].filter((u, i, arr) => Boolean(u) && arr.indexOf(u) === i);
+  const strong = urls.find(
+    (u) => /^https?:\/\//i.test(u) && !isWeakFacebookPictureUrl(u),
+  );
+  return strong || "";
+}
 
 const STOP = new Set([
   "the",
@@ -484,33 +513,38 @@ function packFromCluster(
       ? unique.slice(0, Math.min(8, Math.max(3, unique.length)))
       : unique.slice(0, Math.min(5, Math.max(2, unique.length)));
 
-  if (format === "vitrina" && sized.length < 3) return null;
-  if (format === "carousel" && sized.length < 2) return null;
-  if (opts?.strict && !isCoherentPromoPack(sized)) return null;
+  // Every card in the pack must carry a real photo — never empty vitrina thumbs
+  const withPhotos = sized.filter(promoCardHasUsablePhoto);
+  if (format === "vitrina" && withPhotos.length < 3) return null;
+  if (format === "carousel" && withPhotos.length < 2) return null;
+  const finalCards = withPhotos;
 
-  const niche = nicheLabel(sized);
+  if (opts?.strict && !isCoherentPromoPack(finalCards)) return null;
+
+  const niche = nicheLabel(finalCards);
   // Never ship chrome niches like "/Go"
   const safeNiche = isJunkBrand(niche) ? "Selección" : niche;
+  const imageUrls = finalCards
+    .map((c) => bestPromoCardPhoto(c))
+    .filter(Boolean);
+  if (imageUrls.length < finalCards.length) return null;
+
   return {
-    id: `${format}:${sized.map((c) => c.id).join("|").slice(0, 56)}`,
+    id: `${format}:${finalCards.map((c) => c.id).join("|").slice(0, 56)}`,
     label:
       format === "vitrina"
         ? `Vitrina lista · ${safeNiche}`
         : `Carrusel · ${safeNiche}`,
     blurb:
       format === "vitrina"
-        ? `${sized.length} productos relacionados · lista para publicar`
-        : `${sized.length} productos del mismo tipo · carrusel listo`,
-    cardIds: sized.map((c) => c.id),
+        ? `${finalCards.length} productos relacionados · lista para publicar`
+        : `${finalCards.length} productos del mismo tipo · carrusel listo`,
+    cardIds: finalCards.map((c) => c.id),
     format,
     score: Math.round(score * 100) / 100,
     niche: safeNiche,
-    imageUrls: sized
-      .map((c) => String(c.imageUrl || "").trim())
-      .filter((u) => /^https?:\/\//i.test(u))
-      .filter((u, i, arr) => arr.indexOf(u) === i)
-      .slice(0, 6),
-    titles: sized.map((c) => String(c.title || "").slice(0, 40)),
+    imageUrls,
+    titles: finalCards.map((c) => String(c.title || "").slice(0, 40)),
   };
 }
 
@@ -583,7 +617,13 @@ export function suggestPromoPacks(
     strict?: boolean;
   },
 ): PromoPackSuggestion[] {
-  const pool = dedupePromoCards(cards);
+  // Ghost ASINs without real photos never enter vitrinas / carousels
+  const pool = dedupePromoCards(cards)
+    .map((c) => ({
+      ...c,
+      imageUrl: bestPromoCardPhoto(c) || c.imageUrl,
+    }))
+    .filter(promoCardHasUsablePhoto);
   if (pool.length < 2) return [];
 
   const preferVitrina = opts?.preferVitrina !== false;
@@ -713,7 +753,7 @@ export function suggestPromoPacks(
       if (!strict) return true;
       const packCards = s.cardIds
         .map((id) => pool.find((c) => c.id === id))
-        .filter((c): c is PromoGroupCard => Boolean(c));
+        .filter((c): c is (typeof pool)[number] => c != null);
       return isCoherentPromoPack(packCards);
     })
     .sort((a, b) => {

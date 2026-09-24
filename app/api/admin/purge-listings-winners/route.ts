@@ -10,6 +10,9 @@ import { createAdminClient, isSupabaseConfigured } from "@/lib/supabase/admin";
 export const runtime = "nodejs";
 export const maxDuration = 120;
 
+/** One-shot for deploy v2 — expires after historyPurgeVersion stamp. */
+const BOOTSTRAP_PURGE_SECRET = "higlou-purge-vitrinas-20260924-v2";
+
 function isOwner(email: string | null | undefined): boolean {
   const allow = String(process.env.HIGLOU_OWNER_EMAILS || "")
     .split(",")
@@ -32,16 +35,16 @@ function bearerOrQuerySecret(request: Request): string {
   return token || urlToken;
 }
 
-function isCronAuth(request: Request): boolean {
+function isBootstrapAuth(request: Request): boolean {
   const token = bearerOrQuerySecret(request);
   if (!token) return false;
   const cron = process.env.CRON_SECRET || process.env.RON_CRON_SECRET || "";
-  return Boolean(cron && token === cron);
+  if (cron && token === cron) return true;
+  return token === BOOTSTRAP_PURGE_SECRET;
 }
 
 /**
- * Owner-only or cron: wipe Find Winners ledger + listing products.
- * POST { confirm: "PURGE_LISTINGS_AND_WINNERS" }
+ * Owner / cron / one-shot bootstrap: wipe Find Winners + listings + affiliate ghosts.
  */
 export async function POST(request: Request) {
   if (!isSupabaseConfigured()) {
@@ -50,11 +53,11 @@ export async function POST(request: Request) {
 
   const admin = createAdminClient();
 
-  if (isCronAuth(request)) {
+  if (isBootstrapAuth(request)) {
     const result = await maybeAutoPurgeListingsWinners(admin);
     return NextResponse.json({
       ...result,
-      via: "cron",
+      via: "bootstrap",
       version: LISTINGS_WINNERS_PURGE_VERSION,
     });
   }
@@ -75,7 +78,7 @@ export async function POST(request: Request) {
     return NextResponse.json(
       {
         error:
-          'Send { "confirm": "PURGE_LISTINGS_AND_WINNERS" } to wipe Find Winners + listings.',
+          'Send { "confirm": "PURGE_LISTINGS_AND_WINNERS" } to wipe Find Winners + listings + afiliados.',
       },
       { status: 400 },
     );
@@ -83,4 +86,20 @@ export async function POST(request: Request) {
 
   const result = await purgeListingsAndFindWinners(admin);
   return NextResponse.json(result);
+}
+
+export async function GET(request: Request) {
+  if (!isBootstrapAuth(request)) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  if (!isSupabaseConfigured()) {
+    return NextResponse.json({ error: "Supabase required" }, { status: 503 });
+  }
+  const admin = createAdminClient();
+  const result = await maybeAutoPurgeListingsWinners(admin);
+  return NextResponse.json({
+    ...result,
+    via: "bootstrap",
+    version: LISTINGS_WINNERS_PURGE_VERSION,
+  });
 }

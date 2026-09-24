@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-/** Bump to force another full wipe of listings + Find Winners. */
-export const LISTINGS_WINNERS_PURGE_VERSION = "2026-09-24-v1";
+/** Bump to force another full wipe of listings + Find Winners + affiliate ghosts. */
+export const LISTINGS_WINNERS_PURGE_VERSION = "2026-09-24-v2-vitrinas";
 
 export type PurgeResult = {
   ok: true;
@@ -81,8 +81,8 @@ function stampLearning(
 }
 
 /**
- * Wipe Find Winners ledger + Higlou listing products so RON / Market
- * start from a clean autonomous slate (no ghost ASINs without photos).
+ * Wipe Find Winners ledger + listings + affiliate ghosts so Facebook
+ * vitrinas don't resurrect empty-photo ASINs.
  */
 export async function purgeListingsAndFindWinners(
   admin: SupabaseClient,
@@ -90,10 +90,15 @@ export async function purgeListingsAndFindWinners(
   const cleared: Record<string, number | string> = {};
   const notes: string[] = [];
 
-  // Find Winners / Market feed source
+  // Order matters: clicks → smart_links → affiliate_links → campaigns
   for (const [table, col] of [
+    ["affiliate_clicks", "id"],
+    ["smart_links", "id"],
+    ["affiliate_links", "id"],
+    ["affiliate_campaigns", "id"],
     ["opportunity_ledger", "asin"],
     ["opportunity_niche_stats", "user_id"],
+    ["products", "id"],
   ] as const) {
     const r = await wipeTable(admin, table, col);
     if (r.error) {
@@ -102,15 +107,6 @@ export async function purgeListingsAndFindWinners(
     } else {
       cleared[table] = r.before ?? 0;
     }
-  }
-
-  // Listing history — product_images cascade from products
-  const products = await wipeTable(admin, "products", "id");
-  if (products.error) {
-    cleared.products = `skip: ${products.error}`;
-    notes.push(`products: ${products.error}`);
-  } else {
-    cleared.products = products.before ?? 0;
   }
 
   // Soft-reset RON memory so it does not avoid “already published” ghosts
@@ -142,7 +138,7 @@ export async function purgeListingsAndFindWinners(
   }
 
   notes.push(
-    "Find Winners + listings borrados. RON vuelve a escanear Keepa con fotos reales.",
+    "Find Winners + listings + afiliados fantasma borrados. RON reescanea Keepa con fotos reales.",
   );
 
   return {
@@ -154,20 +150,12 @@ export async function purgeListingsAndFindWinners(
 }
 
 /**
- * One-shot on production: wipe ghost listing / Find Winners history once per
+ * One-shot on production: wipe ghost history once per
  * LISTINGS_WINNERS_PURGE_VERSION, then stamp RON so it never re-runs.
  */
 export async function maybeAutoPurgeListingsWinners(
   admin: SupabaseClient,
 ): Promise<PurgeResult | PurgeSkipResult> {
-  const ledgerCount = await countRows(admin, "opportunity_ledger");
-  const productCount = await countRows(admin, "products");
-  const nicheCount = await countRows(admin, "opportunity_niche_stats");
-  const emptyTables =
-    (ledgerCount ?? 0) === 0 &&
-    (productCount ?? 0) === 0 &&
-    (nicheCount ?? 0) === 0;
-
   const { data: ronRows } = await admin
     .from("ron_agent_state")
     .select("user_id, learning")
@@ -184,8 +172,7 @@ export async function maybeAutoPurgeListingsWinners(
       return learning.historyPurgeVersion === LISTINGS_WINNERS_PURGE_VERSION;
     });
 
-  // Already clean (or never had history) — do not keep re-wiping
-  if (emptyTables && (allStamped || rows.length === 0)) {
+  if (allStamped) {
     return {
       ok: true,
       skipped: true,
@@ -193,42 +180,7 @@ export async function maybeAutoPurgeListingsWinners(
     };
   }
 
-  if (allStamped && emptyTables) {
-    return {
-      ok: true,
-      skipped: true,
-      version: LISTINGS_WINNERS_PURGE_VERSION,
-    };
-  }
-
-  // Tables empty but RON not stamped yet — stamp only, no wipe needed
-  if (emptyTables && rows.length > 0 && !allStamped) {
-    let reset = 0;
-    for (const row of rows) {
-      const learning = stampLearning(
-        row.learning as Record<string, unknown> | null,
-      );
-      const { error } = await admin
-        .from("ron_agent_state")
-        .update({
-          learning,
-          activity_log: [],
-          status_message: "Historial limpio · listo para trabajar solo",
-          last_error: null,
-          posts_today: 0,
-          is_working: false,
-        })
-        .eq("user_id", row.user_id);
-      if (!error) reset += 1;
-    }
-    return {
-      ok: true,
-      skipped: true,
-      version: LISTINGS_WINNERS_PURGE_VERSION,
-      stamped: reset,
-    };
-  }
-
+  // Version bump or first run — full wipe including affiliate ghosts
   return purgeListingsAndFindWinners(admin);
 }
 

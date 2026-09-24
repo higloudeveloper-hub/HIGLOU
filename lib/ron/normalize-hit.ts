@@ -1,4 +1,5 @@
-import { amazonAsinImageCandidates, amazonAsinPrimaryImage } from "@/lib/amazon/asin-image";
+import { amazonAsinImageCandidates } from "@/lib/amazon/asin-image";
+import { isWeakFacebookPictureUrl } from "@/lib/facebook/promo-media";
 import type { OpportunityProduct } from "@/lib/opportunity/types";
 
 /**
@@ -22,9 +23,16 @@ export function normalizeRonHit(
   const imageFromHit = String(
     raw.imageUrl || raw.image_url || "",
   ).trim();
-  const imageUrl =
-    (/^https?:\/\//i.test(imageFromHit) && imageFromHit) ||
-    amazonAsinPrimaryImage(asin);
+  const candidates = [
+    imageFromHit,
+    ...amazonAsinImageCandidates(asin),
+  ].filter(
+    (u, i, arr) => Boolean(u) && /^https?:\/\//i.test(u) && arr.indexOf(u) === i,
+  );
+  const strong = candidates.find((u) => !isWeakFacebookPictureUrl(u));
+  const imageUrl = strong || candidates[0] || "";
+  // RON must not publish gray stubs — skip hits with only weak images
+  if (!imageUrl || isWeakFacebookPictureUrl(imageUrl)) return null;
 
   const title =
     String(raw.title || raw.ebayTitle || "").trim() || `Deal ${asin}`;
@@ -40,7 +48,6 @@ export function normalizeRonHit(
     sourceMarket: raw.sourceMarket || "amazon",
     sourceId: raw.sourceId || asin,
     destMarket: raw.destMarket || "ebay",
-    // Ledger Amazon rows are Keepa-sourced — mark so affiliate minting accepts them
     keepa: raw.keepa === true || raw.mode === "amazon" || Boolean(raw.bsrDrops90),
     amazonPrice: raw.amazonPrice ?? raw.buyBoxPrice ?? null,
     buyBoxPrice: raw.buyBoxPrice ?? raw.amazonPrice ?? null,
@@ -51,7 +58,10 @@ export function normalizeRonHit(
 }
 
 /** Primary + fallback Amazon image URLs for Facebook rehost. */
-export function ronImagePack(asin: string, preferred?: string | null): {
+export function ronImagePack(
+  asin: string,
+  preferred?: string | null,
+): {
   imageUrl: string;
   imageFallbacks: string[];
 } {
@@ -60,9 +70,15 @@ export function ronImagePack(asin: string, preferred?: string | null): {
     ...( /^https?:\/\//i.test(preferredClean) ? [preferredClean] : []),
     ...amazonAsinImageCandidates(asin),
   ];
-  const unique = [...new Set(candidates.filter((u) => /^https?:\/\//i.test(u)))];
+  const unique = [
+    ...new Set(candidates.filter((u) => /^https?:\/\//i.test(u))),
+  ];
+  const strong = unique.filter((u) => !isWeakFacebookPictureUrl(u));
+  const ordered = strong.length
+    ? [...strong, ...unique.filter((u) => isWeakFacebookPictureUrl(u))]
+    : unique;
   return {
-    imageUrl: unique[0] || amazonAsinPrimaryImage(asin),
-    imageFallbacks: unique.slice(0, 6),
+    imageUrl: ordered[0] || "",
+    imageFallbacks: ordered.slice(0, 6),
   };
 }

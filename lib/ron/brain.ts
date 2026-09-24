@@ -332,12 +332,18 @@ export function decideRonPublish(opts: {
     };
   }
 
-  // No pack → one product with active /go link (never a dead photo post)
-  const one = rankedCatalog[0]!;
-  if (!/^https?:\/\//i.test(one.linkUrl)) {
+  // No pack → only publish ONE product if it has a real photo + live link
+  const one = rankedCatalog.find(
+    (c) =>
+      /^https?:\/\//i.test(c.linkUrl) &&
+      /^https?:\/\//i.test(c.imageUrl) &&
+      !/amazon-adsystem|\/images\/P\/[A-Z0-9]{10}\./i.test(c.imageUrl),
+  );
+  if (!one) {
     return {
       action: "skip",
-      reason: "Producto sin link de click · no publico sin enlace activo",
+      reason:
+        "Sin pack relacionado con fotos reales · no publico 1 producto gris. Esperando Keepa con I/ images.",
     };
   }
   const money = scoreCardMoneyOpportunity(one, opts.learning);

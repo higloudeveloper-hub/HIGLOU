@@ -33,6 +33,11 @@ describe("facebook promo copy", () => {
     expect(copy.cardDescription("$24.99")).toBe("$24.99");
     expect(copy.cardDescription(null)).toBe("");
     expect(copy.cardName("ASIN B0CHS1BVBC Anker Bank")).toBe("Anker Bank");
+    expect(
+      copy.cardName(
+        "YosaToo Kids Tablet 10 inch Android with Case Charger Bundle Extra Long Name",
+      ).length,
+    ).toBeLessThanOrEqual(41);
   });
 
   it("carousel copy is TOP DEALS / SWIPE → SHOP", () => {

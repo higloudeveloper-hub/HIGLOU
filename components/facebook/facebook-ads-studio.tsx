@@ -685,22 +685,38 @@ export function FacebookAdsStudio() {
       const seenAsinPub = new Set<string>();
       const seenImgPub = new Set<string>();
       const payloadCards = selectedCards
-        .map((c) => ({
-          id: c.id,
-          title: c.title,
-          imageUrl:
+        .map((c) => {
+          const asin =
+            c.asin ||
+            (c.meta && /^[A-Z0-9]{10}$/i.test(c.meta) ? c.meta : null);
+          const preferred =
             c.imageUrl ||
             c.imageFallbacks?.find((u) => /^https?:\/\//i.test(u)) ||
-            "",
-          linkUrl: absoluteUrl(
-            c.linkUrl.startsWith("/") ? c.linkUrl : null,
-            c.linkUrl,
-          ),
-          priceLabel: c.priceLabel,
-          asin:
-            c.asin ||
-            (c.meta && /^[A-Z0-9]{10}$/i.test(c.meta) ? c.meta : null),
-        }))
+            "";
+          // Prefer CDN images Facebook can scrape (not ads-system widgets)
+          const cdnFallback = c.imageFallbacks?.find(
+            (u) =>
+              /^https?:\/\//i.test(u) &&
+              /(m\.media-amazon\.com|images-na\.ssl-images-amazon\.com)/i.test(
+                u,
+              ),
+          );
+          const imageUrl =
+            cdnFallback && /amazon-adsystem\.com/i.test(preferred)
+              ? cdnFallback
+              : preferred;
+          return {
+            id: c.id,
+            title: c.title,
+            imageUrl,
+            linkUrl: absoluteUrl(
+              c.linkUrl.startsWith("/") ? c.linkUrl : null,
+              c.linkUrl,
+            ),
+            priceLabel: c.priceLabel,
+            asin,
+          };
+        })
         .filter((c) => {
           const asin = String(c.asin || "").toUpperCase();
           if (asin && seenAsinPub.has(asin)) return false;
@@ -712,6 +728,12 @@ export function FacebookAdsStudio() {
         });
       if (payloadCards.some((c) => !c.imageUrl)) {
         toast.error("Falta imagen en algún producto. Probá Mis listings o Market.");
+        return;
+      }
+      if (format !== "ads" && payloadCards.length < selectedCards.length) {
+        toast.error(
+          `Seleccionaste ${selectedCards.length} pero solo ${payloadCards.length} son únicos con foto. Sacá duplicados.`,
+        );
         return;
       }
       if (format !== "ads" && payloadCards.length < minNeeded) {

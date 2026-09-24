@@ -10,6 +10,10 @@ import {
   buildFacebookPromoCopy,
   type PromoFormat as CopyFormat,
 } from "@/lib/facebook/promo-copy";
+import {
+  facebookFriendlyPictureUrl,
+  shortenFacebookCardTitle,
+} from "@/lib/facebook/promo-media";
 import { shareAffiliateToFacebook } from "@/lib/facebook/share";
 
 export type PromoFormat = "ads" | "carousel" | "vitrina";
@@ -37,11 +41,21 @@ type ChildAttachment = {
   picture: string;
 };
 
+function healPromoCard(card: PromoCard): PromoCard {
+  const picture = facebookFriendlyPictureUrl(card.imageUrl, card.asin);
+  return {
+    ...card,
+    title: shortenFacebookCardTitle(card.title, 40),
+    imageUrl: picture,
+  };
+}
+
 function toChildAttachments(
   cards: PromoCard[],
   copy = buildFacebookPromoCopy({ format: "carousel", seed: 0 }),
 ): ChildAttachment[] {
   return cards
+    .map(healPromoCard)
     .filter(
       (c) =>
         /^https?:\/\//i.test(c.linkUrl) && /^https?:\/\//i.test(c.imageUrl),
@@ -73,8 +87,20 @@ async function publishLinkCarousel(opts: {
     seed: 0,
   });
   const children = toChildAttachments(opts.cards, copy);
-  if (children.length < 2) {
-    return { error: "Carrusel Alibaba: necesitás al menos 2 productos con imagen + link." };
+  const min = opts.format === "vitrina" ? 3 : 2;
+  if (children.length < min) {
+    return {
+      error:
+        opts.format === "vitrina"
+          ? `La vitrina necesita ${min} productos con imagen https. Facebook solo aceptó ${children.length} de ${opts.cards.length}. Cambiá las fotos problemáticas.`
+          : `El carrusel necesita ${min} productos con imagen + link https (aceptados: ${children.length}/${opts.cards.length}).`,
+    };
+  }
+  // Never silently drop products the user selected
+  if (children.length < opts.cards.length) {
+    return {
+      error: `Solo ${children.length} de ${opts.cards.length} productos tienen imagen/link que Facebook acepta. Sacá los que fallan o cambiá la foto (evitá widgets de Amazon Ads).`,
+    };
   }
 
   const endpoint = new URL(
@@ -166,14 +192,16 @@ export async function publishFacebookPromo(
   | { ok: false; error: string }
 > {
   const rawCards = opts.cards
-    .map((c) => ({
-      ...c,
-      title: String(c.title || "").trim(),
-      imageUrl: String(c.imageUrl || "").trim(),
-      linkUrl: String(c.linkUrl || "").trim(),
-      priceLabel: c.priceLabel ?? null,
-      asin: c.asin ? String(c.asin).trim().toUpperCase() : null,
-    }))
+    .map((c) =>
+      healPromoCard({
+        ...c,
+        title: String(c.title || "").trim(),
+        imageUrl: String(c.imageUrl || "").trim(),
+        linkUrl: String(c.linkUrl || "").trim(),
+        priceLabel: c.priceLabel ?? null,
+        asin: c.asin ? String(c.asin).trim().toUpperCase() : null,
+      }),
+    )
     .filter(
       (c) =>
         c.imageUrl &&
@@ -181,6 +209,14 @@ export async function publishFacebookPromo(
         c.linkUrl &&
         /^https?:\/\//i.test(c.linkUrl),
     );
+
+  if (rawCards.length < opts.cards.length) {
+    const dropped = opts.cards.length - rawCards.length;
+    return {
+      ok: false,
+      error: `${dropped} producto${dropped === 1 ? "" : "s"} sin imagen/link https usable. Arreglá la foto antes de publicar (Facebook no lee widgets de Amazon Ads).`,
+    };
+  }
 
   // Live Keepa buy box for Amazon links — never publish arbitrage "sell"
   const priced = await enrichPromoCardPrices(rawCards);

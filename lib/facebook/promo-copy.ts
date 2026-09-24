@@ -1,3 +1,5 @@
+import { shortenFacebookCardTitle } from "@/lib/facebook/promo-media";
+
 /**
  * Facebook Page copy — Amazon Deals editorial aesthetic.
  * Ultra-short, premium, minimal. Graph has no markdown; we use
@@ -181,10 +183,7 @@ export function buildFacebookPromoCopy(
     message,
     collectionTitle: collectionTitle.slice(0, 60),
     cardDescription: (priceLabel) => priceOnly(priceLabel),
-    cardName: (title) => {
-      const cleaned = cleanTitle(title) || "Deal";
-      return cleaned.slice(0, 60);
-    },
+    cardName: (title) => shortenFacebookCardTitle(title, 40),
   };
 }
 

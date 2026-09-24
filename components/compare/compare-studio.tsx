@@ -25,7 +25,7 @@ function OfferRow({ offer, amazonPrice }: { offer: CompareOffer; amazonPrice: nu
     >
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="font-[family-name:var(--font-heading)] text-lg text-[#191919]">
+          <span className="font-display text-lg text-[#191919]">
             {offer.label}
           </span>
           {offer.isCheaper ? (
@@ -42,7 +42,7 @@ function OfferRow({ offer, amazonPrice }: { offer: CompareOffer; amazonPrice: nu
         <p className="mt-0.5 line-clamp-1 text-sm text-[#191919]/55">{offer.title}</p>
       </div>
       <div className="shrink-0 text-right">
-        <div className="font-[family-name:var(--font-heading)] text-xl tabular-nums text-[#191919]">
+        <div className="font-display text-xl tabular-nums text-[#191919]">
           {money(offer.price)}
         </div>
         {offer.saveVsAmazon != null && offer.saveVsAmazon > 0 ? (
@@ -118,7 +118,7 @@ export function CompareStudio() {
       <header className="relative z-10 mx-auto flex max-w-5xl items-center justify-between px-5 py-5 md:px-8">
         <Link
           href="/"
-          className="font-[family-name:var(--font-heading)] text-2xl tracking-tight text-[#f4c928] md:text-3xl"
+          className="font-display text-2xl tracking-tight text-[#f4c928] md:text-3xl"
         >
           Higlou
         </Link>
@@ -141,7 +141,7 @@ export function CompareStudio() {
             <Sparkles className="size-3.5" />
             Compare
           </p>
-          <h1 className="font-[family-name:var(--font-heading)] text-[clamp(2.4rem,6vw,3.75rem)] leading-[1.05] tracking-tight text-[#f6f3ea]">
+          <h1 className="font-display text-[clamp(2.4rem,6vw,3.75rem)] leading-[1.05] tracking-tight text-[#f6f3ea]">
             ¿Amazon es lo más barato?
           </h1>
           <p className="mt-4 max-w-md text-base leading-relaxed text-[#f6f3ea]/65 md:text-lg">
@@ -228,7 +228,7 @@ export function CompareStudio() {
                       {result.brand}
                     </p>
                   ) : null}
-                  <h2 className="mt-1 font-[family-name:var(--font-heading)] text-2xl leading-snug text-[#f6f3ea]">
+                  <h2 className="mt-1 font-display text-2xl leading-snug text-[#f6f3ea]">
                     {result.title}
                   </h2>
                   <p className="mt-2 text-sm text-[#f6f3ea]/50">
@@ -239,7 +239,7 @@ export function CompareStudio() {
 
               <div className="bg-[#f6f3ea] px-5 py-2 text-[#191919] md:px-7">
                 <div className="border-b border-[#1a1a1a]/10 py-5">
-                  <p className="font-[family-name:var(--font-heading)] text-xl text-[#191919]">
+                  <p className="font-display text-xl text-[#191919]">
                     {result.note}
                   </p>
                   {result.bestSave != null ? (

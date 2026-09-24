@@ -159,7 +159,7 @@ export async function purgeListingsAndFindWinners(
  */
 export async function maybeAutoPurgeListingsWinners(
   admin: SupabaseClient,
-): Promise<PurgeResult | { ok: true; skipped: true; version: string }> {
+): Promise<PurgeResult | PurgeSkipResult> {
   const ledgerCount = await countRows(admin, "opportunity_ledger");
   const productCount = await countRows(admin, "products");
   const nicheCount = await countRows(admin, "opportunity_niche_stats");
@@ -225,7 +225,6 @@ export async function maybeAutoPurgeListingsWinners(
       ok: true,
       skipped: true,
       version: LISTINGS_WINNERS_PURGE_VERSION,
-      // @ts-expect-error extra diagnostic for ops
       stamped: reset,
     };
   }

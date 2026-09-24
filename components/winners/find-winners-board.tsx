@@ -209,7 +209,11 @@ export function FindWinnersBoard({
 
   const winners = useMemo(() => {
     let list = sortPlatformWinners(
-      hits.filter((hit) => isPlatformWinner(hit, mode)),
+      hits.filter(
+        (hit) =>
+          isPlatformWinner(hit, mode) &&
+          /^https?:\/\//i.test(String(hit.imageUrl || "").trim()),
+      ),
     ) as BoardHit[];
 
     if (profitOnly && !demandLane) {
@@ -240,7 +244,21 @@ export function FindWinnersBoard({
   const applyFound = useCallback(
     (found: BoardHit[]) => {
       const next = sortPlatformWinners(
-        found.filter((hit) => isPlatformWinner(hit, mode)),
+        found
+          .map((hit) => {
+            const asin = String(hit.asin || "")
+              .trim()
+              .toUpperCase();
+            const imageUrl =
+              String(hit.imageUrl || "").trim() ||
+              (asin ? amazonAsinPrimaryImage(asin) : "");
+            return { ...hit, asin, imageUrl };
+          })
+          .filter(
+            (hit) =>
+              isPlatformWinner(hit, mode) &&
+              /^https?:\/\//i.test(String(hit.imageUrl || "")),
+          ),
       ) as BoardHit[];
       if (!next.length) {
         setError(

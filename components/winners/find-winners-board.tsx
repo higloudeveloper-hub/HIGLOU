@@ -25,6 +25,7 @@ import {
 } from "@/lib/keepa/strategies";
 import {
   loadLocalLedger,
+  clearLocalOpportunityLedgers,
   pushRemoteLedger,
   pullRemoteLedger,
   saveLocalLedger,
@@ -156,18 +157,39 @@ export function FindWinnersBoard({
     setError(null);
     setJustFound(0);
     setOpenId(null);
+    // One-shot browser wipe of ghost Find Winners (no photos)
+    try {
+      const flag = "higlou-ledger-purged-20260924-v1";
+      if (window.localStorage.getItem(flag) !== "1") {
+        clearLocalOpportunityLedgers();
+        window.localStorage.setItem(flag, "1");
+      }
+    } catch {
+      clearLocalOpportunityLedgers();
+    }
     const local = loadLocalLedger(mode);
     const winners = sortPlatformWinners(
-      local.hits.filter((hit) => isPlatformWinner(hit, mode)),
+      local.hits.filter(
+        (hit) =>
+          isPlatformWinner(hit, mode) &&
+          /^https?:\/\//i.test(String(hit.imageUrl || "")),
+      ),
     );
     setHits(winners);
     setHydrated(true);
     void pullRemoteLedger(mode).then((remote) => {
-      if (!remote?.hits?.length) return;
+      if (!remote?.hits?.length) {
+        setHits([]);
+        return;
+      }
       const next = sortPlatformWinners(
-        remote.hits.filter((hit) => isPlatformWinner(hit, mode)),
+        remote.hits.filter(
+          (hit) =>
+            isPlatformWinner(hit, mode) &&
+            /^https?:\/\//i.test(String(hit.imageUrl || "")),
+        ),
       );
-      if (next.length) setHits(next);
+      setHits(next);
     });
   }, [mode]);
 

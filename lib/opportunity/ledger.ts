@@ -16,7 +16,45 @@ export type OpportunityLedger = {
   updatedAt: number;
 };
 
-const KEY = (mode: OpportunityMode) => `higlou-opportunity-ledger-v1:${mode}`;
+/** Bump to drop ghost Find Winners history (no photos) from every browser. */
+const LEDGER_VERSION = "v2";
+const KEY = (mode: OpportunityMode) =>
+  `higlou-opportunity-ledger-${LEDGER_VERSION}:${mode}`;
+
+const LEGACY_KEYS = [
+  "higlou-opportunity-ledger-v1:amazon",
+  "higlou-opportunity-ledger-v1:amazon_to_ebay",
+  "higlou-opportunity-ledger-v1:supplier",
+];
+
+function hasHttpsImage(hit: OpportunityProduct): boolean {
+  const url = String(hit.imageUrl || "").trim();
+  return (
+    /^https?:\/\//i.test(url) &&
+    !/placeholder|via\.placeholder|example\.com/i.test(url)
+  );
+}
+
+function usableHit(hit: OpportunityProduct): boolean {
+  return (
+    /^[A-Z0-9]{10}$/i.test(String(hit.asin || "")) && hasHttpsImage(hit)
+  );
+}
+
+/** Wipe legacy + current local Find Winners caches (ghost ASINs without photos). */
+export function clearLocalOpportunityLedgers() {
+  if (typeof window === "undefined") return;
+  try {
+    for (const key of LEGACY_KEYS) {
+      window.localStorage.removeItem(key);
+    }
+    for (const mode of ["amazon", "amazon_to_ebay", "supplier"] as const) {
+      window.localStorage.removeItem(KEY(mode));
+    }
+  } catch {
+    /* private mode */
+  }
+}
 
 export function emptyLedger(mode: OpportunityMode): OpportunityLedger {
   return { mode, hits: [], learn: [], analyzed: 0, updatedAt: 0 };
@@ -24,6 +62,16 @@ export function emptyLedger(mode: OpportunityMode): OpportunityLedger {
 
 export function loadLocalLedger(mode: OpportunityMode): OpportunityLedger {
   if (typeof window === "undefined") return emptyLedger(mode);
+  // Drop legacy ghost caches once per session
+  try {
+    for (const key of LEGACY_KEYS) {
+      if (window.localStorage.getItem(key)) {
+        window.localStorage.removeItem(key);
+      }
+    }
+  } catch {
+    /* ignore */
+  }
   try {
     const raw = window.localStorage.getItem(KEY(mode));
     if (!raw) return emptyLedger(mode);
@@ -33,7 +81,7 @@ export function loadLocalLedger(mode: OpportunityMode): OpportunityLedger {
     }
     return {
       mode,
-      hits: parsed.hits.filter((hit) => /^[A-Z0-9]{10}$/i.test(String(hit.asin || ""))),
+      hits: parsed.hits.filter(usableHit),
       learn: Array.isArray(parsed.learn) ? parsed.learn : [],
       analyzed: Number(parsed.analyzed) || 0,
       updatedAt: Number(parsed.updatedAt) || 0,
@@ -46,10 +94,12 @@ export function loadLocalLedger(mode: OpportunityMode): OpportunityLedger {
 export function saveLocalLedger(ledger: OpportunityLedger) {
   if (typeof window === "undefined") return;
   try {
-    window.localStorage.setItem(
-      KEY(ledger.mode),
-      JSON.stringify({ ...ledger, updatedAt: Date.now() }),
-    );
+    const clean: OpportunityLedger = {
+      ...ledger,
+      hits: (ledger.hits || []).filter(usableHit),
+      updatedAt: Date.now(),
+    };
+    window.localStorage.setItem(KEY(ledger.mode), JSON.stringify(clean));
   } catch {
     /* quota */
   }
@@ -67,7 +117,7 @@ export async function pullRemoteLedger(
     if (!body || !Array.isArray(body.hits)) return null;
     return {
       mode,
-      hits: body.hits,
+      hits: (body.hits || []).filter(usableHit),
       learn: body.learn || [],
       analyzed: Number(body.analyzed) || 0,
       updatedAt: Number(body.updatedAt) || Date.now(),
@@ -82,7 +132,10 @@ export async function pushRemoteLedger(ledger: OpportunityLedger) {
     await fetch("/api/amazon/opportunities/ledger", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(ledger),
+      body: JSON.stringify({
+        ...ledger,
+        hits: (ledger.hits || []).filter(usableHit),
+      }),
     });
   } catch {
     /* local ledger is enough until the table exists */

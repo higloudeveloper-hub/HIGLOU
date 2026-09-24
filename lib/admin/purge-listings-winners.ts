@@ -177,17 +177,18 @@ export async function maybeAutoPurgeListingsWinners(
     };
   }
 
-  // Also wipe when there is ledger/product junk but no RON rows yet
   const ledgerCount = await countRows(admin, "opportunity_ledger");
   const productCount = await countRows(admin, "products");
-  if (allStamped === false && rows.length === 0) {
-    if ((ledgerCount || 0) === 0 && (productCount || 0) === 0) {
-      return {
-        ok: true,
-        skipped: true,
-        version: LISTINGS_WINNERS_PURGE_VERSION,
-      };
-    }
+  const emptyTables =
+    (ledgerCount ?? 0) === 0 && (productCount ?? 0) === 0;
+
+  // No RON rows and nothing to wipe — stamp is unnecessary; stay quiet
+  if (rows.length === 0 && emptyTables) {
+    return {
+      ok: true,
+      skipped: true,
+      version: LISTINGS_WINNERS_PURGE_VERSION,
+    };
   }
 
   return purgeListingsAndFindWinners(admin);

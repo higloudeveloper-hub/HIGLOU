@@ -188,7 +188,19 @@ export async function searchCompareProducts(
     };
   }
   const tag = getAmazonAssociateTag();
-  const asins = await keepaSearchAsins(query);
+  let asins = await keepaSearchAsins(query);
+  // Fallback: Product Finder by title when search tokens are dry
+  if (!asins.length) {
+    const found = await keepaFindHotWinners({
+      mode: "amazon",
+      title: query,
+      preferGlobal: true,
+      maxRoots: 3,
+      strategy: "hot_deals",
+      seed: query.length,
+    });
+    asins = found.asins;
+  }
   const snaps = await keepaProducts(
     asins.slice(0, Math.min(Math.max(opts?.limit || 16, 4), 20)),
   );

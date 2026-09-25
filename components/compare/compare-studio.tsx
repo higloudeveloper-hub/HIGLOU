@@ -135,9 +135,9 @@ function ProductTile({
 }) {
   const reduce = useReducedMotion();
   const Icon = laneIcon(item.lane);
-  const off =
-    item.discount90 != null && item.discount90 > 5
-      ? Math.round(item.discount90)
+  const offPct =
+    item.discount90 != null && item.discount90 > 0.05
+      ? Math.round(item.discount90 * 100)
       : null;
 
   return (
@@ -163,9 +163,9 @@ function ProductTile({
           className="h-full w-full object-contain p-5 transition-transform duration-500 group-hover:scale-[1.04]"
         />
         <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-[#0a0b0d]/80 via-transparent to-transparent opacity-80" />
-        {off != null ? (
+        {offPct != null ? (
           <span className="absolute left-3 top-3 bg-[#c8f542] px-2 py-1 text-[11px] font-bold tabular-nums text-[#0a0b0d]">
-            −{off}%
+            −{offPct}%
           </span>
         ) : (
           <span className="absolute left-3 top-3 inline-flex items-center gap-1 bg-[#0a0b0d]/75 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-[#c8f542] backdrop-blur-sm">

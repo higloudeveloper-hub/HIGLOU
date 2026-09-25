@@ -654,6 +654,14 @@ export function FacebookAdsStudio() {
     for (const id of pack.cardIds) {
       const c = byId.get(id);
       if (!c) continue;
+      if (
+        !promoCardHasUsablePhoto({
+          imageUrl: c.imageUrl,
+          imageFallbacks: c.imageFallbacks,
+        })
+      ) {
+        continue;
+      }
       const asin = String(c.asin || "").toUpperCase();
       if (asin && seenAsin.has(asin)) continue;
       const img = productImageKey(c.imageUrl);

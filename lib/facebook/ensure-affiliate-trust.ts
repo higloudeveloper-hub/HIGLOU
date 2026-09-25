@@ -160,7 +160,7 @@ export async function ensureFacebookPromoAffiliateTrust(
       continue;
     }
 
-    // Already a smart /go/ link → heal destination tag in DB, keep the share URL
+    // Already a smart /go/ link → heal destination; if dead after purge, remint
     const slug = smartGoSlug(linkUrl);
     if (slug) {
       const healed = await healSmartLinkDestination(supabase, {
@@ -169,22 +169,32 @@ export async function ensureFacebookPromoAffiliateTrust(
         associateTag,
         asin: isValidAsin(asin) ? asin : null,
       });
-      if (!healed.ok) {
-        return { ok: false, error: healed.error };
+      if (healed.ok) {
+        const abs = linkUrl.startsWith("http")
+          ? linkUrl
+          : absoluteGoPath(`/go/${slug}`);
+        out.push({
+          ...card,
+          linkUrl: abs,
+          asin: healed.asin || asin || null,
+        });
+        continue;
       }
-      const abs = linkUrl.startsWith("http")
-        ? linkUrl
-        : absoluteGoPath(`/go/${slug}`);
-      out.push({
-        ...card,
-        linkUrl: abs,
-        asin: healed.asin || asin || null,
-      });
-      continue;
+      // Dead /go slug (purge wiped smart_links) — remint below if we have ASIN
+      if (!isValidAsin(asin)) {
+        return {
+          ok: false,
+          error:
+            healed.error ||
+            `Smart link /go/${slug} murió y no hay ASIN para recrearlo.`,
+        };
+      }
+      // fall through to mint with ASIN
     }
 
     // Direct Amazon URL already correctly tagged → keep (still commission-safe)
     if (
+      !slug &&
       isAmazonProductUrl(linkUrl) &&
       amazonUrlHasAssociateTag(linkUrl, associateTag)
     ) {
@@ -326,9 +336,17 @@ async function healSmartLinkDestination(
     .maybeSingle();
 
   if (!smart || smart.user_id !== opts.userId) {
+    // Missing slug is recoverable when ASIN is known (remint upstream).
+    // Only hard-fail when another user owns the slug.
+    if (smart && smart.user_id !== opts.userId) {
+      return {
+        ok: false,
+        error: `Smart link /go/${opts.slug} no es tuyo — no publiques ads con links ajenos.`,
+      };
+    }
     return {
       ok: false,
-      error: `Smart link /go/${opts.slug} no existe o no es tuyo — no publiques ads con links ajenos.`,
+      error: `Smart link /go/${opts.slug} no existe — se recreará con tu ASIN.`,
     };
   }
 

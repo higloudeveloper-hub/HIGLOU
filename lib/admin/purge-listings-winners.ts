@@ -3,6 +3,9 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 /** Bump to force another full wipe of listings + Find Winners + affiliate ghosts. */
 export const LISTINGS_WINNERS_PURGE_VERSION = "2026-09-24-v2-vitrinas";
 
+/** Soft reset: clear RON “already published” memory without wiping affiliates. */
+export const RON_MEMORY_RESET_VERSION = "2026-09-25-v1-keepa-unlock";
+
 export type PurgeResult = {
   ok: true;
   cleared: Record<string, number | string>;
@@ -66,7 +69,11 @@ function stampLearning(
   const next =
     learning && typeof learning === "object" ? { ...learning } : {};
   next.historyPurgeVersion = LISTINGS_WINNERS_PURGE_VERSION;
+  next.memoryResetVersion = RON_MEMORY_RESET_VERSION;
+  // Wipe publish memory so RON can use Keepa hits again after a catalog wipe
   next.recentPacks = {};
+  next.publishedAsins = [];
+  next.lastPublishedAt = null;
   next.opsSnapshot = {
     freshAsins: 0,
     catalogAsins: 0,
@@ -78,6 +85,41 @@ function stampLearning(
     nextAction: "Escaneo Keepa general en el próximo ciclo",
   };
   return next;
+}
+
+/**
+ * Clear RON publish cooldowns without deleting affiliate / Keepa data.
+ * Call after a hard purge so Keepa hits are not blocked as “already published”.
+ */
+export async function maybeResetRonPublishMemory(
+  admin: SupabaseClient,
+): Promise<{ reset: number; skipped: boolean }> {
+  const { data: ronRows, error } = await admin
+    .from("ron_agent_state")
+    .select("user_id, learning")
+    .limit(100);
+  if (error || !ronRows?.length) return { reset: 0, skipped: true };
+
+  let reset = 0;
+  for (const row of ronRows) {
+    const learning =
+      row.learning && typeof row.learning === "object"
+        ? (row.learning as Record<string, unknown>)
+        : {};
+    if (learning.memoryResetVersion === RON_MEMORY_RESET_VERSION) continue;
+    const next = stampLearning(learning);
+    const { error: upErr } = await admin
+      .from("ron_agent_state")
+      .update({
+        learning: next,
+        status_message: "Memoria RON limpia · Keepa desbloqueado",
+        last_error: null,
+        is_working: false,
+      })
+      .eq("user_id", row.user_id);
+    if (!upErr) reset += 1;
+  }
+  return { reset, skipped: reset === 0 };
 }
 
 /**

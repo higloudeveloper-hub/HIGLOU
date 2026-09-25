@@ -208,10 +208,11 @@ export async function runRonCycle(
       "@/lib/supabase/admin"
     );
     if (isSupabaseConfigured()) {
-      const { maybeAutoPurgeListingsWinners } = await import(
-        "@/lib/admin/purge-listings-winners"
-      );
-      await maybeAutoPurgeListingsWinners(createAdminClient());
+      const admin = createAdminClient();
+      const { maybeAutoPurgeListingsWinners, maybeResetRonPublishMemory } =
+        await import("@/lib/admin/purge-listings-winners");
+      await maybeAutoPurgeListingsWinners(admin);
+      await maybeResetRonPublishMemory(admin);
     }
   } catch {
     /* purge optional */

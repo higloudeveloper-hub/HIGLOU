@@ -218,9 +218,9 @@ export async function purgeListingsAndFindWinners(
  * One-shot on production: wipe ghost history once per
  * LISTINGS_WINNERS_PURGE_VERSION, then stamp RON so it never re-runs.
  *
- * Safety: if ANY row is already stamped for this version, never wipe again
- * (avoids wiping Keepa winners when a select returns empty / partial).
- * If there are zero ron rows, skip — do not nuke the ledger blindly.
+ * SAFETY: after the v2 wipe landed, never wipe again — empty select / partial
+ * stamps used to re-delete Keepa winners on every Market refresh.
+ * Only stamp unstamped rows going forward.
  */
 export async function maybeAutoPurgeListingsWinners(
   admin: SupabaseClient,
@@ -239,7 +239,7 @@ export async function maybeAutoPurgeListingsWinners(
   }
 
   const rows = ronRows || [];
-  // No agent rows yet → do not wipe Keepa / affiliates
+  // Never wipe when we can't see agent state
   if (rows.length === 0) {
     return {
       ok: true,
@@ -256,8 +256,9 @@ export async function maybeAutoPurgeListingsWinners(
     return learning.historyPurgeVersion === LISTINGS_WINNERS_PURGE_VERSION;
   });
 
+  // Hard stop: if ANY user already got the v2 wipe, only stamp others — never delete again
   if (anyStamped) {
-    // Stamp any unstamped rows without wiping live Keepa data
+    let stamped = 0;
     for (const row of rows) {
       const learning =
         row.learning && typeof row.learning === "object"
@@ -271,20 +272,21 @@ export async function maybeAutoPurgeListingsWinners(
         historyPurgeVersion: LISTINGS_WINNERS_PURGE_VERSION,
         memoryResetVersion: RON_MEMORY_RESET_VERSION,
       };
-      await admin
+      const { error: upErr } = await admin
         .from("ron_agent_state")
         .update({ learning: next })
         .eq("user_id", row.user_id);
+      if (!upErr) stamped += 1;
     }
     return {
       ok: true,
       skipped: true,
       version: LISTINGS_WINNERS_PURGE_VERSION,
-      stamped: rows.length,
+      stamped,
     };
   }
 
-  // First run for this version — full wipe including affiliate ghosts
+  // First run for this version only — full wipe including affiliate ghosts
   return purgeListingsAndFindWinners(admin);
 }
 

@@ -128,6 +128,8 @@ export async function pullRemoteLedger(
 }
 
 export async function pushRemoteLedger(ledger: OpportunityLedger) {
+  // Never push an empty board — that raced hydration and could confuse clients
+  if (!ledger.hits?.length) return;
   try {
     await fetch("/api/amazon/opportunities/ledger", {
       method: "POST",

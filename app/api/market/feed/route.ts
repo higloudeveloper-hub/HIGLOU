@@ -8,6 +8,7 @@ import { createAdminClient, isSupabaseConfigured } from "@/lib/supabase/admin";
 import type { OpportunityMode, OpportunityProduct } from "@/lib/opportunity/types";
 
 export const runtime = "nodejs";
+export const maxDuration = 60;
 
 async function loadLedgerHits(userId: string): Promise<OpportunityProduct[]> {
   if (!isSupabaseConfigured()) return [];
@@ -73,11 +74,37 @@ export async function GET() {
 
   const [tag, ledgerHits] = await Promise.all([
     withTimeout(resolveUserAssociateTag(auth.supabase, auth.user.id), 4000, null),
-    withTimeout(loadLedgerHits(auth.user.id), 5000, [] as OpportunityProduct[]),
+    withTimeout(loadLedgerHits(auth.user.id), 8000, [] as OpportunityProduct[]),
   ]);
 
+  // After ghost purge the ledger can be empty — seed Keepa once so Market isn't blank
+  let seedNote: string | null = null;
+  let hits = ledgerHits;
+  if (!hits.length && isSupabaseConfigured()) {
+    try {
+      const { maybeSeedEmptyFloor } = await import(
+        "@/lib/opportunity/seed-floor"
+      );
+      const seeded = await maybeSeedEmptyFloor(createAdminClient(), {
+        userId: auth.user.id,
+        supabase: auth.supabase,
+        limit: 12,
+      });
+      if (seeded.seeded) {
+        seedNote = `Floor sembrado · ${seeded.saved} Keepa · ${seeded.affiliates} afiliados`;
+        hits = await withTimeout(
+          loadLedgerHits(auth.user.id),
+          8000,
+          [] as OpportunityProduct[],
+        );
+      }
+    } catch {
+      /* seed optional */
+    }
+  }
+
   const merged = mergeMarketFeed({
-    ledgerHits,
+    ledgerHits: hits,
     associateTag: tag,
     limit: 40,
   });
@@ -91,9 +118,11 @@ export async function GET() {
     floorSize: merged.drops.length,
     analyzing: false,
     drops: merged.drops,
+    seedNote,
     note:
-      merged.ledgerCount > 0
+      seedNote ||
+      (merged.ledgerCount > 0
         ? `${merged.ledgerCount} Higlou-verified winner${merged.ledgerCount === 1 ? "" : "s"} (arbitrage + Keepa Amazon)`
-        : "Market is empty until Find Winners verifies arbitrage keep or Keepa Amazon demand. No demo products.",
+        : "Market is empty until Find Winners verifies arbitrage keep or Keepa Amazon demand. No demo products."),
   });
 }

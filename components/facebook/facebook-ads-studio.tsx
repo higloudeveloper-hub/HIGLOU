@@ -222,47 +222,39 @@ export function FacebookAdsStudio() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [affRes, prodRes, feedRes, fbRes, moneyRes] = await Promise.all([
-        fetch("/api/money/affiliate/links", { cache: "no-store" }),
+      // Market feed first — seeds empty ledger after purge, then affiliates sync
+      const [prodRes, feedRes, fbRes, moneyRes] = await Promise.all([
         fetch("/api/products", { cache: "no-store" }),
         fetch("/api/market/feed", { cache: "no-store" }),
         fetch("/api/facebook/connection", { cache: "no-store" }),
         fetch("/api/settings/money-machine", { cache: "no-store" }),
       ]);
 
-      if (affRes.ok) {
-        const body = (await affRes.json()) as { links?: AffLink[] };
-        setLinks(body.links || []);
-        // Backfill Keepa ledger winners → affiliate (idempotent)
-        void fetch("/api/money/affiliate/sync-keepa-winners", {
-          method: "POST",
-        })
-          .then(async (res) => {
-            if (!res.ok) return;
-            const sync = (await res.json()) as { created?: number };
-            if ((sync.created || 0) > 0) {
-              const refreshed = await fetch("/api/money/affiliate/links", {
-                cache: "no-store",
-              });
-              if (refreshed.ok) {
-                const again = (await refreshed.json()) as { links?: AffLink[] };
-                setLinks(again.links || []);
-              }
-            }
-          })
-          .catch(() => undefined);
-      } else setLinks([]);
-
-      if (prodRes.ok) {
-        const body = (await prodRes.json()) as { products?: ImportedProduct[] };
-        // All user listings (eBay / Amazon / drafts) — not only those with photos
-        setImported(body.products || []);
-      } else setImported([]);
-
       if (feedRes.ok) {
         const body = (await feedRes.json()) as { drops?: MarketDrop[] };
         setDrops((body.drops || []).filter((d) => d.asin && d.photo).slice(0, 30));
       } else setDrops([]);
+
+      // After feed (possible seed), sync ledger → /go then load affiliate catalog
+      try {
+        await fetch("/api/money/affiliate/sync-keepa-winners", {
+          method: "POST",
+        });
+      } catch {
+        /* optional */
+      }
+      const affRes = await fetch("/api/money/affiliate/links", {
+        cache: "no-store",
+      });
+      if (affRes.ok) {
+        const body = (await affRes.json()) as { links?: AffLink[] };
+        setLinks(body.links || []);
+      } else setLinks([]);
+
+      if (prodRes.ok) {
+        const body = (await prodRes.json()) as { products?: ImportedProduct[] };
+        setImported(body.products || []);
+      } else setImported([]);
 
       if (fbRes.ok) {
         const body = (await fbRes.json()) as { connection?: FbConn };

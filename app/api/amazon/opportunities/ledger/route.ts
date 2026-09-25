@@ -6,6 +6,7 @@ import { createAdminClient, isSupabaseConfigured } from "@/lib/supabase/admin";
 import type { OpportunityProduct } from "@/lib/opportunity/types";
 
 export const runtime = "nodejs";
+export const maxDuration = 60;
 
 const modeSchema = z.enum(["amazon", "amazon_to_ebay", "supplier"]);
 
@@ -40,7 +41,28 @@ export async function GET(request: Request) {
     : "amazon_to_ebay";
   try {
     const admin = createAdminClient();
-    // Never auto-purge on ledger read — that wiped Keepa winners after every scan.
+
+    // Empty after purge → seed Keepa winners once (also fills Market/Facebook)
+    try {
+      const { count } = await admin
+        .from("opportunity_ledger")
+        .select("*", { count: "exact", head: true })
+        .eq("user_id", auth.user.id);
+      if ((count ?? 0) === 0) {
+        const { maybeSeedEmptyFloor } = await import(
+          "@/lib/opportunity/seed-floor"
+        );
+        await maybeSeedEmptyFloor(admin, {
+          userId: auth.user.id,
+          supabase: auth.supabase,
+          limit: 12,
+          pageOrigin: new URL(request.url).origin,
+        });
+      }
+    } catch {
+      /* seed optional */
+    }
+
     const { data, error } = await admin
       .from("opportunity_ledger")
       .select("asin, payload, net_profit, last_seen_at, query, image_url")

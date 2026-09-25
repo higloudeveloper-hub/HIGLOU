@@ -210,6 +210,23 @@ export async function POST(request: Request) {
       });
     }
 
+    // Persist to opportunity_ledger BEFORE responding — Market + Facebook need it
+    // even if the browser navigates away before localStorage push.
+    try {
+      const { createAdminClient } = await import("@/lib/supabase/admin");
+      const { persistOpportunityHits } = await import(
+        "@/lib/opportunity/persist-hits"
+      );
+      await persistOpportunityHits(createAdminClient(), {
+        userId: auth.user.id,
+        hits: withBoards,
+        mode,
+        limit: body.limit,
+      });
+    } catch {
+      /* ledger optional — affiliates still minted below */
+    }
+
     // Keepa Amazon winners → affiliate + smart /go (ready for Facebook ads)
     let affiliate: {
       created: number;

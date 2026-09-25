@@ -75,13 +75,12 @@ export function DropMarketStudio() {
     const local = localVerifiedDrops();
     if (local.length) {
       setDrops(local);
-    } else {
-      setDrops([]);
     }
     setRefreshing(true);
 
     const controller = new AbortController();
-    const hardStop = window.setTimeout(() => controller.abort(), 4000);
+    // Keepa seed + ledger can take >4s after a purge — don't abort early
+    const hardStop = window.setTimeout(() => controller.abort(), 45000);
 
     void (async () => {
       try {
@@ -93,20 +92,25 @@ export function DropMarketStudio() {
         const body = (await res.json()) as {
           drops?: MarketDropPublic[];
           affiliateTagConfigured?: boolean;
+          seedNote?: string | null;
         };
         if (!alive) return;
         const remote = body.drops || [];
         if (remote.length) {
-          setDrops(remote);
-        } else if (!local.length) {
-          setDrops([]);
+          // Merge remote over local by id — never wipe a full local floor
+          const byId = new Map<string, MarketDropPublic>();
+          for (const d of local) byId.set(d.id, d);
+          for (const d of remote) byId.set(d.id, d);
+          setDrops([...byId.values()]);
         }
+        // remote empty → keep local (do not clear)
         setTagReady(Boolean(body.affiliateTagConfigured));
+        if (body.seedNote) {
+          toast.success(body.seedNote);
+        }
       } catch {
         if (!alive) return;
-        if (!local.length) {
-          setDrops([]);
-        }
+        // Keep whatever local we already showed
       } finally {
         window.clearTimeout(hardStop);
         if (alive) setRefreshing(false);

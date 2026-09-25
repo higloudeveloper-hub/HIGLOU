@@ -491,15 +491,45 @@ export async function runRonCycle(
   const clickMap = await loadAsinClickMap(supabase, userId);
 
   // Only never-published ASINs — never fall back to the old catalog
-  const freshCatalog = filterFreshCatalogAsins(
+  let freshCatalog = filterFreshCatalogAsins(
     catalog,
     learning,
     RON_ASIN_COOLDOWN_HOURS,
   );
 
+  // Keepa found product but memory still blocks everything → unlock once
+  if (
+    hits.length > 0 &&
+    catalog.length > 0 &&
+    freshCatalog.length === 0
+  ) {
+    learning = {
+      ...learning,
+      recentPacks: {},
+    };
+    freshCatalog = catalog;
+    await appendRonActivity(
+      supabase,
+      userId,
+      {
+        at: new Date().toISOString(),
+        kind: "scan",
+        message:
+          "Memoria de publicados limpiada · Keepa tenía hits bloqueados por cooldown viejo",
+      },
+      {
+        statusMessage: `Trabajando · ${catalog.length} Keepa desbloqueados`,
+        learning,
+        working: true,
+      },
+    );
+  }
+
   if (!freshCatalog.length) {
     const msg =
-      "Sin oportunidades nuevas · todo el catálogo ya se publicó · espero Keepa fresco";
+      hits.length > 0
+        ? `Keepa trajo ${hits.length} pero ninguno es publicable aún (falta foto real o link). Reintento en el próximo ciclo.`
+        : "Sin oportunidades nuevas · todo el catálogo ya se publicó · espero Keepa fresco";
     await appendRonActivity(
       supabase,
       userId,

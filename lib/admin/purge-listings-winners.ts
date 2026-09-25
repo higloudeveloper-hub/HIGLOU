@@ -4,7 +4,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 export const LISTINGS_WINNERS_PURGE_VERSION = "2026-09-24-v2-vitrinas";
 
 /** Soft reset: clear RON “already published” memory without wiping affiliates. */
-export const RON_MEMORY_RESET_VERSION = "2026-09-25-v2-force-unlock";
+export const RON_MEMORY_RESET_VERSION = "2026-09-25-v3-keepa-unlock";
 
 export type PurgeResult = {
   ok: true;
@@ -217,27 +217,20 @@ export async function purgeListingsAndFindWinners(
 /**
  * One-shot on production: wipe ghost history once per
  * LISTINGS_WINNERS_PURGE_VERSION, then stamp RON so it never re-runs.
+ *
+ * Safety: if ANY row is already stamped for this version, never wipe again
+ * (avoids wiping Keepa winners when a select returns empty / partial).
+ * If there are zero ron rows, skip — do not nuke the ledger blindly.
  */
 export async function maybeAutoPurgeListingsWinners(
   admin: SupabaseClient,
 ): Promise<PurgeResult | PurgeSkipResult> {
-  const { data: ronRows } = await admin
+  const { data: ronRows, error } = await admin
     .from("ron_agent_state")
     .select("user_id, learning")
     .limit(100);
 
-  const rows = ronRows || [];
-  const allStamped =
-    rows.length > 0 &&
-    rows.every((row) => {
-      const learning =
-        row.learning && typeof row.learning === "object"
-          ? (row.learning as Record<string, unknown>)
-          : {};
-      return learning.historyPurgeVersion === LISTINGS_WINNERS_PURGE_VERSION;
-    });
-
-  if (allStamped) {
+  if (error) {
     return {
       ok: true,
       skipped: true,
@@ -245,7 +238,53 @@ export async function maybeAutoPurgeListingsWinners(
     };
   }
 
-  // Version bump or first run — full wipe including affiliate ghosts
+  const rows = ronRows || [];
+  // No agent rows yet → do not wipe Keepa / affiliates
+  if (rows.length === 0) {
+    return {
+      ok: true,
+      skipped: true,
+      version: LISTINGS_WINNERS_PURGE_VERSION,
+    };
+  }
+
+  const anyStamped = rows.some((row) => {
+    const learning =
+      row.learning && typeof row.learning === "object"
+        ? (row.learning as Record<string, unknown>)
+        : {};
+    return learning.historyPurgeVersion === LISTINGS_WINNERS_PURGE_VERSION;
+  });
+
+  if (anyStamped) {
+    // Stamp any unstamped rows without wiping live Keepa data
+    for (const row of rows) {
+      const learning =
+        row.learning && typeof row.learning === "object"
+          ? (row.learning as Record<string, unknown>)
+          : {};
+      if (learning.historyPurgeVersion === LISTINGS_WINNERS_PURGE_VERSION) {
+        continue;
+      }
+      const next = {
+        ...learning,
+        historyPurgeVersion: LISTINGS_WINNERS_PURGE_VERSION,
+        memoryResetVersion: RON_MEMORY_RESET_VERSION,
+      };
+      await admin
+        .from("ron_agent_state")
+        .update({ learning: next })
+        .eq("user_id", row.user_id);
+    }
+    return {
+      ok: true,
+      skipped: true,
+      version: LISTINGS_WINNERS_PURGE_VERSION,
+      stamped: rows.length,
+    };
+  }
+
+  // First run for this version — full wipe including affiliate ghosts
   return purgeListingsAndFindWinners(admin);
 }
 

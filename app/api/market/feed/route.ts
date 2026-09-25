@@ -13,15 +13,6 @@ async function loadLedgerHits(userId: string): Promise<OpportunityProduct[]> {
   if (!isSupabaseConfigured()) return [];
   try {
     const admin = createAdminClient();
-    // One-shot: clear ghost Find Winners / listings without photos
-    try {
-      const { maybeAutoPurgeListingsWinners } = await import(
-        "@/lib/admin/purge-listings-winners"
-      );
-      await maybeAutoPurgeListingsWinners(admin);
-    } catch {
-      /* purge optional */
-    }
     const { data, error } = await admin
       .from("opportunity_ledger")
       .select("asin, payload, net_profit, mode, image_url")

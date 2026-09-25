@@ -25,7 +25,6 @@ import {
 } from "@/lib/keepa/strategies";
 import {
   loadLocalLedger,
-  clearLocalOpportunityLedgers,
   pushRemoteLedger,
   pullRemoteLedger,
   saveLocalLedger,
@@ -157,16 +156,6 @@ export function FindWinnersBoard({
     setError(null);
     setJustFound(0);
     setOpenId(null);
-    // One-shot browser wipe of ghost Find Winners (no photos)
-    try {
-      const flag = "higlou-ledger-purged-20260924-v1";
-      if (window.localStorage.getItem(flag) !== "1") {
-        clearLocalOpportunityLedgers();
-        window.localStorage.setItem(flag, "1");
-      }
-    } catch {
-      clearLocalOpportunityLedgers();
-    }
     const local = loadLocalLedger(mode);
     const winners = sortPlatformWinners(
       local.hits.filter(
@@ -178,18 +167,25 @@ export function FindWinnersBoard({
     setHits(winners);
     setHydrated(true);
     void pullRemoteLedger(mode).then((remote) => {
-      if (!remote?.hits?.length) {
-        setHits([]);
-        return;
-      }
-      const next = sortPlatformWinners(
+      // Keep local winners when remote is empty — never wipe after a scan.
+      if (!remote?.hits?.length) return;
+      const remoteWinners = sortPlatformWinners(
         remote.hits.filter(
           (hit) =>
             isPlatformWinner(hit, mode) &&
             /^https?:\/\//i.test(String(hit.imageUrl || "")),
         ),
       );
-      setHits(next);
+      setHits((prev) => {
+        const byKey = new Map<string, BoardHit>();
+        for (const hit of prev) byKey.set(hitKey(hit), hit);
+        for (const hit of remoteWinners) {
+          const key = hitKey(hit);
+          // Prefer newer remote row when ASIN overlaps
+          byKey.set(key, hit as BoardHit);
+        }
+        return sortPlatformWinners([...byKey.values()]) as BoardHit[];
+      });
     });
   }, [mode]);
 

@@ -336,9 +336,9 @@ async function healSmartLinkDestination(
     .maybeSingle();
 
   if (!smart || smart.user_id !== opts.userId) {
-    // Missing slug is recoverable when ASIN is known (remint upstream).
-    // Only hard-fail when another user owns the slug.
-    if (smart && smart.user_id !== opts.userId) {
+    // Missing or foreign slug → remint upstream when ASIN is known.
+    // Never hard-block publish on a dead /go after purge.
+    if (smart && smart.user_id !== opts.userId && !opts.asin) {
       return {
         ok: false,
         error: `Smart link /go/${opts.slug} no es tuyo — no publiques ads con links ajenos.`,

@@ -935,10 +935,13 @@ export function FacebookAdsStudio() {
       for (const card of payloadCards) {
         const asin = String(card.asin || "").trim().toUpperCase();
         if (!/^[A-Z0-9]{10}$/.test(asin)) continue;
-        // Already a /go/ smart link — server will heal tag=
-        if (/\/go\/[a-z0-9]+/i.test(card.linkUrl)) continue;
-        // Already a tagged Amazon URL
-        if (/amazon\./i.test(card.linkUrl) && /[?&]tag=/i.test(card.linkUrl)) {
+        // Always remint by ASIN — stale /go after purge must not block publish.
+        // Keep only already-tagged amazon.com URLs that are not /go/.
+        if (
+          /amazon\./i.test(card.linkUrl) &&
+          /[?&]tag=/i.test(card.linkUrl) &&
+          !/\/go\//i.test(card.linkUrl)
+        ) {
           continue;
         }
         try {

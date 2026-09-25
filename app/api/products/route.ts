@@ -11,21 +11,6 @@ export async function GET() {
   const auth = await requireUser();
   if (!auth.ok) return auth.response;
 
-  // One-shot: wipe ghost listings / Find Winners without photos
-  try {
-    const { createAdminClient, isSupabaseConfigured } = await import(
-      "@/lib/supabase/admin"
-    );
-    if (isSupabaseConfigured()) {
-      const { maybeAutoPurgeListingsWinners } = await import(
-        "@/lib/admin/purge-listings-winners"
-      );
-      await maybeAutoPurgeListingsWinners(createAdminClient());
-    }
-  } catch {
-    /* purge optional */
-  }
-
   const { data, error } = await auth.supabase
     .from("products")
     .select("*")

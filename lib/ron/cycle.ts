@@ -202,20 +202,20 @@ export async function runRonCycle(
 ): Promise<RonCycleResult> {
   const userId = opts.userId;
 
-  // One-shot wipe of ghost listings / Find Winners (no photos) — then RON starts clean
+  // Soft-unlock publish memory only — never wipe Keepa ledger mid-cycle
   try {
     const { createAdminClient, isSupabaseConfigured } = await import(
       "@/lib/supabase/admin"
     );
     if (isSupabaseConfigured()) {
       const admin = createAdminClient();
-      const { maybeAutoPurgeListingsWinners, maybeResetRonPublishMemory } =
-        await import("@/lib/admin/purge-listings-winners");
-      await maybeAutoPurgeListingsWinners(admin);
+      const { maybeResetRonPublishMemory } = await import(
+        "@/lib/admin/purge-listings-winners"
+      );
       await maybeResetRonPublishMemory(admin);
     }
   } catch {
-    /* purge optional */
+    /* unlock optional */
   }
 
   let state = await loadRonState(supabase, userId);

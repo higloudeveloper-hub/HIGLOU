@@ -40,21 +40,14 @@ export async function GET(request: Request) {
     : "amazon_to_ebay";
   try {
     const admin = createAdminClient();
-    try {
-      const { maybeAutoPurgeListingsWinners } = await import(
-        "@/lib/admin/purge-listings-winners"
-      );
-      await maybeAutoPurgeListingsWinners(admin);
-    } catch {
-      /* purge optional */
-    }
+    // Never auto-purge on ledger read — that wiped Keepa winners after every scan.
     const { data, error } = await admin
       .from("opportunity_ledger")
       .select("asin, payload, net_profit, last_seen_at, query, image_url")
       .eq("user_id", auth.user.id)
       .eq("mode", mode)
       .order("net_profit", { ascending: false })
-      .limit(40);
+      .limit(80);
     if (error) {
       return NextResponse.json({ hits: [], learn: [], analyzed: 0, mode });
     }

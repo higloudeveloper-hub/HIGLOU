@@ -2,13 +2,13 @@ import type { Metadata } from "next";
 import { CompareStudio } from "@/components/compare/compare-studio";
 
 export const metadata: Metadata = {
-  title: "Compare · Higlou",
+  title: "Compare · Higlou Marketplace",
   description:
-    "Pegá un link de Amazon y encontrá la misma opción más barata en eBay, Walmart y Home Depot.",
+    "Marketplace Higlou: buscá productos en tendencia o pegá Amazon y compará el mismo deal en eBay, Walmart y Home Depot.",
   openGraph: {
-    title: "Higlou Compare",
+    title: "Higlou Compare Pro",
     description:
-      "¿Amazon es lo más barato? Compará el mismo producto en otras tiendas.",
+      "Tendencias Keepa + comparación multi-tienda. ¿Amazon es lo más barato?",
   },
 };
 

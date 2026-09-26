@@ -47,6 +47,8 @@ function parseLearning(raw: unknown): RonLearning {
     lastKeepaScanAt: o.lastKeepaScanAt || null,
     recentPacks:
       o.recentPacks && typeof o.recentPacks === "object" ? o.recentPacks : {},
+    memoryResetVersion:
+      typeof o.memoryResetVersion === "string" ? o.memoryResetVersion : null,
     opsSnapshot:
       o.opsSnapshot && typeof o.opsSnapshot === "object"
         ? (o.opsSnapshot as RonLearning["opsSnapshot"])

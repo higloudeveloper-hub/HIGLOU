@@ -221,10 +221,44 @@ describe("RON anti-duplicate memory — never republish", () => {
     const fresh = filterFreshCatalogAsins(
       [{ asin: "B0TAB00001" }, { asin: "B0NEW00001" }],
       learned,
-      72,
+      168,
       { currentClicks: nowClicks, keepInterest: true },
     );
     expect(fresh.map((c) => c.asin)).toEqual(["B0NEW00001"]);
+  });
+
+  it("keeps published ASINs blocked across cycles (no memory wipe)", () => {
+    let learning = { ...RON_DEFAULT_LEARNING, recentPacks: {} };
+    learning = rememberPublish(learning, {
+      format: "vitrina",
+      niche: "Bialetti",
+      asins: ["B0MOKA0001", "B0MOKA0002", "B0MOKA0003", "B0MOKA0004"],
+    });
+    expect(
+      shouldSkipPackForCooldown(
+        learning,
+        ["B0MOKA0001", "B0MOKA0002", "B0MOKA0003", "B0MOKA0004"],
+        168,
+      ).skip,
+    ).toBe(true);
+    expect(
+      shouldSkipPackForCooldown(learning, ["B0MOKA0001", "B0OTHER001"], 168)
+        .skip,
+    ).toBe(true);
+    expect(
+      shouldSkipPackForCooldown(learning, ["B0BRANDNEW1", "B0BRANDNEW2"], 168)
+        .skip,
+    ).toBe(false);
+    const fresh = filterFreshCatalogAsins(
+      [
+        { asin: "B0MOKA0001" },
+        { asin: "B0MOKA0002" },
+        { asin: "B0BRANDNEW1" },
+      ],
+      learning,
+      168,
+    );
+    expect(fresh.map((c) => c.asin)).toEqual(["B0BRANDNEW1"]);
   });
 
   it("caption includes product name + source platform", () => {

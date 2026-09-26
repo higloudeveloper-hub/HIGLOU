@@ -4,7 +4,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 export const LISTINGS_WINNERS_PURGE_VERSION = "2026-09-24-v2-vitrinas";
 
 /** Soft reset: clear RON “already published” memory without wiping affiliates. */
-export const RON_MEMORY_RESET_VERSION = "2026-09-26-v4-ron-fresh";
+export const RON_MEMORY_RESET_VERSION = "2026-09-26-v5-ron-keep-memory";
 
 export type PurgeResult = {
   ok: true;
@@ -99,22 +99,8 @@ export async function maybeResetRonPublishMemory(
     .select("user_id, learning");
   if (error) return { reset: 0, skipped: true, error: error.message };
   if (!ronRows?.length) {
-    // Force-clear via broad update in case select shape differs
-    const blank = stampLearning({});
-    const { error: upErr, count } = await admin
-      .from("ron_agent_state")
-      .update(
-        {
-          learning: blank,
-          status_message: "Memoria RON limpia · Keepa desbloqueado",
-          last_error: null,
-          is_working: false,
-        },
-        { count: "exact" },
-      )
-      .neq("user_id", "00000000-0000-0000-0000-000000000000");
-    if (upErr) return { reset: 0, skipped: true, error: upErr.message };
-    return { reset: count ?? 0, skipped: (count ?? 0) === 0 };
+    // No agent rows yet — nothing to reset (never mass-wipe an empty select)
+    return { reset: 0, skipped: true };
   }
 
   let reset = 0;
@@ -123,12 +109,9 @@ export async function maybeResetRonPublishMemory(
       row.learning && typeof row.learning === "object"
         ? (row.learning as Record<string, unknown>)
         : {};
+    // Already stamped for this version → KEEP publish memory (never wipe mid-flight)
     if (learning.memoryResetVersion === RON_MEMORY_RESET_VERSION) {
-      // Still ensure recentPacks is empty (partial stamps)
-      const packs = learning.recentPacks;
-      const packCount =
-        packs && typeof packs === "object" ? Object.keys(packs).length : 0;
-      if (packCount === 0) continue;
+      continue;
     }
     const next = stampLearning(learning);
     const { error: upErr } = await admin

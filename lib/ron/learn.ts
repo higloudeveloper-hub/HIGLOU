@@ -29,6 +29,7 @@ export async function learnFromAffiliateClicks(
     cycles: learning.cycles + 1,
     lastKeepaScanAt: learning.lastKeepaScanAt || null,
     recentPacks: { ...(learning.recentPacks || {}) },
+    memoryResetVersion: learning.memoryResetVersion || null,
     opsSnapshot: learning.opsSnapshot,
   };
 
@@ -140,6 +141,7 @@ export function rememberPublish(
     cycles: learning.cycles,
     lastKeepaScanAt: learning.lastKeepaScanAt || null,
     recentPacks: { ...(learning.recentPacks || {}) },
+    memoryResetVersion: learning.memoryResetVersion || null,
     opsSnapshot: learning.opsSnapshot,
   };
   next.formats[opts.format] = (next.formats[opts.format] || 1) + 0.2;

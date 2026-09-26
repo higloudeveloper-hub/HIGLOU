@@ -53,6 +53,8 @@ export type RonLearning = {
    * Used so RON only posts again when there is a *new* opportunity.
    */
   recentPacks?: Record<string, number>;
+  /** Soft memory-reset stamp — once set, auto-purge must not wipe recentPacks */
+  memoryResetVersion?: string | null;
   /** Last marketplace ops snapshot persisted with learning */
   opsSnapshot?: {
     freshAsins: number;
@@ -94,13 +96,13 @@ export const RON_KEEPA_SCAN_MIN_MINUTES = 60;
 export const RON_SAME_PACK_COOLDOWN_HOURS = 168; // 7 days — never spam same vitrina
 
 /** Don't reuse an ASIN that already went out recently (hours). */
-export const RON_ASIN_COOLDOWN_HOURS = 72;
+export const RON_ASIN_COOLDOWN_HOURS = 168; // 7 days — same as pack cooldown
 
 /**
  * How long to keep publish fingerprints in learning memory (hours).
  * Longer than ASIN cooldown so RON remembers what already shipped.
  */
-export const RON_PACK_MEMORY_HOURS = 336; // 14 days
+export const RON_PACK_MEMORY_HOURS = 720; // 30 days
 
 /**
  * @deprecated Interest republish disabled — same vitrina never goes out twice.

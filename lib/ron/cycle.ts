@@ -202,6 +202,8 @@ export async function runRonCycle(
     userId: string;
     /** Manual "trabajar ahora" */
     force?: boolean;
+    /** Only when force: wipe recentPacks (default keeps memory) */
+    clearMemory?: boolean;
     forceScan?: boolean;
     dryRun?: boolean;
   },
@@ -230,9 +232,18 @@ export async function runRonCycle(
     return { ok: true, state, skipped: "RON está apagado" };
   }
 
-  // Manual "Forzar ciclo" always clears publish cooldown so RON can ship again
+  // Concurrent cycle guard — never double-publish the same vitrina
+  if (state.working && !opts.force) {
+    return {
+      ok: true,
+      state,
+      skipped: "RON ya está trabajando · no lanzo otro ciclo encima",
+    };
+  }
+
+  // Manual "Forzar ciclo" keeps publish memory — only opts.clearMemory wipes it
   let learning = state.learning;
-  if (opts.force) {
+  if (opts.force && opts.clearMemory) {
     learning = { ...learning, recentPacks: {} };
     await appendRonActivity(
       supabase,
@@ -314,8 +325,9 @@ export async function runRonCycle(
   learning = await learnFromAffiliateClicks(
     supabase,
     userId,
-    // Prefer force-cleared learning when present
-    opts.force ? { ...learning, recentPacks: {} } : learning,
+    opts.force && opts.clearMemory
+      ? { ...learning, recentPacks: {} }
+      : learning,
   );
   await appendRonActivity(
     supabase,
@@ -614,28 +626,41 @@ export async function runRonCycle(
     RON_ASIN_COOLDOWN_HOURS,
   );
 
-  // Catalog blocked by stale “already published” memory → unlock (affiliates or Keepa)
+  // NEVER wipe publish memory here. Old unlock wiped recentPacks whenever the
+  // catalog was "blocked", then RON republished the same vitrina every cycle.
   if (catalog.length > 0 && freshCatalog.length === 0) {
+    const msg =
+      "Todo el catálogo ya se publicó · RON espera Keepa nuevo (no repito vitrinas)";
     learning = {
       ...learning,
-      recentPacks: {},
+      opsSnapshot: {
+        freshAsins: 0,
+        catalogAsins: catalog.length,
+        lastMoneyScore: 0,
+        lastFormat: null,
+        pipeline: "idle",
+        peakWindow: false,
+        moneyHint: msg,
+        nextAction: "Escanear Find Winners o esperar Keepa fresco",
+      },
     };
-    freshCatalog = catalog;
     await appendRonActivity(
       supabase,
       userId,
       {
         at: new Date().toISOString(),
-        kind: "scan",
-        message:
-          "Memoria de publicados limpiada · catálogo estaba bloqueado por cooldown viejo",
+        kind: "skip",
+        message: msg,
       },
       {
-        statusMessage: `Trabajando · ${catalog.length} desbloqueados`,
+        statusMessage: msg,
         learning,
-        working: true,
+        lastError: null,
+        working: false,
       },
     );
+    state = await loadRonState(supabase, userId);
+    return finish({ ok: true, state, skipped: msg });
   }
 
   if (!freshCatalog.length) {
@@ -798,6 +823,36 @@ export async function runRonCycle(
       state = await loadRonState(supabase, userId);
       return finish({ ok: true, state, skipped: msg });
     }
+  }
+
+  // Final memory gate — never publish a pack that overlaps what we already shipped
+  {
+    const finalAsins = publishDecision.cards
+      .map((c) => String(c.asin || "").toUpperCase())
+      .filter((a) => /^[A-Z0-9]{10}$/.test(a));
+    const finalGate = shouldSkipPackForCooldown(
+      learning,
+      finalAsins,
+      RON_SAME_PACK_COOLDOWN_HOURS,
+    );
+    if (finalGate.skip) {
+      const msg =
+        "Memoria RON · esa vitrina (o ASINs) ya se publicó · no repito";
+      await appendRonActivity(
+        supabase,
+        userId,
+        {
+          at: new Date().toISOString(),
+          kind: "skip",
+          message: msg,
+          format: publishDecision.format,
+        },
+        { statusMessage: msg, learning, lastError: null, working: false },
+      );
+      state = await loadRonState(supabase, userId);
+      return finish({ ok: true, state, skipped: msg });
+    }
+    packAsins = finalAsins.length ? finalAsins : packAsins;
   }
 
   const dry = opts.dryRun || state.mode === "watch";

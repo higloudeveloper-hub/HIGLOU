@@ -540,7 +540,7 @@ function packFromCluster(
   const sized =
     format === "vitrina"
       ? unique.slice(0, Math.min(8, Math.max(3, unique.length)))
-      : unique.slice(0, Math.min(5, Math.max(2, unique.length)));
+      : unique.slice(0, Math.min(8, Math.max(2, unique.length)));
 
   // Every card in the pack must carry a real photo — never empty vitrina thumbs
   const withPhotos = sized.filter(promoCardHasUsablePhoto);

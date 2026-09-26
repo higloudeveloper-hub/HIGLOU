@@ -242,12 +242,27 @@ function pickBestPack(
     const money = scorePackMoneyOpportunity(cards, learning);
     // Variety: soft-penalize niches we just published (unless learning loves them)
     const nichePenalty = isRecentNiche(learning, pack.niche) ? 8 : 0;
+    // Depth wins: RON must fill the vitrina when more related cards exist
+    // (manual studio ships 4–8; never prefer a skinny 2-card carousel).
+    const depthBonus =
+      cards.length >= 6
+        ? 36
+        : cards.length >= 5
+          ? 28
+          : cards.length >= 4
+            ? 22
+            : cards.length >= 3
+              ? 14
+              : 0;
+    const vitrinaBonus = pack.format === "vitrina" ? 10 : 0;
     const score =
       pack.score * 10 +
       scoreFormat(learning, pack.format) * 2 +
       scoreNiche(learning, pack.niche) * 1.5 +
       asinBoost * 0.4 +
-      money * 0.55 -
+      money * 0.55 +
+      depthBonus +
+      vitrinaBonus -
       nichePenalty;
     if (!best || score > best.score) best = { pack, cards, score };
   }
@@ -256,7 +271,8 @@ function pickBestPack(
 
 /**
  * Decide the next Facebook post.
- * Prefer related packs (2–8). If none, publish one product WITH a live link.
+ * Prefer full related vitrinas (3–8). Only fall back to 2-card carousel
+ * when nothing larger is coherent.
  */
 export function decideRonPublish(opts: {
   catalog: RonCandidateCard[];
@@ -294,7 +310,7 @@ export function decideRonPublish(opts: {
   let best = pickBestPack(packs, opts.learning, rankedCatalog);
 
   // Pass 2 — same family, slightly softer score so we still get carousels of 2+
-  if (!best) {
+  if (!best || best.cards.length < 3) {
     packs = suggestPromoPacks(rankedCatalog, {
       limit: 8,
       preferVitrina: true,
@@ -302,7 +318,28 @@ export function decideRonPublish(opts: {
       disallowPriceBandFallback: true,
       strict: true,
     });
-    best = pickBestPack(packs, opts.learning, rankedCatalog);
+    const soft = pickBestPack(packs, opts.learning, rankedCatalog);
+    if (
+      soft &&
+      (!best || soft.cards.length > best.cards.length || soft.score > best.score)
+    ) {
+      best = soft;
+    }
+  }
+
+  // Pass 3 — widest net: only if we still only have a skinny 2-card pack
+  if (!best || best.cards.length < 3) {
+    packs = suggestPromoPacks(rankedCatalog, {
+      limit: 8,
+      preferVitrina: true,
+      minRelated: 0.28,
+      disallowPriceBandFallback: true,
+      strict: true,
+    });
+    const wide = pickBestPack(packs, opts.learning, rankedCatalog);
+    if (wide && (!best || wide.cards.length > best.cards.length)) {
+      best = wide;
+    }
   }
 
   if (best && best.cards.length >= 2) {

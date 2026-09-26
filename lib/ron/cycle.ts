@@ -694,7 +694,7 @@ export async function runRonCycle(
     if (
       variationPack &&
       variationPack.action === "publish" &&
-      variationPack.cards.length >= 4
+      variationPack.cards.length >= 3
     ) {
       decision = variationPack;
       await appendRonActivity(

@@ -29,11 +29,11 @@ import {
 import type { RonFormat, RonLearning } from "@/lib/ron/types";
 import type { ListingVariation } from "@/types/product";
 
-/** Original + exactly 3 visibly different Color variations. */
-const MIN_EXTRA_VARIATIONS = 3;
-const MAX_EXTRA_VARIATIONS = 3;
+/** Original + as many distinct Color heroes as Keepa has (up to 8 total). */
+const MIN_EXTRA_VARIATIONS = 2;
+const MAX_EXTRA_VARIATIONS = 7;
 const MIN_TOTAL_CARDS = 1 + MIN_EXTRA_VARIATIONS;
-const MAX_VARIATION_CARDS = MIN_TOTAL_CARDS;
+const MAX_VARIATION_CARDS = 8;
 
 function appOrigin(): string {
   const fromEnv = (process.env.NEXT_PUBLIC_APP_URL || "").replace(/\/$/, "");
@@ -305,11 +305,11 @@ export async function tryRonVariationPack(opts: {
     );
     const seedColor = seedVariant ? colorOf(seedVariant) : "";
 
-    // Color ASINs first, then resolve MAIN gallery photos via /product
+    // Color ASINs first — take a wide pool so we can fill the vitrina
     const colorPool = pickColorVariationCandidates(variationSet.variants, {
       seedAsin,
       seedColor,
-      limit: 12,
+      limit: 24,
     });
     if (colorPool.length < MIN_EXTRA_VARIATIONS) continue;
 
@@ -536,7 +536,7 @@ export async function tryRonVariationPack(opts: {
     const imgKeys = cards.map((c) => productImageKey(c.imageUrl));
     if (new Set(imgKeys).size !== cards.length) continue;
 
-    const format: RonFormat = "vitrina";
+    const format: RonFormat = cards.length >= 3 ? "vitrina" : "carousel";
     const niche =
       baseProductName(seed.title) || seed.brand || cards[0]?.title || "Deal";
     const money = scorePackMoneyOpportunity(cards, opts.learning);
@@ -558,7 +558,7 @@ export async function tryRonVariationPack(opts: {
       ...extraHits.map((v) => colorOf(v)).filter(Boolean),
     ]
       .map((c) => c.toUpperCase())
-      .slice(0, 4)
+      .slice(0, 8)
       .join(" · ");
 
     return {
@@ -567,12 +567,14 @@ export async function tryRonVariationPack(opts: {
       cards,
       message,
       collectionTitle:
-        copy.collectionTitle ||
-        baseProductName(seed.title).slice(0, 80) ||
-        defaultFacebookCollectionTitle(),
+        format === "vitrina"
+          ? copy.collectionTitle ||
+            baseProductName(seed.title).slice(0, 80) ||
+            defaultFacebookCollectionTitle()
+          : null,
       coverImageUrl: cards[0]?.imageUrl || null,
       niche,
-      reason: `Variaciones Keepa · vitrina · original + 3 colores (${colorLine}) · score ${money}`,
+      reason: `Variaciones Keepa · ${format} · original + ${cards.length - 1} colores (${colorLine}) · score ${money}`,
     };
   }
 

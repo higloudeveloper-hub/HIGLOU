@@ -132,12 +132,11 @@ export async function debugFacebookToken(
     };
   }
   const d = body.data;
+  // Page tokens from long-lived User have expires_at=0 (never).
+  // Do NOT treat data_access_expires_at as token expiry — that is a separate
+  // Meta data-access window and would falsely mark permanent tokens as dying.
   const expiresAt =
-    d.expires_at && d.expires_at > 0
-      ? d.expires_at
-      : d.data_access_expires_at && d.data_access_expires_at > 0
-        ? d.data_access_expires_at
-        : null;
+    d.expires_at && d.expires_at > 0 ? d.expires_at : null;
   return {
     valid: Boolean(d.is_valid),
     expiresAt: expiresAt && expiresAt > 1_000_000_000 ? expiresAt : null,

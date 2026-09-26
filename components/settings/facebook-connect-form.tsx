@@ -21,6 +21,12 @@ type Connection = {
   canExtendTokens?: boolean;
 };
 
+type Defaults = {
+  pageId: string;
+  pageName: string;
+  appId: string;
+};
+
 type PreviewPost = {
   id: string;
   createdTime: string | null;
@@ -29,11 +35,18 @@ type PreviewPost = {
 
 export function FacebookConnectForm() {
   const [connection, setConnection] = useState<Connection | null>(null);
+  const [defaults, setDefaults] = useState<Defaults>({
+    pageId: "1079254478615173",
+    pageName: "Higlou",
+    appId: "1387610726544790",
+  });
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [replacing, setReplacing] = useState(false);
-  const [pageId, setPageId] = useState("");
-  const [pageName, setPageName] = useState("");
+  const [pageId, setPageId] = useState("1079254478615173");
+  const [pageName, setPageName] = useState("Higlou");
+  const [appId, setAppId] = useState("1387610726544790");
+  const [appSecret, setAppSecret] = useState("");
   const [accessToken, setAccessToken] = useState("");
   const [cleaning, setCleaning] = useState(false);
   const [preview, setPreview] = useState<PreviewPost[]>([]);
@@ -43,8 +56,17 @@ export function FacebookConnectForm() {
   const load = async () => {
     try {
       const res = await fetch("/api/facebook/connection", { cache: "no-store" });
-      const body = (await res.json()) as { connection?: Connection };
+      const body = (await res.json()) as {
+        connection?: Connection;
+        defaults?: Defaults;
+      };
       setConnection(body.connection || null);
+      if (body.defaults) {
+        setDefaults(body.defaults);
+        if (!pageId) setPageId(body.defaults.pageId);
+        if (!pageName) setPageName(body.defaults.pageName);
+        if (!appId) setAppId(body.defaults.appId);
+      }
     } catch {
       setConnection(null);
     } finally {
@@ -54,6 +76,7 @@ export function FacebookConnectForm() {
 
   useEffect(() => {
     void load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const connect = async () => {
@@ -63,9 +86,11 @@ export function FacebookConnectForm() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          pageId: pageId.trim(),
-          pageName: pageName.trim() || undefined,
+          pageId: pageId.trim() || defaults.pageId,
+          pageName: pageName.trim() || defaults.pageName,
           accessToken: accessToken.trim(),
+          appId: appId.trim() || defaults.appId,
+          appSecret: appSecret.trim() || undefined,
         }),
       });
       const body = (await res.json()) as {
@@ -79,12 +104,18 @@ export function FacebookConnectForm() {
       }
       setConnection(body.connection);
       setAccessToken("");
-      setPageId("");
-      setPageName("");
+      setAppSecret("");
       setReplacing(false);
       toast.success(
-        `Page conectada · ${body.connection.pageName || body.connection.pageId}`,
+        body.connection.neverExpires
+          ? `Page permanente · ${body.connection.pageName || body.connection.pageId}`
+          : `Page conectada · ${body.connection.pageName || body.connection.pageId}`,
       );
+      if (!body.connection.neverExpires) {
+        toast.message(
+          "Para que no venza: pegá el App Secret de Meta (Deals Deals) y reconectá.",
+        );
+      }
     } finally {
       setBusy(false);
     }
@@ -196,10 +227,9 @@ export function FacebookConnectForm() {
             Facebook Page
           </h2>
           <p className="mt-1 text-[13px] text-white/85">
-            Pegá un User token de Graph. Higlou lo convierte en Page token
-            {connection?.canExtendTokens
-              ? " permanente (no vence)."
-              : " — agregá FACEBOOK_APP_ID + SECRET en Vercel para que no venza."}
+            Pegá User token + App Secret una vez. Higlou crea un System User
+            token permanente (no vence, no hay que cambiarlo).
+            {connection?.neverExpires ? " · Ya está permanente ✓" : ""}
           </p>
         </div>
         {connection?.connected && !replacing ? (
@@ -362,9 +392,9 @@ export function FacebookConnectForm() {
             <ol className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
               {[
                 "Permisos: pages_manage_posts + pages_read_engagement + pages_show_list",
-                "Generá User token (no el de 1 hora de Page si podés evitarlo)",
-                "Con FACEBOOK_APP_ID + SECRET en Vercel → Page token permanente",
-                "Page ID + pegá el token · Higlou extiende y guarda cifrado",
+                "User token fresco en Graph Explorer (App Deals Deals)",
+                "App Secret una vez: developers.facebook.com → Deals Deals → Settings → Basic",
+                "Higlou crea System User permanente · no vuelve a pedir token",
               ].map((step, i) => (
                 <li
                   key={step}
@@ -388,7 +418,7 @@ export function FacebookConnectForm() {
                 <input
                   value={pageId}
                   onChange={(e) => setPageId(e.target.value)}
-                  placeholder="1079254478615173"
+                  placeholder={defaults.pageId}
                   className="mt-1.5 h-11 w-full rounded-xl border border-[#e5e5e5] bg-white px-3 text-[14px] text-[#191919] outline-none focus:border-[#1877F2]"
                 />
               </label>
@@ -397,17 +427,39 @@ export function FacebookConnectForm() {
                 <input
                   value={pageName}
                   onChange={(e) => setPageName(e.target.value)}
-                  placeholder="Don Baraton Deals"
+                  placeholder={defaults.pageName}
+                  className="mt-1.5 h-11 w-full rounded-xl border border-[#e5e5e5] bg-white px-3 text-[14px] text-[#191919] outline-none focus:border-[#1877F2]"
+                />
+              </label>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="block text-[12px] font-semibold text-[#707070]">
+                App ID (Deals Deals)
+                <input
+                  value={appId}
+                  onChange={(e) => setAppId(e.target.value)}
+                  placeholder={defaults.appId}
+                  className="mt-1.5 h-11 w-full rounded-xl border border-[#e5e5e5] bg-white px-3 text-[14px] text-[#191919] outline-none focus:border-[#1877F2]"
+                />
+              </label>
+              <label className="block text-[12px] font-semibold text-[#707070]">
+                App Secret (una vez)
+                <input
+                  type="password"
+                  value={appSecret}
+                  onChange={(e) => setAppSecret(e.target.value)}
+                  placeholder="Meta → Deals Deals → Settings → Basic"
+                  autoComplete="off"
                   className="mt-1.5 h-11 w-full rounded-xl border border-[#e5e5e5] bg-white px-3 text-[14px] text-[#191919] outline-none focus:border-[#1877F2]"
                 />
               </label>
             </div>
             <label className="block text-[12px] font-semibold text-[#707070]">
-              Access token (User o Page)
+              Access token (User)
               <textarea
                 value={accessToken}
                 onChange={(e) => setAccessToken(e.target.value)}
-                placeholder="EAAB… (si es User token, Higlou lo cambia al de la Page)"
+                placeholder="EAAB… User token de Graph Explorer"
                 rows={3}
                 className="mt-1.5 w-full resize-y rounded-xl border border-[#e5e5e5] bg-white px-3 py-2.5 font-mono text-[12px] leading-relaxed text-[#191919] outline-none focus:border-[#1877F2]"
               />
@@ -417,7 +469,6 @@ export function FacebookConnectForm() {
                 type="button"
                 disabled={
                   busy ||
-                  !pageId.trim() ||
                   accessToken.trim().length < 20 ||
                   connection?.encryptionReady === false
                 }
@@ -431,7 +482,9 @@ export function FacebookConnectForm() {
                 ) : (
                   <FacebookFMark className="size-3.5" />
                 )}
-                Conectar Facebook
+                {appSecret.trim()
+                  ? "Conectar permanente"
+                  : "Conectar Facebook"}
               </button>
               {replacing && connection?.connected ? (
                 <button

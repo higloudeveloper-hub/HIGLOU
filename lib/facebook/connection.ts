@@ -8,6 +8,10 @@ import {
   canExtendFacebookTokens,
   hardenPageAccessToken,
 } from "@/lib/facebook/token-exchange";
+import {
+  HIGLOU_FACEBOOK,
+  mintNeverExpiringPageToken,
+} from "@/lib/facebook/permanent-token";
 
 export type FacebookConnectionPublic = {
   connected: boolean;
@@ -265,6 +269,10 @@ export async function getFacebookConnectionPublic(
 ): Promise<FacebookConnectionPublic> {
   const encryptionReady = canEncryptFacebookToken();
   const db = await dbForFacebook(supabase);
+  const storedApp = await loadStoredFacebookAppCreds(supabase, userId);
+  const extendReady =
+    canExtendFacebookTokens() ||
+    Boolean(storedApp?.appId && storedApp?.appSecret);
 
   const { data, error } = await db
     .from("facebook_connections")
@@ -275,12 +283,14 @@ export async function getFacebookConnectionPublic(
     .maybeSingle();
 
   if (!error) {
-    return publicFromRow(data as Row | null, encryptionReady);
+    const pub = publicFromRow(data as Row | null, encryptionReady);
+    return { ...pub, canExtendTokens: extendReady };
   }
 
   if (isMissingTableError(error.message)) {
     const stored = await readStoragePayload(db, userId);
-    return publicFromStored(stored, encryptionReady);
+    const pub = publicFromStored(stored, encryptionReady);
+    return { ...pub, canExtendTokens: extendReady };
   }
 
   return {
@@ -293,7 +303,7 @@ export async function getFacebookConnectionPublic(
     encryptionReady,
     neverExpires: false,
     tokenExpiresAt: null,
-    canExtendTokens: canExtendFacebookTokens(),
+    canExtendTokens: extendReady,
   };
 }
 
@@ -424,6 +434,56 @@ export async function resolvePageAccessToken(
   }
 }
 
+function appCredsStoragePath(userId: string) {
+  return `facebook/${userId}-app.json`;
+}
+
+async function writeAppCredsPayload(
+  db: SupabaseClient,
+  userId: string,
+  appId: string,
+  appSecret: string,
+): Promise<void> {
+  await ensureSecretsBucket(db);
+  const body = JSON.stringify({
+    appId,
+    appSecretEnc: encryptFacebookToken(appSecret),
+    savedAt: new Date().toISOString(),
+  });
+  const { error } = await db.storage
+    .from(SECRETS_BUCKET)
+    .upload(appCredsStoragePath(userId), body, {
+      contentType: "application/json",
+      upsert: true,
+    });
+  if (error) throw error;
+}
+
+export async function loadStoredFacebookAppCreds(
+  supabase: SupabaseClient,
+  userId: string,
+): Promise<{ appId: string; appSecret: string } | null> {
+  if (!canEncryptFacebookToken()) return null;
+  try {
+    const db = await dbForFacebook(supabase);
+    await ensureSecretsBucket(db);
+    const { data, error } = await db.storage
+      .from(SECRETS_BUCKET)
+      .download(appCredsStoragePath(userId));
+    if (error || !data) return null;
+    const parsed = JSON.parse(await data.text()) as {
+      appId?: string;
+      appSecretEnc?: string;
+    };
+    if (!parsed?.appId || !parsed?.appSecretEnc) return null;
+    const appSecret = decryptFacebookToken(parsed.appSecretEnc);
+    if (!appSecret) return null;
+    return { appId: parsed.appId, appSecret };
+  } catch {
+    return null;
+  }
+}
+
 export async function saveFacebookConnection(
   supabase: SupabaseClient,
   opts: {
@@ -431,6 +491,9 @@ export async function saveFacebookConnection(
     pageId: string;
     pageName?: string | null;
     accessToken: string;
+    /** Optional — enables never-expiring System User / long-lived Page token */
+    appId?: string | null;
+    appSecret?: string | null;
   },
 ): Promise<
   | { ok: true; connection: FacebookConnectionPublic }
@@ -443,7 +506,8 @@ export async function saveFacebookConnection(
         "Set FACEBOOK_TOKEN_ENCRYPTION_KEY or EBAY_TOKEN_ENCRYPTION_KEY (≥32 chars) to store Page tokens.",
     };
   }
-  const pageId = opts.pageId.replace(/\D/g, "");
+  const pageId =
+    opts.pageId.replace(/\D/g, "") || HIGLOU_FACEBOOK.pageId;
   const token = opts.accessToken.trim();
   if (pageId.length < 5 || token.length < 20) {
     return {
@@ -452,22 +516,74 @@ export async function saveFacebookConnection(
     };
   }
 
-  // User token → Page token via /me/accounts (Graph Explorer default)
-  const resolved = await resolvePageAccessToken(pageId, token);
-  if (!resolved.ok) {
-    return { ok: false, error: resolved.error };
+  const storedCreds = await loadStoredFacebookAppCreds(supabase, opts.userId);
+  const appId =
+    String(opts.appId || storedCreds?.appId || HIGLOU_FACEBOOK.appId).trim() ||
+    null;
+  const appSecret =
+    String(opts.appSecret || storedCreds?.appSecret || "").trim() || null;
+
+  // Prefer permanent System User token when App Secret is available
+  let pageAccessToken: string | null = null;
+  let pageName: string | null =
+    String(opts.pageName || "").trim() || HIGLOU_FACEBOOK.pageName;
+  let tokenExpiresAt: string | null = null;
+  let tokenNeverExpires = false;
+  let hardenNote = "";
+
+  if (appSecret && canExtendFacebookTokens({ appId, appSecret })) {
+    const minted = await mintNeverExpiringPageToken({
+      userAccessToken: token,
+      appId: appId || undefined,
+      appSecret,
+      pageId,
+    });
+    if (minted.ok) {
+      pageAccessToken = minted.accessToken;
+      pageName = minted.pageName || pageName;
+      tokenNeverExpires = true;
+      tokenExpiresAt = null;
+      hardenNote = minted.note;
+    }
   }
 
-  // Extend to long-lived / never-expiring Page token when App credentials exist
-  const hardened = await hardenPageAccessToken({
-    pageId: resolved.pageId,
-    accessToken: token,
-    pageAccessToken: resolved.accessToken,
-  });
+  if (!pageAccessToken) {
+    // User token → Page token via /me/accounts (Graph Explorer default)
+    const resolved = await resolvePageAccessToken(pageId, token);
+    if (!resolved.ok) {
+      return { ok: false, error: resolved.error };
+    }
+
+    const hardened = await hardenPageAccessToken({
+      pageId: resolved.pageId,
+      accessToken: token,
+      pageAccessToken: resolved.accessToken,
+      appId,
+      appSecret,
+    });
+    pageAccessToken = hardened.accessToken;
+    pageName =
+      String(opts.pageName || "").trim() || resolved.pageName || pageName;
+    tokenExpiresAt = hardened.expiresAt
+      ? new Date(hardened.expiresAt * 1000).toISOString()
+      : null;
+    tokenNeverExpires = hardened.neverExpires;
+    hardenNote = hardened.note;
+  }
+
+  // Persist App Secret once so future reconnects stay permanent
+  if (appId && appSecret) {
+    try {
+      const db = await dbForFacebook(supabase);
+      await writeAppCredsPayload(db, opts.userId, appId, appSecret);
+    } catch {
+      /* optional — Page token still saved */
+    }
+  }
 
   let enc: string;
   try {
-    enc = encryptFacebookToken(hardened.accessToken);
+    enc = encryptFacebookToken(pageAccessToken);
   } catch (err) {
     return {
       ok: false,
@@ -476,12 +592,6 @@ export async function saveFacebookConnection(
   }
 
   const connectedAt = new Date().toISOString();
-  const pageName =
-    String(opts.pageName || "").trim() || resolved.pageName || null;
-  const tokenExpiresAt = hardened.expiresAt
-    ? new Date(hardened.expiresAt * 1000).toISOString()
-    : null;
-  const tokenNeverExpires = hardened.neverExpires;
   const db = await dbForFacebook(supabase);
 
   // Prefer dedicated table when it exists
@@ -501,7 +611,7 @@ export async function saveFacebookConnection(
         access_token_enc: enc,
         connected_at: connectedAt,
         revoked_at: null,
-        last_error: null,
+        last_error: hardenNote && !tokenNeverExpires ? hardenNote : null,
         updated_at: connectedAt,
         token_expires_at: tokenExpiresAt,
         token_never_expires: tokenNeverExpires,
@@ -525,34 +635,18 @@ export async function saveFacebookConnection(
       pageName,
       accessTokenEnc: enc,
       connectedAt,
-      lastError: null,
+      lastError: hardenNote && !tokenNeverExpires ? hardenNote : null,
       lastShareAt: null,
       tokenExpiresAt,
       tokenNeverExpires,
     });
-    const connection = publicFromStored(
-      {
-        pageId,
-        pageName,
-        accessTokenEnc: enc,
-        connectedAt,
-        lastError: null,
-        lastShareAt: null,
-        tokenExpiresAt,
-        tokenNeverExpires,
-      },
-      true,
-    );
-    if (!connection.connected) {
-      return {
-        ok: false,
-        error:
-          connection.lastError ||
-          "Token guardado pero no legible. Revisá EBAY_TOKEN_ENCRYPTION_KEY.",
-        connection,
-      };
-    }
-    return { ok: true, connection };
+    const connection = await getFacebookConnectionPublic(supabase, opts.userId);
+    if (connection.connected) return { ok: true, connection };
+    return {
+      ok: false,
+      error: "Saved but could not re-read connection.",
+      connection,
+    };
   } catch (err) {
     return {
       ok: false,

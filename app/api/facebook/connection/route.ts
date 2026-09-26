@@ -7,14 +7,17 @@ import {
   maybeBootstrapFacebookConnection,
   saveFacebookConnection,
 } from "@/lib/facebook/connection";
+import { HIGLOU_FACEBOOK } from "@/lib/facebook/permanent-token";
 import { isSupabaseConfigured } from "@/lib/supabase/admin";
 
 export const runtime = "nodejs";
 
 const saveSchema = z.object({
-  pageId: z.string().min(5).max(40),
+  pageId: z.string().min(5).max(40).optional(),
   pageName: z.string().max(120).optional().nullable(),
   accessToken: z.string().min(20).max(4000),
+  appId: z.string().min(5).max(40).optional().nullable(),
+  appSecret: z.string().min(8).max(200).optional().nullable(),
 });
 
 export async function GET() {
@@ -30,6 +33,11 @@ export async function GET() {
         lastError: null,
         lastShareAt: null,
         encryptionReady: false,
+      },
+      defaults: {
+        pageId: HIGLOU_FACEBOOK.pageId,
+        pageName: HIGLOU_FACEBOOK.pageName,
+        appId: HIGLOU_FACEBOOK.appId,
       },
     });
   }
@@ -49,7 +57,14 @@ export async function GET() {
     if (bootstrapped?.connected) connection = bootstrapped;
   }
 
-  return NextResponse.json({ connection });
+  return NextResponse.json({
+    connection,
+    defaults: {
+      pageId: HIGLOU_FACEBOOK.pageId,
+      pageName: HIGLOU_FACEBOOK.pageName,
+      appId: HIGLOU_FACEBOOK.appId,
+    },
+  });
 }
 
 export async function POST(request: Request) {
@@ -67,16 +82,18 @@ export async function POST(request: Request) {
     parsed = saveSchema.parse(await request.json());
   } catch {
     return NextResponse.json(
-      { error: "Send { pageId, accessToken }" },
+      { error: "Send { accessToken, appSecret? }" },
       { status: 400 },
     );
   }
 
   const saved = await saveFacebookConnection(auth.supabase, {
     userId: auth.user.id,
-    pageId: parsed.pageId,
-    pageName: parsed.pageName,
+    pageId: parsed.pageId || HIGLOU_FACEBOOK.pageId,
+    pageName: parsed.pageName || HIGLOU_FACEBOOK.pageName,
     accessToken: parsed.accessToken,
+    appId: parsed.appId || HIGLOU_FACEBOOK.appId,
+    appSecret: parsed.appSecret,
   });
   if (!saved.ok) {
     return NextResponse.json(

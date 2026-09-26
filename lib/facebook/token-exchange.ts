@@ -10,24 +10,31 @@
  * resolve User → Page but the Page token inherits the short lifetime.
  */
 
-export function facebookAppId(): string {
+export function facebookAppId(override?: string | null): string {
   return (
+    String(override || "").trim() ||
     process.env.FACEBOOK_APP_ID ||
     process.env.META_APP_ID ||
     ""
   ).trim();
 }
 
-export function facebookAppSecret(): string {
+export function facebookAppSecret(override?: string | null): string {
   return (
+    String(override || "").trim() ||
     process.env.FACEBOOK_APP_SECRET ||
     process.env.META_APP_SECRET ||
     ""
   ).trim();
 }
 
-export function canExtendFacebookTokens(): boolean {
-  return Boolean(facebookAppId() && facebookAppSecret());
+export function canExtendFacebookTokens(opts?: {
+  appId?: string | null;
+  appSecret?: string | null;
+}): boolean {
+  return Boolean(
+    facebookAppId(opts?.appId) && facebookAppSecret(opts?.appSecret),
+  );
 }
 
 type ExchangeOk = {
@@ -45,18 +52,19 @@ type ExchangeFail = { ok: false; error: string };
  */
 export async function exchangeLongLivedUserToken(
   shortLivedUserToken: string,
+  opts?: { appId?: string | null; appSecret?: string | null },
 ): Promise<ExchangeOk | ExchangeFail> {
-  if (!canExtendFacebookTokens()) {
+  if (!canExtendFacebookTokens(opts)) {
     return {
       ok: false,
       error:
-        "Falta FACEBOOK_APP_ID + FACEBOOK_APP_SECRET en Vercel para tokens que no vencen.",
+        "Falta FACEBOOK_APP_ID + FACEBOOK_APP_SECRET (o pegá el App Secret en Settings) para tokens que no vencen.",
     };
   }
   const url = new URL("https://graph.facebook.com/v21.0/oauth/access_token");
   url.searchParams.set("grant_type", "fb_exchange_token");
-  url.searchParams.set("client_id", facebookAppId());
-  url.searchParams.set("client_secret", facebookAppSecret());
+  url.searchParams.set("client_id", facebookAppId(opts?.appId));
+  url.searchParams.set("client_secret", facebookAppSecret(opts?.appSecret));
   url.searchParams.set("fb_exchange_token", shortLivedUserToken.trim());
 
   const res = await fetch(url);
@@ -87,16 +95,19 @@ export async function exchangeLongLivedUserToken(
 /**
  * Inspect token expiry via debug_token (requires app credentials).
  */
-export async function debugFacebookToken(accessToken: string): Promise<{
+export async function debugFacebookToken(
+  accessToken: string,
+  opts?: { appId?: string | null; appSecret?: string | null },
+): Promise<{
   valid: boolean;
   expiresAt: number | null;
   isPage: boolean;
   error?: string;
 }> {
-  if (!canExtendFacebookTokens()) {
+  if (!canExtendFacebookTokens(opts)) {
     return { valid: true, expiresAt: null, isPage: false };
   }
-  const appToken = `${facebookAppId()}|${facebookAppSecret()}`;
+  const appToken = `${facebookAppId(opts?.appId)}|${facebookAppSecret(opts?.appSecret)}`;
   const url = new URL("https://graph.facebook.com/v21.0/debug_token");
   url.searchParams.set("input_token", accessToken);
   url.searchParams.set("access_token", appToken);
@@ -143,6 +154,8 @@ export async function hardenPageAccessToken(opts: {
   accessToken: string;
   /** Already-resolved Page token from /me/accounts */
   pageAccessToken: string;
+  appId?: string | null;
+  appSecret?: string | null;
 }): Promise<{
   accessToken: string;
   expiresAt: number | null;
@@ -151,21 +164,22 @@ export async function hardenPageAccessToken(opts: {
 }> {
   const pageTok = opts.pageAccessToken.trim();
   const inputTok = opts.accessToken.trim();
+  const credOpts = { appId: opts.appId, appSecret: opts.appSecret };
 
-  if (!canExtendFacebookTokens()) {
+  if (!canExtendFacebookTokens(credOpts)) {
     return {
       accessToken: pageTok,
       expiresAt: null,
       neverExpires: false,
       note:
-        "Token de Page guardado. Sin FACEBOOK_APP_ID/SECRET puede vencer (Graph Explorer). Agregá la App en Vercel para tokens permanentes.",
+        "Token de Page guardado. Sin App Secret puede vencer (Graph Explorer). Pegá App ID + Secret en Settings una vez.",
     };
   }
 
   // If input was a User token, extend it first then re-fetch Page token
   let workingUser = inputTok;
   let extended = false;
-  const asPageProbe = await debugFacebookToken(pageTok);
+  const asPageProbe = await debugFacebookToken(pageTok, credOpts);
   if (asPageProbe.valid && asPageProbe.isPage && !asPageProbe.expiresAt) {
     return {
       accessToken: pageTok,
@@ -176,7 +190,7 @@ export async function hardenPageAccessToken(opts: {
   }
 
   // Try extending the pasted token (User) then resolve Page again
-  const longLived = await exchangeLongLivedUserToken(workingUser);
+  const longLived = await exchangeLongLivedUserToken(workingUser, credOpts);
   if (longLived.ok) {
     workingUser = longLived.accessToken;
     extended = true;
@@ -193,7 +207,7 @@ export async function hardenPageAccessToken(opts: {
       (p) => String(p.id || "").replace(/\D/g, "") === want,
     );
     if (match?.access_token) {
-      const dbg = await debugFacebookToken(match.access_token);
+      const dbg = await debugFacebookToken(match.access_token, credOpts);
       return {
         accessToken: match.access_token,
         expiresAt: dbg.expiresAt,
@@ -207,7 +221,7 @@ export async function hardenPageAccessToken(opts: {
 
   // Fall back: try extending the page token itself (usually no-op / fails)
   if (!extended) {
-    const dbg = await debugFacebookToken(pageTok);
+    const dbg = await debugFacebookToken(pageTok, credOpts);
     return {
       accessToken: pageTok,
       expiresAt: dbg.expiresAt,

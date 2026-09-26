@@ -89,6 +89,7 @@ export async function POST(request: Request) {
 
   const result = await publishFacebookPromo(auth.supabase, {
     userId: auth.user.id,
+    userEmail: auth.user.email,
     format: parsed.format,
     message: parsed.message,
     cards: parsed.cards,

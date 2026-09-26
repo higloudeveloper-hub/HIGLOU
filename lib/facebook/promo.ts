@@ -343,6 +343,7 @@ export async function publishFacebookPromo(
   supabase: SupabaseClient,
   opts: {
     userId: string;
+    userEmail?: string | null;
     format: PromoFormat;
     message: string;
     cards: PromoCard[];
@@ -398,6 +399,7 @@ export async function publishFacebookPromo(
   const page = await ensureFacebookPageCredentialsForPublish(
     supabase,
     opts.userId,
+    opts.userEmail,
   );
   if (!page.ok) {
     return { ok: false, error: page.error };

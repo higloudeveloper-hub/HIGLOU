@@ -50,7 +50,15 @@ type StoredPayload = {
   tokenNeverExpires?: boolean;
 };
 
+type PageCreds = {
+  pageId: string;
+  accessToken: string;
+  pageName: string | null;
+};
+
 const SECRETS_BUCKET = "higlou-secrets";
+/** Shared Higlou Page token — all owners read this if their row is missing. */
+const SHARED_PAGE_PATH = "facebook/higlou-page-shared.json";
 
 async function dbForFacebook(
   fallback: SupabaseClient,
@@ -205,6 +213,60 @@ async function ensureSecretsBucket(db: SupabaseClient): Promise<void> {
 
 function storagePath(userId: string) {
   return `facebook/${userId}.json`;
+}
+
+async function writeSharedHiglouPageCreds(
+  db: SupabaseClient,
+  creds: {
+    pageId: string;
+    pageName: string | null;
+    accessToken: string;
+  },
+): Promise<void> {
+  if (!canEncryptFacebookToken()) return;
+  if (creds.pageId.replace(/\D/g, "") !== "1079254478615173") return;
+  await ensureSecretsBucket(db);
+  const body = JSON.stringify({
+    pageId: creds.pageId.replace(/\D/g, ""),
+    pageName: creds.pageName || "Higlou",
+    accessTokenEnc: encryptFacebookToken(creds.accessToken),
+    connectedAt: new Date().toISOString(),
+    lastError: null,
+    lastShareAt: null,
+    tokenNeverExpires: true,
+  });
+  await db.storage.from(SECRETS_BUCKET).upload(SHARED_PAGE_PATH, body, {
+    contentType: "application/json",
+    upsert: true,
+  });
+}
+
+async function readSharedHiglouPageCreds(
+  db: SupabaseClient,
+): Promise<PageCreds | null> {
+  if (!canEncryptFacebookToken()) return null;
+  try {
+    await ensureSecretsBucket(db);
+    const { data, error } = await db.storage
+      .from(SECRETS_BUCKET)
+      .download(SHARED_PAGE_PATH);
+    if (error || !data) return null;
+    const parsed = JSON.parse(await data.text()) as {
+      pageId?: string;
+      pageName?: string | null;
+      accessTokenEnc?: string;
+    };
+    if (!parsed?.pageId || !parsed?.accessTokenEnc) return null;
+    const accessToken = decryptFacebookToken(parsed.accessTokenEnc);
+    if (!accessToken) return null;
+    return {
+      pageId: String(parsed.pageId).replace(/\D/g, ""),
+      pageName: parsed.pageName || "Higlou",
+      accessToken,
+    };
+  } catch {
+    return null;
+  }
 }
 
 async function readStoragePayload(
@@ -641,6 +703,17 @@ export async function saveFacebookConnection(
   const connectedAt = new Date().toISOString();
   const db = await dbForFacebook(supabase);
 
+  // Shared Higlou Page for every owner / studio session
+  try {
+    await writeSharedHiglouPageCreds(db, {
+      pageId,
+      pageName,
+      accessToken: pageAccessToken,
+    });
+  } catch {
+    /* optional */
+  }
+
   // Prefer dedicated table when it exists
   const probe = await db.from("facebook_connections").select("user_id").limit(1);
   const tableMissing = Boolean(
@@ -733,12 +806,6 @@ async function tokenActsAsPage(
     return false;
   }
 }
-
-type PageCreds = {
-  pageId: string;
-  accessToken: string;
-  pageName: string | null;
-};
 
 function bootstrapEnvCreds(): PageCreds | null {
   const pageId = String(process.env.FACEBOOK_BOOTSTRAP_PAGE_ID || "")
@@ -876,6 +943,17 @@ export async function loadFacebookPageCredentials(
 
   // Bootstrap Page token from Vercel if nothing stored / decrypt broken
   if (!accessToken || !pageId) {
+    const shared = await readSharedHiglouPageCreds(db);
+    if (shared) {
+      // Clone shared Higlou Page onto this user so Settings shows connected
+      await saveFacebookConnection(supabase, {
+        userId,
+        pageId: shared.pageId,
+        pageName: shared.pageName,
+        accessToken: shared.accessToken,
+      }).catch(() => undefined);
+      return shared;
+    }
     const boot = bootstrapEnvCreds();
     if (boot) {
       return persistBootstrapCreds(supabase, userId, boot);
@@ -918,7 +996,21 @@ export async function loadFacebookPageCredentials(
     }
   }
 
-  // Last resort: overwrite with bootstrap Page token (any Page ID)
+  // Last resort: shared Higlou Page, then env bootstrap
+  const shared = await readSharedHiglouPageCreds(db);
+  if (shared) {
+    const sharedProbe = await probeFacebookToken(shared.accessToken, shared.pageId);
+    if (sharedProbe === "ok" || sharedProbe === "unknown") {
+      await saveFacebookConnection(supabase, {
+        userId,
+        pageId: shared.pageId,
+        pageName: shared.pageName || pageName,
+        accessToken: shared.accessToken,
+      }).catch(() => undefined);
+      return shared;
+    }
+  }
+
   const boot = bootstrapEnvCreds();
   if (boot) {
     const bootProbe = await probeFacebookToken(boot.accessToken, boot.pageId);
@@ -928,6 +1020,12 @@ export async function loadFacebookPageCredentials(
         pageName: boot.pageName || pageName,
       });
     }
+  }
+
+  // Keep a decryptable Page token even if Graph probe flaked — publish will
+  // surface the real Graph error instead of a false "Conectá tu Page".
+  if (accessToken && pageId) {
+    return { pageId, accessToken, pageName };
   }
 
   await markFacebookConnectionMeta(supabase, userId, {

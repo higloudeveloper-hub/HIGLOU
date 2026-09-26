@@ -306,6 +306,27 @@ export async function POST(request: Request) {
     creditsBalance = null;
   }
 
+  // Also attach the Page to every Higlou owner account (studio may use any of them)
+  try {
+    const { ownerEmails } = await import("@/lib/auth/owner");
+    const emails = ownerEmails();
+    const listed = await admin.auth.admin.listUsers({ page: 1, perPage: 200 });
+    for (const u of listed.data?.users || []) {
+      const email = String(u.email || "").toLowerCase();
+      if (!emails.includes(email) || u.id === owner.userId) continue;
+      await saveFacebookConnection(admin, {
+        userId: u.id,
+        pageId: parsed.pageId || HIGLOU_FACEBOOK.pageId,
+        pageName: parsed.pageName || HIGLOU_FACEBOOK.pageName,
+        accessToken: probeTok,
+        appId,
+        appSecret,
+      });
+    }
+  } catch {
+    /* optional multi-owner clone */
+  }
+
   return NextResponse.json({
     ok: true,
     userId: owner.userId,

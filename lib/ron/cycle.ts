@@ -59,16 +59,22 @@ function appOrigin(): string {
 /**
  * Load Keepa opportunities from the ledger.
  * Prefer row.asin (always present) over payload-only — payload can be partial.
+ * Uses admin client so cron / force cycles never miss rows due to RLS edge cases.
  */
 async function loadKeepaHits(
-  supabase: SupabaseClient,
+  _supabase: SupabaseClient,
   userId: string,
 ): Promise<OpportunityProduct[]> {
-  const { data } = await supabase
+  const { createAdminClient, isSupabaseConfigured } = await import(
+    "@/lib/supabase/admin"
+  );
+  if (!isSupabaseConfigured()) return [];
+  const admin = createAdminClient();
+  const { data } = await admin
     .from("opportunity_ledger")
     .select("asin, payload, title, brand, image_url, net_profit, score, mode")
     .eq("user_id", userId)
-    .order("net_profit", { ascending: false })
+    .order("last_seen_at", { ascending: false })
     .limit(80);
 
   const hits: OpportunityProduct[] = [];
@@ -224,6 +230,22 @@ export async function runRonCycle(
     return { ok: true, state, skipped: "RON está apagado" };
   }
 
+  // Manual "Forzar ciclo" always clears publish cooldown so RON can ship again
+  let learning = state.learning;
+  if (opts.force) {
+    learning = { ...learning, recentPacks: {} };
+    await appendRonActivity(
+      supabase,
+      userId,
+      {
+        at: new Date().toISOString(),
+        kind: "wake",
+        message: "Forzar ciclo · memoria de publicados limpiada",
+      },
+      { learning, statusMessage: "Trabajando · memoria limpia", working: true },
+    );
+  }
+
   await setRonWorking(supabase, userId, true, "Trabajando · despertando…");
   await appendRonActivity(
     supabase,
@@ -289,10 +311,11 @@ export async function runRonCycle(
     return finish({ ok: false, state, error: msg });
   }
 
-  let learning = await learnFromAffiliateClicks(
+  learning = await learnFromAffiliateClicks(
     supabase,
     userId,
-    state.learning,
+    // Prefer force-cleared learning when present
+    opts.force ? { ...learning, recentPacks: {} } : learning,
   );
   await appendRonActivity(
     supabase,
@@ -358,13 +381,52 @@ export async function runRonCycle(
   // Fresh ledger after scan (scan persists winners)
   ledgerHits = await loadKeepaHits(supabase, userId);
 
+  // Empty ledger after purge → seed Keepa winners once so RON has something to ship
+  if (!ledgerHits.length && !keepa.winners.length) {
+    try {
+      const { createAdminClient, isSupabaseConfigured } = await import(
+        "@/lib/supabase/admin"
+      );
+      if (isSupabaseConfigured()) {
+        const { maybeSeedEmptyFloor } = await import(
+          "@/lib/opportunity/seed-floor"
+        );
+        const seeded = await maybeSeedEmptyFloor(createAdminClient(), {
+          userId,
+          supabase,
+          limit: 12,
+          pageOrigin: appOrigin(),
+          force: Boolean(opts.force),
+        });
+        if (seeded.seeded) {
+          await appendRonActivity(
+            supabase,
+            userId,
+            {
+              at: new Date().toISOString(),
+              kind: "scan",
+              message: `Floor sembrado · ${seeded.saved} Keepa · ${seeded.affiliates} afiliados`,
+            },
+            {
+              statusMessage: `Trabajando · ${seeded.saved} Keepa sembrados`,
+              working: true,
+            },
+          );
+          ledgerHits = await loadKeepaHits(supabase, userId);
+        }
+      }
+    } catch {
+      /* seed optional */
+    }
+  }
+
   const byAsin = new Map<string, OpportunityProduct>();
   for (const h of [...keepa.winners, ...ledgerHits]) {
     const n = normalizeRonHit(h);
     if (!n) continue;
     if (!byAsin.has(n.asin)) byAsin.set(n.asin, n);
   }
-  const hits = [...byAsin.values()];
+  let hits = [...byAsin.values()];
 
   await appendRonActivity(
     supabase,
@@ -456,6 +518,61 @@ export async function runRonCycle(
     if (!row.brand && hit.brand) row.brand = hit.brand;
   }
 
+  // Affiliates exist but ledger empty → hydrate titles/images from Keepa so catalog isn't blind
+  if (!hits.length && affiliateByAsin.size > 0) {
+    try {
+      const { keepaProducts } = await import("@/lib/keepa/finder");
+      const asins = [...affiliateByAsin.keys()].slice(0, 24);
+      const snaps = await keepaProducts(asins);
+      for (const snap of snaps) {
+        const n = normalizeRonHit({
+          asin: snap.asin,
+          title: snap.title,
+          brand: snap.brand,
+          imageUrl: snap.imageUrl,
+          amazonPrice: snap.buyBoxPrice ?? snap.newPrice,
+          buyBoxPrice: snap.buyBoxPrice,
+          salesRank: snap.salesRank,
+          avgSalesRank90: snap.avgSalesRank90,
+          bsrDrops90: snap.bsrDrops90,
+          discount90: snap.discount90,
+          monthlySold: snap.monthlySold,
+          sellerCount: snap.sellerCount,
+          rating: snap.rating,
+          reviewCount: snap.reviewCount,
+          keepa: true,
+          mode: "amazon",
+        });
+        if (!n || byAsin.has(n.asin)) continue;
+        byAsin.set(n.asin, n);
+        const row = affiliateByAsin.get(n.asin);
+        if (row) {
+          if (!row.imageUrl) row.imageUrl = n.imageUrl;
+          if (!row.title) row.title = n.title;
+          if (!row.brand) row.brand = n.brand;
+        }
+      }
+      hits = [...byAsin.values()];
+      if (hits.length) {
+        await appendRonActivity(
+          supabase,
+          userId,
+          {
+            at: new Date().toISOString(),
+            kind: "scan",
+            message: `Keepa hidrató ${hits.length} afiliados sin ledger`,
+          },
+          {
+            statusMessage: `Trabajando · ${hits.length} afiliados hidratados`,
+            working: true,
+          },
+        );
+      }
+    } catch {
+      /* hydrate optional */
+    }
+  }
+
   const catalog = buildRonCatalog({
     hits,
     affiliateByAsin,
@@ -497,12 +614,8 @@ export async function runRonCycle(
     RON_ASIN_COOLDOWN_HOURS,
   );
 
-  // Keepa found product but memory still blocks everything → unlock once
-  if (
-    hits.length > 0 &&
-    catalog.length > 0 &&
-    freshCatalog.length === 0
-  ) {
+  // Catalog blocked by stale “already published” memory → unlock (affiliates or Keepa)
+  if (catalog.length > 0 && freshCatalog.length === 0) {
     learning = {
       ...learning,
       recentPacks: {},
@@ -515,10 +628,10 @@ export async function runRonCycle(
         at: new Date().toISOString(),
         kind: "scan",
         message:
-          "Memoria de publicados limpiada · Keepa tenía hits bloqueados por cooldown viejo",
+          "Memoria de publicados limpiada · catálogo estaba bloqueado por cooldown viejo",
       },
       {
-        statusMessage: `Trabajando · ${catalog.length} Keepa desbloqueados`,
+        statusMessage: `Trabajando · ${catalog.length} desbloqueados`,
         learning,
         working: true,
       },
@@ -529,7 +642,22 @@ export async function runRonCycle(
     const msg =
       hits.length > 0
         ? `Keepa trajo ${hits.length} pero ninguno es publicable aún (falta foto real o link). Reintento en el próximo ciclo.`
-        : "Sin oportunidades nuevas · todo el catálogo ya se publicó · espero Keepa fresco";
+        : affiliateByAsin.size > 0
+          ? `Tengo ${affiliateByAsin.size} afiliados pero sin foto/Keepa usable · reintento próximo ciclo`
+          : "Sin oportunidades nuevas · espero Keepa fresco (escaneá Find Winners o Forzar ciclo)";
+    learning = {
+      ...learning,
+      opsSnapshot: {
+        freshAsins: 0,
+        catalogAsins: catalog.length,
+        lastMoneyScore: 0,
+        lastFormat: null,
+        pipeline: "idle",
+        peakWindow: false,
+        moneyHint: msg,
+        nextAction: "Forzar ciclo o Escanear winners",
+      },
+    };
     await appendRonActivity(
       supabase,
       userId,

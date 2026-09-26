@@ -9,7 +9,7 @@ import {
 import { RON_MEMORY_RESET_VERSION } from "@/lib/admin/purge-listings-winners";
 
 /** One-shot: refill empty floor after the ghost purge wiped Keepa winners. */
-export const FLOOR_SEED_VERSION = "2026-09-25-v1-refill";
+export const FLOOR_SEED_VERSION = "2026-09-26-v2-ron-refill";
 
 /**
  * If this user's opportunity_ledger is empty, seed real Keepa winners once
@@ -22,6 +22,8 @@ export async function maybeSeedEmptyFloor(
     supabase: SupabaseClient;
     limit?: number;
     pageOrigin?: string;
+    /** Ignore prior floorSeedVersion stamp (RON Forzar ciclo) */
+    force?: boolean;
   },
 ): Promise<{
   seeded: boolean;
@@ -49,7 +51,7 @@ export async function maybeSeedEmptyFloor(
     ron?.learning && typeof ron.learning === "object"
       ? (ron.learning as Record<string, unknown>)
       : {};
-  if (learning.floorSeedVersion === FLOOR_SEED_VERSION) {
+  if (!opts.force && learning.floorSeedVersion === FLOOR_SEED_VERSION) {
     return { seeded: false, saved: 0, affiliates: 0, skipped: "already_seeded" };
   }
 

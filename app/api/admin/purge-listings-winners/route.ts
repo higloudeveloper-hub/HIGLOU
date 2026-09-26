@@ -12,7 +12,7 @@ export const runtime = "nodejs";
 export const maxDuration = 120;
 
 /** One-shot: unlock RON memory after affiliate wipe (no data delete). */
-const BOOTSTRAP_MEMORY_SECRET = "higlou-unlock-ron-20260925-v3";
+const BOOTSTRAP_MEMORY_SECRET = "higlou-unlock-ron-20260926-v4";
 
 function isOwner(email: string | null | undefined): boolean {
   const allow = String(process.env.HIGLOU_OWNER_EMAILS || "")

@@ -4,7 +4,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 export const LISTINGS_WINNERS_PURGE_VERSION = "2026-09-24-v2-vitrinas";
 
 /** Soft reset: clear RON “already published” memory without wiping affiliates. */
-export const RON_MEMORY_RESET_VERSION = "2026-09-25-v3-keepa-unlock";
+export const RON_MEMORY_RESET_VERSION = "2026-09-26-v4-ron-fresh";
 
 export type PurgeResult = {
   ok: true;

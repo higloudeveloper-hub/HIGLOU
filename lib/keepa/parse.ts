@@ -80,8 +80,13 @@ function firstImage(row: Record<string, unknown>): string {
         (img as { l?: string; m?: string }).l ||
           (img as { l?: string; m?: string }).m ||
           "",
-      ).trim();
-      if (id) return `https://m.media-amazon.com/images/I/${id}`;
+      )
+        .trim()
+        .replace(/\._.+$/i, "")
+        .replace(/\.(jpe?g|png|webp|gif)$/i, "");
+      if (id.length >= 3) {
+        return `https://m.media-amazon.com/images/I/${id}._AC_SL1500_.jpg`;
+      }
     }
   }
   // Legacy CSV: "abc.jpg,def.jpg"
@@ -89,7 +94,14 @@ function firstImage(row: Record<string, unknown>): string {
     .split(",")
     .map((part) => part.trim())
     .find(Boolean);
-  if (csv) return `https://m.media-amazon.com/images/I/${csv}`;
+  if (csv) {
+    const id = csv
+      .replace(/\._.+$/i, "")
+      .replace(/\.(jpe?g|png|webp|gif)$/i, "");
+    if (id.length >= 3) {
+      return `https://m.media-amazon.com/images/I/${id}._AC_SL1500_.jpg`;
+    }
+  }
   return "";
 }
 

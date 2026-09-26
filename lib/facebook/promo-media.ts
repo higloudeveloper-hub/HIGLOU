@@ -15,12 +15,14 @@ function pictureScore(url: string): number {
   const u = String(url || "").trim();
   if (!/^https?:\/\//i.test(u)) return -1;
   if (isWeakFacebookPictureUrl(u)) return 5;
-  // Real Amazon product images (I/{id}) — what Facebook scrapes reliably
+  // Our CDN first — Facebook scrapes these reliably (Amazon often blanks out)
+  if (/supabase\.co\/storage|cloudinary\.com/i.test(u)) return 200;
+  if (/higlou\.|vercel\.app\/_next\/image/i.test(u)) return 190;
+  // Real Amazon product images (I/{id}) — only when CDN is unavailable
   if (/m\.media-amazon\.com\/images\/I\//i.test(u)) return 100;
   if (/media-amazon\.com\/images\/I\//i.test(u)) return 95;
   if (/images-na\.ssl-images-amazon\.com\/images\/I\//i.test(u)) return 90;
   if (/m\.media-amazon\.com\//i.test(u)) return 70;
-  if (/cloudinary|supabase|higlou|vercel/i.test(u)) return 85;
   return 40;
 }
 

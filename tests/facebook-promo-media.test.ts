@@ -37,6 +37,14 @@ describe("facebook promo media", () => {
     ).toBe(real);
   });
 
+  it("prefers our rehosted CDN over Amazon so FB never blanks the card", () => {
+    const amazon =
+      "https://m.media-amazon.com/images/I/71YosaTooTablet._AC_SL1500_.jpg";
+    const cdn =
+      "https://xyz.supabase.co/storage/v1/object/public/product-images/u/a.jpg";
+    expect(facebookFriendlyPictureUrl(cdn, "B0CHS1BVBC", [amazon])).toBe(cdn);
+  });
+
   it("shortens long titles at a word boundary", () => {
     const long =
       "YosaToo Kids Tablet 10 inch Android Tablet for Kids with Parental Control Blue Case Charger";

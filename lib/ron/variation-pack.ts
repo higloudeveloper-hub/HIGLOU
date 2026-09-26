@@ -29,10 +29,11 @@ import {
 import type { RonFormat, RonLearning } from "@/lib/ron/types";
 import type { ListingVariation } from "@/types/product";
 
-/** Original + 3 visibly different variations (color-first). */
+/** Original + exactly 3 visibly different Color variations. */
 const MIN_EXTRA_VARIATIONS = 3;
+const MAX_EXTRA_VARIATIONS = 3;
 const MIN_TOTAL_CARDS = 1 + MIN_EXTRA_VARIATIONS;
-const MAX_VARIATION_CARDS = 8;
+const MAX_VARIATION_CARDS = MIN_TOTAL_CARDS;
 
 function appOrigin(): string {
   const fromEnv = (process.env.NEXT_PUBLIC_APP_URL || "").replace(/\/$/, "");
@@ -72,6 +73,23 @@ function baseProductName(title: string): string {
     .slice(0, 60);
 }
 
+/** Normalize Keepa / Amazon I/ URLs so FB + dedupe see one fingerprint. */
+export function normalizeAmazonProductImage(url?: string | null): string {
+  const raw = String(url || "").trim();
+  if (!raw || !/^https?:\/\//i.test(raw)) return "";
+  if (isWeakFacebookPictureUrl(raw)) return "";
+  const id = raw.match(/\/images\/I\/([^/?#]+)/i)?.[1];
+  if (id) {
+    const clean = id
+      .replace(/\._.+$/i, "")
+      .replace(/\.(jpe?g|png|webp|gif)$/i, "");
+    if (clean.length >= 3) {
+      return `https://m.media-amazon.com/images/I/${clean}._AC_SL1500_.jpg`;
+    }
+  }
+  return raw;
+}
+
 /** Real product photo only — never ads-system / P-ASIN gray stubs. */
 export function strongVariationImage(
   preferred?: string | null,
@@ -80,11 +98,11 @@ export function strongVariationImage(
 ): { imageUrl: string; imageFallbacks: string[] } | null {
   const pack = ronImagePack(String(asin || ""), preferred);
   const pool = [
-    String(preferred || "").trim(),
-    ...fallbacks.map((u) => String(u || "").trim()),
-    pack.imageUrl,
-    ...(pack.imageFallbacks || []),
-  ].filter((u) => /^https?:\/\//i.test(u) && !isWeakFacebookPictureUrl(u));
+    normalizeAmazonProductImage(preferred),
+    ...fallbacks.map((u) => normalizeAmazonProductImage(u)),
+    normalizeAmazonProductImage(pack.imageUrl),
+    ...(pack.imageFallbacks || []).map((u) => normalizeAmazonProductImage(u)),
+  ].filter((u) => Boolean(u) && !isWeakFacebookPictureUrl(u));
   const unique = [...new Set(pool)];
   if (!unique.length) return null;
   return {
@@ -100,8 +118,36 @@ function colorOf(v: ListingVariation): string {
 }
 
 /**
- * Pick extras after the original: prefer one card per Color so the
- * swipe shows a real visual difference (not Size twins of the same photo).
+ * Color candidates only (one ASIN per Color). Images are resolved later
+ * from Keepa /product so we never trust empty/shared variation.image rows.
+ */
+export function pickColorVariationCandidates(
+  variants: ListingVariation[],
+  opts: { seedAsin: string; seedColor: string; limit: number },
+): ListingVariation[] {
+  const seedAsin = opts.seedAsin.toUpperCase();
+  const seenColor = new Set<string>(
+    opts.seedColor ? [opts.seedColor] : [],
+  );
+  const out: ListingVariation[] = [];
+
+  for (const v of variants) {
+    if (out.length >= opts.limit) break;
+    const asin = String(v.asin || "")
+      .trim()
+      .toUpperCase();
+    if (!/^[A-Z0-9]{10}$/.test(asin) || asin === seedAsin) continue;
+    const color = colorOf(v);
+    if (!color || seenColor.has(color)) continue;
+    seenColor.add(color);
+    out.push(v);
+  }
+  return out;
+}
+
+/**
+ * After Keepa /product snaps arrive: keep only colors whose photo is
+ * actually different from the original and from each other.
  */
 export function pickDistinctVariationExtras(
   variants: ListingVariation[],
@@ -110,6 +156,8 @@ export function pickDistinctVariationExtras(
     seedImageKey: string;
     seedColor: string;
     limit: number;
+    /** Resolved strong image URL per ASIN (from Keepa product snap). */
+    imageByAsin?: Map<string, string>;
   },
 ): ListingVariation[] {
   const seedAsin = opts.seedAsin.toUpperCase();
@@ -121,36 +169,38 @@ export function pickDistinctVariationExtras(
     opts.seedColor ? [opts.seedColor] : [],
   );
   const out: ListingVariation[] = [];
+  const imageOf = (v: ListingVariation): string => {
+    const asin = String(v.asin || "")
+      .trim()
+      .toUpperCase();
+    const fromSnap = opts.imageByAsin?.get(asin) || "";
+    const fromVar = normalizeAmazonProductImage(v.imageUrls?.[0]);
+    return normalizeAmazonProductImage(fromSnap) || fromVar;
+  };
 
-  // Pass 1: Color-distinct + unique image
-  const byColor = new Map<string, ListingVariation>();
+  // Pass 1: Color-distinct + unique resolved photo
   for (const v of variants) {
+    if (out.length >= opts.limit) break;
     const asin = String(v.asin || "")
       .trim()
       .toUpperCase();
     if (!/^[A-Z0-9]{10}$/.test(asin) || seenAsin.has(asin)) continue;
     const color = colorOf(v);
     if (!color || seenColor.has(color)) continue;
-    const img = String(v.imageUrls?.[0] || "").trim();
+    const img = imageOf(v);
     if (!img || isWeakFacebookPictureUrl(img)) continue;
     const imgKey = productImageKey(img);
-    if (imgKey && seenImg.has(imgKey)) continue;
-    if (byColor.has(color)) continue;
-    byColor.set(color, v);
-  }
-
-  for (const v of byColor.values()) {
-    if (out.length >= opts.limit) break;
-    const asin = String(v.asin).toUpperCase();
-    const color = colorOf(v);
-    const imgKey = productImageKey(v.imageUrls?.[0]);
+    if (!imgKey || seenImg.has(imgKey)) continue;
     seenAsin.add(asin);
-    if (color) seenColor.add(color);
-    if (imgKey) seenImg.add(imgKey);
-    out.push(v);
+    seenColor.add(color);
+    seenImg.add(imgKey);
+    out.push({
+      ...v,
+      imageUrls: [img, ...(v.imageUrls || []).filter((u) => u !== img)],
+    });
   }
 
-  // Pass 2: if still short, allow Style/Pattern with unique images
+  // Pass 2: Style/Pattern with unique photos (still no Size twins of same color)
   if (out.length < opts.limit) {
     for (const v of variants) {
       if (out.length >= opts.limit) break;
@@ -158,17 +208,19 @@ export function pickDistinctVariationExtras(
         .trim()
         .toUpperCase();
       if (!/^[A-Z0-9]{10}$/.test(asin) || seenAsin.has(asin)) continue;
-      const img = String(v.imageUrls?.[0] || "").trim();
-      if (!img || isWeakFacebookPictureUrl(img)) continue;
-      const imgKey = productImageKey(img);
-      if (imgKey && seenImg.has(imgKey)) continue;
-      // Skip Size-only twins of an already-used color
       const color = colorOf(v);
       if (color && seenColor.has(color)) continue;
+      const img = imageOf(v);
+      if (!img || isWeakFacebookPictureUrl(img)) continue;
+      const imgKey = productImageKey(img);
+      if (!imgKey || seenImg.has(imgKey)) continue;
       seenAsin.add(asin);
       if (color) seenColor.add(color);
-      if (imgKey) seenImg.add(imgKey);
-      out.push(v);
+      seenImg.add(imgKey);
+      out.push({
+        ...v,
+        imageUrls: [img, ...(v.imageUrls || []).filter((u) => u !== img)],
+      });
     }
   }
 
@@ -195,9 +247,8 @@ function resolveLinkUrl(
 }
 
 /**
- * Expand a Keepa winner into: [original product] + 3+ Color variations.
- * First card is always the seed. Extra cards must show a real photo
- * difference (Color-first). Never ships gray / missing images.
+ * Expand a Keepa winner into: [original] + 3 Color variations with
+ * real different photos. Never ships blank / twin cards.
  */
 export async function tryRonVariationPack(opts: {
   supabase: SupabaseClient;
@@ -242,13 +293,55 @@ export async function tryRonVariationPack(opts: {
       (v) => String(v.asin).toUpperCase() === seedAsin,
     );
     const seedColor = seedVariant ? colorOf(seedVariant) : "";
-    const seedImgKey = productImageKey(seedPhotos.imageUrl);
+
+    // Color ASINs first (up to a pool), then resolve real photos via /product
+    const colorPool = pickColorVariationCandidates(variationSet.variants, {
+      seedAsin,
+      seedColor,
+      limit: 12,
+    });
+    if (colorPool.length < MIN_EXTRA_VARIATIONS) continue;
+
+    const candidateAsins = [
+      seedAsin,
+      ...colorPool.map((v) => String(v.asin).toUpperCase()),
+    ];
+
+    const snaps = await keepaProducts(candidateAsins);
+    const snapByAsin = new Map(
+      snaps.map((s) => [String(s.asin).toUpperCase(), s]),
+    );
+
+    const imageByAsin = new Map<string, string>();
+    for (const asin of candidateAsins) {
+      const snap = snapByAsin.get(asin);
+      const variant =
+        asin === seedAsin
+          ? seedVariant
+          : colorPool.find((v) => String(v.asin).toUpperCase() === asin);
+      const preferred =
+        asin === seedAsin
+          ? seedPhotos.imageUrl
+          : snap?.imageUrl || variant?.imageUrls?.[0] || "";
+      const photos = strongVariationImage(
+        preferred,
+        asin === seedAsin
+          ? seedPhotos.imageFallbacks
+          : [snap?.imageUrl, ...(variant?.imageUrls || [])],
+        asin,
+      );
+      if (photos) imageByAsin.set(asin, photos.imageUrl);
+    }
+
+    if (!imageByAsin.has(seedAsin)) continue;
+    const seedImgKey = productImageKey(imageByAsin.get(seedAsin)!);
 
     const extras = pickDistinctVariationExtras(variationSet.variants, {
       seedAsin,
       seedImageKey: seedImgKey,
       seedColor,
-      limit: MAX_VARIATION_CARDS - 1,
+      limit: MAX_EXTRA_VARIATIONS,
+      imageByAsin,
     });
 
     if (extras.length < MIN_EXTRA_VARIATIONS) continue;
@@ -258,34 +351,17 @@ export async function tryRonVariationPack(opts: {
       ...extras.map((v) => String(v.asin).toUpperCase()),
     ];
 
-    const snaps = await keepaProducts(allAsins);
-    const snapByAsin = new Map(
-      snaps.map((s) => [String(s.asin).toUpperCase(), s]),
-    );
-
     const hits: OpportunityProduct[] = [];
     for (const asin of allAsins) {
       const snap = snapByAsin.get(asin);
-      const variant =
-        asin === seedAsin
-          ? seedVariant
-          : extras.find((v) => String(v.asin).toUpperCase() === asin);
-      const preferredImg =
-        asin === seedAsin
-          ? seedPhotos.imageUrl
-          : String(variant?.imageUrls?.[0] || snap?.imageUrl || "").trim();
-      const photos = strongVariationImage(
-        preferredImg,
-        asin === seedAsin ? seedPhotos.imageFallbacks : [],
-        asin,
-      );
-      if (!photos) continue;
+      const imageUrl = imageByAsin.get(asin);
+      if (!imageUrl) continue;
       const price = snap?.buyBoxPrice ?? snap?.newPrice ?? null;
       hits.push({
         asin,
         title: snap?.title || seed.title,
         brand: snap?.brand || seed.brand || "",
-        imageUrl: photos.imageUrl,
+        imageUrl,
         mode: "amazon",
         sourceMarket: "amazon",
         sourceId: asin,
@@ -307,7 +383,6 @@ export async function tryRonVariationPack(opts: {
       } as OpportunityProduct);
     }
 
-    // Must still have seed + 3 extras with real photos
     const hitAsins = new Set(hits.map((h) => h.asin));
     if (!hitAsins.has(seedAsin)) continue;
     const extraHits = extras.filter((v) =>
@@ -364,11 +439,11 @@ export async function tryRonVariationPack(opts: {
 
       const imgKey = productImageKey(photos.imageUrl);
       const titleKey = productTitleKey(title);
-      if (imgKey && seenImg.has(imgKey)) return false;
+      if (!imgKey || seenImg.has(imgKey)) return false;
       if (titleKey && seenTitle.has(titleKey)) return false;
 
       seenAsin.add(hit.asin);
-      if (imgKey) seenImg.add(imgKey);
+      seenImg.add(imgKey);
       if (titleKey) seenTitle.add(titleKey);
       cards.push({
         id: isSeed ? `ron-seed:${hit.asin}` : `ron-var:${hit.asin}`,
@@ -394,7 +469,7 @@ export async function tryRonVariationPack(opts: {
     if (!seedHit) continue;
     if (!pushCard(seedHit, seedVariant, true)) continue;
 
-    // 2) Then 3+ visibly different variations
+    // 2) Then exactly 3 visibly different Color variations
     for (const v of extraHits) {
       if (cards.length >= MAX_VARIATION_CARDS) break;
       const asin = String(v.asin).toUpperCase();
@@ -404,12 +479,21 @@ export async function tryRonVariationPack(opts: {
     }
 
     if (cards.length < MIN_TOTAL_CARDS) continue;
-    // Guard: first card must still be the original seed
     if (String(cards[0]?.asin || "").toUpperCase() !== seedAsin) continue;
 
-    const format: RonFormat = cards.length >= 4 ? "vitrina" : "carousel";
-    const axes = variationSet.axisNames.join(" · ") || "opciones";
-    const niche = `${baseProductName(seed.title) || seed.brand || "Deal"} · ${axes}`;
+    // Final visual gate: every card must have a unique photo fingerprint
+    const imgKeys = cards.map((c) => productImageKey(c.imageUrl));
+    if (new Set(imgKeys).size !== cards.length) continue;
+
+    const format: RonFormat = "vitrina";
+    const colorLine = [
+      seedColor || "original",
+      ...extraHits.map((v) => colorOf(v)).filter(Boolean),
+    ]
+      .map((c) => c.toUpperCase())
+      .slice(0, 4)
+      .join(" · ");
+    const niche = `${baseProductName(seed.title) || seed.brand || "Deal"} · Color`;
     const money = scorePackMoneyOpportunity(cards, opts.learning);
     const copy = buildFacebookPromoCopy({
       format,
@@ -421,15 +505,12 @@ export async function tryRonVariationPack(opts: {
       seed: opts.seed ?? Date.now(),
     });
 
-    const axisLine = variationSet.axisNames.length
-      ? variationSet.axisNames.map((a) => a.toUpperCase()).join(" · ")
-      : "OPCIONES";
     const message = [
       copy.message.split("\n")[0] || niche.toUpperCase(),
       "",
-      `ORIGINAL + ${cards.length - 1} VARIACIONES · ${axisLine}`,
-      `${cards.length} opciones · misma familia Keepa`,
-      "SWIPE → ELEGÍ COLOR / TALLE",
+      `ORIGINAL + 3 COLORES · ${colorLine}`,
+      "4 opciones · misma familia Keepa",
+      "SWIPE → ELEGÍ EL COLOR",
     ]
       .filter(Boolean)
       .join("\n");
@@ -440,13 +521,11 @@ export async function tryRonVariationPack(opts: {
       cards,
       message,
       collectionTitle:
-        format === "vitrina"
-          ? `${baseProductName(seed.title)} · ${axes}`.slice(0, 80) ||
-            defaultFacebookCollectionTitle()
-          : null,
+        `${baseProductName(seed.title)} · Color`.slice(0, 80) ||
+        defaultFacebookCollectionTitle(),
       coverImageUrl: cards[0]?.imageUrl || null,
       niche,
-      reason: `Variaciones Keepa · ${format} · original + ${cards.length - 1} colores · ${axes} · score ${money}`,
+      reason: `Variaciones Keepa · vitrina · original + 3 colores (${colorLine}) · score ${money}`,
     };
   }
 

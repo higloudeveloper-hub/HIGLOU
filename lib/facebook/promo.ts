@@ -21,7 +21,10 @@ import {
   facebookFriendlyPictureUrl,
   shortenFacebookCardTitle,
 } from "@/lib/facebook/promo-media";
-import { rehostPromoImagesForFacebook } from "@/lib/facebook/rehost-promo-images";
+import {
+  isFacebookStableHost,
+  rehostPromoImagesForFacebook,
+} from "@/lib/facebook/rehost-promo-images";
 
 export type PromoFormat = "ads" | "carousel" | "vitrina";
 
@@ -63,11 +66,15 @@ type ChildAttachment = {
 };
 
 function healPromoCard(card: PromoCard): PromoCard {
-  const picture = facebookFriendlyPictureUrl(
-    card.imageUrl,
-    card.asin,
-    card.imageFallbacks || [],
-  );
+  const current = String(card.imageUrl || "").trim();
+  // Never downgrade a CDN-hosted photo back to Amazon (causes blank FB cards)
+  const picture = isFacebookStableHost(current)
+    ? current
+    : facebookFriendlyPictureUrl(
+        card.imageUrl,
+        card.asin,
+        card.imageFallbacks || [],
+      );
   return {
     ...card,
     title: shortenFacebookCardTitle(card.title, 36),
@@ -517,7 +524,15 @@ export async function publishFacebookPromo(
   }
 
   // Re-check uniqueness after rehost (same CDN twin must never ship)
-  const hostedUnique = uniquePromoCardsForPublish(hosted.cards);
+  const hostedUnique = uniquePromoCardsForPublish(
+    hosted.cards.map((c) => ({
+      ...c,
+      // Drop Amazon fallbacks so heal never swaps CDN → Amazon (blank cards)
+      imageFallbacks: isFacebookStableHost(c.imageUrl)
+        ? [c.imageUrl]
+        : c.imageFallbacks,
+    })),
+  );
   if (hostedUnique.length < min) {
     return {
       ok: false,

@@ -155,20 +155,29 @@ export function isJunkBrand(raw: string | null | undefined): boolean {
 }
 
 /**
- * Stable fingerprint so the same product photo (or ASIN image) is not
- * packed twice — even when ASINs differ or are missing.
+ * Stable fingerprint so the same product photo is not packed twice —
+ * even when ASINs differ or Amazon serves the same I/{id} with different sizes.
  */
 export function productImageKey(url?: string | null): string {
   const raw = String(url || "").trim();
   if (!raw) return "";
   const lower = raw.toLowerCase();
+  // Amazon media I/{imageId} — strip size suffixes so SL500 ≡ SL1500
+  const amzImg = lower.match(
+    /\/images\/i\/([a-z0-9+_-]+?)(?:\._[^/?#]+)?(?:\.(?:jpe?g|png|webp|gif))?(?:[?#]|$)/i,
+  )?.[1];
+  if (amzImg && amzImg.length >= 3) {
+    return `amzimg:${amzImg.replace(/\._.+$/i, "").replace(/\.(jpe?g|png|webp|gif)$/i, "")}`;
+  }
   const fromQuery = lower.match(/[?&]asin=([a-z0-9]{10})\b/i)?.[1];
   const fromPath = lower.match(/\/(?:images\/)?p\/([a-z0-9]{10})\./i)?.[1];
   const asin = (fromQuery || fromPath || "").toUpperCase();
   if (asin) return `asin:${asin}`;
   try {
     const u = new URL(raw);
-    return `path:${u.hostname}${u.pathname}`.toLowerCase();
+    // Strip query + CDN random suffix noise for stable path compare
+    const path = u.pathname.replace(/\/[a-f0-9-]{36}(?=\.[a-z]+$)/i, "");
+    return `path:${u.hostname}${path}`.toLowerCase();
   } catch {
     return `raw:${lower.slice(0, 160)}`;
   }

@@ -18,6 +18,7 @@ const PUBLIC_EXACT_PATHS = [
   "/api/admin/kill-don-baraton-facebook",
   "/api/admin/purge-listings-winners",
   "/api/admin/install-facebook-permanent",
+  "/api/admin/ron-diagnose",
   "/api/cron/ron",
 ];
 

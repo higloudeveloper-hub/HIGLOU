@@ -12,6 +12,12 @@ import {
   type PromoFormat as CopyFormat,
 } from "@/lib/facebook/promo-copy";
 import {
+  dedupePromoCards,
+  productImageKey,
+  productTitleKey,
+  type PromoGroupCard,
+} from "@/lib/facebook/promo-groups";
+import {
   facebookFriendlyPictureUrl,
   shortenFacebookCardTitle,
 } from "@/lib/facebook/promo-media";
@@ -69,16 +75,66 @@ function healPromoCard(card: PromoCard): PromoCard {
   };
 }
 
+/**
+ * Fail-closed uniqueness for carousel/vitrina: never post twin cards
+ * that share ASIN, photo fingerprint, title, or link.
+ */
+export function uniquePromoCardsForPublish(cards: PromoCard[]): PromoCard[] {
+  const asGroup: PromoGroupCard[] = cards.map((c, i) => ({
+    id: c.id || `card-${i}`,
+    title: c.title,
+    asin: c.asin,
+    imageUrl: c.imageUrl,
+    priceLabel: c.priceLabel,
+  }));
+  const uniqueIds = new Set(dedupePromoCards(asGroup).map((c) => c.id));
+  const seenLink = new Set<string>();
+  const seenPicture = new Set<string>();
+  const seenTitle = new Set<string>();
+  const out: PromoCard[] = [];
+  for (let i = 0; i < cards.length; i++) {
+    const c = cards[i]!;
+    const id = c.id || `card-${i}`;
+    if (!uniqueIds.has(id)) continue;
+    const linkKey = String(c.linkUrl || "")
+      .trim()
+      .toLowerCase()
+      .replace(/\/$/, "");
+    if (linkKey && seenLink.has(linkKey)) continue;
+    const picKey = productImageKey(c.imageUrl);
+    if (picKey && seenPicture.has(picKey)) continue;
+    const titleKey = productTitleKey(c.title);
+    if (titleKey && seenTitle.has(titleKey)) continue;
+    if (linkKey) seenLink.add(linkKey);
+    if (picKey) seenPicture.add(picKey);
+    if (titleKey) seenTitle.add(titleKey);
+    out.push(c);
+  }
+  return out;
+}
+
 function toChildAttachments(
   cards: PromoCard[],
   copy = buildFacebookPromoCopy({ format: "carousel", seed: 0 }),
 ): ChildAttachment[] {
-  return cards
+  const unique = uniquePromoCardsForPublish(cards);
+  const seenName = new Set<string>();
+  const seenPic = new Set<string>();
+  return unique
     .map(healPromoCard)
     .filter(
       (c) =>
         /^https?:\/\//i.test(c.linkUrl) && /^https?:\/\//i.test(c.imageUrl),
     )
+    .filter((c) => {
+      const nameKey = productTitleKey(c.title);
+      const picKey = productImageKey(c.imageUrl);
+      if (nameKey && seenName.has(nameKey)) return false;
+      if (picKey && seenPic.has(picKey)) return false;
+      if (nameKey) seenName.add(nameKey);
+      if (picKey) seenPic.add(picKey);
+      return true;
+    })
     .slice(0, 10)
     .map((c) => ({
       link: c.linkUrl,
@@ -160,9 +216,8 @@ async function publishLinkCarousel(opts: {
 }
 
 /**
- * Single product: tappable card with a real photo.
- * Prefer child_attachments + rehosted picture so Facebook never scrapes
- * a blank ads-system /go OG card. Clean {link}-only is last resort.
+ * Single product: one photo + link. Never fake a 2-card carousel by
+ * duplicating the same child_attachment — that posts twin product cards.
  */
 async function publishSingleLinkCard(opts: {
   pageId: string;
@@ -190,43 +245,11 @@ async function publishSingleLinkCard(opts: {
     `https://graph.facebook.com/v21.0/${opts.pageId}/feed`,
   );
 
-  const name = copy.cardName(opts.card.title);
-  const description = copy.cardDescription(
-    opts.card.priceLabel,
-    opts.card.discountPercent,
-    opts.card.sourcePlatform,
-  );
   const picture = String(opts.card.imageUrl || "").trim();
   const hasPicture = /^https?:\/\//i.test(picture);
 
-  // 1) Primary: child_attachments with hosted picture (same as carousel)
-  //    — Graph scrapes our CDN, not Amazon widgets.
+  // 1) Photo post with link in caption — one image, never a carousel twin
   if (hasPicture) {
-    const child: Record<string, string> = {
-      link,
-      name: name || "Deal",
-      description: description || "Shop now",
-      picture,
-    };
-    const multi = await fetch(endpoint, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        message: caption,
-        link,
-        child_attachments: [child, { ...child }],
-        access_token: opts.accessToken,
-      }),
-    });
-    const multiBody = (await multi.json().catch(() => null)) as {
-      id?: string;
-      error?: { message?: string; error_user_msg?: string };
-    } | null;
-    if (multi.ok && multiBody?.id) {
-      return { id: multiBody.id };
-    }
-
-    // 2) Photo post with link in caption (Graph owns the binary)
     const photoEndpoint = new URL(
       `https://graph.facebook.com/v21.0/${opts.pageId}/photos`,
     );
@@ -249,18 +272,36 @@ async function publishSingleLinkCard(opts: {
       return { id: photoBody.post_id || photoBody.id };
     }
 
+    // 2) Link post (OG from /go) — still one card, never duplicated children
+    const linkPost = await fetch(endpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        message: caption,
+        link,
+        access_token: opts.accessToken,
+      }),
+    });
+    const linkBody = (await linkPost.json().catch(() => null)) as {
+      id?: string;
+      error?: { message?: string; error_user_msg?: string };
+    } | null;
+    if (linkPost.ok && linkBody?.id) {
+      return { id: linkBody.id };
+    }
+
     return {
       error: humanizeFacebookGraphError(
-        multiBody?.error?.error_user_msg ||
-          multiBody?.error?.message ||
-          photoBody?.error?.error_user_msg ||
+        photoBody?.error?.error_user_msg ||
           photoBody?.error?.message ||
-          `Facebook link ${multi.status}`,
+          linkBody?.error?.error_user_msg ||
+          linkBody?.error?.message ||
+          `Facebook link ${photo.status}`,
       ),
     };
   }
 
-  // 3) No picture available — clean link post (OG only; may gray out)
+  // 3) No picture — clean link post (OG only; may gray out)
   const primary = await fetch(endpoint, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -344,7 +385,8 @@ export async function publishFacebookPromo(
   if (!trusted.ok) {
     return { ok: false, error: trusted.error };
   }
-  const cards = trusted.cards;
+  // Never publish the same product twice in one post (ASIN / photo / title)
+  const cards = uniquePromoCardsForPublish(trusted.cards);
 
   const creds = await loadFacebookPageCredentials(supabase, opts.userId);
 
@@ -407,7 +449,7 @@ export async function publishFacebookPromo(
           .eq("slug", slug.toLowerCase());
       }
     } catch {
-      /* column may not exist yet — publish still has child_attachments picture */
+      /* column may not exist yet — photo post still carries the image */
     }
 
     const posted = await publishSingleLinkCard({
@@ -438,10 +480,14 @@ export async function publishFacebookPromo(
 
   const min = format === "vitrina" ? 3 : 2;
   if (cards.length < min) {
+    const hadDupes = cards.length < trusted.cards.length;
     return {
       ok: false,
-      error:
-        format === "vitrina"
+      error: hadDupes
+        ? format === "vitrina"
+          ? `La vitrina necesita ${min} productos distintos. Había repeticiones (mismo ASIN, foto o título) — quedaron ${cards.length}.`
+          : `El carrusel necesita ${min} productos distintos. Había repeticiones (mismo ASIN, foto o título) — quedaron ${cards.length}.`
+        : format === "vitrina"
           ? "La vitrina necesita al menos 3 productos."
           : "El carrusel necesita al menos 2 productos.",
     };
@@ -470,9 +516,21 @@ export async function publishFacebookPromo(
     return { ok: false, error: hosted.error };
   }
 
+  // Re-check uniqueness after rehost (same CDN twin must never ship)
+  const hostedUnique = uniquePromoCardsForPublish(hosted.cards);
+  if (hostedUnique.length < min) {
+    return {
+      ok: false,
+      error:
+        format === "vitrina"
+          ? `La vitrina necesita ${min} productos distintos. Había repeticiones — quedaron ${hostedUnique.length}.`
+          : `El carrusel necesita ${min} productos distintos. Había repeticiones — quedaron ${hostedUnique.length}.`,
+    };
+  }
+
   // Stamp /go OG images for each card so scrapers also get real photos
   try {
-    for (const c of hosted.cards) {
+    for (const c of hostedUnique) {
       const slug = String(c.linkUrl || "").match(/\/go\/([a-z0-9_-]+)/i)?.[1];
       if (!slug || !/^https?:\/\//i.test(c.imageUrl)) continue;
       await supabase
@@ -486,7 +544,7 @@ export async function publishFacebookPromo(
   }
 
   // Cover card first for vitrina when provided
-  let ordered = [...hosted.cards];
+  let ordered = [...hostedUnique];
   const cover = String(opts.coverImageUrl || "").trim();
   if (format === "vitrina" && cover) {
     // Match by original cover URL OR already-rehosted card id order

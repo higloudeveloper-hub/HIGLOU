@@ -220,10 +220,27 @@ function asinOf(card: PromoGroupCard): string {
     .toUpperCase();
 }
 
-/** Drop duplicate ASINs / identical images before clustering. */
+/** Exact title fingerprint — collapses whitespace, keeps color/size suffixes. */
+export function productTitleKey(title?: string | null): string {
+  return String(title || "")
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9áéíóúñü\s·.-]/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 120);
+}
+
+/**
+ * Drop duplicate products before clustering / publish.
+ * Same ASIN, same photo, or same title = same product (never twin cards
+ * in a carousel or vitrina). Color/Size suffixes keep variation titles unique.
+ */
 export function dedupePromoCards(cards: PromoGroupCard[]): PromoGroupCard[] {
   const seenAsin = new Set<string>();
   const seenImg = new Set<string>();
+  const seenTitle = new Set<string>();
   const out: PromoGroupCard[] = [];
   for (const c of cards) {
     if (!c.id || !String(c.title || "").trim()) continue;
@@ -231,8 +248,11 @@ export function dedupePromoCards(cards: PromoGroupCard[]): PromoGroupCard[] {
     if (asin && seenAsin.has(asin)) continue;
     const img = productImageKey(c.imageUrl);
     if (img && seenImg.has(img)) continue;
+    const titleKey = productTitleKey(c.title);
+    if (titleKey && seenTitle.has(titleKey)) continue;
     if (asin) seenAsin.add(asin);
     if (img) seenImg.add(img);
+    if (titleKey) seenTitle.add(titleKey);
     out.push(c);
   }
   return out;

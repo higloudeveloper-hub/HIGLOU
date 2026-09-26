@@ -3,6 +3,10 @@ import {
   buildFacebookPromoCopy,
   defaultFacebookCollectionTitle,
 } from "@/lib/facebook/promo-copy";
+import {
+  productImageKey,
+  productTitleKey,
+} from "@/lib/facebook/promo-groups";
 import { keepaVariationSet } from "@/lib/keepa/variations";
 import { keepaProducts } from "@/lib/keepa/finder";
 import {
@@ -178,6 +182,8 @@ export async function tryRonVariationPack(opts: {
     const origin = appOrigin();
     const cards: RonCandidateCard[] = [];
     const seen = new Set<string>();
+    const seenImg = new Set<string>();
+    const seenTitle = new Set<string>();
 
     for (const hit of hits) {
       if (cards.length >= MAX_VARIATION_CARDS) break;
@@ -207,7 +213,15 @@ export async function tryRonVariationPack(opts: {
         ? `${baseProductName(hit.title)} · ${aspect}`.slice(0, 80)
         : hit.title.slice(0, 80);
 
+      // Never twin the same photo or title in a variation carousel/vitrina
+      const imgKey = productImageKey(pack.imageUrl);
+      const titleKey = productTitleKey(title);
+      if (imgKey && seenImg.has(imgKey)) continue;
+      if (titleKey && seenTitle.has(titleKey)) continue;
+
       seen.add(hit.asin);
+      if (imgKey) seenImg.add(imgKey);
+      if (titleKey) seenTitle.add(titleKey);
       cards.push({
         id: `ron-var:${hit.asin}`,
         title,

@@ -261,6 +261,37 @@ describe("ready-made related vitrinas", () => {
     }
   });
 
+  it("dedupes identical titles even when ASIN and image differ", () => {
+    const dirty = [
+      {
+        id: "t1",
+        title: "Sima Brand Exfoliating Washcloth Soft",
+        brand: "Sima",
+        asin: "B0SIMA0001",
+        priceLabel: "$21.45",
+        imageUrl: "https://cdn.example.com/sima-a.jpg",
+      },
+      {
+        id: "t2",
+        title: "Sima Brand Exfoliating Washcloth Soft",
+        brand: "Sima",
+        asin: "B0SIMA0002",
+        priceLabel: "$21.45",
+        imageUrl: "https://cdn.example.com/sima-b.jpg",
+      },
+      {
+        id: "t3",
+        title: "Sima Brand Exfoliating · Black",
+        brand: "Sima",
+        asin: "B0SIMA0003",
+        priceLabel: "$21.45",
+        imageUrl: "https://cdn.example.com/sima-black.jpg",
+      },
+    ];
+    const cleaned = dedupePromoCards(dirty);
+    expect(cleaned.map((c) => c.id)).toEqual(["t1", "t3"]);
+  });
+
   it("puts vitrinas before carousels in suggestPromoPacks", () => {
     const packs = suggestPromoPacks(catalog, { limit: 6, preferVitrina: true });
     const firstVitrina = packs.findIndex((p) => p.format === "vitrina");

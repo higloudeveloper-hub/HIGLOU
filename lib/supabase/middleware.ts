@@ -19,6 +19,7 @@ const PUBLIC_EXACT_PATHS = [
   "/api/admin/purge-listings-winners",
   "/api/admin/install-facebook-permanent",
   "/api/admin/ron-diagnose",
+  "/api/admin/install-associate-tag",
   "/api/cron/ron",
 ];
 

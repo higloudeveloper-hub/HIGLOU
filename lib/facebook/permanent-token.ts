@@ -122,6 +122,26 @@ export async function mintNeverExpiringPageToken(opts: {
 
   const sysTok = tokenBody.access_token;
 
+  // Reject empty-scope system tokens — they cannot publish
+  const dbgUrl = new URL("https://graph.facebook.com/v21.0/debug_token");
+  dbgUrl.searchParams.set("input_token", sysTok);
+  dbgUrl.searchParams.set(
+    "access_token",
+    `${creds.appId}|${creds.appSecret}`,
+  );
+  const dbgRes = await fetch(dbgUrl);
+  const dbg = (await dbgRes.json().catch(() => null)) as {
+    data?: { scopes?: string[]; type?: string };
+  } | null;
+  const scopes = dbg?.data?.scopes || [];
+  if (!scopes.includes("pages_manage_posts")) {
+    return {
+      ok: false,
+      error:
+        "System User token sin pages_manage_posts. Usá un User token (no Page) + App Secret, o pegá un Page token permanente directo.",
+    };
+  }
+
   // Resolve Page token from system user
   const accUrl = new URL("https://graph.facebook.com/v21.0/me/accounts");
   accUrl.searchParams.set("fields", "id,name,access_token");
@@ -157,10 +177,15 @@ export async function mintNeverExpiringPageToken(opts: {
     if (pageBody?.access_token) {
       pageTok = pageBody.access_token;
       pageName = pageBody.name || pageName;
-    } else {
-      // System user token itself can post as Page when assigned with CREATE_CONTENT
-      pageTok = sysTok;
     }
+  }
+
+  if (!pageTok) {
+    return {
+      ok: false,
+      error:
+        "System User OK pero sin Page token. Asigná la Page al System User en Business Manager.",
+    };
   }
 
   return {

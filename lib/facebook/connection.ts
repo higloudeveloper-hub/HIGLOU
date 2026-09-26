@@ -523,7 +523,6 @@ export async function saveFacebookConnection(
   const appSecret =
     String(opts.appSecret || storedCreds?.appSecret || "").trim() || null;
 
-  // Prefer permanent System User token when App Secret is available
   let pageAccessToken: string | null = null;
   let pageName: string | null =
     String(opts.pageName || "").trim() || HIGLOU_FACEBOOK.pageName;
@@ -531,7 +530,53 @@ export async function saveFacebookConnection(
   let tokenNeverExpires = false;
   let hardenNote = "";
 
-  if (appSecret && canExtendFacebookTokens({ appId, appSecret })) {
+  // If the paste is already a Page token for this Page, keep it (do NOT mint a
+  // System User on top — that often returns empty scopes and breaks RON).
+  const alreadyPage = await resolvePageAccessToken(pageId, token);
+  if (alreadyPage.ok) {
+    const meUrl = new URL("https://graph.facebook.com/v21.0/me");
+    meUrl.searchParams.set("fields", "id");
+    meUrl.searchParams.set("access_token", token);
+    const meRes = await fetch(meUrl);
+    const me = (await meRes.json().catch(() => null)) as { id?: string } | null;
+    const isDirectPageToken =
+      meRes.ok &&
+      Boolean(me?.id) &&
+      String(me?.id || "").replace(/\D/g, "") === pageId;
+
+    if (isDirectPageToken) {
+      pageAccessToken = alreadyPage.accessToken;
+      pageName = alreadyPage.pageName || pageName;
+      if (appSecret && canExtendFacebookTokens({ appId, appSecret })) {
+        const { debugFacebookToken } = await import(
+          "@/lib/facebook/token-exchange"
+        );
+        const dbg = await debugFacebookToken(pageAccessToken, {
+          appId,
+          appSecret,
+        });
+        tokenNeverExpires = Boolean(dbg.isPage && !dbg.expiresAt);
+        tokenExpiresAt = dbg.expiresAt
+          ? new Date(dbg.expiresAt * 1000).toISOString()
+          : null;
+        hardenNote = tokenNeverExpires
+          ? "Page token permanente (no vence)."
+          : dbg.expiresAt
+            ? `Page token vence ${new Date(dbg.expiresAt * 1000).toLocaleDateString()}.`
+            : "Page token OK.";
+      } else {
+        tokenNeverExpires = false;
+        hardenNote = "Page token guardado.";
+      }
+    }
+  }
+
+  // Only mint System User when the input is a User token (not already Page)
+  if (
+    !pageAccessToken &&
+    appSecret &&
+    canExtendFacebookTokens({ appId, appSecret })
+  ) {
     const minted = await mintNeverExpiringPageToken({
       userAccessToken: token,
       appId: appId || undefined,
@@ -549,7 +594,9 @@ export async function saveFacebookConnection(
 
   if (!pageAccessToken) {
     // User token → Page token via /me/accounts (Graph Explorer default)
-    const resolved = await resolvePageAccessToken(pageId, token);
+    const resolved = alreadyPage.ok
+      ? alreadyPage
+      : await resolvePageAccessToken(pageId, token);
     if (!resolved.ok) {
       return { ok: false, error: resolved.error };
     }

@@ -271,6 +271,41 @@ export async function POST(request: Request) {
     }
   }
 
+  // Ensure owner has Keepa scan credits so RON is not stuck on empty ledger
+  let creditsBalance: number | null = null;
+  try {
+    const { claimWelcomeBonus, getCreditWallet } = await import(
+      "@/lib/credits/wallet"
+    );
+    await claimWelcomeBonus(owner.userId);
+    const wallet = await getCreditWallet(owner.userId);
+    if (wallet.balance < 20) {
+      const topUp = 100;
+      const next = wallet.balance + topUp;
+      await admin
+        .from("credit_wallets")
+        .update({
+          balance: next,
+          lifetime_granted: (wallet.lifetimeGranted || 0) + topUp,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("user_id", owner.userId);
+      await admin.from("credit_ledger").insert({
+        user_id: owner.userId,
+        delta: topUp,
+        balance_after: next,
+        action: "admin_topup",
+        reason: "RON unblock · Keepa scan credits",
+        meta: { agent: "ron", source: "install-facebook-permanent" },
+      });
+      creditsBalance = next;
+    } else {
+      creditsBalance = wallet.balance;
+    }
+  } catch {
+    creditsBalance = null;
+  }
+
   return NextResponse.json({
     ok: true,
     userId: owner.userId,
@@ -286,6 +321,7 @@ export async function POST(request: Request) {
     ensureOk: ensured.ok,
     ensureError: ensured.ok ? null : ensured.error,
     associateTag: associateTagSaved,
+    creditsBalance,
     proofPrefix: appSecretProof(probeTok, appSecret).slice(0, 8),
     note: "Page token permanente instalado para RON.",
   });

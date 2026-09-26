@@ -694,7 +694,7 @@ export async function runRonCycle(
     if (
       variationPack &&
       variationPack.action === "publish" &&
-      variationPack.cards.length >= 2
+      variationPack.cards.length >= 4
     ) {
       decision = variationPack;
       await appendRonActivity(
@@ -706,7 +706,7 @@ export async function runRonCycle(
           message: variationPack.reason,
         },
         {
-          statusMessage: `Trabajando · ${variationPack.cards.length} variaciones Keepa`,
+          statusMessage: `Trabajando · original + ${variationPack.cards.length - 1} variaciones Keepa`,
           working: true,
         },
       );

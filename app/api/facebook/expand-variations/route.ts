@@ -48,14 +48,23 @@ export async function POST(request: Request) {
     );
   }
 
+  const seedImage = String(body.imageUrl || "").trim();
+  if (!seedImage || !/^https?:\/\//i.test(seedImage)) {
+    return NextResponse.json(
+      {
+        error:
+          "Este producto no tiene foto real. Abrí el ganador con imagen Keepa y reintentá.",
+      },
+      { status: 400 },
+    );
+  }
+
   const seedCard = {
     id: `seed:${asin}`,
     title: body.title || `Deal ${asin}`,
     brand: body.brand || null,
     asin,
-    imageUrl:
-      body.imageUrl ||
-      `https://m.media-amazon.com/images/I/01RmK+J4pJL._AC_SL1500_.jpg`,
+    imageUrl: seedImage,
     linkUrl: body.linkUrl || `https://www.amazon.com/dp/${asin}`,
     priceLabel: body.priceLabel || null,
     meta: body.brand || asin,

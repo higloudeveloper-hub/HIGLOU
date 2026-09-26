@@ -86,7 +86,8 @@ describe("facebook promo copy", () => {
       /keepa|higlou|original \+|misma familia|elegí el color|3 colores/,
     );
     expect(copy.message).toMatch(/Amazon/);
-    expect(copy.message).toMatch(/SWIPE/);
+    expect(copy.message).toContain("→");
+    expect(copy.message).toContain("━━━━━━━━");
   });
 
   it("vitrina uses product name as collection title (niche is secondary)", () => {

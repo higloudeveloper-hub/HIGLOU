@@ -66,11 +66,27 @@ describe("facebook promo copy", () => {
     expect(copy.collectionTitle.toLowerCase()).not.toMatch(/\/go/);
     expect(copy.message).toMatch(/Home Depot/);
     expect(copy.message.toLowerCase()).not.toMatch(
-      /precios bajos|curaduría|verificad|sin relleno/,
+      /precios bajos|curaduría|verificad|sin relleno|keepa|original \+|opciones|familia/,
     );
     expect(copy.message.split("\n").length).toBeGreaterThanOrEqual(3);
     expect(copy.message).toContain("━━━━━━━━");
     expect(defaultFacebookPromoMessage("ads")).toContain("\n");
+  });
+
+  it("never explains Keepa/Higlou internals to the shopper", () => {
+    const copy = buildFacebookPromoCopy({
+      format: "vitrina",
+      titles: ["Bialetti 4942 Moka Express Espresso Maker"],
+      platforms: ["Amazon"],
+      niche: "Bialetti Moka",
+      discountPercents: [13],
+      seed: 0,
+    });
+    expect(copy.message.toLowerCase()).not.toMatch(
+      /keepa|higlou|original \+|misma familia|elegí el color|3 colores/,
+    );
+    expect(copy.message).toMatch(/Amazon/);
+    expect(copy.message).toMatch(/SWIPE/);
   });
 
   it("vitrina uses product name as collection title (niche is secondary)", () => {

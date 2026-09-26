@@ -537,18 +537,12 @@ export async function tryRonVariationPack(opts: {
     if (new Set(imgKeys).size !== cards.length) continue;
 
     const format: RonFormat = "vitrina";
-    const colorLine = [
-      seedColor || "original",
-      ...extraHits.map((v) => colorOf(v)).filter(Boolean),
-    ]
-      .map((c) => c.toUpperCase())
-      .slice(0, 4)
-      .join(" · ");
-    const niche = `${baseProductName(seed.title) || seed.brand || "Deal"} · Color`;
+    const niche =
+      baseProductName(seed.title) || seed.brand || cards[0]?.title || "Deal";
     const money = scorePackMoneyOpportunity(cards, opts.learning);
     const copy = buildFacebookPromoCopy({
       format,
-      titles: cards.map((c) => c.title),
+      titles: [seed.title, ...cards.map((c) => c.title)],
       prices: cards.map((c) => c.priceLabel),
       discountPercents: cards.map((c) => c.discountPercent),
       platforms: cards.map(() => "Amazon"),
@@ -556,15 +550,16 @@ export async function tryRonVariationPack(opts: {
       seed: opts.seed ?? Date.now(),
     });
 
-    const message = [
-      copy.message.split("\n")[0] || niche.toUpperCase(),
-      "",
-      `ORIGINAL + 3 COLORES · ${colorLine}`,
-      "4 opciones · misma familia Keepa",
-      "SWIPE → ELEGÍ EL COLOR",
+    // Customer-facing caption only — Amazon-style retail, never Keepa/ops jargon
+    const message = copy.message;
+
+    const colorLine = [
+      seedColor || "original",
+      ...extraHits.map((v) => colorOf(v)).filter(Boolean),
     ]
-      .filter(Boolean)
-      .join("\n");
+      .map((c) => c.toUpperCase())
+      .slice(0, 4)
+      .join(" · ");
 
     return {
       action: "publish",
@@ -572,7 +567,8 @@ export async function tryRonVariationPack(opts: {
       cards,
       message,
       collectionTitle:
-        `${baseProductName(seed.title)} · Color`.slice(0, 80) ||
+        copy.collectionTitle ||
+        baseProductName(seed.title).slice(0, 80) ||
         defaultFacebookCollectionTitle(),
       coverImageUrl: cards[0]?.imageUrl || null,
       niche,

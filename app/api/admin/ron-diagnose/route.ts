@@ -84,6 +84,11 @@ export async function POST(request: Request) {
     postUrl: result.postUrl || null,
     statusMessage: result.state.statusMessage,
     lastError: result.state.lastError,
-    recentActivity: (result.state.activity || []).slice(0, 5),
+    recentActivity: (result.state.activity || []).slice(0, 8),
+    learningHint: {
+      clicksSeen: result.state.learning?.clicksSeen,
+      cycles: result.state.learning?.cycles,
+      lastKeepaScanAt: result.state.learning?.lastKeepaScanAt,
+    },
   });
 }

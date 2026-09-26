@@ -146,8 +146,8 @@ export function pickColorVariationCandidates(
 }
 
 /**
- * After Keepa /product snaps arrive: keep only colors whose photo is
- * actually different from the original and from each other.
+ * After Keepa /product snaps arrive: keep only colors whose MAIN GALLERY
+ * photo (not the color swatch) is different from the original and each other.
  */
 export function pickDistinctVariationExtras(
   variants: ListingVariation[],
@@ -156,8 +156,8 @@ export function pickDistinctVariationExtras(
     seedImageKey: string;
     seedColor: string;
     limit: number;
-    /** Resolved strong image URL per ASIN (from Keepa product snap). */
-    imageByAsin?: Map<string, string>;
+    /** Resolved MAIN gallery URL per ASIN (from Keepa /product only). */
+    imageByAsin: Map<string, string>;
   },
 ): ListingVariation[] {
   const seedAsin = opts.seedAsin.toUpperCase();
@@ -173,12 +173,11 @@ export function pickDistinctVariationExtras(
     const asin = String(v.asin || "")
       .trim()
       .toUpperCase();
-    const fromSnap = opts.imageByAsin?.get(asin) || "";
-    const fromVar = normalizeAmazonProductImage(v.imageUrls?.[0]);
-    return normalizeAmazonProductImage(fromSnap) || fromVar;
+    // NEVER fall back to variations[].image — that is the fabric swatch
+    return normalizeAmazonProductImage(opts.imageByAsin.get(asin) || "");
   };
 
-  // Pass 1: Color-distinct + unique resolved photo
+  // Pass 1: Color-distinct + unique main gallery photo
   for (const v of variants) {
     if (out.length >= opts.limit) break;
     const asin = String(v.asin || "")
@@ -191,16 +190,19 @@ export function pickDistinctVariationExtras(
     if (!img || isWeakFacebookPictureUrl(img)) continue;
     const imgKey = productImageKey(img);
     if (!imgKey || seenImg.has(imgKey)) continue;
+    // Reject if this "gallery" URL is actually the variation swatch
+    const swatchKey = productImageKey(v.imageUrls?.[0]);
+    if (swatchKey && imgKey === swatchKey) continue;
     seenAsin.add(asin);
     seenColor.add(color);
     seenImg.add(imgKey);
     out.push({
       ...v,
-      imageUrls: [img, ...(v.imageUrls || []).filter((u) => u !== img)],
+      imageUrls: [img],
     });
   }
 
-  // Pass 2: Style/Pattern with unique photos (still no Size twins of same color)
+  // Pass 2: Style/Pattern with unique gallery photos (no Size twins)
   if (out.length < opts.limit) {
     for (const v of variants) {
       if (out.length >= opts.limit) break;
@@ -214,17 +216,33 @@ export function pickDistinctVariationExtras(
       if (!img || isWeakFacebookPictureUrl(img)) continue;
       const imgKey = productImageKey(img);
       if (!imgKey || seenImg.has(imgKey)) continue;
+      const swatchKey = productImageKey(v.imageUrls?.[0]);
+      if (swatchKey && imgKey === swatchKey) continue;
       seenAsin.add(asin);
       if (color) seenColor.add(color);
       seenImg.add(imgKey);
       out.push({
         ...v,
-        imageUrls: [img, ...(v.imageUrls || []).filter((u) => u !== img)],
+        imageUrls: [img],
       });
     }
   }
 
   return out;
+}
+
+/**
+ * True when a URL matches the Keepa variations[].image swatch for this ASIN.
+ * Those are fabric close-ups — never the main PDP hero.
+ */
+export function isVariationSwatchImage(
+  url: string | null | undefined,
+  variant?: ListingVariation | null,
+): boolean {
+  if (!url || !variant?.imageUrls?.[0]) return false;
+  const a = productImageKey(url);
+  const b = productImageKey(variant.imageUrls[0]);
+  return Boolean(a && b && a === b);
 }
 
 function resolveLinkUrl(
@@ -272,13 +290,6 @@ export async function tryRonVariationPack(opts: {
       .toUpperCase();
     if (!/^[A-Z0-9]{10}$/.test(seedAsin)) continue;
 
-    const seedPhotos = strongVariationImage(
-      seed.imageUrl,
-      seed.imageFallbacks || [],
-      seedAsin,
-    );
-    if (!seedPhotos) continue;
-
     let variationSet: Awaited<ReturnType<typeof keepaVariationSet>> = null;
     try {
       variationSet = await keepaVariationSet(seedAsin, { force: true });
@@ -294,7 +305,7 @@ export async function tryRonVariationPack(opts: {
     );
     const seedColor = seedVariant ? colorOf(seedVariant) : "";
 
-    // Color ASINs first (up to a pool), then resolve real photos via /product
+    // Color ASINs first, then resolve MAIN gallery photos via /product
     const colorPool = pickColorVariationCandidates(variationSet.variants, {
       seedAsin,
       seedColor,
@@ -312,6 +323,11 @@ export async function tryRonVariationPack(opts: {
       snaps.map((s) => [String(s.asin).toUpperCase(), s]),
     );
 
+    /**
+     * ONLY Keepa /product gallery heroes (images[0]).
+     * Never variations[].image — those are Amazon color swatches
+     * (fabric swirls), not the lifestyle photo at the top of the PDP.
+     */
     const imageByAsin = new Map<string, string>();
     for (const asin of candidateAsins) {
       const snap = snapByAsin.get(asin);
@@ -319,18 +335,50 @@ export async function tryRonVariationPack(opts: {
         asin === seedAsin
           ? seedVariant
           : colorPool.find((v) => String(v.asin).toUpperCase() === asin);
-      const preferred =
-        asin === seedAsin
-          ? seedPhotos.imageUrl
-          : snap?.imageUrl || variant?.imageUrls?.[0] || "";
+      const galleryHero = normalizeAmazonProductImage(snap?.imageUrl || "");
+      const galleryFallbacks = (snap?.galleryImageUrls || [])
+        .map((u) => normalizeAmazonProductImage(u))
+        .filter(Boolean);
+
+      // Seed may already carry a good mirrored hero — use it only if it is
+      // NOT the variation swatch (fabric close-up).
+      let preferred = galleryHero;
+      if (asin === seedAsin) {
+        const seedCandidate = normalizeAmazonProductImage(seed.imageUrl);
+        if (
+          seedCandidate &&
+          !isVariationSwatchImage(seedCandidate, seedVariant)
+        ) {
+          // Prefer Keepa gallery; fall back to seed only when gallery missing
+          preferred = galleryHero || seedCandidate;
+        }
+      }
+
+      if (!preferred) continue;
+      // Hard reject: if the only photo equals the color swatch, skip
+      if (isVariationSwatchImage(preferred, variant)) {
+        const alt = galleryFallbacks.find(
+          (u) => u && !isVariationSwatchImage(u, variant),
+        );
+        if (!alt) continue;
+        preferred = alt;
+      }
+
       const photos = strongVariationImage(
         preferred,
         asin === seedAsin
-          ? seedPhotos.imageFallbacks
-          : [snap?.imageUrl, ...(variant?.imageUrls || [])],
+          ? [
+              ...galleryFallbacks,
+              ...(seed.imageFallbacks || []).filter(
+                (u) => !isVariationSwatchImage(u, seedVariant),
+              ),
+            ]
+          : galleryFallbacks,
         asin,
       );
-      if (photos) imageByAsin.set(asin, photos.imageUrl);
+      if (!photos) continue;
+      if (isVariationSwatchImage(photos.imageUrl, variant)) continue;
+      imageByAsin.set(asin, photos.imageUrl);
     }
 
     if (!imageByAsin.has(seedAsin)) continue;
@@ -423,16 +471,19 @@ export async function tryRonVariationPack(opts: {
       );
       if (!linkUrl) return false;
 
-      const photos = strongVariationImage(
-        hit.imageUrl,
-        isSeed ? seed.imageFallbacks || [] : variant?.imageUrls || [],
-        hit.asin,
-      );
+      // hit.imageUrl is already the Keepa /product gallery hero — never swatch
+      const photos = strongVariationImage(hit.imageUrl, [], hit.asin);
       if (!photos) return false;
+      if (isVariationSwatchImage(photos.imageUrl, variant)) return false;
 
       const aspect = variant ? aspectLabel(variant.aspects) : "";
       const title = isSeed
-        ? baseProductName(hit.title) || hit.title.slice(0, 80)
+        ? seedColor
+          ? `${baseProductName(hit.title)} · ${seedColor.replace(/\b\w/g, (c) => c.toUpperCase())}`.slice(
+              0,
+              80,
+            )
+          : baseProductName(hit.title) || hit.title.slice(0, 80)
         : aspect
           ? `${baseProductName(hit.title)} · ${aspect}`.slice(0, 80)
           : hit.title.slice(0, 80);

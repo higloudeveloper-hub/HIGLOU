@@ -31,8 +31,13 @@ function isAsin(value: string): boolean {
   return /^[A-Z0-9]{10}$/i.test(value);
 }
 
-function keepaVariantImages(rec: Record<string, unknown>): string[] {
-  const raw = String(rec.image || rec.imagesCSV || "")
+/**
+ * Keepa `variations[].image` is the Amazon COLOR SWATCH (fabric swirl /
+ * tiny thumbnail) — NOT the main gallery hero at the top of the PDP.
+ * Never use these URLs as Facebook card photos.
+ */
+export function keepaVariantSwatchImages(rec: Record<string, unknown>): string[] {
+  const raw = String(rec.image || "")
     .split(",")
     .map((part) => part.trim())
     .find(Boolean);
@@ -50,6 +55,11 @@ function keepaVariantImages(rec: Record<string, unknown>): string[] {
   const id = raw.replace(/\._.+$/i, "").replace(/\.(jpe?g|png|webp|gif)$/i, "");
   if (id.length < 3) return [];
   return [`https://m.media-amazon.com/images/I/${id}._AC_SL1500_.jpg`];
+}
+
+/** @deprecated Use keepaVariantSwatchImages — these are swatches, not heroes. */
+function keepaVariantImages(rec: Record<string, unknown>): string[] {
+  return keepaVariantSwatchImages(rec);
 }
 
 /** Keepa product.variations → Higlou Color/Size picker rows. */

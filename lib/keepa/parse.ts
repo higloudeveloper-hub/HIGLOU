@@ -44,7 +44,10 @@ export type KeepaSnapshot = {
   asin: string;
   title: string;
   brand: string;
+  /** Main PDP hero (images[0] / imagesCSV[0]) — never the color swatch. */
   imageUrl: string;
+  /** Extra gallery heroes from the same Keepa /product row. */
+  galleryImageUrls?: string[];
   upc: string;
   mpn: string;
   amazonRetail: boolean;
@@ -70,8 +73,18 @@ export type KeepaSnapshot = {
   couponPercent: number | null;
 };
 
-function firstImage(row: Record<string, unknown>): string {
-  // Modern Keepa product payloads use `images: [{ l, m, ... }]`
+function amazonImageFromId(raw: string): string {
+  const id = String(raw || "")
+    .trim()
+    .replace(/\._.+$/i, "")
+    .replace(/\.(jpe?g|png|webp|gif)$/i, "");
+  if (id.length < 3) return "";
+  return `https://m.media-amazon.com/images/I/${id}._AC_SL1500_.jpg`;
+}
+
+/** All main-gallery image URLs from a Keepa /product row (hero first). */
+export function keepaGalleryImages(row: Record<string, unknown>): string[] {
+  const out: string[] = [];
   const images = row.images;
   if (Array.isArray(images) && images.length) {
     for (const img of images) {
@@ -80,29 +93,22 @@ function firstImage(row: Record<string, unknown>): string {
         (img as { l?: string; m?: string }).l ||
           (img as { l?: string; m?: string }).m ||
           "",
-      )
-        .trim()
-        .replace(/\._.+$/i, "")
-        .replace(/\.(jpe?g|png|webp|gif)$/i, "");
-      if (id.length >= 3) {
-        return `https://m.media-amazon.com/images/I/${id}._AC_SL1500_.jpg`;
-      }
+      ).trim();
+      const url = amazonImageFromId(id);
+      if (url && !out.includes(url)) out.push(url);
+      if (out.length >= 6) return out;
     }
   }
-  // Legacy CSV: "abc.jpg,def.jpg"
   const csv = String(row.imagesCSV || "")
     .split(",")
     .map((part) => part.trim())
-    .find(Boolean);
-  if (csv) {
-    const id = csv
-      .replace(/\._.+$/i, "")
-      .replace(/\.(jpe?g|png|webp|gif)$/i, "");
-    if (id.length >= 3) {
-      return `https://m.media-amazon.com/images/I/${id}._AC_SL1500_.jpg`;
-    }
+    .filter(Boolean);
+  for (const part of csv) {
+    const url = amazonImageFromId(part);
+    if (url && !out.includes(url)) out.push(url);
+    if (out.length >= 6) break;
   }
-  return "";
+  return out;
 }
 
 function firstUpc(row: Record<string, unknown>): string {
@@ -205,11 +211,14 @@ export function parseKeepaProduct(row: Record<string, unknown>): KeepaSnapshot |
     }
   }
 
+  const gallery = keepaGalleryImages(row);
+
   return {
     asin,
     title: String(row.title || "").trim(),
     brand: String(row.brand || "").trim(),
-    imageUrl: firstImage(row),
+    imageUrl: gallery[0] || "",
+    galleryImageUrls: gallery.slice(1),
     upc: firstUpc(row),
     mpn: firstMpn(row),
     // Amazon is "retail present" only when Amazon has a live offer (>0 cents).

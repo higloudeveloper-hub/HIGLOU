@@ -672,12 +672,49 @@ export async function runRonCycle(
     return finish({ ok: true, state, skipped: msg });
   }
 
-  const decision = decideRonPublish({
+  const decisionSeed = decideRonPublish({
     catalog: freshCatalog,
     learning,
     emptyReason:
       "Sin pack nuevo relacionado · espero más oportunidades Keepa",
   });
+
+  // WAO path: expand Keepa winner into full Color/Size variation carousel/vitrina
+  let decision = decisionSeed;
+  try {
+    const { tryRonVariationPack } = await import("@/lib/ron/variation-pack");
+    const variationPack = await tryRonVariationPack({
+      supabase,
+      userId,
+      seedCards: freshCatalog,
+      learning,
+      associateTag: tag,
+      seed: Date.now(),
+    });
+    if (
+      variationPack &&
+      variationPack.action === "publish" &&
+      variationPack.cards.length >= 2
+    ) {
+      decision = variationPack;
+      await appendRonActivity(
+        supabase,
+        userId,
+        {
+          at: new Date().toISOString(),
+          kind: "scan",
+          message: variationPack.reason,
+        },
+        {
+          statusMessage: `Trabajando · ${variationPack.cards.length} variaciones Keepa`,
+          working: true,
+        },
+      );
+    }
+  } catch {
+    /* variation expand optional — fall back to related packs */
+  }
+
   if (decision.action === "skip") {
     await appendRonActivity(
       supabase,

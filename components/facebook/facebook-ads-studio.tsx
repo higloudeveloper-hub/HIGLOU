@@ -681,6 +681,83 @@ export function FacebookAdsStudio() {
     );
   };
 
+  /** Keepa Color/Size family → full carousel/vitrina (same product, all options). */
+  const expandVariationsFromKeepa = async () => {
+    const seed =
+      selectedCards.find((c) => /^[A-Z0-9]{10}$/i.test(String(c.asin || ""))) ||
+      catalog.all.find((c) => /^[A-Z0-9]{10}$/i.test(String(c.asin || "")));
+    if (!seed?.asin) {
+      toast.error("Elegí un producto Amazon con ASIN para expandir variaciones.");
+      return;
+    }
+    setBusy(true);
+    try {
+      const res = await fetch("/api/facebook/expand-variations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          asin: seed.asin,
+          title: seed.title,
+          brand: seed.meta,
+          imageUrl: seed.imageUrl,
+          linkUrl: seed.linkUrl,
+          priceLabel: seed.priceLabel,
+        }),
+      });
+      const body = (await res.json().catch(() => null)) as {
+        ok?: boolean;
+        error?: string;
+        format?: PromoFormat;
+        message?: string;
+        collectionTitle?: string | null;
+        niche?: string;
+        cards?: PickCard[];
+      } | null;
+      if (!res.ok || !body?.ok || !body.cards?.length) {
+        toast.error(
+          body?.error ||
+            "Keepa no trajo Color/Size para este ASIN. Probá otro ganador.",
+        );
+        return;
+      }
+      const nextCustom: PickCard[] = body.cards.map((c) => ({
+        id: c.id,
+        title: c.title,
+        imageUrl: c.imageUrl,
+        linkUrl: c.linkUrl,
+        priceLabel: c.priceLabel,
+        asin: c.asin,
+        meta: c.meta || "Variación Keepa",
+        imageFallbacks: c.imageFallbacks,
+      }));
+      setCustomCards((prev) => {
+        const byId = new Map(prev.map((p) => [p.id, p]));
+        for (const c of nextCustom) byId.set(c.id, c);
+        return [...byId.values()];
+      });
+      const nextFormat =
+        body.format === "vitrina" || body.format === "carousel"
+          ? body.format
+          : nextCustom.length >= 3
+            ? "vitrina"
+            : "carousel";
+      setFormat(nextFormat);
+      setSelectedIds(nextCustom.map((c) => c.id));
+      setCoverId(nextCustom[0]?.id || null);
+      setSource("custom");
+      setPanel("publicar");
+      if (body.message) setMessage(body.message);
+      if (body.collectionTitle) setCollectionTitle(body.collectionTitle);
+      toast.success(
+        `Variaciones Keepa · ${nextCustom.length} opciones · ${body.niche || "misma familia"}`,
+      );
+    } catch {
+      toast.error("Error expandiendo variaciones Keepa.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const coverCard =
     selectedCards.find((c) => c.id === coverId) || selectedCards[0] || null;
 
@@ -1187,6 +1264,20 @@ export function FacebookAdsStudio() {
                 ? `Carrusel · ${minNeeded}–${MAX} · TOP DEALS · swipe to shop.`
                 : `Vitrina · ${minNeeded}–${MAX} · selección editorial.`}
           </p>
+
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => void expandVariationsFromKeepa()}
+            className="mb-4 inline-flex w-full items-center justify-center gap-2 rounded-xl border border-[#3665F3]/25 bg-[#3665F3]/08 px-4 py-2.5 text-[13px] font-semibold text-[#3665F3] transition hover:bg-[#3665F3]/14 disabled:opacity-50"
+          >
+            {busy ? (
+              <Loader2 className="size-3.5 animate-spin" />
+            ) : (
+              <Wand2 className="size-3.5" />
+            )}
+            Expandir variaciones Keepa · Color / Size
+          </button>
 
           {readyVitrinas.length > 0 || readyCarousels.length > 0 ? (
             <div className="mb-4 space-y-3">

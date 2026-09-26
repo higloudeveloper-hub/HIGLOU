@@ -117,15 +117,15 @@ async function keepaProductRow(
 /** Child ASINs from Keepa when the Amazon page HTML hid the twister. */
 export async function keepaVariationSet(
   asin: string,
+  opts?: { force?: boolean },
 ): Promise<ListingVariationSet | null> {
-  const { keepaVariationsEnabled } = await import("@/lib/keepa/budget");
-  if (
-    !isKeepaConfigured() ||
-    !keepaVariationsEnabled() ||
-    !isAsin(asin)
-  ) {
-    return null;
-  }
+  const { keepaVariationsEnabled, keepaBudgetOk } = await import(
+    "@/lib/keepa/budget"
+  );
+  if (!isKeepaConfigured() || !isAsin(asin)) return null;
+  // RON / Facebook publish may force-load variations even when import flag is off
+  if (!opts?.force && !keepaVariationsEnabled()) return null;
+  if (!keepaBudgetOk(2)) return null;
   const row = await keepaProductRow(asin);
   if (!row) return null;
   const parsed = parseKeepaVariations(row);

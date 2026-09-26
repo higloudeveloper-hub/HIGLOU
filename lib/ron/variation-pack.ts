@@ -190,9 +190,8 @@ export function pickDistinctVariationExtras(
     if (!img || isWeakFacebookPictureUrl(img)) continue;
     const imgKey = productImageKey(img);
     if (!imgKey || seenImg.has(imgKey)) continue;
-    // Reject if this "gallery" URL is actually the variation swatch
-    const swatchKey = productImageKey(v.imageUrls?.[0]);
-    if (swatchKey && imgKey === swatchKey) continue;
+    // Color product shots often equal variations[].image (moka, shoes, etc.)
+    // — that is fine when the hero differs from seed/other colors.
     seenAsin.add(asin);
     seenColor.add(color);
     seenImg.add(imgKey);
@@ -202,7 +201,7 @@ export function pickDistinctVariationExtras(
     });
   }
 
-  // Pass 2: Style/Pattern with unique gallery photos (no Size twins)
+  // Pass 2: Style/Pattern with unique gallery photos (no Size twins of same color)
   if (out.length < opts.limit) {
     for (const v of variants) {
       if (out.length >= opts.limit) break;
@@ -216,11 +215,32 @@ export function pickDistinctVariationExtras(
       if (!img || isWeakFacebookPictureUrl(img)) continue;
       const imgKey = productImageKey(img);
       if (!imgKey || seenImg.has(imgKey)) continue;
-      const swatchKey = productImageKey(v.imageUrls?.[0]);
-      if (swatchKey && imgKey === swatchKey) continue;
       seenAsin.add(asin);
       if (color) seenColor.add(color);
       seenImg.add(imgKey);
+      out.push({
+        ...v,
+        imageUrls: [img],
+      });
+    }
+  }
+
+  // Pass 3: Size / other axes with unique photos — fill the vitrina
+  if (out.length < opts.limit) {
+    for (const v of variants) {
+      if (out.length >= opts.limit) break;
+      const asin = String(v.asin || "")
+        .trim()
+        .toUpperCase();
+      if (!/^[A-Z0-9]{10}$/.test(asin) || seenAsin.has(asin)) continue;
+      const img = imageOf(v);
+      if (!img || isWeakFacebookPictureUrl(img)) continue;
+      const imgKey = productImageKey(img);
+      if (!imgKey || seenImg.has(imgKey)) continue;
+      seenAsin.add(asin);
+      seenImg.add(imgKey);
+      const color = colorOf(v);
+      if (color) seenColor.add(color);
       out.push({
         ...v,
         imageUrls: [img],
@@ -284,7 +304,7 @@ export async function tryRonVariationPack(opts: {
       scoreCardMoneyOpportunity(a, opts.learning),
   );
 
-  for (const seed of ranked.slice(0, 4)) {
+  for (const seed of ranked.slice(0, 10)) {
     const seedAsin = String(seed.asin || "")
       .trim()
       .toUpperCase();
@@ -355,13 +375,13 @@ export async function tryRonVariationPack(opts: {
       }
 
       if (!preferred) continue;
-      // Hard reject: if the only photo equals the color swatch, skip
+      // Prefer a non-swatch gallery frame when available; otherwise the color
+      // product shot (often == variations[].image) is still valid for FB.
       if (isVariationSwatchImage(preferred, variant)) {
         const alt = galleryFallbacks.find(
           (u) => u && !isVariationSwatchImage(u, variant),
         );
-        if (!alt) continue;
-        preferred = alt;
+        if (alt) preferred = alt;
       }
 
       const photos = strongVariationImage(
@@ -377,7 +397,6 @@ export async function tryRonVariationPack(opts: {
         asin,
       );
       if (!photos) continue;
-      if (isVariationSwatchImage(photos.imageUrl, variant)) continue;
       imageByAsin.set(asin, photos.imageUrl);
     }
 
@@ -471,10 +490,9 @@ export async function tryRonVariationPack(opts: {
       );
       if (!linkUrl) return false;
 
-      // hit.imageUrl is already the Keepa /product gallery hero — never swatch
+      // hit.imageUrl is already the Keepa /product gallery hero
       const photos = strongVariationImage(hit.imageUrl, [], hit.asin);
       if (!photos) return false;
-      if (isVariationSwatchImage(photos.imageUrl, variant)) return false;
 
       const aspect = variant ? aspectLabel(variant.aspects) : "";
       const title = isSeed

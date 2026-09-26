@@ -706,6 +706,7 @@ export async function runRonCycle(
 
   // WAO path: expand Keepa winner into full Color/Size variation carousel/vitrina
   let decision = decisionSeed;
+  let variationTried = false;
   try {
     const { tryRonVariationPack } = await import("@/lib/ron/variation-pack");
     const variationPack = await tryRonVariationPack({
@@ -716,6 +717,7 @@ export async function runRonCycle(
       associateTag: tag,
       seed: Date.now(),
     });
+    variationTried = true;
     if (
       variationPack &&
       variationPack.action === "publish" &&
@@ -738,6 +740,20 @@ export async function runRonCycle(
     }
   } catch {
     /* variation expand optional — fall back to related packs */
+  }
+
+  // Never ship a skinny 2-card carousel when RON can wait for a real vitrina
+  if (
+    decision.action === "publish" &&
+    decision.cards.length < 3 &&
+    !opts.force
+  ) {
+    decision = {
+      action: "skip",
+      reason: variationTried
+        ? `Solo ${decision.cards.length} cards · espero vitrina de 3+ variaciones Keepa (no publico carrusel flaco)`
+        : `Solo ${decision.cards.length} productos relacionados · espero pack de 3+ para vitrina atractiva`,
+    };
   }
 
   if (decision.action === "skip") {

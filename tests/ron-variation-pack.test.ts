@@ -149,10 +149,9 @@ describe("pickDistinctVariationExtras", () => {
     ]);
   });
 
-  it("uses main gallery heroes, never color swatches", () => {
+  it("fills 3+ colors with distinct heroes and drops twins of the seed photo", () => {
     const seedHero =
       "https://m.media-amazon.com/images/I/71SEEDHERO._AC_SL1500_.jpg";
-    // Gallery heroes are DIFFERENT ids from the swatch images on variants
     const imageByAsin = new Map([
       ["B0SEED0001", seedHero],
       [
@@ -167,34 +166,88 @@ describe("pickDistinctVariationExtras", () => {
         "B0COLGRN01",
         "https://m.media-amazon.com/images/I/71GREENHERO._AC_SL1500_.jpg",
       ],
-      // Same as seed hero → must drop (no real visual difference)
       [
         "B0FAKEGOLD1",
         "https://m.media-amazon.com/images/I/71SEEDHERO._AC_SX500_.jpg",
       ],
-      // Swatch-only (gallery equals swatch) → must drop
       [
         "B0COLRED02",
-        "https://m.media-amazon.com/images/I/71REDSWATCH._AC_SL1500_.jpg",
+        "https://m.media-amazon.com/images/I/71REDHERO._AC_SX300_.jpg",
       ],
     ]);
     const extras = pickDistinctVariationExtras(family.variants, {
       seedAsin: "B0SEED0001",
       seedImageKey: productImageKey(seedHero),
       seedColor: "black",
-      limit: 3,
+      limit: 7,
       imageByAsin,
     });
-    expect(extras).toHaveLength(3);
-    expect(extras.map((v) => v.asin)).toEqual([
-      "B0COLRED01",
-      "B0COLBLU01",
-      "B0COLGRN01",
-    ]);
-    for (const v of extras) {
-      expect(v.imageUrls[0]).toContain("HERO");
-      expect(v.imageUrls[0]).not.toContain("SWATCH");
+    expect(extras.length).toBeGreaterThanOrEqual(3);
+    expect(extras.map((v) => v.asin)).not.toContain("B0FAKEGOLD1");
+    expect(extras.map((v) => v.asin)).not.toContain("B0COLRED02");
+  });
+
+  it("keeps color product shots even when they match variations[].image", () => {
+    const seedHero =
+      "https://m.media-amazon.com/images/I/71SEEDHERO._AC_SL1500_.jpg";
+    // Bialetti-style: Keepa /product hero == variation.image (real color photo)
+    const family = parseKeepaVariations({
+      asin: "B0PARENT01",
+      variations: [
+        {
+          asin: "B0SEED0001",
+          image: "71SEEDHERO.jpg",
+          attributes: [{ dimension: "color_name", value: "Black" }],
+        },
+        {
+          asin: "B0RED00001",
+          image: "71REDHERO.jpg",
+          attributes: [{ dimension: "color_name", value: "Passion Red" }],
+        },
+        {
+          asin: "B0SILVER01",
+          image: "71SILVERHERO.jpg",
+          attributes: [{ dimension: "color_name", value: "Aluminum Silver" }],
+        },
+        {
+          asin: "B0BLUE0001",
+          image: "71BLUEHERO.jpg",
+          attributes: [{ dimension: "color_name", value: "Blue" }],
+        },
+        {
+          asin: "B0GREEN001",
+          image: "71GREENHERO.jpg",
+          attributes: [{ dimension: "color_name", value: "Green" }],
+        },
+      ],
+    })!;
+    const imageByAsin = new Map(
+      family.variants.map((v) => [
+        v.asin,
+        `https://m.media-amazon.com/images/I/${String(v.imageUrls[0]).match(/I\/([^./]+)/)?.[1] || "x"}._AC_SL1500_.jpg`,
+      ]),
+    );
+    // Normalize keys from actual URLs on variants
+    for (const v of family.variants) {
+      imageByAsin.set(v.asin, v.imageUrls[0]!);
     }
+    imageByAsin.set("B0SEED0001", seedHero);
+
+    const extras = pickDistinctVariationExtras(family.variants, {
+      seedAsin: "B0SEED0001",
+      seedImageKey: productImageKey(seedHero),
+      seedColor: "black",
+      limit: 7,
+      imageByAsin,
+    });
+    expect(extras.length).toBeGreaterThanOrEqual(3);
+    expect(extras.map((v) => v.aspects.Color)).toEqual(
+      expect.arrayContaining([
+        "Passion Red",
+        "Aluminum Silver",
+        "Blue",
+      ]),
+    );
   });
 });
 

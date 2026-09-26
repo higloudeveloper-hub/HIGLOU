@@ -22,6 +22,8 @@ const bodySchema = z.object({
   appSecret: z.string().min(8).max(200),
   /** Owner email to attach the connection to (default HIGLOU_OWNER_EMAILS[0]) */
   userEmail: z.string().email().optional(),
+  /** Also restore Amazon Associate tag (RON needs it) */
+  associateTag: z.string().min(3).max(64).optional(),
 });
 
 async function resolveOwnerUserId(
@@ -234,6 +236,41 @@ export async function POST(request: Request) {
     wantEmail,
   );
 
+  let associateTagSaved: string | null = null;
+  const tag = String(parsed.associateTag || "higlou-20").trim();
+  if (tag) {
+    const now = new Date().toISOString();
+    const { data: existing } = await admin
+      .from("money_machine_settings")
+      .select("user_id")
+      .eq("user_id", owner.userId)
+      .maybeSingle();
+    if (existing) {
+      const { error } = await admin
+        .from("money_machine_settings")
+        .update({
+          associate_tag: tag,
+          associate_marketplace: "US",
+          updated_at: now,
+        })
+        .eq("user_id", owner.userId);
+      if (!error) associateTagSaved = tag;
+    } else {
+      const { error } = await admin.from("money_machine_settings").insert({
+        user_id: owner.userId,
+        associate_tag: tag,
+        associate_marketplace: "US",
+        money_engine: true,
+        affiliate_engine: true,
+        smart_links: true,
+        money_score: true,
+        autopilot: true,
+        updated_at: now,
+      });
+      if (!error) associateTagSaved = tag;
+    }
+  }
+
   return NextResponse.json({
     ok: true,
     userId: owner.userId,
@@ -248,6 +285,7 @@ export async function POST(request: Request) {
     },
     ensureOk: ensured.ok,
     ensureError: ensured.ok ? null : ensured.error,
+    associateTag: associateTagSaved,
     proofPrefix: appSecretProof(probeTok, appSecret).slice(0, 8),
     note: "Page token permanente instalado para RON.",
   });

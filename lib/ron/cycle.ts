@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { spendCredits } from "@/lib/credits/wallet";
 import { publishFacebookPromo } from "@/lib/facebook/promo";
-import { loadFacebookPageCredentials } from "@/lib/facebook/connection";
+import { ensureFacebookPageCredentialsForPublish } from "@/lib/facebook/connection";
 import {
   ensureAffiliateLinksFromKeepaWinners,
   keepaAffiliateShareUrl,
@@ -296,9 +296,28 @@ export async function runRonCycle(
     return finish({ ok: true, state, skipped: msg });
   }
 
-  const creds = await loadFacebookPageCredentials(supabase, userId);
-  if (!creds) {
-    const msg = "Conectá tu Page de Facebook para que RON publique solo";
+  // Resolve owner email so FACEBOOK_BOOTSTRAP_USER_EMAIL gate works on cron too
+  let userEmail: string | null = null;
+  try {
+    const { createAdminClient, isSupabaseConfigured } = await import(
+      "@/lib/supabase/admin"
+    );
+    if (isSupabaseConfigured()) {
+      const admin = createAdminClient();
+      const { data } = await admin.auth.admin.getUserById(userId);
+      userEmail = data?.user?.email || null;
+    }
+  } catch {
+    userEmail = null;
+  }
+
+  const page = await ensureFacebookPageCredentialsForPublish(
+    supabase,
+    userId,
+    userEmail,
+  );
+  if (!page.ok) {
+    const msg = page.error;
     await appendRonActivity(
       supabase,
       userId,

@@ -2,7 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { stripUrlsFromFacebookCaption } from "@/lib/facebook/caption";
 import { humanizeFacebookGraphError } from "@/lib/facebook/config";
 import {
-  loadFacebookPageCredentials,
+  ensureFacebookPageCredentialsForPublish,
   markFacebookConnectionMeta,
 } from "@/lib/facebook/connection";
 import { enrichPromoCardPrices } from "@/lib/facebook/enrich-promo-prices";
@@ -395,7 +395,14 @@ export async function publishFacebookPromo(
   // Never publish the same product twice in one post (ASIN / photo / title)
   const cards = uniquePromoCardsForPublish(trusted.cards);
 
-  const creds = await loadFacebookPageCredentials(supabase, opts.userId);
+  const page = await ensureFacebookPageCredentialsForPublish(
+    supabase,
+    opts.userId,
+  );
+  if (!page.ok) {
+    return { ok: false, error: page.error };
+  }
+  const creds = page.creds;
 
   // Multi-card "ads" from studio → real tappable carousel/vitrina (never 1 photo)
   let format: PromoFormat = opts.format;
@@ -407,13 +414,6 @@ export async function publishFacebookPromo(
     const first = cards[0];
     if (!first?.linkUrl) {
       return { ok: false, error: "Elegí al menos un producto con link." };
-    }
-    if (!creds) {
-      return {
-        ok: false,
-        error:
-          "Conectá tu Page de Facebook en Settings. Sin Page no hay post con click a la publicación.",
-      };
     }
 
     const caption =
@@ -505,13 +505,6 @@ export async function publishFacebookPromo(
 
   // Never fall back to a single-photo share for multi-card formats —
   // that is what published "solo 1 foto" instead of the full vitrina.
-  if (!creds) {
-    return {
-      ok: false,
-      error:
-        "Conectá tu Page de Facebook en Settings para publicar vitrinas y carruseles completos. Sin Page, Facebook solo permite un link suelto.",
-    };
-  }
 
   // Re-host every picture on our public CDN so Graph scrapes real photos
   // (Amazon ads-system / P/ASIN stubs often publish as blank cards).

@@ -32,5 +32,8 @@ describe("resolvePageAccessToken contract", () => {
     const mod = await import("@/lib/facebook/connection");
     expect(typeof mod.resolvePageAccessToken).toBe("function");
     expect(typeof mod.maybeBootstrapFacebookConnection).toBe("function");
+    expect(typeof mod.ensureFacebookPageCredentialsForPublish).toBe(
+      "function",
+    );
   });
 });

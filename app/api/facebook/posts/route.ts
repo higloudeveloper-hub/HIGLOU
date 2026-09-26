@@ -5,7 +5,7 @@ import {
   deleteFacebookPagePosts,
   listFacebookPagePosts,
 } from "@/lib/facebook/delete-page-posts";
-import { loadFacebookPageCredentials } from "@/lib/facebook/connection";
+import { ensureFacebookPageCredentialsForPublish } from "@/lib/facebook/connection";
 import { isSupabaseConfigured } from "@/lib/supabase/admin";
 
 export const runtime = "nodejs";
@@ -26,16 +26,15 @@ export async function GET() {
     return NextResponse.json({ error: "Supabase required" }, { status: 503 });
   }
 
-  const creds = await loadFacebookPageCredentials(
+  const page = await ensureFacebookPageCredentialsForPublish(
     auth.supabase,
     auth.user.id,
+    auth.user.email,
   );
-  if (!creds) {
-    return NextResponse.json(
-      { error: "Conectá tu Facebook Page en Settings primero." },
-      { status: 400 },
-    );
+  if (!page.ok) {
+    return NextResponse.json({ error: page.error }, { status: 400 });
   }
+  const creds = page.creds;
 
   const listed = await listFacebookPagePosts({
     pageId: creds.pageId,
@@ -84,16 +83,15 @@ export async function DELETE(request: Request) {
     );
   }
 
-  const creds = await loadFacebookPageCredentials(
+  const page = await ensureFacebookPageCredentialsForPublish(
     auth.supabase,
     auth.user.id,
+    auth.user.email,
   );
-  if (!creds) {
-    return NextResponse.json(
-      { error: "Conectá tu Facebook Page en Settings primero." },
-      { status: 400 },
-    );
+  if (!page.ok) {
+    return NextResponse.json({ error: page.error }, { status: 400 });
   }
+  const creds = page.creds;
 
   const result = await deleteFacebookPagePosts({
     pageId: creds.pageId,

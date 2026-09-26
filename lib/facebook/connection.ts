@@ -593,6 +593,81 @@ async function tokenActsAsPage(
   }
 }
 
+type PageCreds = {
+  pageId: string;
+  accessToken: string;
+  pageName: string | null;
+};
+
+function bootstrapEnvCreds(): PageCreds | null {
+  const pageId = String(process.env.FACEBOOK_BOOTSTRAP_PAGE_ID || "")
+    .replace(/\D/g, "")
+    .trim();
+  const accessToken = String(
+    process.env.FACEBOOK_BOOTSTRAP_PAGE_TOKEN || "",
+  ).trim();
+  const pageName =
+    String(process.env.FACEBOOK_BOOTSTRAP_PAGE_NAME || "").trim() || null;
+  if (pageId.length < 5 || accessToken.length < 20) return null;
+  return { pageId, accessToken, pageName };
+}
+
+/**
+ * Graph probe that distinguishes invalid tokens from network/unknown failures.
+ * Unknown must NOT block RON — a blip would otherwise look like "Page desconectada".
+ */
+async function probeFacebookToken(
+  accessToken: string,
+  expectPageId?: string | null,
+): Promise<"ok" | "invalid" | "unknown"> {
+  try {
+    const url = new URL("https://graph.facebook.com/v21.0/me");
+    url.searchParams.set("fields", "id");
+    url.searchParams.set("access_token", accessToken);
+    const res = await fetch(url);
+    const body = (await res.json().catch(() => null)) as {
+      id?: string;
+      error?: { message?: string; code?: number; type?: string };
+    } | null;
+    if (!res.ok || !body?.id) {
+      const msg = String(body?.error?.message || "").toLowerCase();
+      if (
+        /invalid|expired|session|oauthexception|cannot parse access token|error validating/i.test(
+          msg,
+        ) ||
+        body?.error?.type === "OAuthException"
+      ) {
+        return "invalid";
+      }
+      // Rate limit / 5xx / odd Graph responses → unknown, keep trying
+      if (res.status >= 500 || res.status === 429) return "unknown";
+      return "invalid";
+    }
+    if (expectPageId) {
+      const want = expectPageId.replace(/\D/g, "");
+      const got = String(body.id).replace(/\D/g, "");
+      if (want && got && want !== got) return "invalid";
+    }
+    return "ok";
+  } catch {
+    return "unknown";
+  }
+}
+
+async function persistBootstrapCreds(
+  supabase: SupabaseClient,
+  userId: string,
+  boot: PageCreds,
+): Promise<PageCreds> {
+  await saveFacebookConnection(supabase, {
+    userId,
+    pageId: boot.pageId,
+    pageName: boot.pageName,
+    accessToken: boot.accessToken,
+  });
+  return boot;
+}
+
 /**
  * Load credentials and auto-heal User tokens → Page tokens.
  * Also falls back to FACEBOOK_BOOTSTRAP_PAGE_TOKEN when needed.
@@ -600,13 +675,20 @@ async function tokenActsAsPage(
 export async function loadFacebookPageCredentials(
   supabase: SupabaseClient,
   userId: string,
-): Promise<{ pageId: string; accessToken: string; pageName: string | null } | null> {
-  if (!canEncryptFacebookToken()) return null;
+): Promise<PageCreds | null> {
+  if (!canEncryptFacebookToken()) {
+    await markFacebookConnectionMeta(supabase, userId, {
+      lastError:
+        "Falta FACEBOOK_TOKEN_ENCRYPTION_KEY (o EBAY_TOKEN_ENCRYPTION_KEY ≥32) en el servidor.",
+    }).catch(() => undefined);
+    return null;
+  }
   const db = await dbForFacebook(supabase);
 
   let pageId: string | null = null;
   let pageName: string | null = null;
   let accessToken: string | null = null;
+  let decryptFailed = false;
 
   const { data, error } = await db
     .from("facebook_connections")
@@ -623,9 +705,11 @@ export async function loadFacebookPageCredentials(
           pageId = row.page_id;
           pageName = row.page_name;
           accessToken = tok;
+        } else {
+          decryptFailed = true;
         }
       } catch {
-        // continue
+        decryptFailed = true;
       }
     }
   }
@@ -639,40 +723,46 @@ export async function loadFacebookPageCredentials(
           pageId = stored.pageId;
           pageName = stored.pageName;
           accessToken = tok;
+          decryptFailed = false;
+        } else {
+          decryptFailed = true;
         }
       } catch {
-        // continue
+        decryptFailed = true;
       }
     }
   }
 
-  // Bootstrap Page token from Vercel if nothing stored
+  // Bootstrap Page token from Vercel if nothing stored / decrypt broken
   if (!accessToken || !pageId) {
-    const bootId = String(process.env.FACEBOOK_BOOTSTRAP_PAGE_ID || "")
-      .replace(/\D/g, "")
-      .trim();
-    const bootTok = String(process.env.FACEBOOK_BOOTSTRAP_PAGE_TOKEN || "").trim();
-    const bootName =
-      String(process.env.FACEBOOK_BOOTSTRAP_PAGE_NAME || "").trim() || null;
-    if (bootId.length >= 5 && bootTok.length >= 20) {
-      pageId = bootId;
-      pageName = bootName;
-      accessToken = bootTok;
-      await saveFacebookConnection(supabase, {
-        userId,
-        pageId: bootId,
-        pageName: bootName,
-        accessToken: bootTok,
-      });
-      return { pageId: bootId, accessToken: bootTok, pageName: bootName };
+    const boot = bootstrapEnvCreds();
+    if (boot) {
+      return persistBootstrapCreds(supabase, userId, boot);
+    }
+    if (decryptFailed) {
+      await markFacebookConnectionMeta(supabase, userId, {
+        lastError:
+          "No se pudo leer el token (clave de cifrado distinta). Reconectá la Page en Settings.",
+      }).catch(() => undefined);
     }
     return null;
+  }
+
+  // Probe once: Page token OK → publish. Do NOT double-probe (old soft check
+  // after tokenActsAsPage killed RON on Graph blips with "Conectá tu Page").
+  const probe = await probeFacebookToken(accessToken, pageId);
+  if (probe === "ok" || probe === "unknown") {
+    return { pageId, accessToken, pageName };
   }
 
   // Heal: stored User token → real Page token
-  if (!(await tokenActsAsPage(pageId, accessToken))) {
-    const resolved = await resolvePageAccessToken(pageId, accessToken);
-    if (resolved.ok) {
+  const resolved = await resolvePageAccessToken(pageId, accessToken);
+  if (resolved.ok) {
+    const healedProbe = await probeFacebookToken(
+      resolved.accessToken,
+      resolved.pageId,
+    );
+    if (healedProbe === "ok" || healedProbe === "unknown") {
       await saveFacebookConnection(supabase, {
         userId,
         pageId: resolved.pageId,
@@ -685,81 +775,70 @@ export async function loadFacebookPageCredentials(
         pageName: resolved.pageName || pageName,
       };
     }
-
-    // Last resort: overwrite with bootstrap Page token
-    const bootId = String(process.env.FACEBOOK_BOOTSTRAP_PAGE_ID || "")
-      .replace(/\D/g, "")
-      .trim();
-    const bootTok = String(process.env.FACEBOOK_BOOTSTRAP_PAGE_TOKEN || "").trim();
-    const bootName =
-      String(process.env.FACEBOOK_BOOTSTRAP_PAGE_NAME || "").trim() || null;
-    if (
-      bootId &&
-      bootTok &&
-      bootId === pageId.replace(/\D/g, "") &&
-      (await tokenActsAsPage(bootId, bootTok))
-    ) {
-      await saveFacebookConnection(supabase, {
-        userId,
-        pageId: bootId,
-        pageName: bootName || pageName,
-        accessToken: bootTok,
-      });
-      return {
-        pageId: bootId,
-        accessToken: bootTok,
-        pageName: bootName || pageName,
-      };
-    }
-
-    await markFacebookConnectionMeta(supabase, userId, {
-      lastError:
-        "Token inválido o vencido. Pegá un User token fresco en Settings → Facebook (con FACEBOOK_APP_ID/SECRET se convierte en Page token permanente).",
-    });
-    return null;
   }
 
-  // Soft probe: ensure Graph still accepts the Page token
-  if (!(await tokenStillValid(accessToken))) {
-    const bootId = String(process.env.FACEBOOK_BOOTSTRAP_PAGE_ID || "")
-      .replace(/\D/g, "")
-      .trim();
-    const bootTok = String(process.env.FACEBOOK_BOOTSTRAP_PAGE_TOKEN || "").trim();
-    const bootName =
-      String(process.env.FACEBOOK_BOOTSTRAP_PAGE_NAME || "").trim() || null;
-    if (bootId && bootTok && (await tokenStillValid(bootTok))) {
-      await saveFacebookConnection(supabase, {
-        userId,
-        pageId: bootId,
-        pageName: bootName || pageName,
-        accessToken: bootTok,
+  // Last resort: overwrite with bootstrap Page token (any Page ID)
+  const boot = bootstrapEnvCreds();
+  if (boot) {
+    const bootProbe = await probeFacebookToken(boot.accessToken, boot.pageId);
+    if (bootProbe === "ok" || bootProbe === "unknown") {
+      return persistBootstrapCreds(supabase, userId, {
+        ...boot,
+        pageName: boot.pageName || pageName,
       });
-      return {
-        pageId: bootId,
-        accessToken: bootTok,
-        pageName: bootName || pageName,
-      };
     }
-    await markFacebookConnectionMeta(supabase, userId, {
-      lastError:
-        "Token inválido o vencido. Generá uno nuevo en Graph y reconectá (App ID/Secret lo hace permanente).",
-    });
-    return null;
   }
 
-  return { pageId, accessToken, pageName };
+  await markFacebookConnectionMeta(supabase, userId, {
+    lastError:
+      "Token inválido o vencido. Pegá un token fresco en Settings → Facebook (App ID/Secret lo hace permanente).",
+  });
+  return null;
 }
 
-async function tokenStillValid(accessToken: string): Promise<boolean> {
-  try {
-    const url = new URL("https://graph.facebook.com/v21.0/me");
-    url.searchParams.set("fields", "id");
-    url.searchParams.set("access_token", accessToken);
-    const res = await fetch(url);
-    return res.ok;
-  } catch {
-    return false;
+/**
+ * RON / publish entry: bootstrap from Vercel if needed, then load credentials.
+ * Returns a Spanish error RON can show in the ops log (not a vague "Conectá").
+ */
+export async function ensureFacebookPageCredentialsForPublish(
+  supabase: SupabaseClient,
+  userId: string,
+  userEmail?: string | null,
+): Promise<{ ok: true; creds: PageCreds } | { ok: false; error: string }> {
+  if (!canEncryptFacebookToken()) {
+    return {
+      ok: false,
+      error:
+        "Falta clave de cifrado Facebook en el servidor (FACEBOOK_TOKEN_ENCRYPTION_KEY o EBAY_TOKEN_ENCRYPTION_KEY ≥32).",
+    };
   }
+
+  // Same heal Settings GET uses — cron/force cycle never hit that route
+  try {
+    await maybeBootstrapFacebookConnection(supabase, userId, userEmail);
+  } catch {
+    /* bootstrap optional */
+  }
+
+  const creds = await loadFacebookPageCredentials(supabase, userId);
+  if (creds) return { ok: true, creds };
+
+  const pub = await getFacebookConnectionPublic(supabase, userId);
+  if (pub.lastError) {
+    return { ok: false, error: pub.lastError };
+  }
+  if (!pub.encryptionReady) {
+    return {
+      ok: false,
+      error:
+        "Falta clave de cifrado Facebook en el servidor. Sin ella RON no puede leer el Page token.",
+    };
+  }
+  return {
+    ok: false,
+    error:
+      "Conectá tu Page de Facebook en Settings → Facebook (Page ID + token) para que RON publique solo",
+  };
 }
 
 /** Persist last Graph error / share time across table or storage backends. */

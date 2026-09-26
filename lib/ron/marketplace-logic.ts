@@ -173,7 +173,12 @@ export function buildNextAction(opts: {
   freshAsins: number;
   lastError: string | null;
 }): string {
-  if (opts.lastError) return "Revisá el error · luego reencendé el ciclo";
+  if (opts.lastError) {
+    if (/page|token|facebook|cifrado|encryption/i.test(opts.lastError)) {
+      return "Conectá / renová el Page token en Settings → Facebook";
+    }
+    return "Revisá el error · luego reencendé el ciclo";
+  }
   if (!opts.enabled) return "Encendé RON para que trabaje solo";
   if (opts.working) return "Ciclo en curso · no hace falta tocar nada";
   if (opts.freshAsins <= 0) return "Próximo: escaneo Keepa general automático";

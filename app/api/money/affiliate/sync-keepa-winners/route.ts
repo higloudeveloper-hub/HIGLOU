@@ -34,7 +34,7 @@ export async function POST() {
     .select("asin, payload, mode")
     .eq("user_id", auth.user.id)
     .order("last_seen_at", { ascending: false })
-    .limit(80);
+    .limit(200);
 
   const hits: OpportunityProduct[] = [];
   const seen = new Set<string>();
@@ -48,6 +48,7 @@ export async function POST() {
     hits.push({
       ...payload,
       asin,
+      keepa: payload.keepa ?? true,
       mode: (payload.mode || row.mode || "amazon") as OpportunityProduct["mode"],
     });
   }
@@ -57,7 +58,7 @@ export async function POST() {
     hits,
     source: "keepa_backfill",
     campaignName: "Keepa winners → Facebook",
-    limit: 40,
+    limit: 80,
   });
 
   return NextResponse.json({

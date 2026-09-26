@@ -14,6 +14,7 @@ import { keepaGet } from "@/lib/keepa/client";
 import { isKeepaConfigured } from "@/lib/keepa/config";
 import { parseKeepaProduct } from "@/lib/keepa/parse";
 import { amazonUrlHasAssociateTag } from "@/lib/monetization/affiliate/tagged-url";
+import { isWeakFacebookPictureUrl } from "@/lib/facebook/promo-media";
 
 export const runtime = "nodejs";
 
@@ -122,7 +123,7 @@ export async function GET() {
     )
     .eq("user_id", auth.user.id)
     .order("created_at", { ascending: false })
-    .limit(50);
+    .limit(120);
 
   if (error) {
     return NextResponse.json({
@@ -221,7 +222,13 @@ export async function GET() {
       };
       const photo = String(payload.imageUrl || "").trim();
       const title = String(payload.title || "").trim();
-      if (asin && /^https?:\/\//i.test(photo) && !imageByAsin.has(asin)) {
+      // Skip ads-system / P-ASIN stubs so Keepa can fill a real I/ hero below
+      if (
+        asin &&
+        /^https?:\/\//i.test(photo) &&
+        !isWeakFacebookPictureUrl(photo) &&
+        !imageByAsin.has(asin)
+      ) {
         imageByAsin.set(asin, photo);
       }
       if (asin && title && !titleByAsin.has(asin)) {

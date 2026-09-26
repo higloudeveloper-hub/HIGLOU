@@ -3,12 +3,27 @@ import { requireUser } from "@/lib/auth/require-user";
 import { hasHttpsProductImage } from "@/lib/admin/purge-listings-winners";
 import { mergeMarketFeed } from "@/lib/market/from-opportunity";
 import { resolveUserAssociateTag } from "@/lib/monetization/affiliate/links";
+import {
+  isAmazonProductWinner,
+  isKeepaBuyVelocityWinner,
+} from "@/lib/opportunity/amazon-product-winner";
 import { isPlatformWinner } from "@/lib/opportunity/platform-winner";
 import { createAdminClient, isSupabaseConfigured } from "@/lib/supabase/admin";
 import type { OpportunityMode, OpportunityProduct } from "@/lib/opportunity/types";
+import { isWeakFacebookPictureUrl } from "@/lib/facebook/promo-media";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
+
+/** Keepa / Finder hits ready for Facebook Ads — not only full arbitrage winners. */
+function isFacebookPublishableHit(hit: OpportunityProduct, mode: OpportunityMode): boolean {
+  if (hit.verdict === "reject") return false;
+  if (isPlatformWinner(hit, mode)) return true;
+  if (hit.keepa === true) return true;
+  if (isAmazonProductWinner(hit)) return true;
+  if (isKeepaBuyVelocityWinner(hit)) return true;
+  return false;
+}
 
 async function loadLedgerHits(userId: string): Promise<OpportunityProduct[]> {
   if (!isSupabaseConfigured()) return [];
@@ -19,7 +34,7 @@ async function loadLedgerHits(userId: string): Promise<OpportunityProduct[]> {
       .select("asin, payload, net_profit, mode, image_url")
       .eq("user_id", userId)
       .order("last_seen_at", { ascending: false })
-      .limit(120);
+      .limit(200);
     if (error || !data?.length) return [];
     const out: OpportunityProduct[] = [];
     const seen = new Set<string>();
@@ -30,20 +45,30 @@ async function loadLedgerHits(userId: string): Promise<OpportunityProduct[]> {
       if (!/^[A-Z0-9]{10}$/.test(asin) || seen.has(asin)) continue;
       const payload = (row.payload || {}) as OpportunityProduct;
       const mode = (row.mode || payload.mode || "amazon_to_ebay") as OpportunityMode;
-      const imageUrl = String(
+      const rawImage = String(
         payload.imageUrl || row.image_url || "",
       ).trim();
-      if (!hasHttpsProductImage(imageUrl)) continue;
+      // Prefer real heroes; still allow https so Market isn't empty after purge
+      const imageUrl =
+        rawImage && !isWeakFacebookPictureUrl(rawImage)
+          ? rawImage
+          : hasHttpsProductImage(rawImage)
+            ? rawImage
+            : "";
+      if (!hasHttpsProductImage(imageUrl) && !hasHttpsProductImage(rawImage)) {
+        continue;
+      }
       const hit: OpportunityProduct = {
         ...payload,
         asin,
         mode,
-        imageUrl,
+        imageUrl: imageUrl || rawImage,
+        keepa: payload.keepa ?? true,
         netProfit:
           payload.netProfit ??
           (row.net_profit != null ? Number(row.net_profit) : null),
       };
-      if (!isPlatformWinner(hit, mode)) continue;
+      if (!isFacebookPublishableHit(hit, mode)) continue;
       out.push(hit);
       seen.add(asin);
     }
@@ -106,7 +131,7 @@ export async function GET() {
   const merged = mergeMarketFeed({
     ledgerHits: hits,
     associateTag: tag,
-    limit: 40,
+    limit: 80,
   });
 
   return NextResponse.json({
@@ -122,7 +147,7 @@ export async function GET() {
     note:
       seedNote ||
       (merged.ledgerCount > 0
-        ? `${merged.ledgerCount} Higlou-verified winner${merged.ledgerCount === 1 ? "" : "s"} (arbitrage + Keepa Amazon)`
-        : "Market is empty until Find Winners verifies arbitrage keep or Keepa Amazon demand. No demo products."),
+        ? `${merged.ledgerCount} Keepa / Finder winner${merged.ledgerCount === 1 ? "" : "s"} listos para Facebook Ads`
+        : "Market is empty until Find Winners verifies Keepa Amazon demand. No demo products."),
   });
 }

@@ -222,20 +222,7 @@ export function FacebookAdsStudio() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      // Market feed first — seeds empty ledger after purge, then affiliates sync
-      const [prodRes, feedRes, fbRes, moneyRes] = await Promise.all([
-        fetch("/api/products", { cache: "no-store" }),
-        fetch("/api/market/feed", { cache: "no-store" }),
-        fetch("/api/facebook/connection", { cache: "no-store" }),
-        fetch("/api/settings/money-machine", { cache: "no-store" }),
-      ]);
-
-      if (feedRes.ok) {
-        const body = (await feedRes.json()) as { drops?: MarketDrop[] };
-        setDrops((body.drops || []).filter((d) => d.asin && d.photo).slice(0, 30));
-      } else setDrops([]);
-
-      // After feed (possible seed), sync ledger → /go then load affiliate catalog
+      // 1) Mint Finder/Keepa ledger → affiliate /go so Afiliados is not empty
       try {
         await fetch("/api/money/affiliate/sync-keepa-winners", {
           method: "POST",
@@ -243,9 +230,21 @@ export function FacebookAdsStudio() {
       } catch {
         /* optional */
       }
-      const affRes = await fetch("/api/money/affiliate/links", {
-        cache: "no-store",
-      });
+
+      // 2) After sync: Market (ledger) + affiliates + listings
+      const [prodRes, feedRes, affRes, fbRes, moneyRes] = await Promise.all([
+        fetch("/api/products", { cache: "no-store" }),
+        fetch("/api/market/feed", { cache: "no-store" }),
+        fetch("/api/money/affiliate/links", { cache: "no-store" }),
+        fetch("/api/facebook/connection", { cache: "no-store" }),
+        fetch("/api/settings/money-machine", { cache: "no-store" }),
+      ]);
+
+      if (feedRes.ok) {
+        const body = (await feedRes.json()) as { drops?: MarketDrop[] };
+        setDrops((body.drops || []).filter((d) => d.asin && d.photo).slice(0, 60));
+      } else setDrops([]);
+
       if (affRes.ok) {
         const body = (await affRes.json()) as { links?: AffLink[] };
         setLinks(body.links || []);
@@ -284,13 +283,15 @@ export function FacebookAdsStudio() {
     void load();
   }, [load]);
 
-  // Prefer Mis listings when there are no affiliate links yet
+  // Prefer Market when Finder/Keepa filled drops but affiliates are still empty
   useEffect(() => {
     if (loading) return;
-    if (imported.length > 0 && links.length === 0) {
+    if (imported.length > 0 && links.length === 0 && drops.length === 0) {
       setSource("imported");
+    } else if (links.length === 0 && drops.length > 0) {
+      setSource("market");
     }
-  }, [loading, imported.length, links.length]);
+  }, [loading, imported.length, links.length, drops.length]);
 
   const marketPhotoByAsin = useMemo(() => {
     const map = new Map<string, string>();
@@ -1418,7 +1419,11 @@ export function FacebookAdsStudio() {
               [
                 { id: "affiliate" as const, label: "Afiliados", count: links.length },
                 { id: "imported" as const, label: "Mis listings", count: imported.length },
-                { id: "market" as const, label: "Market", count: drops.length },
+                {
+                  id: "market" as const,
+                  label: "Finder / Market",
+                  count: drops.length,
+                },
                 { id: "custom" as const, label: "Cualquiera", count: customCards.length },
               ] as const
             ).map((t) => (
@@ -1885,7 +1890,7 @@ function EmptySource({ source }: { source: SourceTab }) {
     source === "affiliate"
       ? {
           title: "Sin afiliados aún",
-          body: "Escaneá Find Winners (Keepa Amazon) — cada ganador se convierte solo en link de afiliado listo para ads.",
+          body: "Escaneá Find Winners (Keepa) — se sincronizan solos acá. Si ya escaneaste, mirá la pestaña Finder / Market.",
           href: "/winners",
           cta: "Find Winners",
         }
@@ -1904,8 +1909,8 @@ function EmptySource({ source }: { source: SourceTab }) {
               cta: "",
             }
           : {
-              title: "Market vacío",
-              body: "Escaneá Find Winners para llenar el floor.",
+              title: "Finder vacío",
+              body: "Los ganadores de Keepa en Find Winners aparecen acá listos para publicar en Facebook.",
               href: "/winners",
               cta: "Find Winners",
             };

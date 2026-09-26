@@ -104,7 +104,7 @@ export async function ensureAffiliateLinksFromKeepaWinners(
 
   const candidates = opts.hits
     .filter(isKeepaAmazonAffiliateCandidate)
-    .slice(0, Math.min(Math.max(opts.limit || 40, 1), 40));
+    .slice(0, Math.min(Math.max(opts.limit || 80, 1), 80));
 
   if (!candidates.length) {
     return { ok: true, created: 0, reused: 0, skipped: 0, links: [] };
